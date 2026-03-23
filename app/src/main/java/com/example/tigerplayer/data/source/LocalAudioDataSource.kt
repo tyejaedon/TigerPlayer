@@ -2,28 +2,30 @@ package com.example.tigerplayer.data.source
 
 import android.content.ContentUris
 import android.content.Context
-import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
-import androidx.annotation.RequiresApi
-import androidx.annotation.RequiresExtension
-import androidx.core.net.toUri
+import android.util.Log
 import com.example.tigerplayer.data.model.AudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
+import androidx.core.net.toUri
 
 class LocalAudioDataSource @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
 
-    @RequiresApi(Build.VERSION_CODES.Q)
-    @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
-    suspend fun getLocalAudioFiles(): List<AudioTrack> = withContext(Dispatchers.IO) {
+    /**
+     * THE INDEXING RITUAL
+     * Streams scan progress back to the UI so the user isn't left in the dark.
+     */
+    fun getLocalAudioFiles(): Flow<ScanStatus> = flow {
         val tracks = mutableListOf<AudioTrack>()
 
-        val projection = arrayOf(
+        val projection = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
@@ -31,60 +33,81 @@ class LocalAudioDataSource @Inject constructor(
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.BITRATE,
-            MediaStore.Audio.Media.SAMPLERATE,
-            MediaStore.Audio.Media.TRACK // <-- THE FIX: Pull the track number directly
-        )
+            MediaStore.Audio.Media.TRACK,
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.YEAR
+        ).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                add(MediaStore.Audio.Media.BITRATE)
+                add(MediaStore.Audio.Media.SAMPLERATE)
+            }
+        }.toTypedArray()
 
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.MIME_TYPE} LIKE '%flac%') " +
+                "AND ${MediaStore.Audio.Media.IS_RINGTONE} == 0 AND ${MediaStore.Audio.Media.IS_NOTIFICATION} == 0"
 
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
             selection,
             null,
-            sortOrder
+            "${MediaStore.Audio.Media.TITLE} ASC"
         )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            val mimeTypeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-            val albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val bitrateColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.BITRATE)
-            val sampleRateColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SAMPLERATE)
-            val trackColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
+            val total = cursor.count
+            emit(ScanStatus.Started(total))
+
+            // SPEED HACK: Fetch indices OUTSIDE the loop
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+            val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+            val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
+            val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+            val yearCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
 
             while (cursor.moveToNext()) {
-                val id = cursor.getLong(idColumn)
-                val albumId = cursor.getLong(albumIdColumn)
+                val id = cursor.getLong(idCol)
+                val albumId = cursor.getLong(albumIdCol)
+                val rawTrack = cursor.getInt(trackCol)
+                val year = cursor.getInt(yearCol)
 
-                // Track numbers in MediaStore are sometimes stored as e.g., 1004 (Disc 1, Track 4)
-                // We parse it down to just the track number safely.
-                val rawTrack = cursor.getInt(trackColumn)
+                // Track number normalization (e.g. 1004 -> 4)
                 val cleanTrackNum = if (rawTrack >= 1000) rawTrack % 1000 else rawTrack
 
-                tracks.add(
-                    AudioTrack(
-                        id = id.toString(),
-                        title = cursor.getString(titleColumn) ?: "Unknown Title",
-                        artist = cursor.getString(artistColumn) ?: "Unknown Artist",
-                        album = cursor.getString(albumColumn) ?: "Unknown Album",
-                        uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
-                        artworkUri = "content://media/external/audio/albumart/$albumId".toUri(),
-                        durationMs = cursor.getLong(durationColumn),
-                        mimeType = cursor.getString(mimeTypeColumn) ?: "audio/mpeg",
-                        isLocal = true,
-                        bitrate = cursor.getInt(bitrateColumn),
-                        sampleRate = cursor.getInt(sampleRateColumn),
-                        trackNumber = cleanTrackNum // Extracted instantly!
-                    )
-                )
-            }
-        }
+                tracks.add(AudioTrack(
+                    id = id.toString(),
+                    title = cursor.getString(titleCol) ?: "Unknown",
+                    artist = cursor.getString(artistCol) ?: "Unknown Artist",
+                    album = cursor.getString(albumCol) ?: "Unknown Album",
+                    uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
+                    artworkUri = "content://media/external/audio/albumart/$albumId".toUri(),
+                    durationMs = cursor.getLong(durCol),
+                    mimeType = cursor.getString(mimeCol) ?: "audio/mpeg",
+                    isLocal = true,
+                    isRemote = false,
+                    trackNumber = cleanTrackNum,
+                    path = cursor.getString(dataCol),
+                    year = if (year != 0) year.toString() else null,
+                    bitrate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE).coerceAtLeast(0)) else 0,
+                    sampleRate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.SAMPLERATE).coerceAtLeast(0)) else 0,
+                    serverPath = null
+                ))
 
-        return@withContext tracks
+                // Update UI every 10 tracks to keep the main thread fluid
+                if (tracks.size % 10 == 0 || tracks.size == total) {
+                    emit(ScanStatus.InProgress(tracks.size, total))
+                }
+            }
+            emit(ScanStatus.Complete(tracks))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    sealed class ScanStatus {
+        data class Started(val total: Int) : ScanStatus()
+        data class InProgress(val current: Int, val total: Int) : ScanStatus()
+        data class Complete(val tracks: List<AudioTrack>) : ScanStatus()
     }
 }

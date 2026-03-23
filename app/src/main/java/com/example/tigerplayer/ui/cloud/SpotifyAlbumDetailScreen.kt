@@ -1,14 +1,11 @@
 package com.example.tigerplayer.ui.cloud
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,9 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
@@ -30,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -51,7 +46,8 @@ import coil.compose.AsyncImage
 import com.example.tigerplayer.data.remote.model.SpotifyTrack
 import com.example.tigerplayer.ui.theme.SpotifyGreen
 import com.example.tigerplayer.ui.theme.WitcherIcons
-
+import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +58,7 @@ fun SpotifyAlbumDetailScreen(
     viewModel: CloudViewModel,
     onBackClick: () -> Unit
 ) {
-    val tracks by viewModel.currentPlaylistTracks.collectAsState() // Re-using the same StateFlow for simplicity
+    val tracks by viewModel.currentPlaylistTracks.collectAsState()
     val isLoading by viewModel.isLoadingTracks.collectAsState()
 
     LaunchedEffect(albumId) {
@@ -70,13 +66,21 @@ fun SpotifyAlbumDetailScreen(
     }
 
     Scaffold(
-        containerColor = Color.Black, // Deep Noir
+        containerColor = Color(0xFF121212), // Deep Noir
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(albumName, fontWeight = FontWeight.Black, fontSize = 16.sp) },
+                title = {
+                    Text(
+                        text = albumName,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(WitcherIcons.Back, contentDescription = null, tint = Color.White)
+                        Icon(WitcherIcons.Back, contentDescription = "Back", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -87,22 +91,27 @@ fun SpotifyAlbumDetailScreen(
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
             contentPadding = PaddingValues(bottom = 120.dp)
         ) {
             // --- HERO SECTION ---
             item {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     AsyncImage(
                         model = albumImageUrl,
-                        contentDescription = null,
+                        contentDescription = "Cover for $albumName",
                         modifier = Modifier
                             .size(260.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .shadow(24.dp),
+                            // THE FIX: Shadow first, then clip
+                            .shadow(24.dp, MaterialTheme.shapes.extraLarge, spotColor = SpotifyGreen)
+                            .clip(MaterialTheme.shapes.extraLarge),
                         contentScale = ContentScale.Crop
                     )
 
@@ -120,18 +129,21 @@ fun SpotifyAlbumDetailScreen(
                     Button(
                         onClick = { viewModel.playSpotifyUri("spotify:album:$albumId") },
                         colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
-                        modifier = Modifier.padding(top = 16.dp).height(48.dp).width(160.dp),
+                        modifier = Modifier
+                            .padding(top = 16.dp)
+                            .height(56.dp) // Slightly taller for better touch targets
+                            .width(180.dp),
                         shape = CircleShape
                     ) {
                         Icon(WitcherIcons.Play, contentDescription = null, tint = Color.Black)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("PLAY", color = Color.Black, fontWeight = FontWeight.Black)
+                        Text("PLAY ALBUM", color = Color.Black, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                     }
                 }
             }
 
             // --- TRACK LIST ---
-            if (isLoading) {
+            if (isLoading && tracks.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = SpotifyGreen)
@@ -139,7 +151,8 @@ fun SpotifyAlbumDetailScreen(
                 }
             } else {
                 itemsIndexed(tracks) { index, track ->
-                    SpotifyTrackRow(
+                    // THE FIX: Renamed to avoid collision
+                    SpotifyAlbumTrackRow(
                         index = index + 1,
                         track = track,
                         onClick = { viewModel.playSpotifyUri(track.uri) }
@@ -150,40 +163,52 @@ fun SpotifyAlbumDetailScreen(
     }
 }
 
+// THE FIX: Renamed composable and added glass/bounce styling
 @Composable
-fun SpotifyTrackRow(index: Int, track: SpotifyTrack, onClick: () -> Unit) {
-    Row(
+fun SpotifyAlbumTrackRow(index: Int, track: SpotifyTrack, onClick: () -> Unit) {
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .bounceClick { onClick() }
+            .glassEffect(MaterialTheme.shapes.medium),
+        color = Color.Black.copy(alpha = 0.2f) // Deep glass
     ) {
-        Text(
-            text = index.toString(),
-            modifier = Modifier.width(32.dp),
-            color = Color.White.copy(alpha = 0.5f),
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Column(modifier = Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = track.name,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                text = index.toString(),
+                modifier = Modifier.width(32.dp),
+                color = SpotifyGreen.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black
             )
-            Text(
-                text = track.artists.joinToString { it.name },
-                color = Color.White.copy(alpha = 0.6f),
-                style = MaterialTheme.typography.bodySmall
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = track.artists.joinToString { it.name },
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                imageVector = WitcherIcons.Options,
+                contentDescription = "Options",
+                tint = Color.White.copy(alpha = 0.3f),
+                modifier = Modifier.size(20.dp)
             )
         }
-        Icon(
-            imageVector = WitcherIcons.Options,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.3f),
-            modifier = Modifier.size(20.dp)
-        )
     }
 }

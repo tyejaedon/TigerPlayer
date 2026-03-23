@@ -4,7 +4,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
-import androidx.compose.material.icons.rounded.* // Using Rounded icons for the Pixel/Expressive feel
+import androidx.compose.material.icons.rounded.*
+import com.example.tigerplayer.R
 
 /**
  * A centralized dictionary for all app icons.
@@ -48,4 +49,7 @@ object WitcherIcons {
     val Headphones = Icons.Rounded.Headphones
     val Close = Icons.Rounded.Close
     val More = Icons.Rounded.MoreVert
+
+    // --- Brand & Fallbacks ---
+    val DefaultAlbumArt = R.drawable.ic_launcher_tiger
 }

@@ -23,7 +23,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 @Singleton
 class SpotifyRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val spotifyApiService: SpotifyApiService,
     val authManager: SpotifyAuthManager // Inject the manager here!
 ) {
@@ -163,11 +163,15 @@ class SpotifyRepository @Inject constructor(
     }
 
     fun playUri(uri: String) {
-        // RECTIFIED: Use _isRemoteConnected
-        if (_isRemoteConnected.value) {
-            spotifyAppRemote?.playerApi?.play(uri)
+        val remote = spotifyAppRemote
+        if (_isRemoteConnected.value && remote != null) {
+            remote.playerApi.play(uri)
         } else {
+            // If the connection was lost, trigger a reconnect and the play command
+            _isRemoteConnected.value = false
             connect()
+            // Note: In a production app, you'd queue this URI to play
+            // once onConnected triggers.
         }
     }
 

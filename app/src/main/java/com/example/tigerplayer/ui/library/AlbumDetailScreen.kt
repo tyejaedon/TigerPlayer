@@ -5,7 +5,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -143,14 +142,15 @@ fun AlbumDetailsScreen(
                             .fillMaxWidth()
                             .height(300.dp)
                             .padding(16.dp)
-                            .clip(MaterialTheme.shapes.extraLarge)
-                            .shadow(24.dp, MaterialTheme.shapes.extraLarge),
+                            // THE FIX 1: Shadow goes BEFORE clip
+                            .shadow(24.dp, MaterialTheme.shapes.extraLarge)
+                            .clip(MaterialTheme.shapes.extraLarge),
                         contentScale = ContentScale.Crop
                     )
                 }
 
                 item {
-                    // THE GLASS BUBBLE HEADER (Button removed so it can float)
+                    // THE GLASS BUBBLE HEADER
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -178,31 +178,29 @@ fun AlbumDetailsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // THE TRACKS (Upgraded to larger, premium glass cards)
+                // THE TRACKS
                 itemsIndexed(albumTracks) { index, track ->
                     val isCurrentTrack = uiState.currentTrack?.id == track.id
 
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp) // Increased vertical margin
-                            .clip(MaterialTheme.shapes.extraLarge) // Rounder corners
-                            .clickable { viewModel.playTrack(track) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            // THE FIX 2: Replace .clickable with .bounceClick
+                            .bounceClick { viewModel.playTrack(track) }
+                            .clip(MaterialTheme.shapes.extraLarge)
                             .glassEffect(MaterialTheme.shapes.extraLarge)
-                            // Subtle glass border
                             .border(
                                 width = 1.dp,
                                 color = if (isCurrentTrack) accentColor.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f),
                                 shape = MaterialTheme.shapes.extraLarge
                             ),
-                        // Darker glass background for contrast
                         color = if (isCurrentTrack) accentColor.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.2f)
                     ) {
                         Row(
-                            modifier = Modifier.padding(20.dp), // Thicker internal padding
+                            modifier = Modifier.padding(20.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Bigger, chunkier index bubble
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
@@ -225,7 +223,7 @@ fun AlbumDetailsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = track.title,
-                                    style = MaterialTheme.typography.titleMedium, // Upgraded from bodyLarge
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = if (isCurrentTrack) accentColor else MaterialTheme.colorScheme.onBackground,
                                     maxLines = 1,
@@ -250,7 +248,7 @@ fun AlbumDetailsScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 100.dp) // Keeps it safely above your bottom navigation bar
+                .padding(bottom = 100.dp)
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
@@ -260,9 +258,9 @@ fun AlbumDetailsScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                 modifier = Modifier
                     .fillMaxWidth(0.6f)
-                    .height(64.dp) // Made it slightly chunkier
-                    .shadow(16.dp, CircleShape, spotColor = accentColor) // Colored shadow for extra pop
-                    .bounceClick { }
+                    .height(64.dp)
+                    .shadow(16.dp, CircleShape, spotColor = accentColor)
+                // THE FIX 3: Removed redundant .bounceClick
             ) {
                 Icon(WitcherIcons.Play, contentDescription = null, tint = Color.White)
                 Spacer(modifier = Modifier.width(12.dp))

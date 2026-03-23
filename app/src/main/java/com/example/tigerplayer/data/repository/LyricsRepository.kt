@@ -16,7 +16,7 @@ import javax.inject.Singleton
 @Singleton
 class LyricsRepository @Inject constructor(
     private val lrclibApi: LrclibApi,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     /**
      * Fetches lyrics for a track.
@@ -26,15 +26,13 @@ class LyricsRepository @Inject constructor(
     fun getLyrics(track: AudioTrack): Flow<String?> = flow {
         // 1. Try to find local lyrics file first (Zero network cost)
         val localLyrics = findLocalLyrics(track)
-        if (localLyrics != null) {
-            Log.d("LyricsRepo", "Found local lyrics for ${track.title}")
+        if (!localLyrics.isNullOrBlank()) {
             emit(localLyrics)
             return@flow
         }
 
-        // 2. Fallback to Remote API
+        // 2. Fallback to Remote API (LRCLIB)
         try {
-            Log.d("LyricsRepo", "Fetching remote lyrics for ${track.title}...")
             val response = lrclibApi.getLyrics(
                 trackName = track.title,
                 artistName = track.artist,
@@ -43,45 +41,47 @@ class LyricsRepository @Inject constructor(
 
             if (response.isSuccessful && response.body() != null) {
                 val body = response.body()!!
-                // Prefer synced lyrics (for karaoke style), fallback to plain
-                val bestLyrics = body.syncedLyrics ?: body.plainLyrics
+                // Priority: Synced -> Plain
+                val bestLyrics = body.syncedLyrics?.takeIf { it.isNotBlank() }
+                    ?: body.plainLyrics?.takeIf { it.isNotBlank() }
+
                 emit(bestLyrics)
             } else {
-                Log.w("LyricsRepo", "No lyrics found on LRCLIB: ${response.code()}")
                 emit(null)
             }
         } catch (e: Exception) {
-            Log.e("LyricsRepo", "Network error fetching lyrics", e)
+            Log.e("LyricsRepo", "Ritual failed: Network error fetching lyrics", e)
             emit(null)
         }
     }.flowOn(Dispatchers.IO)
 
+    /**
+     * Scans the directory of the audio file for .lrc or .txt files
+     * with the same filename.
+     */
     private fun findLocalLyrics(track: AudioTrack): String? {
-        // THE FIX: Use the actual raw absolute file path, NOT the MediaStore URI path!
-        // Assuming your AudioTrack has a 'data' or 'filePath' string property.
-        // Change 'track.data' to whatever you named the absolute path string in your model.
-        val rawPath = track.id ?: return null
+        // IMPORTANT: track.path must be the absolute file path (e.g. /storage/emulated/0/Music/song.flac)
+        val rawPath = track.path ?: return null
 
-        val audioFile = File(rawPath)
-        if (!audioFile.exists()) return null
+        return try {
+            val audioFile = File(rawPath)
+            if (!audioFile.exists()) return null
 
-        val parentDir = audioFile.parentFile ?: return null
-        val baseName = audioFile.nameWithoutExtension
+            val parentDir = audioFile.parentFile ?: return null
+            val baseName = audioFile.nameWithoutExtension
 
-        // Look for matching files in the exact same folder
-        val extensions = listOf(".lrc", ".txt")
+            // Look for matching sidecar files (song.lrc or song.txt)
+            val extensions = listOf(".lrc", ".LRC", ".txt", ".TXT")
 
-        for (ext in extensions) {
-            val lyricsFile = File(parentDir, "$baseName$ext")
-            if (lyricsFile.exists()) {
-                return try {
-                    lyricsFile.readText()
-                } catch (e: Exception) {
-                    Log.e("LyricsRepo", "Failed to read local lyrics file", e)
-                    null
-                }
+            extensions.firstNotNullOfOrNull { ext ->
+                val lyricsFile = File(parentDir, "$baseName$ext")
+                if (lyricsFile.exists()) {
+                    lyricsFile.readText().takeIf { it.isNotBlank() }
+                } else null
             }
+        } catch (e: Exception) {
+            Log.e("LyricsRepo", "Failed to read local scroll", e)
+            null
         }
-        return null
     }
 }

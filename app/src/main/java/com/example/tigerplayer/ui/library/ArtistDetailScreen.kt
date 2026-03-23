@@ -8,13 +8,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.magnifier
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -27,12 +27,16 @@ import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.ui.home.SearchResultItem
 import com.example.tigerplayer.ui.home.SectionTitle
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.utils.ArtistUtils
+import java.text.NumberFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,13 +108,20 @@ fun ArtistDetailsScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text(artistName, fontWeight = FontWeight.Black) },
+                    title = {
+                        Text(
+                            text = artistName,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
                             Icon(WitcherIcons.Back, contentDescription = "Back")
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent
                     ),
                     modifier = Modifier.glassEffect(RectangleShape)
@@ -126,117 +137,145 @@ fun ArtistDetailsScreen(
             ) {
                 // 1. HERO IMAGE
                 item {
-                    AsyncImage(
-                        model = imageRequest,
-                        contentDescription = "Image of $artistName",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(320.dp)
-                            .padding(16.dp)
-                            .clip(MaterialTheme.shapes.extraLarge),
-                        contentScale = ContentScale.Crop
-                    )
+                    ArtistHeroImage(imageRequest, artistName)
                 }
 
-                // 2. GENRE CLOUD (The New Polish)
-                if (!profile?.genres.isNullOrEmpty()) {
+                // 2. GENRE CLOUD
+                if (profile?.genres?.isNotEmpty() == true) {
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            profile.genres.take(3)?.forEach { genre ->
-                                MetadataBadge(text = genre, isHighlight = true)
-                            }
-                        }
+                        ArtistGenreCloud(profile.genres)
                     }
                 }
 
-                // 3. THE VANGUARD STATS & BIO
+                // 3. VANGUARD STATS & BIO
                 item {
-                    Column(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth()
-                            .glassEffect(MaterialTheme.shapes.large)
-                            .background(
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
-                                MaterialTheme.shapes.large
-                            )
-                            .padding(20.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "VANGUARD STATS",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 2.sp
-                            )
+                    ArtistVanguardStats(profile)
+                }
 
-                            // THE RENOWN BADGE
-                            MetadataBadge(
-                                text = "RENOWN: ${profile?.popularity ?: 0}",
-                                textColor = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
+                // 4. LOCAL ARCHIVES
+                if (artistTracks.isNotEmpty()) {
+                    item {
                         Spacer(modifier = Modifier.height(16.dp))
-
-                        val bio = profile?.bio
-                        if (!bio.isNullOrBlank()) {
-                            Text(
-                                text = bio,
-                                style = MaterialTheme.typography.bodyLarge,
-                                lineHeight = 26.sp,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        } else {
-                            // Professional Loading Ritual
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "Consulting the Spotify Oracle...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                LinearProgressIndicator(
-                                    modifier = Modifier.fillMaxWidth().height(2.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                                    trackColor = Color.Transparent
-                                )
-                            }
-                        }
+                        SectionTitle(title = "Local Archives")
                     }
-                }
 
-                // 4. THE ARCHIVES (Songs)
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    SectionTitle(title = "Archives")
-                }
-
-                items(artistTracks) { track ->
-                    SearchResultItem(
-                        track = track,
-                        isAlbum = false,
-                        onClick = { viewModel.playTrack(track) }
-                    )
+                    items(artistTracks) { track ->
+                        SearchResultItem(
+                            track = track,
+                            isAlbum = false,
+                            onClick = { viewModel.playTrack(track) }
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+// --- EXTRACTED COMPONENTS ---
+
 @Composable
-fun MetadataBadge(
+private fun ArtistHeroImage(imageRequest: ImageRequest, artistName: String) {
+    AsyncImage(
+        model = imageRequest,
+        contentDescription = "Image of $artistName",
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(320.dp)
+            .padding(16.dp)
+            .shadow(24.dp, MaterialTheme.shapes.extraLarge)
+            .clip(MaterialTheme.shapes.extraLarge),
+        contentScale = ContentScale.Crop
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ArtistGenreCloud(genres: List<String>) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        genres.take(4).forEach { genre ->
+            ArtistMetadataBadge(text = genre, isHighlight = true)
+        }
+    }
+}
+
+@Composable
+private fun ArtistVanguardStats(profile: ArtistDetails?) {
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxWidth()
+            .glassEffect(MaterialTheme.shapes.large)
+            .background(
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+                MaterialTheme.shapes.large
+            )
+            .padding(20.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "VANGUARD STATS",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            )
+
+            val formattedListeners = NumberFormat.getNumberInstance(Locale.US).format(profile?.popularity ?: 0)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ArtistMetadataBadge(
+                    text = "LISTENERS: $formattedListeners",
+                    textColor = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        val bio = profile?.bio
+        if (!bio.isNullOrBlank()) {
+            Text(
+                text = bio,
+                style = MaterialTheme.typography.bodyLarge,
+                lineHeight = 26.sp,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Consulting the Archives...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                    trackColor = Color.Transparent
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistMetadataBadge(
     text: String,
     isHighlight: Boolean = false,
     textColor: Color = MaterialTheme.colorScheme.primary
@@ -247,8 +286,7 @@ fun MetadataBadge(
         border = BorderStroke(
             width = 1.dp,
             color = if (isHighlight) textColor else textColor.copy(alpha = 0.3f)
-        ),
-        modifier = Modifier.padding(vertical = 4.dp)
+        )
     ) {
         Text(
             text = text.uppercase(),

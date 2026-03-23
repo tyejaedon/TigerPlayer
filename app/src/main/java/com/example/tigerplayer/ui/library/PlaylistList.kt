@@ -30,7 +30,6 @@ fun PlaylistsList(
     val customPlaylists by viewModel.customPlaylists.collectAsState(initial = emptyList())
     var showCreateDialog by remember { mutableStateOf(false) }
 
-    // THE FIX: Re-derive these whenever customPlaylists changes
     val likedSongsPlaylist = remember(customPlaylists) {
         customPlaylists.find { it.name.equals("Liked Songs", ignoreCase = true) }
     }
@@ -46,8 +45,12 @@ fun PlaylistsList(
             // --- 1. The Liked Songs Archive (Top Priority) ---
             item {
                 LikedSongsCard(
-                        trackCount = likedSongsPlaylist?.trackCount ?: 0,
-                onClick = { likedSongsPlaylist?.let { onNavigateToPlaylist(it.id, "Liked Songs") } }
+                    trackCount = likedSongsPlaylist?.trackCount ?: 0,
+                    onClick = {
+                        // THE FIX: Always navigate, even if empty. Use -3L as the "Empty Liked Songs" flag
+                        val playlistId = likedSongsPlaylist?.id ?: -3L
+                        onNavigateToPlaylist(playlistId, "Liked Songs")
+                    }
                 )
             }
 
@@ -57,7 +60,7 @@ fun PlaylistsList(
             item {
                 ActionListItem(
                     icon = WitcherIcons.Add,
-                    title = "Create New Playlist",
+                    title = "Forge New Playlist",
                     onClick = { showCreateDialog = true },
                     isHighlight = true
                 )
@@ -68,7 +71,6 @@ fun PlaylistsList(
                 ActionListItem(
                     icon = WitcherIcons.Favorite,
                     title = "Favorites",
-                    // THE FIX: Pass both the ID and the Name String
                     onClick = { onNavigateToPlaylist(-1L, "Favorites") }
                 )
             }
@@ -77,7 +79,6 @@ fun PlaylistsList(
                 ActionListItem(
                     icon = WitcherIcons.Duration,
                     title = "Recently Added",
-                    // THE FIX: Pass both the ID and the Name String
                     onClick = { onNavigateToPlaylist(-2L, "Recently Added") }
                 )
             }
@@ -136,7 +137,7 @@ private fun ActionListItem(
             tint = if (isHighlight) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .size(64.dp)
-                .clip(RoundedCornerShape(12.dp)) // Slightly sharper corners
+                .clip(RoundedCornerShape(12.dp))
                 .background(if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
                 .padding(16.dp)
         )
@@ -169,7 +170,6 @@ private fun CustomPlaylistRow(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // A placeholder icon for custom playlists. We can upgrade this to a collage of album art later!
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -202,8 +202,6 @@ private fun CustomPlaylistRow(
     }
 }
 
-
-
 @Composable
 private fun CreatePlaylistDialog(
     onDismiss: () -> Unit,
@@ -229,7 +227,6 @@ private fun CreatePlaylistDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Using the dark-glass text field style from the search bar
             TextField(
                 value = text,
                 onValueChange = { text = it },

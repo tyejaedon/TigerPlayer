@@ -4,7 +4,6 @@ import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -44,8 +43,7 @@ fun SpotifyPlaylistScreen(
     val isLoading by viewModel.isLoadingTracks.collectAsState()
     val context = LocalContext.current
 
-    // --- DYNAMIC SPOTIFY COLOR EXTRACTION ---
-    val fallbackColor = Color(0xFF121212) // Spotify Noir
+    val fallbackColor = Color(0xFF121212)
     var dominantColor by remember { mutableStateOf(fallbackColor) }
 
     val animatedDominantColor by animateColorAsState(
@@ -75,7 +73,6 @@ fun SpotifyPlaylistScreen(
             .build()
     }
 
-    // Determine Accent (Defaults to Spotify Green if extraction fails)
     val accentColor = if (dominantColor == fallbackColor) Color(0xFF1DB954) else animatedDominantColor
 
     LaunchedEffect(playlistId) {
@@ -83,7 +80,6 @@ fun SpotifyPlaylistScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1. LIVE GRADIENT BACKGROUND
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -100,7 +96,7 @@ fun SpotifyPlaylistScreen(
         )
 
         Scaffold(
-            containerColor = Color.Transparent, // Let the gradient shine through
+            containerColor = Color.Transparent,
             topBar = {
                 CenterAlignedTopAppBar(
                     title = {
@@ -117,10 +113,12 @@ fun SpotifyPlaylistScreen(
                             Icon(WitcherIcons.Back, contentDescription = "Back", tint = Color.White)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent
-                    ),
-                    modifier = Modifier.background(animatedDominantColor.copy(alpha = 0.2f))
+                    // THE FIX: Correct Material 3 syntax for transparent app bars
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
                 )
             }
         ) { paddingValues ->
@@ -133,9 +131,8 @@ fun SpotifyPlaylistScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
-                    contentPadding = PaddingValues(bottom = 120.dp) // Space for floating button
+                    contentPadding = PaddingValues(bottom = 120.dp)
                 ) {
-                    // --- HERO IMAGE ---
                     item {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
@@ -153,7 +150,7 @@ fun SpotifyPlaylistScreen(
                             )
                         }
                     }
-                    // Inside your LazyColumn in SpotifyPlaylistScreen
+
                     if (!isLoading && tracks.isEmpty()) {
                         item {
                             Box(
@@ -181,7 +178,6 @@ fun SpotifyPlaylistScreen(
             }
         }
 
-        // --- THE FLOATING PLAY BUTTON ---
         if (tracks.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -198,7 +194,6 @@ fun SpotifyPlaylistScreen(
                         .fillMaxWidth(0.6f)
                         .height(64.dp)
                         .shadow(16.dp, CircleShape, spotColor = accentColor)
-                        .bounceClick { }
                 ) {
                     Icon(WitcherIcons.Play, contentDescription = null, tint = Color.White)
                     Spacer(modifier = Modifier.width(12.dp))
@@ -221,15 +216,14 @@ fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .clip(MaterialTheme.shapes.large)
-            .clickable { onClick() }
+            .bounceClick { onClick() }
             .glassEffect(MaterialTheme.shapes.large),
-        color = Color.Black.copy(alpha = 0.2f) // Deep glass
+        color = Color.Black.copy(alpha = 0.2f)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Rank Number
             Text(
                 text = index.toString(),
                 modifier = Modifier.width(32.dp),
@@ -238,19 +232,19 @@ fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick
                 fontWeight = FontWeight.Black
             )
 
-            // Track Art
             AsyncImage(
-                model = track.album.images?.firstOrNull()?.url,
+                // SAFE CALL: Added '?.' before images to prevent NullPointerExceptions
+                model = track.album?.images?.firstOrNull()?.url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(48.dp)
                     .clip(MaterialTheme.shapes.small)
+                    .background(Color.White.copy(alpha = 0.1f))
             )
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Track Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.name,

@@ -19,7 +19,7 @@ import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
         PlaylistTrackCrossRef::class,
         CachedTrackEntity::class // <-- Added
     ],
-    version = 4, // <-- Bumped to 4
+    version = 5, // <-- Bumped to 5 for year addition
     exportSchema = false
 )
 @TypeConverters(Converters::class)

@@ -57,9 +57,12 @@ data class SpotifyTrack(
     @SerializedName("id") val id: String,
     @SerializedName("name") val name: String,
     @SerializedName("uri") val uri: String,
-    @SerializedName("album") val album: SpotifyAlbum,
+
+    // THE FIX: Make album nullable (?) because Simplified Tracks (from the Album endpoint) don't have this field!
+    @SerializedName("album") val album: SpotifyAlbum?,
+
     @SerializedName("artists") val artists: List<SpotifyArtist>,
-    @SerializedName("duration_ms") val durationMs: Long // Helpful for the UI progress bars
+    @SerializedName("duration_ms") val durationMs: Long
 )
 
 data class SpotifyAlbumTrackResponse(

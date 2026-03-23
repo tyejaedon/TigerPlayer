@@ -3,43 +3,29 @@ package com.example.tigerplayer.utils
 import java.security.MessageDigest
 import java.util.UUID
 
+data class NavidromeAuth(
+    val u: String,
+    val t: String,
+    val s: String,
+    val v: String = "1.16.1",
+    val c: String = "TigerPlayer"
+)
+
 object NavidromeSecurity {
 
-    // The payload we will inject into our Retrofit API calls
-    data class AuthPayload(
-        val u: String,     // Username
-        val t: String,     // Token (MD5 Hash)
-        val s: String,     // Salt
-        val v: String = "1.16.1", // Subsonic API version
-        val c: String = "TigerPlayer" // Client name
-    )
-
-    /**
-     * Forges the secure token required by the Subsonic API.
-     */
-    fun generateAuthPayload(username: String, password: String): AuthPayload {
-        val salt = generateSalt()
-        val token = md5(password + salt)
-
-        return AuthPayload(
-            u = username,
-            t = token,
-            s = salt
-        )
+    fun generateAuthPayload(username: String, pass: String): NavidromeAuth {
+        val salt = UUID.randomUUID().toString().substring(0, 8)
+        val token = md5(pass + salt)
+        return NavidromeAuth(u = username, t = token, s = salt)
     }
 
-    private fun generateSalt(): String {
-        // A random 8-character string is perfect for the Subsonic salt
-        return UUID.randomUUID().toString().substring(0, 8)
+    // This helper is used by AudioRepository to generate valid Stream URIs
+    fun generateToken(pass: String, salt: String): String {
+        return md5(pass + salt)
     }
 
     private fun md5(input: String): String {
         val md = MessageDigest.getInstance("MD5")
-        val digested = md.digest(input.toByteArray())
-
-        // Convert the byte array into a clean hex string
-        return digested.joinToString("") {
-            String.format("%02x", it)
-        }
+        return md.digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 }

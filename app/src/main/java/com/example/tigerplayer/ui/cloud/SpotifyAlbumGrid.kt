@@ -1,7 +1,6 @@
 package com.example.tigerplayer.ui.cloud
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,11 +35,9 @@ import com.example.tigerplayer.ui.theme.bounceClick
 @Composable
 fun SpotifyAlbumsGrid(
     viewModel: CloudViewModel,
-    albums: List<SpotifyAlbum>, // The filtered archives passed from CloudScreen
+    albums: List<SpotifyAlbum>,
     onAlbumClick: (String, String, String?) -> Unit
 ) {
-    // RECTIFICATION 1: Only collect the loading state.
-    // We use the 'albums' parameter passed in for the actual list.
     val isLoading by viewModel.isLoadingAlbums.collectAsState()
 
     if (isLoading) {
@@ -51,14 +47,12 @@ fun SpotifyAlbumsGrid(
     } else {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 120.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 120.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             items(albums) { album ->
-                // RECTIFICATION 2: Use your SpotifyAlbumCard component here
-                // to keep the code clean and DRY.
                 SpotifyAlbumCard(
                     name = album.name,
                     artist = album.artists.firstOrNull()?.name ?: "Various",
@@ -82,7 +76,7 @@ fun SpotifyAlbumCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .bounceClick { onClick() } // Use the custom bounce effect for that premium feel
+            .bounceClick { onClick() }
             .padding(4.dp)
     ) {
         AsyncImage(
@@ -94,19 +88,24 @@ fun SpotifyAlbumCard(
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
+
         Spacer(modifier = Modifier.height(8.dp))
+
         Text(
             text = name,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            color = Color.White
+            // THE FIX: Use semantic background contrast color
+            color = MaterialTheme.colorScheme.onBackground
         )
+
         Text(
             text = artist,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            // THE FIX: Use surface variant for secondary text
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

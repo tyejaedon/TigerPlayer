@@ -2,6 +2,7 @@ package com.example.tigerplayer.ui.library
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,7 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tigerplayer.ui.player.PlayerViewModel
@@ -38,16 +37,21 @@ fun PlaylistDetailsScreen(
     onBackClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // Remember the flow to prevent re-fetching on every recomposition
     val playlistTracksFlow = remember(playlistId) { viewModel.getPlaylistTracks(playlistId) }
     val playlistTracks by playlistTracksFlow.collectAsState(initial = emptyList())
 
     val scrollState = rememberLazyListState()
+
+    // Derived state prevents unnecessary recompositions during scrolling
     val scrollOffset by remember { derivedStateOf { scrollState.firstVisibleItemScrollOffset } }
     val isScrolled by remember { derivedStateOf { scrollState.firstVisibleItemIndex > 0 } }
 
     val artScale by animateFloatAsState(
         targetValue = if (isScrolled) 0.7f else 1f,
-        animationSpec = tween(500), label = "artScale"
+        animationSpec = tween(500),
+        label = "artScale"
     )
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -86,10 +90,11 @@ fun PlaylistDetailsScreen(
                     .shadow(32.dp, MaterialTheme.shapes.extraLarge, spotColor = MaterialTheme.colorScheme.primary),
                 shape = MaterialTheme.shapes.extraLarge,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
+                        // Dynamic icon based on whether it's the Favorites playlist
                         imageVector = if (playlistId == -1L) WitcherIcons.Favorite else WitcherIcons.Playlist,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
@@ -103,7 +108,7 @@ fun PlaylistDetailsScreen(
         LazyColumn(
             state = scrollState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 320.dp, bottom = 120.dp)
+            contentPadding = PaddingValues(top = 320.dp, bottom = 120.dp) // Leave room for MiniPlayer
         ) {
             item {
                 // HEADER CARD
@@ -136,7 +141,9 @@ fun PlaylistDetailsScreen(
                         Button(
                             onClick = { viewModel.mediaControllerManager.setPlaylistAndPlay(playlistTracks, 0) },
                             shape = CircleShape,
-                            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp).bounceClick { },
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .height(56.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Icon(WitcherIcons.Play, null, tint = MaterialTheme.colorScheme.onPrimary)
@@ -158,13 +165,16 @@ fun PlaylistDetailsScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
                         .clip(MaterialTheme.shapes.medium)
-                        .clickable { viewModel.mediaControllerManager.setPlaylistAndPlay(playlistTracks, index) }
+                        // Use bounceClick instead of standard clickable for consistency
+                        .bounceClick { viewModel.mediaControllerManager.setPlaylistAndPlay(playlistTracks, index) }
                         .glassEffect(MaterialTheme.shapes.medium),
                     color = if (isCurrentTrack) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent,
-                    border = if (isCurrentTrack) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null
+                    border = if (isCurrentTrack) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -179,21 +189,25 @@ fun PlaylistDetailsScreen(
                                 text = track.title,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = if (isCurrentTrack) FontWeight.Black else FontWeight.Bold,
-                                color = if (isCurrentTrack) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                color = if (isCurrentTrack) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
                             )
                             Text(
                                 text = track.artist,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
                             )
                         }
 
+                        // Playback Indicator properly placed inside the Row
                         if (isCurrentTrack) {
+                            Spacer(modifier = Modifier.width(8.dp))
                             Icon(
-                                imageVector = WitcherIcons.Duration, // Use a "playing" or pulse icon
-                                contentDescription = null,
+                                imageVector = WitcherIcons.Duration,
+                                contentDescription = "Playing",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -203,16 +217,22 @@ fun PlaylistDetailsScreen(
 
         // STICKY TOP BAR
         TopAppBar(
-            title = { if (isScrolled) Text(playlistName, fontWeight = FontWeight.Black) },
+            title = {
+                if (isScrolled) {
+                    Text(playlistName, fontWeight = FontWeight.Black)
+                }
+            },
             navigationIcon = {
                 IconButton(onClick = onBackClick) {
-                    Icon(WitcherIcons.Back, null)
+                    Icon(WitcherIcons.Back, contentDescription = "Back")
                 }
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = if (isScrolled) MaterialTheme.colorScheme.background.copy(alpha = 0.8f) else Color.Transparent
             ),
-            modifier = Modifier.statusBarsPadding().then(if (isScrolled) Modifier.glassEffect(RectangleShape) else Modifier)
+            modifier = Modifier
+                .statusBarsPadding()
+                .then(if (isScrolled) Modifier.glassEffect(RectangleShape) else Modifier)
         )
     }
 }

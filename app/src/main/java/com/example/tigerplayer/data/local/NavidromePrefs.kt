@@ -15,7 +15,7 @@ private val Context.dataStore by preferencesDataStore(name = "navidrome_prefs")
 
 @Singleton
 class NavidromePrefs @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val dataStore = context.dataStore
 

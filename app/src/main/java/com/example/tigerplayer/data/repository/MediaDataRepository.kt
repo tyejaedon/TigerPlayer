@@ -54,7 +54,12 @@ class MediaDataRepository @Inject constructor(
         // 2. CACHE MISS: CONSULT THE SPOTIFY ORACLE
         Log.d("MediaRepo", "Cache Miss for $artistName. Hunting Spotify API...")
         try {
-            val token = authManager.getToken()
+            val token = authManager.getValidToken()
+            if (token.isEmpty()) {
+                emit(ArtistDetails(artistName, null, "No ritual token available."))
+                return@flow
+            }
+
             val response = spotifyApiService.searchArtist("Bearer $token", artistName)
 
             if (response.isSuccessful) {
@@ -95,7 +100,7 @@ class MediaDataRepository @Inject constructor(
      * High-Res Album Art Ritual
      */
     fun getHighResAlbumArt(albumName: String, artistName: String): Flow<String?> = flow {
-        val token = authManager.getToken()
+        val token = authManager.getValidToken()
         if (token.isEmpty()) {
             emit(null)
             return@flow

@@ -6,17 +6,22 @@ data class AudioTrack(
     val id: String,
     val title: String,
     val artist: String,
-    val album: String = "Unknown Album",
-    val trackNumber: Int,
+    val album: String,
     val uri: Uri,
+    val artworkUri: Uri,
     val durationMs: Long,
-    val artworkUri: Uri?,
-    val mimeType: String = "audio/mpeg",
+    val mimeType: String,
+    val isLocal: Boolean = false,
+    val isRemote: Boolean = false,
     val bitrate: Int = 0,
     val sampleRate: Int = 0,
-    val isLocal: Boolean = true,
-    val isRemote: Boolean = false,
-    val serverPath: String? = null // Store the raw Subsonic ID here
+    val trackNumber: Int = 0,
+    val serverPath: String? = null,
+    val year: String? = null,
+
+    // --- THE MISSING LINK ---
+    // This must exist for track.path to work in the LyricsRepository!
+    val path: String? = null
 )
 
 data class Playlist(

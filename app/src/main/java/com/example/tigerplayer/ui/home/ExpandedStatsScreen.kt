@@ -92,7 +92,9 @@ fun ExpandedStatsScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                         Text("TOTAL RITUAL TIME", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         Row(verticalAlignment = Alignment.Bottom) {
                             Text(statsState.totalListeningHours.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Black)
-                            Text(" hours", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+                            Text("h ", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+                            Text(statsState.totalListeningMinutes.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Black)
+                            Text("m", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
                         }
                     }
                 }

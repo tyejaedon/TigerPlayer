@@ -14,16 +14,19 @@ import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-object DataModule {
+object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): TigerDatabase {
+    fun provideTigerDatabase(
+        @ApplicationContext context: Context
+    ): TigerDatabase {
         return Room.databaseBuilder(
             context,
             TigerDatabase::class.java,
-            "tiger_database"
+            "tiger_player_vault.db"
         )
+            // THE FIX: Destructive migration is safest during your current "Forging" phase
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -32,10 +35,9 @@ object DataModule {
     fun provideTigerDao(database: TigerDatabase): TigerDao {
         return database.tigerDao()
     }
-    @Provides
-    @Singleton
-    fun providePlaylistDao(database: TigerDatabase): PlaylistDao {
-        return database.playlistDao() // Tells Hilt to pull it from your Database class
-    }
 
+    @Provides
+    fun providePlaylistDao(database: TigerDatabase): PlaylistDao {
+        return database.playlistDao()
+    }
 }

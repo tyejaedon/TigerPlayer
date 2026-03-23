@@ -5,7 +5,9 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,16 +17,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.Subject
 import androidx.compose.material.icons.rounded.AcUnit
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.LocalFireDepartment
-import androidx.compose.material.icons.rounded.Subject
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -37,31 +46,27 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
+import androidx.media3.common.Player
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.library.SongOptionsSheet
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.glassEffect
-import java.util.concurrent.TimeUnit
-import kotlin.math.abs
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.media3.common.Player
 import coil.size.Precision
 import coil.size.Size
+import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.ui.library.SongOptionsSheet
+import com.example.tigerplayer.ui.theme.SpotifyGreen
+import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.glassEffect
+import kotlinx.coroutines.delay
+import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import kotlin.math.sin
 
-// --- Thematic Witcher Colors ---
 // --- Thematic Witcher Colors ---
 private val IgniRed = Color(0xFFF11F1A)
 private val AardBlue = Color(0xFF4FC3F7)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FullPlayerScreen(
     viewModel: PlayerViewModel,
@@ -72,29 +77,44 @@ fun FullPlayerScreen(
     val track = uiState.currentTrack ?: return
     val context = LocalContext.current
 
+    // --- State Hoisting: All variables declared at the top ---
     var showOptions by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
+    var isLikedLocally by remember(track.id) { mutableStateOf(false) }
 
-    // Gesture State
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
 
-    // Dynamic Color States
     val onBackground = MaterialTheme.colorScheme.onBackground
     var dynamicTextColor by remember(onBackground) { mutableStateOf(onBackground) }
     var dynamicSecondaryTextColor by remember(onBackground) { mutableStateOf(onBackground.copy(alpha = 0.7f)) }
 
+    // --- THE DYNAMIC BREATHING ENGINE ---
     val infiniteTransition = rememberInfiniteTransition(label = "ArtBreathing")
+    
     val scale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
-        targetValue = 1.1f,
+        targetValue = 1.15f,
         animationSpec = infiniteRepeatable(
-            animation = tween(15000, easing = LinearEasing),
+            animation = tween(8000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "ScaleAnimation"
     )
 
+    val igniTransition = rememberInfiniteTransition(label = "IgniFlicker")
+    val igniAlpha by igniTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(250, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "FlickerAnimation"
+    )
+
+    // --- Image Loading & Palette Extraction ---
     val imageUrl = if (showLyrics) {
         uiState.artistImageUrl ?: track.artworkUri
     } else {
@@ -113,7 +133,6 @@ fun FullPlayerScreen(
                     val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                     bitmap?.let { b ->
                         Palette.from(b).generate { palette ->
-                            // Prioritize vibrant colors to avoid muddy grays
                             val dominantColorInt = palette?.vibrantSwatch?.rgb
                                 ?: palette?.dominantSwatch?.rgb
                                 ?: palette?.mutedSwatch?.rgb
@@ -124,9 +143,6 @@ fun FullPlayerScreen(
                             if (luminance > 0.6) {
                                 dynamicTextColor = Color.Black
                                 dynamicSecondaryTextColor = Color.Black.copy(alpha = 0.7f)
-                            } else if (luminance < 0.1) {
-                                dynamicTextColor = Color.White
-                                dynamicSecondaryTextColor = Color.White.copy(alpha = 0.7f)
                             } else {
                                 dynamicTextColor = Color.White
                                 dynamicSecondaryTextColor = Color.White.copy(alpha = 0.7f)
@@ -138,6 +154,7 @@ fun FullPlayerScreen(
             .build()
     }
 
+    // --- UI Structure ---
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -178,9 +195,8 @@ fun FullPlayerScreen(
                 }
         )
 
-        // Adaptive Scrim: Lightens or darkens based on the extracted text color
         val scrimColor = if (dynamicTextColor == Color.Black) Color.White else Color.Black
-        val scrimAlphaCenter = if (showLyrics) 0.7f else 0.4f
+        val scrimAlphaCenter = if (showLyrics || showQueue) 0.7f else 0.4f
 
         Box(
             modifier = Modifier
@@ -195,18 +211,6 @@ fun FullPlayerScreen(
                     )
                 )
         )
-        var isLikedLocally by remember(track.id) { mutableStateOf(false) }
-
-        val igniTransition = rememberInfiniteTransition(label = "IgniFlicker")
-        val igniAlpha by igniTransition.animateFloat(
-            initialValue = 0.8f,
-            targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(250, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "FlickerAnimation"
-        )
 
         Column(
             modifier = Modifier
@@ -216,7 +220,6 @@ fun FullPlayerScreen(
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -228,18 +231,57 @@ fun FullPlayerScreen(
                     Icon(WitcherIcons.Collapse, contentDescription = "Collapse", tint = dynamicTextColor)
                 }
 
-                Text(
-                    text = if (showLyrics) "LYRICS" else "NOW PLAYING",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = dynamicTextColor.copy(alpha = 0.8f),
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp
-                )
+                // --- ANIMATED HEADER ---
+                var showAlbumHeader by remember { mutableStateOf(false) }
+                LaunchedEffect(track.id) {
+                    showAlbumHeader = false
+                    while(true) {
+                        delay(5000)
+                        showAlbumHeader = !showAlbumHeader
+                    }
+                }
+
+                AnimatedContent(
+                    targetState = when {
+                        showLyrics -> "LYRICS"
+                        showQueue -> "UP NEXT"
+                        showAlbumHeader -> track.album.uppercase()
+                        else -> "NOW PLAYING"
+                    },
+                    transitionSpec = {
+                        (slideInVertically { height -> height } + fadeIn()).togetherWith(slideOutVertically { height -> -height } + fadeOut())
+                    },
+                    label = "HeaderAnim"
+                ) { headerTitle ->
+                    Text(
+                        text = headerTitle,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = dynamicTextColor.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 200.dp)
+                    )
+                }
 
                 Row {
-                    IconButton(onClick = { showLyrics = !showLyrics }) {
+                    IconButton(onClick = { 
+                        showQueue = !showQueue
+                        if (showQueue) showLyrics = false
+                    }) {
                         Icon(
-                            imageVector = Icons.Rounded.Subject,
+                            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                            contentDescription = "Queue",
+                            tint = if (showQueue) MaterialTheme.colorScheme.primary else dynamicTextColor
+                        )
+                    }
+                    IconButton(onClick = { 
+                        showLyrics = !showLyrics
+                        if (showLyrics) showQueue = false
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.Subject,
                             contentDescription = "Lyrics",
                             tint = if (showLyrics) MaterialTheme.colorScheme.primary else dynamicTextColor
                         )
@@ -257,35 +299,43 @@ fun FullPlayerScreen(
                 contentAlignment = Alignment.BottomStart
             ) {
                 AnimatedContent(
-                    targetState = showLyrics,
+                    targetState = if (showQueue) "queue" else if (showLyrics) "lyrics" else "info",
                     transitionSpec = {
                         (scaleIn(initialScale = 0.8f, animationSpec = tween(400, easing = EaseOutBack)) + fadeIn(tween(400))) togetherWith
                                 (scaleOut(targetScale = 0.8f, animationSpec = tween(400)) + fadeOut(tween(400)))
                     },
-                    label = "LyricsBubbleAnimation"
-                ) { isLyricsShowing ->
-                    if (isLyricsShowing) {
-                        LyricsDisplay(
-                            lyrics = uiState.currentLyrics,
-                            currentPositionMs = uiState.currentPosition,
-                            textColor = dynamicTextColor
-                        )
-                    } else {
-                        TrackInfoCard(
-                            track = track,
-                            textColor = dynamicTextColor,
-                            secondaryTextColor = dynamicSecondaryTextColor,
-                            isLiked = isLikedLocally,
-                            onLikeClick = {
-                                isLikedLocally = !isLikedLocally
-                                if (isLikedLocally) {
-                                    // Summon the ViewModel to permanently save it
-                                    viewModel.addTrackToLikedSongs(track)
-                                } else {
-                                    // Optional: viewModel.removeTrackFromLikedSongs(track)
+                    label = "ContentAnimation"
+                ) { contentType ->
+                    when (contentType) {
+                        "queue" -> {
+                            QueueDisplay(
+                                queue = uiState.queue,
+                                currentTrackId = track.id,
+                                textColor = dynamicTextColor,
+                                onTrackClick = { viewModel.playTrack(it) }
+                            )
+                        }
+                        "lyrics" -> {
+                            LyricsDisplay(
+                                lyrics = uiState.currentLyrics,
+                                currentPositionMs = uiState.currentPosition,
+                                textColor = dynamicTextColor
+                            )
+                        }
+                        else -> {
+                            TrackInfoCard(
+                                track = track,
+                                textColor = dynamicTextColor,
+                                secondaryTextColor = dynamicSecondaryTextColor,
+                                isLiked = isLikedLocally,
+                                onLikeClick = {
+                                    isLikedLocally = !isLikedLocally
+                                    if (isLikedLocally) {
+                                        viewModel.addTrackToLikedSongs(track)
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -330,7 +380,100 @@ fun FullPlayerScreen(
     }
 }
 
-// --- NEW: Synced Lyrics Display Engine ---
+// --- QUEUE ENGINE ---
+
+@Composable
+private fun QueueDisplay(
+    queue: List<AudioTrack>,
+    currentTrackId: String,
+    textColor: Color,
+    onTrackClick: (AudioTrack) -> Unit
+) {
+    if (queue.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = "The queue is empty.\nNo shadows follow.",
+                color = textColor.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.headlineSmall
+            )
+        }
+        return
+    }
+
+    val listState = rememberLazyListState()
+    val currentIndex = queue.indexOfFirst { it.id == currentTrackId }
+
+    LaunchedEffect(Unit) {
+        if (currentIndex > 0) {
+            listState.scrollToItem(currentIndex)
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize()
+            .glassEffect(MaterialTheme.shapes.large)
+            .padding(16.dp),
+        contentPadding = PaddingValues(bottom = 32.dp)
+    ) {
+        itemsIndexed(queue) { index, track ->
+            val isPlaying = track.id == currentTrackId
+            
+            Surface(
+                onClick = { onTrackClick(track) },
+                color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.size(48.dp)) {
+                        AsyncImage(
+                            model = track.artworkUri,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.small)
+                        )
+                        if (isPlaying) {
+                            Box(
+                                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.LocalFireDepartment, null, tint = IgniRed, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = track.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (isPlaying) MaterialTheme.colorScheme.primary else textColor,
+                            fontWeight = if (isPlaying) FontWeight.Black else FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = track.artist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else textColor.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- SYNCHRONIZED LYRICS ENGINE ---
 
 data class LyricLine(val timeMs: Long, val text: String)
 
@@ -414,7 +557,8 @@ private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: C
     }
 }
 
-// --- THE FIERY WAVY SEEKER ---
+// --- FIERY WAVY SEEKER ---
+
 @Composable
 private fun FieryWavySeeker(
     uiState: PlayerUiState,
@@ -424,17 +568,15 @@ private fun FieryWavySeeker(
     val track = uiState.currentTrack ?: return
     val accentColor = if (uiState.isPlaying) IgniRed else AardBlue
 
-
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableStateOf(0f) }
-// THE FIX: Ensure duration is at least 1ms and handle NaN explicitly
+
     val duration = track.durationMs.coerceAtLeast(1L)
     val progressValue = (uiState.currentPosition.toFloat() / duration)
     val actualProgress = if (progressValue.isNaN()) 0f else progressValue.coerceIn(0f, 1f)
 
     val targetProgress = if (isDragging) dragProgress else actualProgress
 
-// Also, ensure the animation doesn't try to interpolate a NaN value
     val animatedProgress by animateFloatAsState(
         targetValue = if (targetProgress.isNaN()) 0f else targetProgress,
         animationSpec = if (uiState.isPlaying && !isDragging)
@@ -480,7 +622,7 @@ private fun FieryWavySeeker(
                 drawLine(
                     color = textColor.copy(alpha = 0.1f),
                     start = Offset(0f, centerY),
-                    end = androidx.compose.ui.geometry.Offset(width, centerY),
+                    end = Offset(width, centerY),
                     strokeWidth = 4.dp.toPx()
                 )
 
@@ -506,7 +648,7 @@ private fun FieryWavySeeker(
                 drawCircle(
                     color = accentColor,
                     radius = 8.dp.toPx(),
-                    center = androidx.compose.ui.geometry.Offset(
+                    center = Offset(
                         progressX,
                         centerY + (waveAmplitude * sin(progressX * waveFrequency + phase))
                     )
@@ -522,7 +664,9 @@ private fun FieryWavySeeker(
     }
 }
 
-// --- AUTO-SCALING TRACK INFO CARD ---
+// --- TRACK INFO CARD ---
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackInfoCard(
     track: AudioTrack,
@@ -533,9 +677,12 @@ private fun TrackInfoCard(
 ) {
     var titleFontSize by remember { mutableStateOf(44.sp) }
 
-    // Heart Animation Mechanics
     val heartScale by animateFloatAsState(
-        targetValue = if (isLiked) 1.2f else 1.0f,
+        targetValue = if (isLiked) {
+            1.2f
+        } else {
+            1.0f
+        },
         animationSpec = spring(dampingRatio = Spring.DampingRatioHighBouncy, stiffness = Spring.StiffnessLow),
         label = "HeartScale"
     )
@@ -557,7 +704,6 @@ private fun TrackInfoCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Track & Artist Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
@@ -567,8 +713,8 @@ private fun TrackInfoCard(
                     ),
                     color = textColor,
                     fontWeight = FontWeight.Black,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee(),
                     onTextLayout = { textLayoutResult ->
                         if (textLayoutResult.hasVisualOverflow && titleFontSize > 24.sp) {
                             titleFontSize *= 0.9f
@@ -582,11 +728,10 @@ private fun TrackInfoCard(
                     color = secondaryTextColor,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.basicMarquee()
                 )
             }
 
-            // --- THE LIKED SONGS BUTTON ---
             IconButton(
                 onClick = onLikeClick,
                 modifier = Modifier
@@ -608,11 +753,27 @@ private fun TrackInfoCard(
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetadataBadge(text = track.mimeType.split("/").last().uppercase(), textColor = textColor)
-            MetadataBadge(text = "LOSSLESS", isHighlight = true, textColor = textColor)
-        }
-    }
+            val format = track.mimeType.split("/").last().uppercase()
+            MetadataBadge(text = format, textColor = textColor)
+
+            when {
+                track.id.startsWith("spotify:") -> {
+                    MetadataBadge(text = "SPOTIFY", isHighlight = true, textColor = SpotifyGreen)
+                }
+                track.isRemote -> {
+                    MetadataBadge(text = "NAVIDROME", isHighlight = true, textColor = AardBlue)
+                }
+                track.mimeType.contains("flac", ignoreCase = true) || track.bitrate > 320000 -> {
+                    MetadataBadge(text = "LOSSLESS", isHighlight = true, textColor = IgniRed)
+                }
+            }
+
+            track.year?.let { year ->
+                MetadataBadge(text = year, textColor = textColor)
+            }
+        }    }
 }
+
 @Composable
 private fun MetadataBadge(text: String, isHighlight: Boolean = false, textColor: Color) {
     Surface(
@@ -631,7 +792,8 @@ private fun MetadataBadge(text: String, isHighlight: Boolean = false, textColor:
     }
 }
 
-// --- FLICKERING & PULSING PLAYBACK CONTROLS ---
+// --- PLAYBACK CONTROLS ---
+
 @Composable
 private fun PlaybackControls(
     uiState: PlayerUiState,
@@ -677,14 +839,31 @@ private fun PlaybackControls(
             label = "PulsingAnimation"
         )
 
-        val color1 by animateColorAsState(if (uiState.isPlaying) AardBlue else IgniRed, tween(500), label = "C1")
-        val color2 by animateColorAsState(if (uiState.isPlaying) AardBlue.copy(alpha = 0.5f) else Color(0xFFFF5722), tween(500), label = "C2")
+        val isPlaying = uiState.isPlaying
+        
+        // ELEMENTAL TRANSITIONS: "Heating" for fire, "Cooling" for ice
+        val elementTransition = rememberInfiniteTransition(label = "ElementPulse")
+        val heatingColor by elementTransition.animateColor(
+            initialValue = IgniRed,
+            targetValue = Color(0xFFFF9100), // Intense Orange
+            animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "Heating"
+        )
+        val coolingColor by elementTransition.animateColor(
+            initialValue = Color(0xFF0D47A1), // Deep Blue
+            targetValue = Color(0xFF81D4FA), // Ice Blue
+            animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "Cooling"
+        )
+
+        val color1 by animateColorAsState(if (isPlaying) heatingColor else coolingColor, tween(500), label = "C1")
+        val color2 by animateColorAsState(if (isPlaying) Color(0xFFFFD700) else Color(0xFFE1F5FE), tween(500), label = "C2")
 
         val gradientBrush = Brush.linearGradient(
             colors = listOf(color1, color2)
         )
 
-        val actionIcon = if (uiState.isPlaying) Icons.Rounded.AcUnit else Icons.Rounded.LocalFireDepartment
+        val actionIcon = if (isPlaying) Icons.Rounded.LocalFireDepartment else Icons.Rounded.AcUnit
 
         Box(
             modifier = Modifier
@@ -694,7 +873,7 @@ private fun PlaybackControls(
                 .graphicsLayer {
                     scaleX = dynamicPulseScale
                     scaleY = dynamicPulseScale
-                    alpha = if (!uiState.isPlaying) 1.0f else igniFlickerAlpha
+                    alpha = if (!isPlaying) 1.0f else igniFlickerAlpha
                 }
                 .padding(4.dp),
             contentAlignment = Alignment.Center

@@ -6,23 +6,30 @@ import com.example.tigerplayer.data.local.entity.CachedTrackEntity
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * THE CHRONICLE RECORDS
+ * Data classes for aggregating your listening habits.
+ */
 data class ArtistStats(
     val artistName: String,
     val playCount: Int,
-    val imageUrl: String? = null // Room will look for this in the MAX(imageUrl)
+    val imageUrl: String? = null
 )
 
 data class TrackStats(
     val trackId: String,
     val title: String,
     val artist: String,
-    val imageUrl: String?, // Now matched with your Query
+    val imageUrl: String?,
     val playCount: Int
 )
 
 @Dao
 @JvmSuppressWildcards
 interface TigerDao {
+
+    // --- THE CHRONICLES (Playback History) ---
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistory(history: PlaybackHistoryEntity): Long
 
@@ -35,12 +42,30 @@ interface TigerDao {
     @Query("SELECT SUM(durationListenedMs) FROM playback_history WHERE timestamp >= :startTime")
     fun getTotalListeningTimeMs(startTime: Long): Flow<Long?>
 
-
-    @Query("SELECT artist FROM playback_history GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 1")
+    /**
+     * THE SUPREME ARTIST
+     * Returns the most played artist, accounting for collaborations.
+     */
+    @Query("""
+        SELECT 
+            trim(CASE 
+                WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
+                WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
+                WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
+                WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                ELSE artist 
+            END) as artistName
+        FROM playback_history 
+        GROUP BY artistName 
+        ORDER BY COUNT(*) DESC 
+        LIMIT 1
+    """)
     fun getTopArtist(): Flow<String?>
 
-
-
+    /**
+     * THE TOP ARTISTS LIST
+     * Direct SQL ritual to split featuring artists and rank them.
+     */
     @Query("""
         SELECT 
             trim(CASE 
@@ -70,22 +95,29 @@ interface TigerDao {
     """)
     fun getTopTracks(startTime: Long, limit: Int): Flow<List<TrackStats>>
 
+    // --- THE METADATA SIGN (Artist Cache) ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArtistCache(artist: ArtistCacheEntity): Long
 
-    @Transaction
     @Query("SELECT * FROM artist_cache WHERE artistName = :name LIMIT 1")
     suspend fun getArtistCache(name: String): ArtistCacheEntity?
+
+    // --- THE VAULT (Local Track Caching) ---
 
     @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
     suspend fun getCachedTracks(): List<CachedTrackEntity>
 
-    // ✅ FIX: Explicit return types to satisfy KSP
-    @Query("DELETE FROM cached_tracks")
-    suspend fun clearTrackCache(): Int
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
 
+    @Query("DELETE FROM cached_tracks")
+    suspend fun clearTrackCache(): Int
+
+    /**
+     * PURGE RITUAL
+     * Deletes playback history older than 90 days to keep the S22 snappy.
+     */
+    @Query("DELETE FROM playback_history WHERE timestamp < :threshold")
+    suspend fun purgeOldHistory(threshold: Long): Int
 }

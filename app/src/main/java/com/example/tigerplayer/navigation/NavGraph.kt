@@ -6,15 +6,9 @@ import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -26,14 +20,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel // THE FIX: Modern Hilt Import
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.tigerplayer.R
-import com.example.tigerplayer.ui.cloud.CloudViewModel
 import com.example.tigerplayer.ui.cloud.SpotifyAlbumDetailScreen
 import com.example.tigerplayer.ui.cloud.SpotifyPlaylistScreen
 import com.example.tigerplayer.ui.library.AlbumDetailsScreen
@@ -43,6 +36,7 @@ import com.example.tigerplayer.ui.library.PlaylistDetailsScreen
 import com.example.tigerplayer.ui.main.MainScreen
 import com.example.tigerplayer.ui.permissions.PermissionScreen
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.settings.SettingsScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -59,14 +53,16 @@ fun TigerBranding() {
 }
 
 @Composable
-fun TigerPlayerNavGraph(navController: NavHostController) {
+fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: PlayerViewModel) {
     val context = LocalContext.current
+
+    // THE FIX: Removed sharedPlayerViewModel to ensure the music never skips
+    // and relies entirely on the playerViewModel passed from the MainActivity.
 
     NavHost(
         navController = navController,
         startDestination = Screen.Splash.route
     ) {
-        // --- 1. Splash Screen Ritual ---
         composable(route = Screen.Splash.route) {
             LaunchedEffect(key1 = Unit) {
                 val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -110,7 +106,6 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
             }
         }
 
-        // --- 2. Permission Gateway ---
         composable(route = Screen.Permission.route) {
             PermissionScreen(
                 onPermissionGranted = {
@@ -121,10 +116,9 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
             )
         }
 
-        // --- 3. Main Application Hub ---
         composable(route = Screen.MainApp.route) {
             MainScreen(
-                playerViewModel = hiltViewModel(),
+                playerViewModel = playerViewModel,
                 onNavigateToSpotifyPlaylist = { id, name, url ->
                     navController.navigate(Screen.SpotifyPlaylist.createRoute(id, name, url))
                 },
@@ -140,22 +134,32 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
                 onNavigateToNavidromeLogin = {
                     navController.navigate(Screen.NavidromeLogin.route)
                 },
-                // THE FIX: Wire the Local Playlist Navigation up to the NavHost
                 onNavigateToPlaylist = { id, name ->
-                    val encodedName = Uri.encode(name) // Safely encode spaces
-                    navController.navigate("local_playlist/$id/$encodedName")
+                    navController.navigate(Screen.LocalPlaylist.createRoute(id, name))
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Screen.Settings.route)
                 }
             )
         }
 
-        // --- 4. GLOBAL DETAIL SCREENS (Local Archives) ---
+        // --- Settings Route ---
+        composable(route = Screen.Settings.route) {
+            SettingsScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
 
         composable(
             route = Screen.ArtistDetail.route,
             arguments = listOf(navArgument("artistName") { type = NavType.StringType })
         ) { backStackEntry ->
             val name = Uri.decode(backStackEntry.arguments?.getString("artistName") ?: "")
-            ArtistDetailsScreen(artistName = name, viewModel = hiltViewModel(), onBackClick = { navController.popBackStack() })
+            ArtistDetailsScreen(
+                artistName = name,
+                viewModel = playerViewModel,
+                onBackClick = { navController.popBackStack() }
+            )
         }
 
         composable(
@@ -163,12 +167,15 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
             arguments = listOf(navArgument("albumName") { type = NavType.StringType })
         ) { backStackEntry ->
             val name = Uri.decode(backStackEntry.arguments?.getString("albumName") ?: "")
-            AlbumDetailsScreen(albumName = name, viewModel = hiltViewModel(), onBackClick = { navController.popBackStack() })
+            AlbumDetailsScreen(
+                albumName = name,
+                viewModel = playerViewModel,
+                onBackClick = { navController.popBackStack() }
+            )
         }
 
-        // THE FIX: The missing Local Playlist Route!
         composable(
-            route = "local_playlist/{playlistId}/{playlistName}",
+            route = Screen.LocalPlaylist.route,
             arguments = listOf(
                 navArgument("playlistId") { type = NavType.LongType },
                 navArgument("playlistName") { type = NavType.StringType }
@@ -180,14 +187,12 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
             PlaylistDetailsScreen(
                 playlistId = id,
                 playlistName = name,
-                viewModel = hiltViewModel(),
+                viewModel = playerViewModel,
                 onBackClick = { navController.popBackStack() }
             )
         }
 
-        // --- 5. Navidrome Login ---
         composable(route = Screen.NavidromeLogin.route) {
-            val playerViewModel: PlayerViewModel = hiltViewModel()
             NavidromeLoginScreen(
                 viewModel = playerViewModel,
                 onLoginSuccess = { navController.popBackStack() },
@@ -195,9 +200,8 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
             )
         }
 
-        // --- 6. Spotify Cloud Routes ---
         composable(
-            route = "spotify_album/{albumId}/{albumName}?imageUrl={imageUrl}",
+            route = Screen.SpotifyAlbum.route,
             arguments = listOf(
                 navArgument("albumId") { type = NavType.StringType },
                 navArgument("albumName") { type = NavType.StringType },
@@ -215,17 +219,17 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
                 albumId = albumId,
                 albumName = albumName,
                 albumImageUrl = imageUrl,
-                viewModel = hiltViewModel(),
+                viewModel = hiltViewModel(), // Scoped locally to this screen
                 onBackClick = { navController.popBackStack() }
             )
         }
 
         composable(
-            route = "spotify_playlist/{playlistId}/{playlistName}?imageUrl={imageUrl}",
+            route = Screen.SpotifyPlaylist.route,
             arguments = listOf(
                 navArgument("playlistId") { type = NavType.StringType },
                 navArgument("playlistName") { type = NavType.StringType },
-                navArgument("imageUrl") { type = NavType.StringType; nullable = true; defaultValue = null }
+                navArgument("imageUrl") { type = NavType.StringType; nullable = true }
             )
         ) { backStackEntry ->
             val playlistId = backStackEntry.arguments?.getString("playlistId") ?: ""
@@ -239,7 +243,7 @@ fun TigerPlayerNavGraph(navController: NavHostController) {
                 playlistId = playlistId,
                 playlistName = playlistName,
                 playlistImageUrl = imageUrl,
-                viewModel = hiltViewModel(),
+                viewModel = hiltViewModel(), // Scoped locally to this screen
                 onBackClick = { navController.popBackStack() }
             )
         }

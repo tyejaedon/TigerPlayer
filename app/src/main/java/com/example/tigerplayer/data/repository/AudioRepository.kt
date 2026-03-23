@@ -1,9 +1,6 @@
 package com.example.tigerplayer.data.repository
 
 import android.net.Uri
-import android.os.Build
-import androidx.annotation.RequiresApi
-import androidx.annotation.RequiresExtension
 import androidx.core.net.toUri
 import com.example.tigerplayer.data.local.dao.PlaylistDao
 import com.example.tigerplayer.data.local.dao.TigerDao
@@ -15,10 +12,7 @@ import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.remote.api.RemoteTrack
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.utils.NavidromeSecurity
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,30 +21,35 @@ import javax.inject.Singleton
 class AudioRepository @Inject constructor(
     private val localAudioDataSource: LocalAudioDataSource,
     private val playlistDao: PlaylistDao,
-    private val tigerDao: TigerDao, // <-- Injected the DAO for caching
+    private val tigerDao: TigerDao,
     private val navidromeRepository: NavidromeRepository
 ) {
 
+    private var remoteCache: List<AudioTrack> = emptyList()
+
     /**
-     * The Master Archive: Combines local FLACs and Navidrome streams.
+     * THE MASTER ARCHIVE
+     * Combines local high-fidelity FLACs/MP3s and Navidrome remote streams.
+     * Ensures local files are prioritized for bit-perfect output.
      */
-    @RequiresApi(Build.VERSION_CODES.Q)
-    @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
     fun getUnifiedTracks(
         user: String?,
         pass: String?,
         baseUrl: String?,
-        forceRefresh: Boolean = false // <-- Added so UI can trigger a scan
+        forceRefresh: Boolean = false
     ): Flow<List<AudioTrack>> = combine(
         getLocalTracks(forceRefresh),
         flow {
-            if (user != null && pass != null && baseUrl != null) {
-                // If you add a local database cache for Navidrome later, it would go here too
-                val remoteResult = navidromeRepository.getAllRemoteTracks(user, pass)
-                val remoteTracks = remoteResult.getOrDefault(emptyList())
-                emit(remoteTracks.map { it.toAudioTrack(baseUrl, user, pass) })
+            if (!user.isNullOrBlank() && !pass.isNullOrBlank() && !baseUrl.isNullOrBlank()) {
+                if (remoteCache.isEmpty() || forceRefresh) {
+                    val remoteResult = navidromeRepository.getAllRemoteTracks(user, pass)
+                    val remoteTracks = remoteResult.getOrDefault(emptyList())
+                    // High-Quality: We ensure suffix is handled properly for codec selection
+                    remoteCache = remoteTracks.map { it.toAudioTrack(baseUrl, user, pass) }
+                }
+                emit(remoteCache)
             } else {
-                emit(emptyList<AudioTrack>())
+                emit(emptyList())
             }
         }
     ) { local, remote ->
@@ -58,14 +57,16 @@ class AudioRepository @Inject constructor(
     }
 
     /**
-     * Extension to transform Navidrome's RemoteTrack into our Unified AudioTrack
+     * THE NAVIDROME RITUAL
+     * Optimized for high-quality streaming.
      */
     private fun RemoteTrack.toAudioTrack(baseUrl: String, u: String, p: String): AudioTrack {
         val salt = UUID.randomUUID().toString().substring(0, 8)
-        val auth = NavidromeSecurity.generateAuthPayload(u, p)
+        val token = NavidromeSecurity.generateToken(p, salt)
+        val authQuery = "u=$u&t=$token&s=$salt&v=1.16.1&c=TigerPlayer"
 
-        val authQuery = "u=$u&t=${auth.t}&s=$salt&v=1.16.1&c=TigerPlayer"
-
+        // Bit-Perfect Consideration: Navidrome stream.view returns the original file unless transcoding is forced.
+        // We omit 'maxBitRate' and 'format' parameters to ensure we get the source file (FLAC/ALAC/High-VBR MP3).
         return AudioTrack(
             id = id,
             title = title,
@@ -78,72 +79,58 @@ class AudioRepository @Inject constructor(
             mimeType = "audio/$suffix",
             bitrate = bitRate * 1000,
             isRemote = true,
-            serverPath = id
+            serverPath = id,
+            year = year?.toString()
         )
     }
 
     /**
-     * Handles the local track caching logic.
+     * LOCAL CACHE LOGIC
+     * Retrieves bit-perfect local files from the internal vault.
      */
-    @RequiresApi(Build.VERSION_CODES.Q)
-    @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
     fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = flow {
         if (forceRefresh) {
             tigerDao.clearTrackCache()
         }
 
-        // 1. Check the local Room cache first
         val cachedEntities = tigerDao.getCachedTracks()
 
         if (cachedEntities.isNotEmpty()) {
-            // Map Entity back to the Domain Model
-            val cachedTracks = cachedEntities.map { entity ->
-                AudioTrack(
-                    id = entity.id,
-                    title = entity.title,
-                    artist = entity.artist,
-                    album = entity.album,
-                    uri = entity.uriString.toUri(),
-                    artworkUri = entity.artworkUriString.toUri(),
-                    durationMs = entity.durationMs,
-                    mimeType = entity.mimeType,
-                    isLocal = true,
-                    bitrate = entity.bitrate,
-                    sampleRate = entity.sampleRate,
-                    trackNumber = entity.trackNumber
-                )
-            }
-            emit(cachedTracks)
+            emit(cachedEntities.map { it.toDomainModel() })
         } else {
-            // 2. If cache is empty, do the heavy MediaStore scan
-            val scannedTracks = localAudioDataSource.getLocalAudioFiles()
-
-            // 3. Save the newly scanned tracks into Room for next time
-            val entitiesToCache = scannedTracks.map { track ->
-                CachedTrackEntity(
-                    id = track.id,
-                    title = track.title,
-                    artist = track.artist,
-                    album = track.album,
-                    uriString = track.uri.toString(),
-                    artworkUriString = track.artworkUri.toString(),
-                    durationMs = track.durationMs,
-                    mimeType = track.mimeType,
-                    bitrate = track.bitrate,
-                    sampleRate = track.sampleRate,
-                    trackNumber = track.trackNumber
-                )
+            localAudioDataSource.getLocalAudioFiles().collect { status ->
+                if (status is LocalAudioDataSource.ScanStatus.Complete) {
+                    if (status.tracks.isNotEmpty()) {
+                        tigerDao.insertCachedTracks(status.tracks.map { it.toEntity() })
+                    }
+                    emit(status.tracks)
+                }
             }
-            if (entitiesToCache.isNotEmpty()) {
-                tigerDao.insertCachedTracks(entitiesToCache)
-            }
-
-            // 4. Emit the scanned tracks
-            emit(scannedTracks)
         }
     }
 
-    // --- PLAYLIST LOGIC ---
+    fun getLocalTracksWithProgress(forceRefresh: Boolean = false): Flow<LocalAudioDataSource.ScanStatus> = flow {
+        if (forceRefresh) {
+            tigerDao.clearTrackCache()
+        }
+
+        val cachedEntities = tigerDao.getCachedTracks()
+
+        if (cachedEntities.isNotEmpty()) {
+            val tracks = cachedEntities.map { it.toDomainModel() }
+            emit(LocalAudioDataSource.ScanStatus.Started(tracks.size))
+            emit(LocalAudioDataSource.ScanStatus.Complete(tracks))
+        } else {
+            localAudioDataSource.getLocalAudioFiles().collect { status ->
+                if (status is LocalAudioDataSource.ScanStatus.Complete) {
+                    if (status.tracks.isNotEmpty()) {
+                        tigerDao.insertCachedTracks(status.tracks.map { it.toEntity() })
+                    }
+                }
+                emit(status)
+            }
+        }
+    }
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
         return playlistDao.getAllPlaylists().map { entities ->
@@ -168,11 +155,44 @@ class AudioRepository @Inject constructor(
         )
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
-    @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
     fun getTracksForPlaylist(playlistId: Long): Flow<List<AudioTrack>> {
         return getLocalTracks().combine(playlistDao.getTrackIdsForPlaylist(playlistId)) { allTracks, trackIds ->
             allTracks.filter { trackIds.contains(it.id) }
         }
     }
+
+    // --- MAPPING HELPERS ---
+
+    private fun CachedTrackEntity.toDomainModel() = AudioTrack(
+        id = id,
+        title = title,
+        artist = artist,
+        album = album,
+        uri = uriString.toUri(),
+        artworkUri = artworkUriString.toUri(),
+        durationMs = durationMs,
+        mimeType = mimeType,
+        isLocal = true,
+        bitrate = bitrate,
+        sampleRate = sampleRate,
+        trackNumber = trackNumber,
+        path = path,
+        year = year
+    )
+
+    private fun AudioTrack.toEntity() = CachedTrackEntity(
+        id = id,
+        title = title,
+        artist = artist,
+        album = album,
+        uriString = uri.toString(),
+        artworkUriString = artworkUri.toString(),
+        durationMs = durationMs,
+        mimeType = mimeType,
+        bitrate = bitrate,
+        sampleRate = sampleRate,
+        trackNumber = trackNumber,
+        path = path,
+        year = year
+    )
 }
