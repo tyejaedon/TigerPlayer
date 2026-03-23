@@ -3,6 +3,7 @@ package com.example.tigerplayer.data.local.dao
 import androidx.room.*
 import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
 import com.example.tigerplayer.data.local.entity.CachedTrackEntity
+import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -46,7 +47,8 @@ interface TigerDao {
      * THE SUPREME ARTIST
      * Returns the most played artist, accounting for collaborations.
      */
-    @Query("""
+    @Query(
+        """
         SELECT 
             trim(CASE 
                 WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
@@ -59,14 +61,16 @@ interface TigerDao {
         GROUP BY artistName 
         ORDER BY COUNT(*) DESC 
         LIMIT 1
-    """)
+    """
+    )
     fun getTopArtist(): Flow<String?>
 
     /**
      * THE TOP ARTISTS LIST
      * Direct SQL ritual to split featuring artists and rank them.
      */
-    @Query("""
+    @Query(
+        """
         SELECT 
             trim(CASE 
                 WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
@@ -82,17 +86,20 @@ interface TigerDao {
         GROUP BY artistName 
         ORDER BY playCount DESC 
         LIMIT :limit
-    """)
+    """
+    )
     fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>>
 
-    @Query("""
+    @Query(
+        """
         SELECT trackId, title, artist, MAX(imageUrl) as imageUrl, COUNT(*) as playCount 
         FROM playback_history 
         WHERE timestamp >= :startTime 
         GROUP BY trackId 
         ORDER BY playCount DESC 
         LIMIT :limit
-    """)
+    """
+    )
     fun getTopTracks(startTime: Long, limit: Int): Flow<List<TrackStats>>
 
     // --- THE METADATA SIGN (Artist Cache) ---
@@ -114,10 +121,32 @@ interface TigerDao {
     @Query("DELETE FROM cached_tracks")
     suspend fun clearTrackCache(): Int
 
+    // Inside your TigerDao interface:
+
+    @Query("SELECT * FROM lyrics_cache WHERE trackId = :trackId")
+    suspend fun getLyricsCache(trackId: String): LyricsCacheEntity?
+
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertLyricsCache(lyrics: LyricsCacheEntity)
+
+    @Query("UPDATE lyrics_cache SET lastAccessed = :timestamp WHERE trackId = :trackId")
+    suspend fun updateLyricsAccessTime(
+        trackId: String,
+        timestamp: Long = System.currentTimeMillis()
+    )
+
+    // The space-saving ritual (2000 rows = ~10MB max)
+    @Query("DELETE FROM lyrics_cache WHERE trackId NOT IN (SELECT trackId FROM lyrics_cache ORDER BY lastAccessed DESC LIMIT 2000)")
+    suspend fun enforceLyricsCacheLimit()
+
     /**
      * PURGE RITUAL
      * Deletes playback history older than 90 days to keep the S22 snappy.
      */
-    @Query("DELETE FROM playback_history WHERE timestamp < :threshold")
-    suspend fun purgeOldHistory(threshold: Long): Int
+    @Query("DELETE FROM lyrics_cache")
+    suspend fun clearAllLyrics()
+
+
+    @Query("DELETE FROM artist_cache") // Adjust table name if yours is different
+    suspend fun clearArtistCache()
 }

@@ -6,12 +6,15 @@ import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
 import com.example.tigerplayer.data.remote.api.SpotifyApiService
 import com.example.tigerplayer.data.remote.api.WikipediaApi
 import com.example.tigerplayer.data.remote.model.SpotifyArtistDetail
+import com.example.tigerplayer.data.remote.api.LastFmApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,75 +30,105 @@ data class ArtistDetails(
 class MediaDataRepository @Inject constructor(
     private val tigerDao: TigerDao,
     private val spotifyApiService: SpotifyApiService,
-    private val authManager: SpotifyAuthManager
+    private val authManager: SpotifyAuthManager,
+    private val lastFmApi: LastFmApi
+
 ) {
 
     /**
      * PRIORITY: Cache. Fallback: Spotify API.
      * This ritual ensures the UI gets the full ArtistDetails object every time.
      */
+
+
+// ... (Make sure private val lastFmApi: LastFmApi is injected in MediaDataRepository's constructor)
+
     fun getArtistDetails(artistName: String): Flow<ArtistDetails> = flow {
         // 1. CHECK THE ARCHIVES (Database)
         val cachedData = tigerDao.getArtistCache(artistName)
 
-        if (cachedData != null && !cachedData.imageUrl.isNullOrBlank()) {
+        // Ensure we actually have the bio cached before skipping the API hunt
+        if (cachedData != null && !cachedData.imageUrl.isNullOrBlank() && !cachedData.bio.isNullOrBlank()) {
             Log.d("MediaRepo", "Cache Hit for $artistName. Restoring metadata.")
             emit(ArtistDetails(
                 name = artistName,
                 imageUrl = cachedData.imageUrl,
                 bio = cachedData.bio,
-                // If your CacheEntity doesn't store genres/pop yet, we default them here
-                genres = emptyList(),
+                genres = emptyList(), // Ideally load from cache if your entity supports it
                 popularity = 0
             ))
             return@flow
         }
 
-        // 2. CACHE MISS: CONSULT THE SPOTIFY ORACLE
-        Log.d("MediaRepo", "Cache Miss for $artistName. Hunting Spotify API...")
+        // 2. CACHE MISS: CONSULT BOTH ORACLES (Spotify + Last.fm)
+        Log.d("MediaRepo", "Cache Miss for $artistName. Hunting Spotify and Last.fm APIs...")
         try {
-            val token = authManager.getValidToken()
-            if (token.isEmpty()) {
-                emit(ArtistDetails(artistName, null, "No ritual token available."))
-                return@flow
-            }
+            coroutineScope {
+                // A. Fetch Spotify Essence (Image, Genres, Popularity)
+                val spotifyDeferred = async {
+                    val token = authManager.getValidToken()
+                    if (token.isNotEmpty()) {
+                        val response = spotifyApiService.searchArtist("Bearer $token", artistName)
+                        if (response.isSuccessful) response.body()?.artists?.items?.firstOrNull() else null
+                    } else null
+                }
 
-            val response = spotifyApiService.searchArtist("Bearer $token", artistName)
+                // B. Fetch Last.fm Lore (Biography)
+                val lastFmDeferred = async {
+                    try {
+                        val response = lastFmApi.getArtistInfo(artistName = artistName)
+                        if (response.isSuccessful) response.body()?.artist else null
+                    } catch (e: Exception) {
+                        Log.e("MediaRepo", "Last.fm fetch error: ${e.message}")
+                        null // Prevent one failing API from crashing the other
+                    }
+                }
 
-            if (response.isSuccessful) {
-                val detail = response.body()?.artists?.items?.firstOrNull()
+                // Await both results
+                val spotifyDetail = spotifyDeferred.await()
+                val lastFmArtist = lastFmDeferred.await()
 
-                if (detail != null) {
-                    // Extract the essence
-                    val imageUrl = if ((detail.images?.size ?: 0) > 1) detail.images?.get(1)?.url else detail.images?.firstOrNull()?.url
-                    val generatedBio = buildSyntheticBio(detail)
+                if (spotifyDetail != null || lastFmArtist != null) {
+                    // Extract Image from Spotify
+                    val imageUrl = if ((spotifyDetail?.images?.size ?: 0) > 1)
+                        spotifyDetail?.images?.get(1)?.url
+                    else
+                        spotifyDetail?.images?.firstOrNull()?.url
+
+                    // Extract and clean Bio from Last.fm
+                    val rawBio = lastFmArtist?.bio?.summary
+                    val finalBio = if (!rawBio.isNullOrBlank()) {
+                        // Strip the messy HTML "Read more on Last.fm" link
+                        rawBio.substringBefore("<a href").trim()
+                    } else {
+                        // Fallback to our synthetic bio if Last.fm is empty
+                        spotifyDetail?.let { buildSyntheticBio(it) } ?: "No historical records found."
+                    }
 
                     val freshDetails = ArtistDetails(
-                        name = detail.name,
+                        name = spotifyDetail?.name ?: lastFmArtist?.name ?: artistName,
                         imageUrl = imageUrl,
-                        bio = generatedBio,
-                        genres = detail.genres ?: emptyList(),
-                        popularity = detail.popularity ?: 0
+                        bio = finalBio,
+                        genres = spotifyDetail?.genres ?: emptyList(),
+                        popularity = spotifyDetail?.popularity ?: 0
                     )
 
                     // 3. STORE THE LOOT
-                    // NOTE: Update your ArtistCacheEntity to include bio if it's missing!
-                    tigerDao.insertArtistCache(ArtistCacheEntity(artistName, imageUrl, generatedBio))
+                    tigerDao.insertArtistCache(ArtistCacheEntity(artistName, imageUrl, finalBio))
 
                     // 4. EMIT FRESH DATA
                     emit(freshDetails)
                 } else {
-                    emit(ArtistDetails(artistName, null, "No records found in the Spotify archives."))
+                    // Neither oracle had answers, but we EMIT a non-null string to kill the loading bar!
+                    emit(ArtistDetails(artistName, null, "No records found in the archives."))
                 }
-            } else {
-                emit(ArtistDetails(artistName, null, "The connection to the cloud was severed."))
             }
         } catch (e: Exception) {
             Log.e("MediaRepo", "API Hunt failed for $artistName: ${e.message}")
+            // EMIT error string to kill the loading bar on crash
             emit(ArtistDetails(artistName, null, "Ritual failed: ${e.localizedMessage}"))
         }
     }.flowOn(Dispatchers.IO)
-
     /**
      * High-Res Album Art Ritual
      */
@@ -133,4 +166,6 @@ class MediaDataRepository @Inject constructor(
         }
         return "Known in the archives as $renown of $genreText. Their influence across the cloud is currently marked at a potency of ${artist.popularity ?: 0}/100."
     }
-}
+    suspend fun clearArtistCache() {
+        tigerDao.clearArtistCache()
+    }}

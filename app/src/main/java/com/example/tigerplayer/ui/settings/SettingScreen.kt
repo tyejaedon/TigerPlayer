@@ -1,19 +1,34 @@
 package com.example.tigerplayer.ui.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
+
+// --- Thematic Colors ---
+private val IgniRed = Color(0xFFF11F1A)
+private val AardBlue = Color(0xFF4FC3F7)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,11 +37,22 @@ fun SettingsScreen(
     onBackClick: () -> Unit
 ) {
     val themeMode by viewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+    val cacheSize by viewModel.cacheSizeFormatted.collectAsState()
+    var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
+
+    val scrollState = rememberScrollState()
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("ARCHIVE PREFERENCES", fontWeight = FontWeight.Black) },
+                title = {
+                    Text(
+                        text = "ARCHIVE PREFERENCES",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp // THE FIX: sp for text
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
@@ -43,37 +69,102 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
             // --- SECTION: APPEARANCE ---
-            SettingsSectionTitle("THE LOOK")
-
-            ThemePreferenceSelector(
-                currentMode = themeMode,
-                onModeSelected = { viewModel.setThemeMode(it) }
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
+            SettingsSection(
+                title = "THE LOOK",
+                icon = Icons.Rounded.ColorLens
+            ) {
+                ThemePreferenceSelector(
+                    currentMode = themeMode,
+                    onModeSelected = { viewModel.setThemeMode(it) }
+                )
+            }
 
             // --- SECTION: REMOTE SERVICES ---
-            SettingsSectionTitle("CONTRACTS")
-
-            PreferenceRow(
-                title = "Spotify Connection",
-                subtitle = "Sever the link with the cloud",
-                action = {
-                    TextButton(onClick = { viewModel.logoutSpotify() }) {
-                        Text("LOGOUT", color = Color(0xFFF11F1A)) // Igni Red
+            SettingsSection(
+                title = "CONTRACTS",
+                icon = Icons.Rounded.CloudOff
+            ) {
+                PreferenceRow(
+                    title = "Spotify Connection",
+                    subtitle = "Sever the link with the cloud oracle",
+                    action = {
+                        TextButton(onClick = { viewModel.logoutSpotify() }) {
+                            Text("LOGOUT", color = IgniRed, fontWeight = FontWeight.Bold)
+                        }
                     }
-                }
-            )
+                )
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // --- SECTION: LOCAL STORAGE ---
+            SettingsSection(
+                title = "STORAGE",
+                icon = Icons.Rounded.DeleteSweep
+            ) {
+                PreferenceRow(
+                    title = "Purge Temporary Archives",
+                    subtitle = cacheClearedMessage ?: "Currently utilizing $cacheSize of space",
+                    action = {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.clearTotalCache {
+                                    cacheClearedMessage = "Archives purged successfully."
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("PURGE", fontWeight = FontWeight.Black)
+                        }
+                    }
+                )
+            }
 
             // --- SECTION: THE CREATOR ---
-            SettingsSectionTitle("THE ARCHIVIST")
-            AboutMeSection()
+            SettingsSection(
+                title = "THE ARCHIVIST",
+                icon = Icons.Rounded.Code
+            ) {
+                AboutMeSection()
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+}
+
+@Composable
+fun SettingsSection(
+    title: String,
+    icon: ImageVector,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
+            )
+        }
+        content()
     }
 }
 
@@ -84,58 +175,75 @@ fun AboutMeSection() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .glassEffect(shape = MaterialTheme.shapes.medium)
-            .padding(16.dp)
+            .glassEffect(shape = MaterialTheme.shapes.extraLarge)
+            .padding(24.dp)
     ) {
-        Text(
-            text = "TY Jaedon",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Black
-        )
-        Text(
-            text = "Forged in Nairobi.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            text = "Strathmore University student, Android alchemist, and high-fidelity audio archivist. Passionate about crafting clean architectures, exploring cybersecurity, and ensuring every FLAC track plays with absolute precision.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("TY", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column {
+                Text(
+                    text = "Jaedon",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = "Forged in Nairobi, Kenya",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Social Links
+        Text(
+            text = "Strathmore University student, Android alchemist, and high-fidelity audio archivist. Passionate about crafting clean architectures, exploring cybersecurity, and ensuring every FLAC track plays with absolute precision.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 22.sp
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+        Spacer(modifier = Modifier.height(16.dp))
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.SpaceAround
         ) {
-            SocialLink(
-                label = "GitHub",
-                onClick = { uriHandler.openUri("https://github.com/tyejaedon") }
-            )
-            SocialLink(
-                label = "LinkedIn",
-                onClick = { uriHandler.openUri("https://linkedin.com/in/tyejaedon") }
-            )
-            SocialLink(
-                label = "Instagram",
-                onClick = { uriHandler.openUri("https://instagram.com/tyjaedon") }
-            )
+            SocialLink(label = "GitHub", onClick = { uriHandler.openUri("https://github.com/tyejaedon") })
+            SocialLink(label = "LinkedIn", onClick = { uriHandler.openUri("https://linkedin.com/in/tyejaedon") })
+            SocialLink(label = "Instagram", onClick = { uriHandler.openUri("https://instagram.com/tyjaedon") })
         }
     }
 }
 
 @Composable
 fun SocialLink(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Bold,
+    Surface(
+        color = Color.Transparent,
+        shape = CircleShape,
         modifier = Modifier.clickable { onClick() }
-    )
+    ) {
+        Text(
+            text = label.uppercase(),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+    }
 }
 
 @Composable
@@ -146,40 +254,43 @@ fun ThemePreferenceSelector(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .glassEffect(shape = MaterialTheme.shapes.medium)
-            .padding(16.dp)
+            .glassEffect(shape = MaterialTheme.shapes.large)
+            .padding(20.dp)
     ) {
         Text(
-            "Midnight Mode",
+            "Visual Resonance",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
         Text(
-            "Choose your visual ritual",
+            "Dictate the application's ambient lighting",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             ThemeOption(
                 label = "Light",
                 isSelected = currentMode == ThemeMode.LIGHT,
-                onClick = { onModeSelected(ThemeMode.LIGHT) }
+                onClick = { onModeSelected(ThemeMode.LIGHT) },
+                modifier = Modifier.weight(1f)
             )
             ThemeOption(
                 label = "Dark",
                 isSelected = currentMode == ThemeMode.DARK,
-                onClick = { onModeSelected(ThemeMode.DARK) }
+                onClick = { onModeSelected(ThemeMode.DARK) },
+                modifier = Modifier.weight(1f)
             )
             ThemeOption(
                 label = "System",
                 isSelected = currentMode == ThemeMode.SYSTEM,
-                onClick = { onModeSelected(ThemeMode.SYSTEM) }
+                onClick = { onModeSelected(ThemeMode.SYSTEM) },
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -189,28 +300,24 @@ fun ThemePreferenceSelector(
 fun ThemeOption(
     label: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    FilterChip(
-        selected = isSelected,
+    Surface(
         onClick = onClick,
-        label = { Text(label) },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-        )
-    )
-}
-
-@Composable
-fun SettingsSectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Black,
-        modifier = Modifier.padding(vertical = 8.dp)
-    )
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.height(40.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold
+            )
+        }
+    }
 }
 
 @Composable
@@ -218,13 +325,16 @@ fun PreferenceRow(title: String, subtitle: String, action: @Composable () -> Uni
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .glassEffect(shape = MaterialTheme.shapes.medium)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
+            .glassEffect(shape = MaterialTheme.shapes.large)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        // THE FIX: "end" instead of "right" for RTL support
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
         }
         action()
     }

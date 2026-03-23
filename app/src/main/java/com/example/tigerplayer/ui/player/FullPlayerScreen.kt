@@ -61,10 +61,12 @@ import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sin
+import com.example.tigerplayer.R
 
 // --- Thematic Witcher Colors ---
 private val IgniRed = Color(0xFFF11F1A)
 private val AardBlue = Color(0xFF4FC3F7)
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -73,7 +75,8 @@ fun FullPlayerScreen(
     onCollapse: () -> Unit,
     onNavigateToAlbum: (String) -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+     val uiState = PlayerUiState()
+
     val track = uiState.currentTrack ?: return
     val context = LocalContext.current
 
@@ -125,8 +128,10 @@ fun FullPlayerScreen(
         ImageRequest.Builder(context)
             .data(imageUrl)
             .crossfade(true)
+            .fallback(R.drawable.ic_tiger_logo)
             .size(Size.ORIGINAL)
             .precision(Precision.EXACT)
+            .error(R.drawable.ic_tiger_logo)
             .allowHardware(false)
             .listener(
                 onSuccess = { _, result ->
@@ -522,15 +527,27 @@ private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: C
         )
     } else {
         val listState = rememberLazyListState()
+
+        // Find the index of the currently playing lyric
         val activeIndex = parsedLyrics.indexOfLast { it.timeMs <= currentPositionMs }.coerceAtLeast(0)
 
-        val configuration = LocalConfiguration.current
-        val screenHeight = configuration.screenHeightDp.dp
-        val centerOffset = with(LocalDensity.current) { (screenHeight / 3).toPx().toInt() }
+        // Calculate a precise center offset.
+        // We use density to ensure it calculates correctly on the S22 screen.
+        val density = LocalDensity.current
+        val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
+        // The offset should push the item roughly to the middle of the LazyColumn's visible area.
+        // Adjust the '2.5f' divisor if it feels slightly too high or low.
+        val centerOffsetPx = (screenHeightPx / 2.5f).toInt()
+
+        // THE SMOOTH SCROLL RITUAL
         LaunchedEffect(activeIndex) {
-            if (activeIndex > 0) {
-                listState.animateScrollToItem(activeIndex, scrollOffset = -centerOffset)
+            if (activeIndex >= 0) {
+                // Animate to the item, but apply a negative offset to push it down into the center
+                listState.animateScrollToItem(
+                    index = activeIndex,
+                    scrollOffset = -centerOffsetPx
+                )
             }
         }
 
@@ -539,24 +556,44 @@ private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: C
             modifier = Modifier
                 .fillMaxSize()
                 .glassEffect(MaterialTheme.shapes.large)
-                .padding(24.dp),
-            contentPadding = PaddingValues(vertical = 100.dp)
+                .padding(horizontal = 24.dp),
+            // Reduce vertical padding so it doesn't artificially stretch the container bounds
+            contentPadding = PaddingValues(vertical = 40.dp)
         ) {
             itemsIndexed(parsedLyrics) { index, line ->
                 val isActive = index == activeIndex
                 val isPassed = index < activeIndex
 
+                // Smoothly animate the text size and opacity
+                val textSize by animateFloatAsState(
+                    targetValue = if (isActive) 28f else 20f,
+                    animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+                    label = "TextSize"
+                )
+
+                val alpha by animateFloatAsState(
+                    targetValue = when {
+                        isActive -> 1.0f
+                        isPassed -> 0.5f
+                        else -> 0.3f
+                    },
+                    animationSpec = tween(durationMillis = 400),
+                    label = "TextAlpha"
+                )
+
                 Text(
                     text = if (line.text.isBlank()) "🎵" else line.text,
-                    color = if (isActive) MaterialTheme.colorScheme.primary else if (isPassed) textColor.copy(alpha = 0.7f) else textColor.copy(alpha = 0.3f),
-                    style = if (isActive) MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black) else MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(vertical = 12.dp)
+                    color = if (isActive) MaterialTheme.colorScheme.primary else textColor.copy(alpha = alpha),
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = if (isActive) FontWeight.Black else FontWeight.Medium,
+                        fontSize = textSize.sp
+                    ),
+                    modifier = Modifier.padding(vertical = 16.dp)
                 )
             }
         }
     }
 }
-
 // --- FIERY WAVY SEEKER ---
 
 @Composable

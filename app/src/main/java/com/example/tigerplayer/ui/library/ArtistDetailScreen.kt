@@ -5,8 +5,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
@@ -43,17 +45,28 @@ import java.util.Locale
 fun ArtistDetailsScreen(
     artistName: String,
     viewModel: PlayerViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onAlbumClick: (String) -> Unit = {} // Added for album navigation routing!
 ) {
     val context = LocalContext.current
     val artistDetails by viewModel.artistDetails.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
 
     val profile = artistDetails[artistName]
+
+    // 1. Get all tracks by the artist
     val artistTracks = remember(uiState.tracks, artistName) {
         uiState.tracks.filter { track ->
             ArtistUtils.getBaseArtist(track.artist).equals(artistName, ignoreCase = true)
         }
+    }
+
+    // 2. THE FIX: Group tracks by Album to extract unique album representations
+    val artistAlbums = remember(artistTracks) {
+        artistTracks.groupBy { it.album.trim() }
+            .filterKeys { it.isNotEmpty() && !it.equals("Unknown", ignoreCase = true) }
+            .mapValues { it.value.first() } // Use the first track to represent the album art/year
+            .values.toList()
     }
 
     LaunchedEffect(artistName) {
@@ -136,27 +149,42 @@ fun ArtistDetailsScreen(
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 // 1. HERO IMAGE
-                item {
-                    ArtistHeroImage(imageRequest, artistName)
-                }
+                item { ArtistHeroImage(imageRequest, artistName) }
 
                 // 2. GENRE CLOUD
                 if (profile?.genres?.isNotEmpty() == true) {
-                    item {
-                        ArtistGenreCloud(profile.genres)
-                    }
+                    item { ArtistGenreCloud(profile.genres) }
                 }
 
                 // 3. VANGUARD STATS & BIO
-                item {
-                    ArtistVanguardStats(profile)
-                }
+                item { ArtistVanguardStats(profile) }
 
-                // 4. LOCAL ARCHIVES
-                if (artistTracks.isNotEmpty()) {
+                // 4. ALBUMS (Horizontal Row bundled at the top)
+                if (artistAlbums.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
-                        SectionTitle(title = "Local Archives")
+                        SectionTitle(title = "Albums")
+
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(artistAlbums) { albumTrack ->
+                                ArtistAlbumCard(
+                                    track = albumTrack,
+                                    onClick = { onAlbumClick(albumTrack.album) }
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                }
+
+                // 5. ALL SONGS (Vertical List below)
+                if (artistTracks.isNotEmpty()) {
+                    item {
+                        SectionTitle(title = "All Tracks")
                     }
 
                     items(artistTracks) { track ->
@@ -172,7 +200,52 @@ fun ArtistDetailsScreen(
     }
 }
 
-// --- EXTRACTED COMPONENTS ---
+// --- NEW COMPONENT: THE ALBUM CARD ---
+@Composable
+private fun ArtistAlbumCard(
+    track: AudioTrack,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        AsyncImage(
+            model = track.artworkUri,
+            contentDescription = "Album Art for ${track.album}",
+            modifier = Modifier
+                .size(140.dp)
+                .shadow(8.dp, MaterialTheme.shapes.medium)
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentScale = ContentScale.Crop
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = track.album,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        track.year?.let { year ->
+            Text(
+                text = year,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                maxLines = 1
+            )
+        }
+    }
+}
+
+// --- PREVIOUS COMPONENTS ---
 
 @Composable
 private fun ArtistHeroImage(imageRequest: ImageRequest, artistName: String) {

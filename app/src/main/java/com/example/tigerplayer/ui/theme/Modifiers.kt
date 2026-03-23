@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.getValue
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -36,7 +38,6 @@ fun Modifier.bounceClick(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Animates the scale from 100% down to 92% when pressed
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.92f else 1f,
         animationSpec = spring(
@@ -53,29 +54,58 @@ fun Modifier.bounceClick(
         }
         .clickable(
             interactionSource = interactionSource,
-            indication = ripple(bounded = true), // New Material 3 ripple API
+            indication = ripple(bounded = true),
             onClick = onClick
         )
 }
 
 /**
- * A modifier that adds a "Glass" effect appearance.
- * To prevent text blurring, we do NOT apply .blur() here.
- * Instead, we use semi-transparency and a subtle border.
+ * A dynamic "Glass" effect that reacts to the system theme.
+ * Light Mode: Subtle dark frosting.
+ * Dark Mode: Subtle light frosting.
+ */
+/**
+ * A dynamic "Glass" effect that reacts to the system theme.
+ * Light Mode: Subtle dark frosting with an elegant drop shadow.
+ * Dark Mode: Subtle light frosting, floating in the AMOLED void.
  */
 fun Modifier.glassEffect(
-    shape: Shape,
-    color: Color = Color.White.copy(alpha = 0.12f),
-    borderColor: Color = Color.White.copy(alpha = 0.2f)
-) = this
-    .clip(shape)
-    .background(
-        Brush.verticalGradient(
-            colors = listOf(color, color.copy(alpha = 0.05f))
-        )
-    )
-    .border(1.dp, borderColor, shape)
+    shape: Shape
+) = composed {
+    val isDark = isSystemInDarkTheme()
 
+    // Switch the base pigment depending on the active theme
+    val baseTint = if (isDark) Color.White else Color.Black
+
+    // Light mode needs less alpha, but significantly more shadow
+    val topAlpha = if (isDark) 0.12f else 0.04f
+    val bottomAlpha = if (isDark) 0.05f else 0.01f
+    val borderAlpha = if (isDark) 0.2f else 0.1f
+
+    // The Elevation Lift: 0dp in Dark Mode, 8dp in Light Mode
+    val shadowElevation = if (isDark) 0.dp else 8.dp
+
+    val glassColor = baseTint.copy(alpha = topAlpha)
+    val borderColor = baseTint.copy(alpha = borderAlpha)
+
+    this
+        // 1. Cast the shadow first, before we clip the bounds
+        .shadow(
+            elevation = shadowElevation,
+            shape = shape,
+            clip = false
+        )
+        // 2. Shape the glass
+        .clip(shape)
+        // 3. Apply the frosted gradient
+        .background(
+            Brush.verticalGradient(
+                colors = listOf(glassColor, baseTint.copy(alpha = bottomAlpha))
+            )
+        )
+        // 4. Trace the polished edge
+        .border(1.dp, borderColor, shape)
+}
 /**
  * A custom modifier to give cards a "Glowing Border" when in dark mode
  */

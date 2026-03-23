@@ -51,5 +51,5 @@ object WitcherIcons {
     val More = Icons.Rounded.MoreVert
 
     // --- Brand & Fallbacks ---
-    val DefaultAlbumArt = R.drawable.ic_launcher_tiger
+    val DefaultAlbumArt = R.drawable.ic_tiger_logo
 }
