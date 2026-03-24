@@ -2,16 +2,18 @@ package com.example.tigerplayer.ui.player
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,7 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.R
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 
@@ -33,117 +35,117 @@ private val AardBlue = Color(0xFF4FC3F7)
 
 @Composable
 fun MiniPlayer(
-    track: AudioTrack,
-    isPlaying: Boolean,
-    progress: Float = 0f,
-    onPlayPauseClick: () -> Unit,
-    onNextClick: () -> Unit,
+    viewModel: PlayerViewModel,
     onExpandClick: () -> Unit
 ) {
-    val actionTint by animateColorAsState(
-        targetValue = if (isPlaying) AardBlue else IgniRed,
+    val uiState by viewModel.uiState.collectAsState()
+    val track = uiState.currentTrack ?: return
+    val isPlaying = uiState.isPlaying
+
+    // --- PROGRESS LOGIC ---
+    val duration = track.durationMs.coerceAtLeast(1L)
+    val progressValue = (uiState.currentPosition.toFloat() / duration)
+    val actualProgress = if (progressValue.isNaN()) 0f else progressValue.coerceIn(0f, 1f)
+
+    // Dynamic color for playback state (Igni/Aard)
+    val actionColor by animateColorAsState(
+        targetValue = if (isPlaying) IgniRed else AardBlue,
         animationSpec = tween(500),
         label = "MiniPlayerActionColor"
     )
 
+    // The entire MiniPlayer is now transparent to blend into the MainScreen's Glass Bar
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
             .bounceClick { onExpandClick() }
+        // No background here — let the Glass through!
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AnimatedContent(
-                targetState = track,
-                transitionSpec = {
-                    (slideInHorizontally { width -> width } + fadeIn(tween(400))) togetherWith
-                            (slideOutHorizontally { width -> -width } + fadeOut(tween(400)))
-                },
-                label = "MiniAlbumArtAnimation"
-            ) { animatedTrack ->
-                AsyncImage(
-                    model = animatedTrack.artworkUri.takeIf { it != android.net.Uri.EMPTY },
-                    contentDescription = "Album Art",
-                    fallback = painterResource(WitcherIcons.DefaultAlbumArt),
-                    error = painterResource(WitcherIcons.DefaultAlbumArt),
-                    placeholder = painterResource(WitcherIcons.DefaultAlbumArt),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(MaterialTheme.shapes.small)
-                        .background(MaterialTheme.colorScheme.surface)
-                )
-            }
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // --- ALBUM ART ---
+                AnimatedContent(
+                    targetState = track.artworkUri,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "MiniArt"
+                ) { uri ->
+                    AsyncImage(
+                        model = uri.takeIf { it != android.net.Uri.EMPTY },
+                        contentDescription = null,
+                        fallback = painterResource(R.drawable.ic_tiger_logo),
+                        error = painterResource(R.drawable.ic_tiger_logo),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp))
+                    )
+                }
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(16.dp))
 
-            AnimatedContent(
-                targetState = track,
-                transitionSpec = {
-                    (slideInHorizontally { width -> width } + fadeIn(tween(400))) togetherWith
-                            (slideOutHorizontally { width -> -width } + fadeOut(tween(400)))
-                },
-                label = "MiniTrackInfoAnimation",
-                modifier = Modifier.weight(1f)
-            ) { animatedTrack ->
-                Column {
+                // --- TRACK INFO (Visibility Optimized) ---
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = animatedTrack.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Bold,
+                        text = track.title,
+                        // Using 'onSurface' instead of 'onSurfaceVariant' for max contrast on glass
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.ExtraBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = animatedTrack.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        text = track.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                // --- CONTROLS ---
+                IconButton(
+                    onClick = { viewModel.togglePlayPause() },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(actionColor.copy(alpha = 0.15f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) WitcherIcons.Pause else WitcherIcons.Play,
+                        contentDescription = "Play/Pause",
+                        tint = actionColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(onClick = { viewModel.skipToNext() }) {
+                    Icon(
+                        imageVector = WitcherIcons.Next,
+                        contentDescription = "Next",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                }
             }
 
-            IconButton(
-                onClick = onPlayPauseClick,
+            // --- SEAMLESS PROGRESS BAR ---
+            // Sitting at the very bottom of the MiniPlayer section
+            LinearProgressIndicator(
+                progress = { actualProgress },
                 modifier = Modifier
-                    .clip(CircleShape)
-                    .background(actionTint.copy(alpha = 0.15f))
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) WitcherIcons.Pause else WitcherIcons.Play,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = actionTint
-                )
-            }
-
-            Spacer(modifier = Modifier.width(4.dp))
-
-            IconButton(onClick = onNextClick) {
-                Icon(
-                    imageVector = WitcherIcons.Next,
-                    contentDescription = "Skip Next",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                    .fillMaxWidth()
+                    .height(3.dp), // Slightly thicker for visibility
+                color = actionColor,
+                trackColor = actionColor.copy(alpha = 0.1f),
+            )
         }
-
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .align(Alignment.BottomCenter),
-            color = actionTint,
-            trackColor = Color.Transparent,
-        )
     }
 }

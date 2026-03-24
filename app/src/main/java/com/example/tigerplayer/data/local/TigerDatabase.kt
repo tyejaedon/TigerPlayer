@@ -10,16 +10,17 @@ import com.example.tigerplayer.data.local.entity.CachedTrackEntity // NEW
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.example.tigerplayer.data.local.entity.PlaylistEntity
 import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
-
+import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
 @Database(
     entities = [
         PlaybackHistoryEntity::class,
         ArtistCacheEntity::class,
         PlaylistEntity::class,
         PlaylistTrackCrossRef::class,
-        CachedTrackEntity::class // <-- Added
+        CachedTrackEntity::class, // <-- Added
+        LyricsCacheEntity::class // 2. Add it to the array
     ],
-    version = 5, // <-- Bumped to 5 for year addition
+    version = 6, // <-- Bumped to 5 for year addition
     exportSchema = false
 )
 @TypeConverters(Converters::class)

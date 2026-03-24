@@ -7,5 +7,6 @@ import androidx.room.PrimaryKey
 data class ArtistCacheEntity(
     @PrimaryKey val artistName: String,
     val imageUrl: String?,
-    val bio: String? // --- NEW ---
+    val bio: String?,
+    val genres: String? // Store as "rock, metal, blues"
 )

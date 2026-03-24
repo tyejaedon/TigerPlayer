@@ -81,7 +81,7 @@ class PlayerViewModel @Inject constructor(
     private val historyRepository: HistoryRepository,
     private val lyricsRepository: LyricsRepository,
     private val mediaDataRepository: MediaDataRepository,
-    private val lastFmRepository: LastFmRepository, // <--- THE LAST.FM INJECTION
+    private val lastFmRepository: LastFmRepository,
     private val navidromeRepository: NavidromeRepository,
     private val spotifyRepository: SpotifyRepository,
     private val hostManager: SubsonicHostManager,
@@ -89,7 +89,6 @@ class PlayerViewModel @Inject constructor(
     private val navidromePrefs: NavidromePrefs
 ) : ViewModel() {
 
-    // --- State Flows ---
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
@@ -104,9 +103,9 @@ class PlayerViewModel @Inject constructor(
 
     private val _statsFilter = MutableStateFlow("Today")
 
-    // --- Jobs & Caches ---
     private var lyricsFetchJob: Job? = null
     private var artistImageFetchJob: Job? = null
+    private var metadataFetchJob: Job? = null
 
     val customPlaylists: StateFlow<List<Playlist>> =
         audioRepository.getCustomPlaylists()
@@ -123,12 +122,9 @@ class PlayerViewModel @Inject constructor(
         observeSpotifyRemote()
         performAutoRitual()
 
+
         loadLocalAudio()
     }
-
-    // ==========================================
-    // --- OBSERVERS & CORE ENGINE ---
-    // ==========================================
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeLibrary() {
@@ -200,9 +196,7 @@ class PlayerViewModel @Inject constructor(
                         totalListeningTimeHours = hours.toInt(),
                         topArtistThisWeek = topArtist ?: "New Recruit",
                         listeningTimeToday = "${hours}h ${minutes}m",
-                        losslessTrackCount = allTracks.count {
-                            it.mimeType.contains("flac", ignoreCase = true) || it.bitrate > 320000
-                        }
+                        totalTracksCount = allTracks.size
                     ),
                     discoverTracks = allTracks.shuffled(random).take(10),
                     recentlyPlayedTracks = recent.mapNotNull { entity ->
@@ -246,6 +240,13 @@ class PlayerViewModel @Inject constructor(
                     }
                     fetchTrackMetadata(track)
                 }
+            }
+        }
+        viewModelScope.launch {
+            // We observe the mediaControllerState flow from your manager
+            mediaControllerManager.mediaControllerState.collect { _ ->
+                // Whenever the state of the controller changes (Connection/Timeline)
+                updateQueue()
             }
         }
 
@@ -316,24 +317,34 @@ class PlayerViewModel @Inject constructor(
 
     private fun fetchSpotifyHighResArt(title: String, artist: String) {
         viewModelScope.launch {
-            mediaDataRepository.getHighResAlbumArt(title, artist).collect { highResUrl ->
-                highResUrl?.let { url ->
-                    _uiState.update { state ->
-                        if (state.currentTrack?.id == "spotify:remote" && state.currentTrack.title == title) {
-                            state.copy(
-                                currentTrack = state.currentTrack.copy(artworkUri = Uri.parse(url))
-                            )
-                        } else state
+            // --- CONSULT THE ARCHIVES ---
+            // We call the repository function we just polished.
+            mediaDataRepository.getHighResAlbumArt(title, artist)
+                .collect { highResUrl ->
+                    highResUrl?.let { url ->
+                        val newUri = Uri.parse(url)
+
+                        _uiState.update { state ->
+                            val current = state.currentTrack
+
+                            // VALIDATION: Ensure we are still playing the Spotify Remote track
+                            // and that the artwork isn't already set to this URI.
+                            if (current?.id == "spotify:remote" &&
+                                current.title == title &&
+                                current.artworkUri != newUri) {
+
+                                Log.d("TigerVM", "High-res art manifest successful for: $title")
+                                state.copy(
+                                    currentTrack = current.copy(artworkUri = newUri)
+                                )
+                            } else {
+                                state
+                            }
+                        }
                     }
                 }
-            }
         }
     }
-
-    // ==========================================
-    // --- PLAYBACK CONTROLS ---
-    // ==========================================
-
     fun playTrack(track: AudioTrack) {
         viewModelScope.launch {
             val isSpotifyTrack = track.id.startsWith("spotify:")
@@ -363,9 +374,7 @@ class PlayerViewModel @Inject constructor(
 
     fun seekTo(position: Long) {
         val isSpotify = _uiState.value.currentTrack?.id?.startsWith("spotify:") == true
-        if (isSpotify) spotifyRepository.seekTo(position) else mediaControllerManager.seekTo(
-            position
-        )
+        if (isSpotify) spotifyRepository.seekTo(position) else mediaControllerManager.seekTo(position)
     }
 
     fun toggleShuffle() {
@@ -441,49 +450,49 @@ class PlayerViewModel @Inject constructor(
         return if (clean.endsWith("/")) clean else "$clean/"
     }
 
-
-    // ==========================================
-    // --- METADATA, STATS & PLAYLISTS ---
-    // ==========================================
-
     private fun fetchTrackMetadata(track: AudioTrack) {
-        lyricsFetchJob?.cancel()
-        artistImageFetchJob?.cancel()
+        // Cancel the previous hunt to save bandwidth and CPU
+        metadataFetchJob?.cancel()
 
-        // Leaves MediaDataRepository here for quick image loading on the player screen
-        artistImageFetchJob = viewModelScope.launch {
-            mediaDataRepository.getArtistDetails(track.artist).collect { details ->
-                _artistDetails.update { it + (track.artist to details) }
-                _uiState.update { it.copy(artistImageUrl = details.imageUrl) }
+        metadataFetchJob = viewModelScope.launch {
+            // We launch these as siblings in one job for easier management
+            launch {
+                // 1. Hunt for Artist Lore (Spotify + Last.fm + DB Cache)
+                mediaDataRepository.getArtistDetails(track.artist).collect { details ->
+                    // Update the persistent map for the session
+                    _artistDetails.update { it + (track.artist to details) }
+
+                    // Update UI state for the current view
+                    _uiState.update { it.copy(artistImageUrl = details.imageUrl) }
+                }
             }
-        }
 
-        lyricsFetchJob = viewModelScope.launch {
-            lyricsRepository.getLyrics(track).collect { lyrics ->
-                _uiState.update { it.copy(currentLyrics = lyrics) }
+            launch {
+                // 2. Hunt for Lyrics
+                lyricsRepository.getLyrics(track).collect { lyrics ->
+                    _uiState.update { it.copy(currentLyrics = lyrics) }
+                }
             }
         }
     }
 
     /**
-     * THE LORE RITUAL UPDATE
-     * Uses Last.fm to fetch the rich biography and listener tags.
+     * THE ARCHIVE CONSULTATION:
+     * Pre-fetches or restores artist profiles without interrupting playback.
      */
     fun fetchArtistProfile(artistName: String) {
         val baseName = ArtistUtils.getBaseArtist(artistName)
+
+        // Check memory cache first to prevent redundant Flow emissions
         if (_artistDetails.value.containsKey(baseName)) return
 
         viewModelScope.launch {
-            Log.d("PlayerVM", "Consulting Last.fm archives for: $baseName")
+            Log.d("TigerVM", "Consulting Archives for artist profile: $baseName")
 
-            // Calls the new Last.fm Repository
-            val lastFmDetails = lastFmRepository.fetchArtistProfile(baseName)
-
-            if (lastFmDetails != null) {
-                // Assuming ArtistDetails is the model returned by the repository
-                _artistDetails.update { (it + (baseName to lastFmDetails)) as Map<String, ArtistDetails> }
-            } else {
-                Log.w("PlayerVM", "No lore found for $baseName on Last.fm")
+            // Use the unified Repository instead of bypassing it.
+            // This ensures the hunt checks the DB and Spotify before Last.fm.
+            mediaDataRepository.getArtistDetails(baseName).collect { details ->
+                _artistDetails.update { it + (baseName to details) }
             }
         }
     }
@@ -559,8 +568,7 @@ class PlayerViewModel @Inject constructor(
                 audioRepository.createPlaylist("Liked Songs")
                 delay(200)
                 val updatedPlaylists = audioRepository.getCustomPlaylists().first()
-                likedPlaylist =
-                    updatedPlaylists.find { it.name.equals("Liked Songs", ignoreCase = true) }
+                likedPlaylist = updatedPlaylists.find { it.name.equals("Liked Songs", ignoreCase = true) }
             }
 
             likedPlaylist?.let {
@@ -586,10 +594,6 @@ class PlayerViewModel @Inject constructor(
         if (playlistId == -2L) return flowOf(_uiState.value.tracks.reversed().take(20))
         return audioRepository.getTracksForPlaylist(playlistId)
     }
-
-    // ==========================================
-    // --- LIBRARY & NETWORK MANAGEMENT ---
-    // ==========================================
 
     fun onAuthSuccess(newToken: String) {
         authManager.updateToken(newToken)
@@ -696,7 +700,6 @@ class PlayerViewModel @Inject constructor(
                                 )
                             }
                         }
-
                         is LocalAudioDataSource.ScanStatus.InProgress -> {
                             _uiState.update {
                                 it.copy(
@@ -706,7 +709,6 @@ class PlayerViewModel @Inject constructor(
                                 )
                             }
                         }
-
                         is LocalAudioDataSource.ScanStatus.Complete -> {
                             _uiState.update { currentState ->
                                 val newState = aggregateLibrary(status.tracks, currentState.searchQuery)
@@ -721,5 +723,68 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
         }
+    }
+    /**
+     * THE QUEUE MANIFEST:
+     * Synchronizes the internal Media3 playlist with the UI state,
+     * resolving IDs into full AudioTrack objects.
+     */
+    private fun updateQueue() {
+        val controller = mediaControllerManager.mediaController ?: return
+
+        // 1. Gather the current known tracks for fast lookup
+        val knownTracks = _uiState.value.tracks.associateBy { it.id }
+
+        val resolvedQueue = mutableListOf<AudioTrack>()
+
+        // 2. Iterate through the Controller's playlist
+        for (i in 0 until controller.mediaItemCount) {
+            val mediaItem = controller.getMediaItemAt(i)
+
+            // Try to find the full AudioTrack in our library first
+            val resolvedTrack = knownTracks[mediaItem.mediaId] ?: mediaItem.toAudioTrack()
+            resolvedQueue.add(resolvedTrack)
+        }
+
+        // 3. Update the UI State
+        _uiState.update { it.copy(queue = resolvedQueue) }
+
+        Log.d("TigerVM", "Queue Manifested: ${resolvedQueue.size} items following.")
+    }
+    // Inside PlayerViewModel.kt
+
+    fun removeFromQueue(track: AudioTrack) {
+        val controller = mediaControllerManager.mediaController ?: return
+
+        // 1. Find the index of the track in the current Media3 timeline
+        for (i in 0 until controller.mediaItemCount) {
+            if (controller.getMediaItemAt(i).mediaId == track.id) {
+                // 2. Remove from the actual player engine
+                controller.removeMediaItem(i)
+
+                // 3. Update the UI State queue immediately for responsiveness
+                _uiState.update { state ->
+                    state.copy(queue = state.queue.filterIndexed { index, _ -> index != i })
+                }
+                break
+            }
+        }
+    }
+    @OptIn(UnstableApi::class)
+    private fun androidx.media3.common.MediaItem.toAudioTrack(): AudioTrack {
+        val metadata = mediaMetadata
+        return AudioTrack(
+            id = mediaId,
+            title = metadata.title?.toString() ?: "Unknown Scroll",
+            artist = metadata.artist?.toString() ?: "Unknown Witcher",
+            album = metadata.albumTitle?.toString() ?: "Unknown Archive",
+            durationMs = 0L, // Duration is usually handled by the player state
+            uri = Uri.EMPTY,
+            trackNumber = metadata.trackNumber ?: 0,
+            artworkUri = metadata.artworkUri ?: Uri.EMPTY,
+            mimeType = "audio/*",
+            isLocal = mediaId.startsWith("/"), // Simple heuristic
+            isRemote = mediaId.startsWith("http") || mediaId.contains("spotify")
+        )
     }
 }

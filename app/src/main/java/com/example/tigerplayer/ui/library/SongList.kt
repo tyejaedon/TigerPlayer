@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,190 +22,90 @@ import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import java.util.concurrent.TimeUnit
 import androidx.compose.ui.graphics.vector.ImageVector
-
-
-@Composable
-fun SongsList(viewModel: PlayerViewModel, onGoToAlbum: (String) -> Unit) {
-    val uiState by viewModel.uiState.collectAsState()
-    // THE FIX 1: Collect your forged playlists
-    val playlists by viewModel.customPlaylists.collectAsState()
-
-    val tracks = uiState.filteredTracks
-    val currentTrack = uiState.currentTrack
-    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
-
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 120.dp)
-        ) {
-            items(tracks, key = { track -> track.id }) { track ->
-                val isCurrentTrack = track.id == currentTrack?.id
-
-                Column {
-                    SongListItem(
-                        track = track,
-                        isCurrentTrack = isCurrentTrack,
-                        onClick = { viewModel.playTrack(track) },
-                        onOptionsClick = { trackForOptions = track }
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
-                        thickness = 1.dp
-                    )
-                }
-            }
-        }
-    }
-
-    trackForOptions?.let { track ->
-        SongOptionsSheet(
-            track = track,
-            playlists = playlists, // THE FIX 2: Pass them into the sheet
-            onDismiss = { trackForOptions = null },
-            onPlayNext = {
-                viewModel.addToQueue(track)
-                trackForOptions = null // Auto-close sheet
-            },
-            onAddToPlaylist = { playlistId ->
-                // THE FIX 3: Push the track to the database
-                viewModel.addTrackToPlaylist(playlistId, track)
-                trackForOptions = null // Auto-close sheet
-            },
-            onGoToAlbum = { albumName ->
-                onGoToAlbum(albumName)
-                trackForOptions = null // Auto-close sheet
-            }
-        )
-    }
-}
+import androidx.compose.ui.res.painterResource
+import com.example.tigerplayer.ui.theme.tigerGlow
+import com.example.tigerplayer.R
 
 @Composable
-fun SongThumbnail(artworkUri: android.net.Uri?) {
-    AsyncImage(
-        model = artworkUri,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = Modifier
-            .size(56.dp)
-            .clip(MaterialTheme.shapes.medium)
-    )
-}
-
-@Composable
-private fun SongListItem(
+fun SongItem(
     track: AudioTrack,
-    isCurrentTrack: Boolean,
+    isActive: Boolean,
+    isPlaying: Boolean,
     onClick: () -> Unit,
-    onOptionsClick: () -> Unit
+    onMoreClick: () -> Unit
 ) {
-    val titleColor = if (isCurrentTrack) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onBackground
-    }
-
-    val backgroundColor = if (isCurrentTrack) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-    } else {
-        Color.Transparent
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(backgroundColor)
             .bounceClick { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SongThumbnail(track.artworkUri)
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = titleColor,
-                fontWeight = if (isCurrentTrack) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+        // --- THE VISUAL ANCHOR: High-Res Thumb ---
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .then(if (isActive) Modifier.tigerGlow() else Modifier) // Glow for the active track
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            AsyncImage(
+                model = track.artworkUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.ic_tiger_logo),
+                modifier = Modifier.fillMaxSize()
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // --- THE CLOUD ICON LOGIC ---
-                if (track.isRemote) {
-                    Icon(
-                        imageVector = WitcherIcons.Cloud,
-                        contentDescription = "Remote Archive",
-                        tint = if (isCurrentTrack) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(
-                            alpha = 0.7f
-                        ),
-                        modifier = Modifier
-                            .size(14.dp)
-                            .padding(end = 4.dp)
-                    )
+            // If playing, show a subtle overlay
+            if (isActive && isPlaying) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // You can add a small Lottie or static wave icon here
+                    Icon(WitcherIcons.Play, null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
-
-                val subtitleText = buildString {
-                    append(track.artist)
-                    if (track.mimeType.contains("flac", true) || track.mimeType.contains(
-                            "wav",
-                            true
-                        )
-                    ) {
-                        append(" • Lossless")
-                    }
-                    if (track.isRemote) {
-                        append(" • Ritual Sync") // Thematic name for Navidrome tracks
-                    }
-                }
-
-                Text(
-                    text = subtitleText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (track.isRemote && !isCurrentTrack)
-                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f)
-                    else
-                        MaterialTheme.colorScheme.secondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(16.dp))
 
-        if (isCurrentTrack) {
-            Icon(
-                imageVector = WitcherIcons.VolumeUp,
-                contentDescription = "Currently Playing",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        } else {
+        // --- THE MANIFEST: Metadata ---
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = formatDuration(track.durationMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                text = track.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${track.artist} • ${track.album}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
-        IconButton(onClick = onOptionsClick) {
+        // --- THE STATS: Duration/Bitrate (Optional aesthetic touch) ---
+        if (!isActive) {
+            Text(
+                text = formatDuration(track.durationMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
+
+        IconButton(onClick = onMoreClick) {
             Icon(
-                imageVector = WitcherIcons.Options,
-                contentDescription = "Options",
-                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                imageVector = WitcherIcons.More,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }
-}
-
-private fun formatDuration(durationMs: Long): String {
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(durationMs)
-    val seconds = TimeUnit.MILLISECONDS.toSeconds(durationMs) - TimeUnit.MINUTES.toSeconds(minutes)
-    return String.format("%02d:%02d", minutes, seconds)
 }

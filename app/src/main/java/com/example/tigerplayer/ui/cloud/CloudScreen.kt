@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset // IMPORT REQUIRED FOR TABS
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,7 +30,6 @@ import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloudScreen(
     viewModel: CloudViewModel = hiltViewModel(),
@@ -45,7 +44,7 @@ fun CloudScreen(
     val isConnected by viewModel.isSpotifyConnected.collectAsState()
     val isLoadingTracks by viewModel.isLoadingTracks.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Playlists", "Albums")
 
     LaunchedEffect(isConnected) {
@@ -77,15 +76,17 @@ fun CloudScreen(
                     onQueryChange = { viewModel.onSearchQueryChange(it) }
                 )
 
-                // THE FIX: Use SecondaryTabRow to avoid the PrimaryTabRow deprecation issues
-                // and keep the indicator offset working smoothly.
                 SecondaryTabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
                     divider = {},
+                    // THE FIX: Remove "tabPositions ->" and use the selectedTab index directly
                     indicator = {
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(selectedTab),
+                            modifier = Modifier.tabIndicatorOffset(
+                                selectedTabIndex = selectedTab,
+                                matchContentSize = false // Set to true if you want the bar to match text width
+                            ),
                             height = 3.dp,
                             color = SpotifyGreen
                         )

@@ -126,27 +126,29 @@ interface TigerDao {
     @Query("SELECT * FROM lyrics_cache WHERE trackId = :trackId")
     suspend fun getLyricsCache(trackId: String): LyricsCacheEntity?
 
-    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
-    suspend fun insertLyricsCache(lyrics: LyricsCacheEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLyricsCache(lyrics: LyricsCacheEntity): Long
 
     @Query("UPDATE lyrics_cache SET lastAccessed = :timestamp WHERE trackId = :trackId")
     suspend fun updateLyricsAccessTime(
         trackId: String,
         timestamp: Long = System.currentTimeMillis()
-    )
+    ): Int // <-- THE FIX IS HERE
 
     // The space-saving ritual (2000 rows = ~10MB max)
     @Query("DELETE FROM lyrics_cache WHERE trackId NOT IN (SELECT trackId FROM lyrics_cache ORDER BY lastAccessed DESC LIMIT 2000)")
-    suspend fun enforceLyricsCacheLimit()
+    suspend fun enforceLyricsCacheLimit(): Int // <-- AND HERE
+
+    // The space-saving ritual (2000 rows = ~10MB max)
 
     /**
      * PURGE RITUAL
      * Deletes playback history older than 90 days to keep the S22 snappy.
      */
+    // THE FIX
     @Query("DELETE FROM lyrics_cache")
-    suspend fun clearAllLyrics()
+    suspend fun clearAllLyrics(): Int
 
-
-    @Query("DELETE FROM artist_cache") // Adjust table name if yours is different
-    suspend fun clearArtistCache()
+    @Query("DELETE FROM artist_cache")
+    suspend fun clearArtistCache(): Int
 }

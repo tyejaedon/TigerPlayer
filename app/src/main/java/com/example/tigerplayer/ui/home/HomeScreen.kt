@@ -4,9 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
@@ -17,15 +17,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.components.DiscoverCarousel
 import com.example.tigerplayer.ui.components.RecentlyPlayedRow
+import com.example.tigerplayer.ui.library.AlbumSearchRow
+import com.example.tigerplayer.ui.library.ArtistAlbumCard
+import com.example.tigerplayer.ui.library.ArtistSearchRow
+import com.example.tigerplayer.ui.library.SearchEmptyState
+import com.example.tigerplayer.ui.library.SearchSectionTitle
+import com.example.tigerplayer.ui.library.SongListItem
+import com.example.tigerplayer.ui.player.PlayerUiState
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -40,33 +49,25 @@ private val SpotifyGreen = Color(0xFF1DB954)
 fun HomeScreen(
     viewModel: PlayerViewModel,
     onNavigateToAlbum: (String) -> Unit,
-    onNavigateToSettings: () -> Unit // NEW: Support navigation to settings
+    onNavigateToSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val homeState by viewModel.homeUiState.collectAsState()
     var isStatsExpanded by remember { mutableStateOf(false) }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    // --- SEARCH LOGIC ---
-    val searchResults = uiState.filteredTracks
-    val songsFound = if (uiState.searchQuery.isNotEmpty()) {
-        searchResults.filter { it.title.contains(uiState.searchQuery, ignoreCase = true) }
-    } else emptyList()
-
     BackHandler(enabled = isStatsExpanded || isSearchActive) {
-        if (isStatsExpanded) {
-            isStatsExpanded = false
-        } else if (isSearchActive) {
+        if (isStatsExpanded) isStatsExpanded = false
+        else if (isSearchActive) {
             isSearchActive = false
-            viewModel.onSearchQueryChanged("")
+            viewModel.clearSearch()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 100.dp)
+            contentPadding = PaddingValues(bottom = 120.dp)
         ) {
             item {
                 HomeHeader(
@@ -75,7 +76,7 @@ fun HomeScreen(
                     isSearchActive = isSearchActive,
                     onSearchToggle = {
                         isSearchActive = !isSearchActive
-                        if (!isSearchActive) viewModel.onSearchQueryChanged("")
+                        if (!isSearchActive) viewModel.clearSearch()
                     },
                     onSearchQueryChange = { viewModel.onSearchQueryChanged(it) },
                     onSettingsClick = onNavigateToSettings
@@ -83,31 +84,24 @@ fun HomeScreen(
             }
 
             if (uiState.searchQuery.isNotEmpty()) {
-                if (songsFound.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No echoes found for '${uiState.searchQuery}'",
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                        )
-                    }
-                }
-
-                if (songsFound.isNotEmpty()) {
-                    item { SectionTitle("Songs") }
-                    items(songsFound) { track ->
-                        SearchResultItem(
+                // --- SEARCH MODE: Unified with Library Style ---
+                val results = uiState.filteredTracks
+                if (results.isEmpty()) {
+                    item { SearchEmptyState(uiState.searchQuery) }
+                } else {
+                    item { SectionTitle("Echoes Found") }
+                    items(results) { track ->
+                        SongListItem(
                             track = track,
-                            isAlbum = false,
-                            onClick = { viewModel.playTrack(track) }
+                            isCurrentTrack = uiState.currentTrack?.id == track.id,
+                            isPlaying = uiState.isPlaying,
+                            onClick = { viewModel.playTrack(track) },
+                            onOptionsClick = { /* Track Options */ }
                         )
                     }
                 }
-                item { Spacer(modifier = Modifier.height(24.dp)) }
-
             } else {
+                // --- DEFAULT MODE ---
                 item {
                     UserStatisticsHeader(
                         statistics = homeState.statistics,
@@ -116,8 +110,8 @@ fun HomeScreen(
                 }
 
                 if (homeState.discoverTracks.isNotEmpty()) {
+                    item { SectionTitle("The Vanguard") }
                     item {
-                        SectionTitle("Discover")
                         DiscoverCarousel(
                             tracks = homeState.discoverTracks,
                             onTrackClick = { viewModel.playTrack(it) }
@@ -126,39 +120,46 @@ fun HomeScreen(
                 }
 
                 if (homeState.recentlyPlayedTracks.isNotEmpty()) {
-                    item {
-                        SectionTitle("Recently Played")
-                        RecentlyPlayedRow(
-                            tracks = homeState.recentlyPlayedTracks,
-                            onTrackClick = { viewModel.playTrack(it) }
+                    item { SectionTitle("Recent Rituals") }
+                    items(homeState.recentlyPlayedTracks.take(5)) { track ->
+                        SongListItem(
+                            track = track,
+                            isCurrentTrack = uiState.currentTrack?.id == track.id,
+                            isPlaying = uiState.isPlaying,
+                            onClick = { viewModel.playTrack(track) },
+                            onOptionsClick = { /* Options */ }
                         )
                     }
                 }
 
                 if (homeState.recommendedTracks.isNotEmpty()) {
+                    item { SectionTitle("Recommended Archives") }
                     item {
-                        SectionTitle("Recommended Albums")
-                        RecommendedAlbumsList(
-                            tracks = homeState.recommendedTracks,
-                            onAlbumClick = { albumName ->
-                                onNavigateToAlbum(albumName)
+                        // Using a Horizontal Grid to show off high-res album art
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            val uniqueAlbums = homeState.recommendedTracks.distinctBy { it.album }
+                            items(uniqueAlbums) { track ->
+                                ArtistAlbumCard(
+                                    track = track,
+                                    onClick = { onNavigateToAlbum(track.album) }
+                                )
                             }
-                        )
+                        }
                     }
                 }
             }
         }
 
-        // --- STATS OVERLAY ---
+        // Stats Overlay
         AnimatedVisibility(
             visible = isStatsExpanded,
             enter = slideInVertically(initialOffsetY = { it }),
             exit = slideOutVertically(targetOffsetY = { it })
         ) {
-            ExpandedStatsScreen(
-                viewModel = viewModel,
-                onClose = { isStatsExpanded = false }
-            )
+            ExpandedStatsScreen(viewModel = viewModel, onClose = { isStatsExpanded = false })
         }
     }
 }
@@ -175,6 +176,7 @@ fun HomeHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding() // THE FIX: Drops the header below the camera notch
             .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
@@ -284,147 +286,48 @@ fun HomeHeader(
 }
 
 @Composable
-fun UniversalHeader(
-    title: String,
-    searchQuery: String,
-    isSearchActive: Boolean,
-    onSearchToggle: () -> Unit,
-    onSearchQueryChange: (String) -> Unit
+fun SearchLibraryResults(
+    uiState: PlayerUiState,
+    viewModel: PlayerViewModel,
+    onNavigateToArtist: (String) -> Unit,
+    onNavigateToAlbum: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 20.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(modifier = Modifier.weight(1f)) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !isSearchActive,
-                enter = fadeIn() + expandHorizontally(),
-                exit = fadeOut() + shrinkHorizontally()
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+    val query = uiState.searchQuery
+    val matchedArtists = remember(query, uiState.artists) {
+        uiState.artists.filter { it.name.contains(query, ignoreCase = true) }
+    }
+    val matchedAlbums = remember(query, uiState.tracks) {
+        uiState.tracks.filter { it.album.contains(query, ignoreCase = true) }.distinctBy { it.album.lowercase().trim() }
+    }
+    val matchedSongs = remember(query, uiState.filteredTracks) {
+        uiState.filteredTracks.filter { it.title.contains(query, ignoreCase = true) }
+    }
 
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isSearchActive,
-                enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End),
-                exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End)
-            ) {
-                TextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), CircleShape)
-                        .glassEffect(CircleShape),
-                    placeholder = {
-                        Text("Search your realm...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                    },
-                    trailingIcon = {
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = searchQuery.isNotEmpty(),
-                            enter = fadeIn() + scaleIn(),
-                            exit = fadeOut() + scaleOut()
-                        ) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(
-                                    imageVector = WitcherIcons.Close,
-                                    contentDescription = "Clear Search",
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        cursorColor = AardBlue
-                    ),
-                    singleLine = true,
-                    shape = CircleShape
-                )
-            }
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
+        if (matchedArtists.isNotEmpty()) {
+            item { SearchSectionTitle("THE VANGUARD (Artists)") }
+            items(matchedArtists) { artist -> ArtistSearchRow(artist) { onNavigateToArtist(artist.name) } }
         }
+        if (matchedAlbums.isNotEmpty()) {
+            item { SearchSectionTitle("THE VOLUMES (Albums)") }
+            items(matchedAlbums) { track -> AlbumSearchRow(track) { onNavigateToAlbum(track.album) } }
+        }
+        if (matchedSongs.isNotEmpty()) {
+            item { SectionTitle("Echoes Found") } // Thematic header
 
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(AardBlue)
-                .bounceClick { onSearchToggle() },
-            contentAlignment = Alignment.Center
-        ) {
-            Crossfade(targetState = isSearchActive, label = "") { active ->
-                Icon(
-                    imageVector = if (active) WitcherIcons.Collapse else WitcherIcons.Search,
-                    contentDescription = "Search Toggle",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+            items(matchedSongs) { track ->
+                // SWAP: SearchResultItem -> SongListItem
+                SongListItem(
+                    track = track,
+                    isCurrentTrack = uiState.currentTrack?.id == track.id,
+                    isPlaying = uiState.isPlaying,
+                    onClick = { viewModel.playTrack(track) },
+                    onOptionsClick = { /* Add to playlist or show details */ }
                 )
             }
         }
     }
 }
-
-@Composable
-fun SearchResultItem(track: AudioTrack, isAlbum: Boolean, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .glassEffect(MaterialTheme.shapes.medium)
-            .bounceClick { onClick() }
-            .padding(12.dp),
-        color = Color.Transparent
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = track.artworkUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(if (isAlbum) 60.dp else 48.dp)
-                    .clip(if (isAlbum) MaterialTheme.shapes.medium else MaterialTheme.shapes.small)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(
-                    text = if (isAlbum) track.album else track.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = track.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
 @Composable
 fun UserStatisticsHeader(
     statistics: UserStatistics,
@@ -473,9 +376,9 @@ fun UserStatisticsHeader(
 
             StatGlassWidget(
                 modifier = Modifier.weight(1f),
-                title = "Lossless Archives",
-                value = "${statistics.losslessTrackCount} FLAC",
-                icon = WitcherIcons.Album,
+                title = "Audio Archives",
+                value = "${statistics.totalTracksCount}",
+                icon = WitcherIcons.HiRes,
                 accentColor = IgniRed
             )
         }
@@ -537,6 +440,7 @@ fun StatGlassWidget(
     }
 }
 
+
 @Composable
 fun SectionTitle(title: String) {
     Text(
@@ -554,8 +458,6 @@ fun RecommendedAlbumsList(
     tracks: List<AudioTrack>,
     onAlbumClick: (String) -> Unit
 ) {
-    // The ViewModel now provides tracks pre-grouped/selected for the 2-hour window.
-    // We just need to group them by album name to display them as albums.
     val albumGroups = remember(tracks) {
         tracks.groupBy { it.album }.values.toList()
     }
@@ -583,6 +485,8 @@ fun RecommendedAlbumsList(
                         model = firstTrack.artworkUri,
                         contentDescription = "Cover for $albumName",
                         contentScale = ContentScale.Crop,
+                        fallback = painterResource(R.drawable.ic_tiger_logo), // THE FIX: Network resiliency
+                        error = painterResource(R.drawable.ic_tiger_logo),
                         modifier = Modifier
                             .size(56.dp)
                             .clip(MaterialTheme.shapes.medium)

@@ -26,6 +26,7 @@ import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.remote.model.SpotifyTrack
+import com.example.tigerplayer.ui.theme.SpotifyGreen
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
@@ -52,44 +53,40 @@ fun SpotifyPlaylistScreen(
         label = "SpotifyPlaylistColor"
     )
 
+    // Palette Ritual: Extracting essence from the artwork
     val imageRequest = remember(playlistImageUrl) {
         ImageRequest.Builder(context)
             .data(playlistImageUrl)
             .crossfade(true)
             .allowHardware(false)
-            .listener(
-                onSuccess = { _, result ->
-                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                    bitmap?.let { b ->
-                        Palette.from(b).generate { palette ->
-                            val colorInt = palette?.dominantSwatch?.rgb
-                                ?: palette?.mutedSwatch?.rgb
-                                ?: palette?.vibrantSwatch?.rgb
-                            colorInt?.let { dominantColor = Color(it) }
-                        }
+            .listener(onSuccess = { _, result ->
+                val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                bitmap?.let { b ->
+                    Palette.from(b).generate { palette ->
+                        val colorInt = palette?.dominantSwatch?.rgb
+                            ?: palette?.vibrantSwatch?.rgb
+                            ?: palette?.mutedSwatch?.rgb
+                        colorInt?.let { dominantColor = Color(it) }
                     }
                 }
-            )
+            })
             .build()
     }
 
-    val accentColor = if (dominantColor == fallbackColor) Color(0xFF1DB954) else animatedDominantColor
+    val accentColor = if (dominantColor == fallbackColor) SpotifyGreen else animatedDominantColor
 
     LaunchedEffect(playlistId) {
         viewModel.fetchTracksForPlaylist(playlistId)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Dynamic Ambient Background
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            animatedDominantColor.copy(alpha = 0.6f),
-                            fallbackColor
-                        ),
-                        startY = 0f,
+                        colors = listOf(animatedDominantColor.copy(alpha = 0.6f), fallbackColor),
                         endY = 1500f
                     )
                 )
@@ -103,18 +100,16 @@ fun SpotifyPlaylistScreen(
                         Text(
                             text = playlistName,
                             fontWeight = FontWeight.Black,
-                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(WitcherIcons.Back, contentDescription = "Back", tint = Color.White)
+                            Icon(WitcherIcons.Back, contentDescription = "Back")
                         }
                     },
-                    // THE FIX: Correct Material 3 syntax for transparent app bars
-                    colors = TopAppBarDefaults.topAppBarColors(
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent,
                         titleContentColor = Color.White,
                         navigationIconContentColor = Color.White
@@ -128,41 +123,20 @@ fun SpotifyPlaylistScreen(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    contentPadding = PaddingValues(bottom = 140.dp)
                 ) {
                     item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
                             AsyncImage(
                                 model = imageRequest,
-                                contentDescription = "Header",
-                                contentScale = ContentScale.Crop,
+                                contentDescription = "Playlist Art",
                                 modifier = Modifier
                                     .size(260.dp)
-                                    .padding(vertical = 24.dp)
                                     .clip(MaterialTheme.shapes.extraLarge)
-                                    .shadow(32.dp, MaterialTheme.shapes.extraLarge, spotColor = accentColor)
+                                    .shadow(32.dp, MaterialTheme.shapes.extraLarge, spotColor = accentColor),
+                                contentScale = ContentScale.Crop
                             )
-                        }
-                    }
-
-                    if (!isLoading && tracks.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier.fillParentMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "The archives are empty or inaccessible.",
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
                         }
                     }
 
@@ -178,37 +152,26 @@ fun SpotifyPlaylistScreen(
             }
         }
 
+        // Floating Action Portal
         if (tracks.isNotEmpty()) {
-            Box(
+            Button(
+                onClick = { viewModel.playSpotifyUri("spotify:playlist:$playlistId") },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 40.dp)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                    .padding(bottom = 48.dp)
+                    .fillMaxWidth(0.7f)
+                    .height(64.dp)
+                    .shadow(24.dp, CircleShape, spotColor = accentColor),
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                shape = CircleShape
             ) {
-                Button(
-                    onClick = { viewModel.playSpotifyUri("spotify:playlist:$playlistId") },
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                    modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .height(64.dp)
-                        .shadow(16.dp, CircleShape, spotColor = accentColor)
-                ) {
-                    Icon(WitcherIcons.Play, contentDescription = null, tint = Color.White)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "PLAY CLOUD ARCHIVE",
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        letterSpacing = 1.sp
-                    )
-                }
+                Icon(WitcherIcons.Play, null, tint = Color.Black)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("PLAY ARCHIVE", fontWeight = FontWeight.Black, color = Color.Black)
             }
         }
     }
 }
-
 @Composable
 fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick: () -> Unit) {
     Surface(

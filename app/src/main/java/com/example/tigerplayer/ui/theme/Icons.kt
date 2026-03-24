@@ -52,4 +52,5 @@ object WitcherIcons {
 
     // --- Brand & Fallbacks ---
     val DefaultAlbumArt = R.drawable.ic_tiger_logo
+    val HiRes = Icons.Rounded.Audiotrack
 }

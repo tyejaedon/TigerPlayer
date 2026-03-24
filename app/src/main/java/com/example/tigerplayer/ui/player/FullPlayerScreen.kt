@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -40,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,7 +56,6 @@ import coil.size.Precision
 import coil.size.Size
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.library.SongOptionsSheet
-import com.example.tigerplayer.ui.theme.SpotifyGreen
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.delay
@@ -62,11 +63,13 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sin
 import com.example.tigerplayer.R
+import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.tigerGlow
 
 // --- Thematic Witcher Colors ---
 private val IgniRed = Color(0xFFF11F1A)
 private val AardBlue = Color(0xFF4FC3F7)
-
+private val SpotifyGreen = Color(0xFF1DB954) // THE FIX: Added missing color!
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -75,7 +78,7 @@ fun FullPlayerScreen(
     onCollapse: () -> Unit,
     onNavigateToAlbum: (String) -> Unit
 ) {
-     val uiState = PlayerUiState()
+    val uiState by viewModel.uiState.collectAsState()
 
     val track = uiState.currentTrack ?: return
     val context = LocalContext.current
@@ -84,6 +87,9 @@ fun FullPlayerScreen(
     var showOptions by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
+
+    // The optimistic UI update for Liked Songs.
+    // It wires directly to the ViewModel's addTrackToLikedSongs underneath.
     var isLikedLocally by remember(track.id) { mutableStateOf(false) }
 
     var offsetX by remember { mutableStateOf(0f) }
@@ -95,7 +101,7 @@ fun FullPlayerScreen(
 
     // --- THE DYNAMIC BREATHING ENGINE ---
     val infiniteTransition = rememberInfiniteTransition(label = "ArtBreathing")
-    
+
     val scale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
         targetValue = 1.15f,
@@ -271,7 +277,7 @@ fun FullPlayerScreen(
                 }
 
                 Row {
-                    IconButton(onClick = { 
+                    IconButton(onClick = {
                         showQueue = !showQueue
                         if (showQueue) showLyrics = false
                     }) {
@@ -281,7 +287,7 @@ fun FullPlayerScreen(
                             tint = if (showQueue) MaterialTheme.colorScheme.primary else dynamicTextColor
                         )
                     }
-                    IconButton(onClick = { 
+                    IconButton(onClick = {
                         showLyrics = !showLyrics
                         if (showLyrics) showQueue = false
                     }) {
@@ -315,9 +321,12 @@ fun FullPlayerScreen(
                         "queue" -> {
                             QueueDisplay(
                                 queue = uiState.queue,
-                                currentTrackId = track.id,
-                                textColor = dynamicTextColor,
-                                onTrackClick = { viewModel.playTrack(it) }
+                                currentTrackId = uiState.currentTrack?.id,
+                                isPlaying = uiState.isPlaying, // Crucial for the VolumeUp icon
+                                onTrackClick = { viewModel.playTrack(it) },
+                                onRemoveFromQueue = { track ->
+                                    viewModel.removeFromQueue(track)
+                                }
                             )
                         }
                         "lyrics" -> {
@@ -388,30 +397,39 @@ fun FullPlayerScreen(
 // --- QUEUE ENGINE ---
 
 @Composable
-private fun QueueDisplay(
+fun QueueDisplay(
     queue: List<AudioTrack>,
-    currentTrackId: String,
-    textColor: Color,
-    onTrackClick: (AudioTrack) -> Unit
+    currentTrackId: String?,
+    isPlaying: Boolean,
+    onTrackClick: (AudioTrack) -> Unit,
+    onRemoveFromQueue: (AudioTrack) -> Unit // Recommended for full control
 ) {
+    // --- THE VOID CHECK ---
     if (queue.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
             Text(
                 text = "The queue is empty.\nNo shadows follow.",
-                color = textColor.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.headlineSmall
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Light
             )
         }
         return
     }
 
     val listState = rememberLazyListState()
-    val currentIndex = queue.indexOfFirst { it.id == currentTrackId }
+    val currentIndex = remember(queue, currentTrackId) {
+        queue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0)
+    }
 
-    LaunchedEffect(Unit) {
-        if (currentIndex > 0) {
-            listState.scrollToItem(currentIndex)
+    // THE SCROLL RITUAL: Snap the view to the current track on entry
+    LaunchedEffect(key1 = currentTrackId) {
+        if (currentIndex >= 0 && queue.isNotEmpty()) {
+            listState.animateScrollToItem(currentIndex, scrollOffset = -200)
         }
     }
 
@@ -419,57 +437,108 @@ private fun QueueDisplay(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .glassEffect(MaterialTheme.shapes.large)
-            .padding(16.dp),
-        contentPadding = PaddingValues(bottom = 32.dp)
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        itemsIndexed(queue) { index, track ->
-            val isPlaying = track.id == currentTrackId
-            
-            Surface(
-                onClick = { onTrackClick(track) },
-                color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth()
+        itemsIndexed(
+            items = queue,
+            key = { index, track -> "${track.id}_$index" } // Supports duplicate tracks in queue
+        ) { index, track ->
+            val isActive = track.id == currentTrackId
+
+            // --- THE QUEUE ROW ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    // Subtle background for the active track
+                    .background(
+                        if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                        else Color.Transparent
+                    )
+                    .bounceClick { onTrackClick(track) }
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(modifier = Modifier.size(48.dp)) {
+                    // --- ARTWORK WITH IGNI GLOW ---
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .then(if (isActive) Modifier.tigerGlow() else Modifier)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
                         AsyncImage(
                             model = track.artworkUri,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.small)
+                            fallback = painterResource(R.drawable.ic_tiger_logo),
+                            modifier = Modifier.fillMaxSize()
                         )
-                        if (isPlaying) {
+
+                        if (isActive && isPlaying) {
                             Box(
-                                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.3f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Rounded.LocalFireDepartment, null, tint = IgniRed, modifier = Modifier.size(24.dp))
+                                Icon(
+                                    imageVector = WitcherIcons.VolumeUp,
+                                    contentDescription = "Playing",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.width(16.dp))
-                    
+
+                    // --- METADATA MANIFEST ---
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = track.title,
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (isPlaying) MaterialTheme.colorScheme.primary else textColor,
-                            fontWeight = if (isPlaying) FontWeight.Black else FontWeight.Bold,
+                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = track.artist,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else textColor.copy(alpha = 0.6f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (track.isRemote) {
+                                Icon(
+                                    imageVector = WitcherIcons.Cloud,
+                                    contentDescription = null,
+                                    tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+
+                            Text(
+                                text = "${track.artist}${if (track.isRemote) " • Ritual Sync" else ""}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    // --- TRAILING OPTIONS ---
+                    IconButton(onClick = { onRemoveFromQueue(track) }) {
+                        Icon(
+                            imageVector = WitcherIcons.Close, // Use a "X" or "Dismiss" icon
+                            contentDescription = "Banish from Queue",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -498,7 +567,11 @@ private fun parseSyncedLyrics(raw: String?): List<LyricLine> {
 }
 
 @Composable
-private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: Color) {
+private fun LyricsDisplay(
+    lyrics: String?,
+    currentPositionMs: Long,
+    textColor: Color
+) {
     if (lyrics.isNullOrBlank()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
@@ -513,6 +586,7 @@ private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: C
 
     val parsedLyrics = remember(lyrics) { parseSyncedLyrics(lyrics) }
 
+    // IF STATIC LYRICS (No timestamps)
     if (parsedLyrics.isEmpty()) {
         val scrollState = rememberScrollState()
         Text(
@@ -521,32 +595,29 @@ private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: C
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(bottom = 32.dp),
-            style = MaterialTheme.typography.titleLarge.copy(lineHeight = 36.sp),
+                .padding(24.dp)
+                .padding(bottom = 100.dp),
+            style = MaterialTheme.typography.titleLarge.copy(lineHeight = 38.sp),
             textAlign = TextAlign.Center
         )
     } else {
+        // IF SYNCED LYRICS
         val listState = rememberLazyListState()
 
-        // Find the index of the currently playing lyric
-        val activeIndex = parsedLyrics.indexOfLast { it.timeMs <= currentPositionMs }.coerceAtLeast(0)
+        // Find the index of the currently playing line
+        val activeIndex = remember(currentPositionMs, parsedLyrics) {
+            val index = parsedLyrics.indexOfLast { it.timeMs <= currentPositionMs }
+            index.coerceAtLeast(0)
+        }
 
-        // Calculate a precise center offset.
-        // We use density to ensure it calculates correctly on the S22 screen.
-        val density = LocalDensity.current
-        val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
-
-        // The offset should push the item roughly to the middle of the LazyColumn's visible area.
-        // Adjust the '2.5f' divisor if it feels slightly too high or low.
-        val centerOffsetPx = (screenHeightPx / 2.5f).toInt()
-
-        // THE SMOOTH SCROLL RITUAL
+        // THE CENTERING RITUAL:
+        // We scroll so the active item is roughly in the top 1/3rd of the screen.
+        // This is more comfortable for the eyes than dead-center.
         LaunchedEffect(activeIndex) {
-            if (activeIndex >= 0) {
-                // Animate to the item, but apply a negative offset to push it down into the center
+            if (parsedLyrics.isNotEmpty()) {
                 listState.animateScrollToItem(
                     index = activeIndex,
-                    scrollOffset = -centerOffsetPx
+                    scrollOffset = -250 // Fixed offset in pixels for stability
                 )
             }
         }
@@ -555,47 +626,47 @@ private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: C
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .glassEffect(MaterialTheme.shapes.large)
                 .padding(horizontal = 24.dp),
-            // Reduce vertical padding so it doesn't artificially stretch the container bounds
-            contentPadding = PaddingValues(vertical = 40.dp)
+            // Huge bottom padding so the last line can be centered
+            contentPadding = PaddingValues(top = 150.dp, bottom = 400.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             itemsIndexed(parsedLyrics) { index, line ->
                 val isActive = index == activeIndex
-                val isPassed = index < activeIndex
 
-                // Smoothly animate the text size and opacity
-                val textSize by animateFloatAsState(
-                    targetValue = if (isActive) 28f else 20f,
-                    animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-                    label = "TextSize"
+                // PERFORMANCE FIX: Animate Alpha and Scale, NOT Font Size.
+                // This prevents the list from "jumping" due to re-measuring.
+                val alpha by animateFloatAsState(
+                    targetValue = if (isActive) 1f else 0.4f,
+                    animationSpec = tween(400),
+                    label = "LyricAlpha"
                 )
 
-                val alpha by animateFloatAsState(
-                    targetValue = when {
-                        isActive -> 1.0f
-                        isPassed -> 0.5f
-                        else -> 0.3f
-                    },
-                    animationSpec = tween(durationMillis = 400),
-                    label = "TextAlpha"
+                val scale by animateFloatAsState(
+                    targetValue = if (isActive) 1.1f else 1f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
+                    label = "LyricScale"
                 )
 
                 Text(
-                    text = if (line.text.isBlank()) "🎵" else line.text,
+                    text = if (line.text.isBlank()) "•••" else line.text,
                     color = if (isActive) MaterialTheme.colorScheme.primary else textColor.copy(alpha = alpha),
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = if (isActive) FontWeight.Black else FontWeight.Medium,
-                        fontSize = textSize.sp
+                        fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
                     ),
-                    modifier = Modifier.padding(vertical = 16.dp)
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 20.dp)
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                        }
                 )
             }
         }
     }
 }
-// --- FIERY WAVY SEEKER ---
-
 @Composable
 private fun FieryWavySeeker(
     uiState: PlayerUiState,
@@ -790,7 +861,8 @@ private fun TrackInfoCard(
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val format = track.mimeType.split("/").last().uppercase()
+            // THE FIX: Safe parsing for mimeType so it doesn't crash if the format is empty!
+            val format = track.mimeType.split("/").lastOrNull()?.uppercase() ?: "AUDIO"
             MetadataBadge(text = format, textColor = textColor)
 
             when {
@@ -808,7 +880,8 @@ private fun TrackInfoCard(
             track.year?.let { year ->
                 MetadataBadge(text = year, textColor = textColor)
             }
-        }    }
+        }
+    } // THE FIX: Removed the extra double bracket here!
 }
 
 @Composable
@@ -877,7 +950,7 @@ private fun PlaybackControls(
         )
 
         val isPlaying = uiState.isPlaying
-        
+
         // ELEMENTAL TRANSITIONS: "Heating" for fire, "Cooling" for ice
         val elementTransition = rememberInfiniteTransition(label = "ElementPulse")
         val heatingColor by elementTransition.animateColor(

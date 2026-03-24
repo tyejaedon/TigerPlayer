@@ -8,8 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
@@ -53,11 +57,20 @@ class MainActivity : ComponentActivity() {
                 Log.d("SpotifyAuth", "Code acquired! Swapping for token...")
 
                 lifecycleScope.launch {
-                    // Swap the code for the actual token securely
-                    val token = authManager.exchangeCodeForToken(authCode, redirectUri)
-                    if (token.isNotEmpty()) {
-                        spotifyRepository.fetchUserPlaylists(token)
-                        spotifyRepository.fetchUserSavedAlbums(token)
+                    try {
+                        // Swap the code for the actual token securely
+                        val token = authManager.exchangeCodeForToken(authCode, redirectUri)
+
+                        if (token.isNotEmpty()) {
+                            // THE MISSING WIRE: Tell the Oracle the connection is forged!
+                            playerViewModel.onAuthSuccess(token)
+
+                            // Fetch initial cloud data
+                            spotifyRepository.fetchUserPlaylists(token)
+                            spotifyRepository.fetchUserSavedAlbums(token)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SpotifyAuth", "Ritual failed during token exchange: ${e.message}")
                     }
                 }
             }
@@ -74,11 +87,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-
         setContent {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
-
-            // Observe the theme mode flow
             val themeMode by settingsViewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
 
             val useDarkTheme = when (themeMode) {
@@ -88,18 +98,20 @@ class MainActivity : ComponentActivity() {
             }
 
             TigerPlayerTheme(darkTheme = useDarkTheme) {
-                // Initialize the Navigator
-                val navController = rememberNavController()
-
-                // Launch the Grimoire
-                TigerPlayerNavGraph(
-                    navController = navController,
-                    playerViewModel = playerViewModel
-                )
+                // THE GLOBAL ANCHOR: Ensures background colors are applied to ALL tabs
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    val navController = rememberNavController()
+                    TigerPlayerNavGraph(
+                        navController = navController,
+                        playerViewModel = playerViewModel
+                    )
+                }
             }
         }
     }
-
     /**
      * Cast this sign from the UI via LocalContext.current as MainActivity
      * to trigger the Spotify login flow.
@@ -115,7 +127,9 @@ class MainActivity : ComponentActivity() {
         builder.setScopes(arrayOf(
             "playlist-read-private",
             "playlist-read-collaborative",
-            "user-library-read"
+            "user-library-read",
+            "user-read-private", // The "Gatekeeper" fix
+            "streaming"          // Required for the Play button to work
         ))
 
         val request = builder.build()

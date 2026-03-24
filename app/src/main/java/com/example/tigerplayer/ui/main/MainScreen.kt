@@ -35,7 +35,7 @@ fun MainScreen(
     onNavigateToNavidromeLogin: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToPlaylist: (Long, String) -> Unit,
-    onNavigateToSettings: () -> Unit // NEW: Support navigation to settings
+    onNavigateToSettings: () -> Unit
 ) {
     val tabNavController = rememberNavController()
     val uiState by playerViewModel.uiState.collectAsState()
@@ -51,56 +51,50 @@ fun MainScreen(
 
         // --- LAYER 1: The App Shell (Scaffold) ---
         Scaffold(
+            // Use background color so the Glass Bar has something to "frost"
+            containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
-                // Unified Glass Column for MiniPlayer + Navigation
+                // Apply glassEffect once to the entire bottom stack
                 Column(
-                    modifier = Modifier.glassEffect(
-                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                        borderColor = Color.White.copy(alpha = 0.12f)
-                    )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                        .windowInsetsPadding(WindowInsets.navigationBars)
                 ) {
                     val currentTrack = uiState.currentTrack
-                    if (currentTrack != null && !isPlayerExpanded) {
-                        val trackProgress = if (currentTrack.durationMs > 0) {
-                            (uiState.currentPosition.toFloat() / currentTrack.durationMs).coerceIn(0f, 1f)
-                        } else 0f
 
+                    // MiniPlayer remains consistent inside the glass container
+                    if (currentTrack != null && !isPlayerExpanded) {
                         MiniPlayer(
-                            track = currentTrack,
-                            isPlaying = uiState.isPlaying,
-                            progress = trackProgress,
-                            onPlayPauseClick = { playerViewModel.togglePlayPause() },
-                            onNextClick = { playerViewModel.skipToNext() },
+                            viewModel = playerViewModel,
                             onExpandClick = { isPlayerExpanded = true }
+                        )
+
+                        // Subtle visual separation
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                         )
                     }
 
                     NavigationBar(
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp
+                        containerColor = Color.Transparent, // Let the Column's glass show
+                        tonalElevation = 0.dp,
+                        modifier = Modifier.height(80.dp)
                     ) {
                         val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
 
                         tabs.forEach { tab ->
                             val isSelected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
+
                             NavigationBarItem(
-                                icon = {
-                                    Icon(
-                                        imageVector = tab.icon,
-                                        contentDescription = tab.title,
-                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                label = { Text(tab.title) },
                                 selected = isSelected,
                                 onClick = {
-                                    // THE CLEARING RITUAL: Clear search results when switching tabs
                                     if (!isSelected) {
                                         playerViewModel.clearSearch()
                                     }
-
                                     tabNavController.navigate(tab.route) {
                                         popUpTo(tabNavController.graph.findStartDestination().id) {
                                             saveState = true
@@ -108,21 +102,66 @@ fun MainScreen(
                                         launchSingleTop = true
                                         restoreState = true
                                     }
-                                }
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = tab.icon,
+                                        contentDescription = tab.title,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = tab.title,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                )
                             )
                         }
                     }
                 }
             }
         ) { innerPadding ->
-            // Tab Content Host
-            Box(modifier = Modifier.padding(innerPadding)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = innerPadding.calculateBottomPadding())
+            ) {
                 NavHost(
                     navController = tabNavController,
                     startDestination = BottomNavTab.Home.route,
-                    enterTransition = { fadeIn(tween(400)) },
-                    exitTransition = { fadeOut(tween(400)) }
-                ) {
+                    // THE GLOBAL RITUAL: All tab switches will use these animations
+                    enterTransition = {
+                        slideInHorizontally(
+                            initialOffsetX = { 300 }, // Slide in from the right
+                            animationSpec = tween(400, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(400))
+                    },
+                    exitTransition = {
+                        slideOutHorizontally(
+                            targetOffsetX = { -300 }, // Slide out to the left
+                            animationSpec = tween(400, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(400))
+                    },
+                    popEnterTransition = {
+                        slideInHorizontally(
+                            initialOffsetX = { -300 }, // Slide in from the left
+                            animationSpec = tween(400, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(400))
+                    },
+                    popExitTransition = {
+                        slideOutHorizontally(
+                            targetOffsetX = { 300 }, // Slide out to the right
+                            animationSpec = tween(400, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(400))
+                    }
+                ){
                     composable(BottomNavTab.Home.route) {
                         HomeScreen(
                             viewModel = playerViewModel,
@@ -174,7 +213,6 @@ fun MainScreen(
         }
 
         // --- THE INITIATION RITUAL ---
-        // Automatically scan archives when the app launches
         LaunchedEffect(Unit) {
             playerViewModel.loadLocalAudio(forceRefresh = false)
         }

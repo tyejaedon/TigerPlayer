@@ -172,7 +172,7 @@ object NetworkModule {
     @Named("LastFmRetrofit") // Use Named so Hilt doesn't confuse it with Spotify's Retrofit
     fun provideLastFmRetrofit(): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://ws.audioscrobbler.com/")
+            .baseUrl("https://ws.audioscrobbler.com/")
             .addConverterFactory(GsonConverterFactory.create())
             // Consider adding an OkHttpClient with a custom User-Agent interceptor later!
             .build()

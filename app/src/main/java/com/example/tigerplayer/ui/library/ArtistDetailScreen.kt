@@ -31,7 +31,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.ArtistDetails
-import com.example.tigerplayer.ui.home.SearchResultItem
 import com.example.tigerplayer.ui.home.SectionTitle
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
@@ -39,6 +38,7 @@ import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.utils.ArtistUtils
 import java.text.NumberFormat
 import java.util.Locale
+import com.example.tigerplayer.ui.library.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,61 +46,48 @@ fun ArtistDetailsScreen(
     artistName: String,
     viewModel: PlayerViewModel,
     onBackClick: () -> Unit,
-    onAlbumClick: (String) -> Unit = {} // Added for album navigation routing!
+    onAlbumClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val artistDetails by viewModel.artistDetails.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
-
     val profile = artistDetails[artistName]
 
-    // 1. Get all tracks by the artist
+    // 1. THE ALL-SONGS HIERARCHY: Every track by this artist
     val artistTracks = remember(uiState.tracks, artistName) {
         uiState.tracks.filter { track ->
             ArtistUtils.getBaseArtist(track.artist).equals(artistName, ignoreCase = true)
         }
     }
 
-    // 2. THE FIX: Group tracks by Album to extract unique album representations
+    // 2. THE ALBUM AGGREGATION (RECTIFIED):
+    // We group by album name to show unique albums in the horizontal row
     val artistAlbums = remember(artistTracks) {
-        artistTracks.groupBy { it.album.trim() }
-            .filterKeys { it.isNotEmpty() && !it.equals("Unknown", ignoreCase = true) }
-            .mapValues { it.value.first() } // Use the first track to represent the album art/year
-            .values.toList()
+        artistTracks
+            .distinctBy { it.album.lowercase().trim() }
+            .sortedByDescending { it.album } // Or sortedBy { it.year } if available
     }
 
-    LaunchedEffect(artistName) {
-        viewModel.fetchArtistProfile(artistName)
-    }
-
-    val imageUrl = profile?.imageUrl ?: artistTracks.firstOrNull()?.artworkUri
+    // 3. THE PALETTE & IMAGE RITUAL
+    val imageUrl = profile?.imageUrl?.takeIf { it.isNotBlank() } ?: artistTracks.firstOrNull()?.artworkUri
     val fallbackColor = MaterialTheme.colorScheme.background
     var dominantColor by remember { mutableStateOf(fallbackColor) }
 
-    val animatedDominantColor by animateColorAsState(
-        targetValue = dominantColor,
-        animationSpec = tween(durationMillis = 1000),
-        label = "DominantColorAnimation"
-    )
-
+    // Palette Engine: Extract colors from the high-res cloud art
     val imageRequest = remember(imageUrl) {
         ImageRequest.Builder(context)
             .data(imageUrl)
-            .crossfade(true)
-            .allowHardware(false)
-            .listener(
-                onSuccess = { _, result ->
-                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                    bitmap?.let { b ->
-                        Palette.from(b).generate { palette ->
-                            val colorInt = palette?.dominantSwatch?.rgb
-                                ?: palette?.mutedSwatch?.rgb
-                                ?: palette?.vibrantSwatch?.rgb
-                            colorInt?.let { dominantColor = Color(it) }
-                        }
+            .crossfade(800)
+            .allowHardware(false) // Required for Palette to work
+            .listener(onSuccess = { _, result ->
+                val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                bitmap?.let { b ->
+                    Palette.from(b).generate { palette ->
+                        val colorInt = palette?.dominantSwatch?.rgb ?: palette?.mutedSwatch?.rgb
+                        colorInt?.let { dominantColor = Color(it) }
                     }
                 }
-            )
+            })
             .build()
     }
 
@@ -109,66 +96,47 @@ fun ArtistDetailsScreen(
             .fillMaxSize()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(
-                        animatedDominantColor.copy(alpha = 0.5f),
-                        fallbackColor
-                    ),
-                    startY = 0f,
-                    endY = 1500f
+                    colors = listOf(dominantColor.copy(alpha = 0.4f), fallbackColor),
+                    endY = 1200f
                 )
             )
     ) {
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            text = artistName,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
+                    title = { Text(artistName.uppercase(), fontWeight = FontWeight.Black, letterSpacing = 2.sp) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
                             Icon(WitcherIcons.Back, contentDescription = "Back")
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
-                    ),
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                     modifier = Modifier.glassEffect(RectangleShape)
                 )
-            },
-            containerColor = Color.Transparent
+            }
         ) { padding ->
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
-                // 1. HERO IMAGE
-                item { ArtistHeroImage(imageRequest, artistName) }
+                // --- HERO SECTION ---
+                item { ArtistHeroImage(imageUrl, artistName) }
 
-                // 2. GENRE CLOUD
                 if (profile?.genres?.isNotEmpty() == true) {
                     item { ArtistGenreCloud(profile.genres) }
                 }
 
-                // 3. VANGUARD STATS & BIO
                 item { ArtistVanguardStats(profile) }
 
-                // 4. ALBUMS (Horizontal Row bundled at the top)
+                // --- HORIZONTAL ALBUMS ROW ---
                 if (artistAlbums.isNotEmpty()) {
                     item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        SectionTitle(title = "Albums")
-
+                        SectionTitle(title = "Discography")
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                         ) {
                             items(artistAlbums) { albumTrack ->
                                 ArtistAlbumCard(
@@ -177,21 +145,24 @@ fun ArtistDetailsScreen(
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
 
-                // 5. ALL SONGS (Vertical List below)
+                // --- VERTICAL TRACK LIST ---
                 if (artistTracks.isNotEmpty()) {
                     item {
-                        SectionTitle(title = "All Tracks")
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SectionTitle(title = "All Manifestations")
                     }
 
                     items(artistTracks) { track ->
-                        SearchResultItem(
+                        // Using our Unified SongListItem for aesthetic consistency
+                        SongListItem(
                             track = track,
-                            isAlbum = false,
-                            onClick = { viewModel.playTrack(track) }
+                            isCurrentTrack = uiState.currentTrack?.id == track.id,
+                            isPlaying = uiState.isPlaying,
+                            onClick = { viewModel.playTrack(track) },
+                            onOptionsClick = { /* Track Options */ }
                         )
                     }
                 }
@@ -201,173 +172,3 @@ fun ArtistDetailsScreen(
 }
 
 // --- NEW COMPONENT: THE ALBUM CARD ---
-@Composable
-private fun ArtistAlbumCard(
-    track: AudioTrack,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(140.dp)
-            .clickable { onClick() },
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        AsyncImage(
-            model = track.artworkUri,
-            contentDescription = "Album Art for ${track.album}",
-            modifier = Modifier
-                .size(140.dp)
-                .shadow(8.dp, MaterialTheme.shapes.medium)
-                .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = track.album,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        track.year?.let { year ->
-            Text(
-                text = year,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                maxLines = 1
-            )
-        }
-    }
-}
-
-// --- PREVIOUS COMPONENTS ---
-
-@Composable
-private fun ArtistHeroImage(imageRequest: ImageRequest, artistName: String) {
-    AsyncImage(
-        model = imageRequest,
-        contentDescription = "Image of $artistName",
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(320.dp)
-            .padding(16.dp)
-            .shadow(24.dp, MaterialTheme.shapes.extraLarge)
-            .clip(MaterialTheme.shapes.extraLarge),
-        contentScale = ContentScale.Crop
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ArtistGenreCloud(genres: List<String>) {
-    FlowRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        genres.take(4).forEach { genre ->
-            ArtistMetadataBadge(text = genre, isHighlight = true)
-        }
-    }
-}
-
-@Composable
-private fun ArtistVanguardStats(profile: ArtistDetails?) {
-    Column(
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxWidth()
-            .glassEffect(MaterialTheme.shapes.large)
-            .background(
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
-                MaterialTheme.shapes.large
-            )
-            .padding(20.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "VANGUARD STATS",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp
-            )
-
-            val formattedListeners = NumberFormat.getNumberInstance(Locale.US).format(profile?.popularity ?: 0)
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ArtistMetadataBadge(
-                    text = "LISTENERS: $formattedListeners",
-                    textColor = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        val bio = profile?.bio
-        if (!bio.isNullOrBlank()) {
-            Text(
-                text = bio,
-                style = MaterialTheme.typography.bodyLarge,
-                lineHeight = 26.sp,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Consulting the Archives...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                    trackColor = Color.Transparent
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArtistMetadataBadge(
-    text: String,
-    isHighlight: Boolean = false,
-    textColor: Color = MaterialTheme.colorScheme.primary
-) {
-    Surface(
-        color = if (isHighlight) textColor.copy(alpha = 0.2f) else textColor.copy(alpha = 0.1f),
-        shape = CircleShape,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isHighlight) textColor else textColor.copy(alpha = 0.3f)
-        )
-    ) {
-        Text(
-            text = text.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = textColor,
-            fontWeight = FontWeight.Black,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            letterSpacing = 1.sp
-        )
-    }
-}

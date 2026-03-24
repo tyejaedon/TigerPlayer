@@ -9,16 +9,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,20 +34,28 @@ fun ArtistsList(
     val uiState by viewModel.uiState.collectAsState()
     val artistProfiles by viewModel.artistDetails.collectAsState()
 
+    // THE PERFORMANCE RITUAL:
+    // Instead of searching tracks inside the loop, we create a quick lookup map.
+    // This turns O(N*M) search into O(1) lookup during scrolling.
+    val localArtworkMap = remember(uiState.tracks) {
+        uiState.tracks
+            .distinctBy { it.artist.lowercase() }
+            .associate { ArtistUtils.getBaseArtist(it.artist) to it.artworkUri }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 120.dp)
+        // Extra bottom padding so the last artist isn't hidden by the MiniPlayer
+        contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
     ) {
-        items(uiState.artists, key = { it.name }) { artist ->
+        items(
+            items = uiState.artists,
+            key = { it.name } // Critical for smooth animations
+        ) { artist ->
             val profile = artistProfiles[artist.name]
+            val localArtwork = localArtworkMap[artist.name]
 
-            val localArtwork = remember(artist.name, uiState.tracks) {
-                uiState.tracks.firstOrNull {
-                    // THE FIX 1: Safely ignore case just in case metadata is weird
-                    ArtistUtils.getBaseArtist(it.artist).equals(artist.name, ignoreCase = true)
-                }?.artworkUri
-            }
-
+            // Automatic Lore Retrieval: Triggers when the artist card enters the viewport
             LaunchedEffect(artist.name) {
                 if (profile == null) {
                     viewModel.fetchArtistProfile(artist.name)
@@ -61,6 +66,7 @@ fun ArtistsList(
                 artistName = artist.name,
                 trackCount = artist.trackCount,
                 albumCount = artist.albumCount,
+                // Priority: 1. Cloud Profile Image | 2. Local File Tag | 3. Tiger Logo
                 artworkUri = profile?.imageUrl ?: localArtwork,
                 onClick = { onArtistClick(artist.name) }
             )
@@ -76,26 +82,32 @@ private fun ArtistListItem(
     artworkUri: Any?,
     onClick: () -> Unit
 ) {
-    // THE FIX 2: Wrapped in Surface for the premium glass effect
+    // We use MaterialTheme colors to ensure the glass is legible in Light & Dark mode
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val subTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
-            .clip(MaterialTheme.shapes.large)
             .bounceClick { onClick() }
             .glassEffect(MaterialTheme.shapes.large),
-        color = Color.Black.copy(alpha = 0.2f) // Deep glass background
+        color = Color.Transparent // Surface handles the glass tint via the glassEffect modifier
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // High-fidelity Artist Portrait
             AsyncImage(
                 model = artworkUri,
                 contentDescription = artistName,
                 contentScale = ContentScale.Crop,
+                // Fallback icon while loading or if no art exists
+                placeholder = painterResource(id = com.example.tigerplayer.R.drawable.ic_tiger_logo),
+                error = painterResource(id = com.example.tigerplayer.R.drawable.ic_tiger_logo),
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(60.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             )
@@ -106,26 +118,28 @@ private fun ArtistListItem(
                 Text(
                     text = artistName,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White, // High contrast text
-                    fontWeight = FontWeight.Bold,
+                    color = textColor,
+                    fontWeight = FontWeight.Black,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = "$albumCount Albums • $trackCount Songs",
+                    text = "$albumCount Albums • $trackCount Tracks",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = subTextColor,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
+            // Minimalist Witcher Chevron
             Icon(
                 imageVector = WitcherIcons.Options,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.3f),
-                modifier = Modifier.size(24.dp)
+                contentDescription = "Artist Lore",
+                tint = subTextColor.copy(alpha = 0.4f),
+                modifier = Modifier.size(20.dp)
             )
         }
     }

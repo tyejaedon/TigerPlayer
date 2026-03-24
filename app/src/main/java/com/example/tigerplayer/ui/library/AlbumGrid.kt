@@ -29,7 +29,7 @@ import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.bounceClick
 
 @Composable
-fun AlbumsGrid(
+fun AlbumsGridV1(
     viewModel: PlayerViewModel,
     onAlbumClick: (String) -> Unit
 ) {
@@ -67,51 +67,7 @@ fun AlbumsGrid(
     }
 }
 
+
+
 // --- The Reusable Grid Card ---
 
-@Composable
-private fun AlbumGridItem(
-    albumName: String,
-    artistName: String,
-    artworkUri: Uri?,
-    trackCount: Int,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .bounceClick { onClick() }
-    ) {
-        // High-Quality Square Album Art
-        AsyncImage(
-            model = artworkUri,
-            contentDescription = "Album Art for $albumName",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f) // Forces the image to be a perfect square regardless of column width
-                .clip(MaterialTheme.shapes.medium) // Applies the sharp Witcher cut corners!
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 1. Album Name (Primary)
-        Text(
-            text = albumName,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        // 2. Album Artist & Track Count (Secondary)
-        Text(
-            text = "$artistName • $trackCount Tracks",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}

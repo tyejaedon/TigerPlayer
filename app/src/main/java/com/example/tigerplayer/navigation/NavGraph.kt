@@ -39,6 +39,10 @@ import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.settings.SettingsScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 
 @Composable
 fun TigerBranding() {
@@ -61,7 +65,25 @@ fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: Playe
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Splash.route
+        startDestination = Screen.Splash.route,
+        enterTransition = {
+            slideIntoContainer(
+                AnimatedContentTransitionScope.SlideDirection.Left,
+                animationSpec = tween(300)
+            )
+        },
+        exitTransition = {
+            fadeOut(animationSpec = tween(300))
+        },
+        popEnterTransition = {
+            fadeIn(animationSpec = tween(300))
+        },
+        popExitTransition = {
+            slideOutOfContainer(
+                AnimatedContentTransitionScope.SlideDirection.Right,
+                animationSpec = tween(300)
+            )
+        }
     ) {
         composable(route = Screen.Splash.route) {
             LaunchedEffect(key1 = Unit) {
@@ -158,7 +180,13 @@ fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: Playe
             ArtistDetailsScreen(
                 artistName = name,
                 viewModel = playerViewModel,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                // THE FIX: Wire up the album cards to navigate deeper into the archive!
+                onAlbumClick = { albumName ->
+                    // Make sure to encode the name in case the album has a slash or question mark
+                    val safeAlbumName = Uri.encode(albumName)
+                    navController.navigate(Screen.AlbumDetail.createRoute(safeAlbumName))
+                }
             )
         }
 

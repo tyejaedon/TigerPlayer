@@ -1,81 +1,84 @@
 package com.example.tigerplayer.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.home.UserStatistics
 import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick // The heavy physical click
+import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 
-// 1. The Large "Discover" Carousel
+private val AardBlue = Color(0xFF007AFF)
+private val LosslessGold = Color(0xFFFFD700)
+
 @Composable
 fun DiscoverCarousel(
     tracks: List<AudioTrack>,
     onTrackClick: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        items(tracks) { track ->
-            LargeAlbumCard(
-                track = track,
-                onClick = { onTrackClick(track) }
-            )
+    Column(modifier = modifier) {
+        SectionHeader(title = "THE VANGUARD", subtitle = "New discoveries from the archives")
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            items(tracks) { track ->
+                LargeAlbumCard(
+                    track = track,
+                    onClick = { onTrackClick(track) }
+                )
+            }
         }
     }
 }
 
-// 2. The Smaller "Recently Played" Row
 @Composable
 fun RecentlyPlayedRow(
     tracks: List<AudioTrack>,
     onTrackClick: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(tracks) { track ->
-            SmallTrackCard(
-                track = track,
-                onClick = { onTrackClick(track) }
-            )
+    Column(modifier = modifier) {
+        SectionHeader(title = "RECENT CONTRACTS", subtitle = "Echoes of past chants")
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(tracks) { track ->
+                SmallTrackCard(
+                    track = track,
+                    onClick = { onTrackClick(track) }
+                )
+            }
         }
     }
 }
 
-// --- The Individual Cards (Armor Plated) ---
+// --- The Mastercrafted Cards ---
 
 @Composable
 private fun LargeAlbumCard(
@@ -84,37 +87,51 @@ private fun LargeAlbumCard(
 ) {
     Column(
         modifier = Modifier
-            .width(200.dp)
-            .bounceClick { onClick() } // Heavy interaction
+            .width(220.dp)
+            .bounceClick { onClick() }
     ) {
-        // High-Quality Art Display with sharp Witcher cuts
-        AsyncImage(
-            model = track.artworkUri,
-            contentDescription = "Album Art for ${track.title}",
-            contentScale = ContentScale.Crop,
+        Box {
+            // THE IMAGE: Sharp cuts with a subtle Aard glow border
+            AsyncImage(
+                model = track.artworkUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.ic_tiger_logo),
+                modifier = Modifier
+                    .size(220.dp)
+                    .clip(MaterialTheme.shapes.extraLarge)
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), MaterialTheme.shapes.extraLarge)
+            )
+
+            // THE LOSSLESS BADGE: Appears if bit depth is high (FLAC ritual)
+            if (track.mimeType.contains("flac", ignoreCase = true)) {
+                LosslessBadge(modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
+            }
+        }
+
+        // TEXT OVERLAY: Glassmorphic label attached to the card
+        Column(
             modifier = Modifier
-                .width(200.dp)
-                .height(200.dp)
-                .clip(MaterialTheme.shapes.medium)
-        )
-
-        Text(
-            text = track.title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
-        )
-
-        Text(
-            text = track.artist,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+                .padding(top = 12.dp)
+                .fillMaxWidth()
+        ) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = track.artist.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = AardBlue,
+                letterSpacing = 1.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -123,134 +140,97 @@ private fun SmallTrackCard(
     track: AudioTrack,
     onClick: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
-            .width(120.dp)
+            .width(260.dp)
+            .height(80.dp)
+            .glassEffect(MaterialTheme.shapes.large)
             .bounceClick { onClick() }
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
             model = track.artworkUri,
-            contentDescription = "Thumbnail for ${track.title}",
+            contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .width(120.dp)
-                .height(120.dp)
-                .clip(MaterialTheme.shapes.small) // Sharp corner cuts
+                .size(64.dp)
+                .clip(MaterialTheme.shapes.medium)
         )
 
-        Text(
-            text = track.title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp)
-        )
-    }
-}
+        Spacer(modifier = Modifier.width(12.dp))
 
-// --- The Statistics Banner ---
-
-@Composable
-fun UserStatisticsHeader(statistics: UserStatistics) {
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        shape = MaterialTheme.shapes.large, // Uses the massive angular cut on the corners!
-    ) {
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.surfaceVariant) // Dark leather tone
-                .padding(20.dp)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Library Records", // Fits the medieval tone better
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary, // Igni Red
-                fontWeight = FontWeight.Bold
+                text = track.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                StatItem(
-                    icon = WitcherIcons.Duration,
-                    value = "${statistics.totalListeningTimeHours}h",
-                    label = "Listened",
-                    modifier = Modifier.weight(1f)
-                )
-
-                StatItem(
-                    icon = WitcherIcons.Headphones,
-                    value = statistics.topGenre,
-                    label = "Top Genre",
-                    modifier = Modifier.weight(1f)
-                )
-
-                StatItem(
-                    icon = WitcherIcons.LosslessBadge,
-                    value = statistics.losslessTrackCount.toString(),
-                    label = "Lossless",
-                    isHighlighted = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            Text(
+                text = track.artist,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
+
+        Icon(
+            imageVector = WitcherIcons.Play,
+            contentDescription = null,
+            tint = AardBlue.copy(alpha = 0.6f),
+            modifier = Modifier.size(20.dp).padding(end = 4.dp)
+        )
+    }
+}
+
+// --- Internal Ornaments ---
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 2.sp
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
     }
 }
 
 @Composable
-private fun StatItem(
-    icon: ImageVector,
-    value: String,
-    label: String,
-    isHighlighted: Boolean = false,
-    modifier: Modifier = Modifier
-) {
-    val iconColor = if (isHighlighted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
-    val valueColor = if (isHighlighted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.padding(horizontal = 4.dp) // Gives slight breathing room between columns
+private fun LosslessBadge(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = Color.Black.copy(alpha = 0.6f),
+        shape = CircleShape,
+        border = BorderStroke(1.dp, AardBlue.copy(alpha = 0.5f))
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = iconColor,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(MaterialTheme.shapes.small) // Sharp cuts for the icon background
-                .background(iconColor.copy(alpha = 0.1f))
-                .padding(8.dp)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // THE FIX: Added maxLines and TextAlign to stop alignment "crapping"
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge,
-            color = valueColor,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = WitcherIcons.HiRes, // Ensure you have this icon
+                contentDescription = null,
+                tint = AardBlue,
+                modifier = Modifier.size(10.dp)
+            )
+            Text(
+                text = "HI-RES",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+        }
     }
 }

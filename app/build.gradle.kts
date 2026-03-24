@@ -30,8 +30,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "1.1"
-        versionName = "0.1.1" // or "1.0-beta", or "1.0"
+        versionName = "0.1.2" // or "1.0-beta", or "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -98,6 +97,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.animation)
 
     // Media3 (The Heart of TigerPlayer)
     val media3_version = "1.9.3"
@@ -126,6 +129,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Spotify Integration
+// THE FIX
     implementation("com.spotify.android:auth:2.1.1")
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
 
