@@ -1,0 +1,10 @@
+{
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-21",
+            "path": "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home",
+            "default": true
+        }
+    ],
+    "java.jdt.ls.java.home": "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home"
+}
