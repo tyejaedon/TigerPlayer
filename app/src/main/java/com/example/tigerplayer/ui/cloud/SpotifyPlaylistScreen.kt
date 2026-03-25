@@ -111,8 +111,8 @@ fun SpotifyPlaylistScreen(
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent,
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
             }
@@ -203,7 +203,7 @@ fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick
                 modifier = Modifier
                     .size(48.dp)
                     .clip(MaterialTheme.shapes.small)
-                    .background(Color.White.copy(alpha = 0.1f))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -211,7 +211,7 @@ fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.name,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -219,7 +219,7 @@ fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick
                 )
                 Text(
                     text = track.artists.joinToString { it.name },
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -229,7 +229,7 @@ fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick
             Icon(
                 imageVector = WitcherIcons.Options,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.3f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 modifier = Modifier.size(20.dp)
             )
         }

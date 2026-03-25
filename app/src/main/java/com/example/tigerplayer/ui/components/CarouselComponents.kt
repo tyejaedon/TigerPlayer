@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -100,7 +101,7 @@ private fun LargeAlbumCard(
                 modifier = Modifier
                     .size(220.dp)
                     .clip(MaterialTheme.shapes.extraLarge)
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), MaterialTheme.shapes.extraLarge)
+                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), MaterialTheme.shapes.extraLarge)
             )
 
             // THE LOSSLESS BADGE: Appears if bit depth is high (FLAC ritual)
@@ -209,27 +210,36 @@ private fun SectionHeader(title: String, subtitle: String) {
 private fun LosslessBadge(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        color = Color.Black.copy(alpha = 0.6f),
+        // S22 Optimization: Increased alpha to 0.85f to block busy art patterns
+        color = Color.Black.copy(alpha = 0.85f),
         shape = CircleShape,
-        border = BorderStroke(1.dp, AardBlue.copy(alpha = 0.5f))
+        // Thicker, high-contrast border to separate from light album covers
+        border = BorderStroke(1.dp, AardBlue.copy(alpha = 0.8f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+                .graphicsLayer {
+                    // Subtle shadow to lift the text off the dark surface
+                    shadowElevation = 4f
+                },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(
-                imageVector = WitcherIcons.HiRes, // Ensure you have this icon
+                imageVector = WitcherIcons.HighRes,
                 contentDescription = null,
+                // Using a slightly "Electric" version of AardBlue for visibility
                 tint = AardBlue,
-                modifier = Modifier.size(10.dp)
+                modifier = Modifier.size(12.dp) // Bumped from 10dp
             )
             Text(
                 text = "HI-RES",
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White
+                // Using labelMedium from our new S22 Typography (9sp)
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White, // Force white for absolute contrast
+                letterSpacing = 1.sp
             )
         }
     }

@@ -45,6 +45,7 @@ import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import java.text.NumberFormat
 import java.util.Locale
+import com.example.tigerplayer.ui.home.HomeUiState
 
 @Composable
 fun ArtistSearchRow(artist: LibraryArtist, onClick: () -> Unit) {
@@ -78,6 +79,7 @@ fun ArtistSearchRow(artist: LibraryArtist, onClick: () -> Unit) {
         )
     }
 }
+
 @Composable
 fun ArtistRow(artist: LibraryArtist, onClick: () -> Unit) {
     Row(
@@ -146,7 +148,8 @@ fun ArtistGenreCloud(genres: List<String>) {
 }
 
 @Composable
-fun ArtistVanguardStats(profile: ArtistDetails?) {
+fun ArtistVanguardStats(viewModel: PlayerViewModel, profile: ArtistDetails?) {
+
     Column(
         modifier = Modifier
             .padding(16.dp)
@@ -170,6 +173,7 @@ fun ArtistVanguardStats(profile: ArtistDetails?) {
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp
             )
+            val statsState by viewModel.detailedStatsState.collectAsState()
 
             val formattedListeners = NumberFormat.getNumberInstance(Locale.US).format(profile?.popularity ?: 0)
 

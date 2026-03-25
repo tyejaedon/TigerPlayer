@@ -1,26 +1,21 @@
 package com.example.tigerplayer.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+
+// --- THE INK (Theme-Aware Variables) ---
 
 private val DarkColorScheme = darkColorScheme(
     primary = TigerNeonOrange,
     onPrimary = Color.Black,
     secondary = TigerElectricAmber,
-    tertiary = TigerSpectralViolet, // The "Vibe" accent
+    tertiary = TigerSpectralViolet,
     background = TigerBlack,
     surface = TigerDeepGrey,
     surfaceVariant = TigerSurfaceCharcoal,
@@ -31,13 +26,34 @@ private val DarkColorScheme = darkColorScheme(
 
 private val LightColorScheme = lightColorScheme(
     primary = TigerNeonOrange,
+    onPrimary = Color.White,
     secondary = TigerElectricAmber,
+    onSecondary = Color.White,
+    tertiary = TigerSpectralViolet,
+    onTertiary = Color.White,
     background = TigerIvory,
     surface = TigerPaper,
     surfaceVariant = TigerMutedSilk,
     onBackground = TigerTextInverse,
     onSurface = TigerTextInverse,
     onSurfaceVariant = Color(0xFF5A5A5A)
+)
+
+// --- ADAPTIVE SIGNS (The Vanguard's Touch) ---
+// By hooking these to MaterialTheme, they automatically recompose when the theme changes.
+val MaterialTheme.aardBlue: Color
+    @Composable
+    get() = if (isSystemInDarkTheme()) AardBlueDark else AardBlueLight
+
+val MaterialTheme.igniRed: Color
+    @Composable
+    get() = if (isSystemInDarkTheme()) IgniRedDark else IgniRedLight
+
+// Helper function kept intact so it doesn't break any of your existing screens
+@Composable
+fun getVanguardColors() = Pair(
+    MaterialTheme.colorScheme.onSurface,
+    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 )
 
 @Composable
@@ -51,20 +67,19 @@ fun TigerPlayerTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            val viewInsetsController = WindowCompat.getInsetsController(window, view)
+            val insetsController = WindowCompat.getInsetsController(window, view)
 
-            // Instead of setting colors manually, we just tell the system
-            // whether to use Light or Dark icons for the status/nav bars.
-            viewInsetsController.isAppearanceLightStatusBars = !darkTheme
-            viewInsetsController.isAppearanceLightNavigationBars = !darkTheme
+            // Ensures status bar icons are dark in Light Mode so they are visible!
+            insetsController.isAppearanceLightStatusBars = !darkTheme
+            insetsController.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
-        shapes = ModernShapes,
+        // Assuming Typography and ModernShapes are defined in your other theme files
+        // typography = Typography,
+        // shapes = ModernShapes,
         content = content
     )
 }
-

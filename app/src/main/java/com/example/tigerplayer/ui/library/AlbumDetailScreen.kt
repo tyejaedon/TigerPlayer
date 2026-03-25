@@ -18,6 +18,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -68,9 +70,11 @@ fun AlbumDetailsScreen(
                     val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                     bitmap?.let { b ->
                         Palette.from(b).generate { palette ->
-                            val colorInt = palette?.dominantSwatch?.rgb
-                                ?: palette?.mutedSwatch?.rgb
-                                ?: palette?.vibrantSwatch?.rgb
+                            // RECTIFIED: Priority goes to Vibrant and LightVibrant for readability
+                            val colorInt = palette?.vibrantSwatch?.rgb
+                                ?: palette?.lightVibrantSwatch?.rgb
+                                ?: palette?.dominantSwatch?.rgb
+
                             colorInt?.let { dominantColor = Color(it) }
                         }
                     }
@@ -79,8 +83,20 @@ fun AlbumDetailsScreen(
             .build()
     }
 
-    val accentColor = if (dominantColor == fallbackColor) MaterialTheme.colorScheme.primary else animatedDominantColor
+// --- THE CONTRAST RITUAL ---
+    val accentColor = remember(dominantColor) {
+        val hsl = FloatArray(3)
+        androidx.core.graphics.ColorUtils.colorToHSL(dominantColor.toArgb(), hsl)
 
+        // Check Lightness (hsl[2]). If it's below 50%, it's too dark for text on dark backgrounds.
+        if (hsl[2] < 0.5f) {
+            hsl[2] = 0.75f // Force it to be bright and punchy
+            hsl[1] = (hsl[1] + 0.15f).coerceAtMost(1f) // Boost saturation for that "Witcher" glow
+            Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
+        } else {
+            dominantColor
+        }
+    }
     // --- ROOT LAYER ---
     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -172,7 +188,8 @@ fun AlbumDetailsScreen(
                             text = firstTrack?.artist ?: "Unknown Artist",
                             style = MaterialTheme.typography.titleLarge,
                             color = accentColor,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.ExtraBold, // Bumped to ExtraBold for better visibility
+
                         )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
@@ -181,65 +198,13 @@ fun AlbumDetailsScreen(
                 // THE TRACKS
                 itemsIndexed(albumTracks) { index, track ->
                     val isCurrentTrack = uiState.currentTrack?.id == track.id
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            // THE FIX 2: Replace .clickable with .bounceClick
-                            .bounceClick { viewModel.playTrack(track) }
-                            .clip(MaterialTheme.shapes.extraLarge)
-                            .glassEffect(MaterialTheme.shapes.extraLarge)
-                            .border(
-                                width = 1.dp,
-                                color = if (isCurrentTrack) accentColor.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f),
-                                shape = MaterialTheme.shapes.extraLarge
-                            ),
-                        color = if (isCurrentTrack) accentColor.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.2f)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(20.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .background(
-                                        if (isCurrentTrack) accentColor else Color.White.copy(alpha = 0.1f),
-                                        CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${index + 1}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = if (isCurrentTrack) Color.White else MaterialTheme.colorScheme.onBackground
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(20.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = track.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isCurrentTrack) accentColor else MaterialTheme.colorScheme.onBackground,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = track.artist,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
+                    ChapterSongRow(
+                        index = index,
+                        track = track.copy(),
+                        isCurrentTrack = isCurrentTrack,
+                        isPlaying = uiState.isPlaying,
+                        onClick = { viewModel.playTrack(track) }
+                    ) { }
                 }
             }
         }
@@ -262,12 +227,12 @@ fun AlbumDetailsScreen(
                     .shadow(16.dp, CircleShape, spotColor = accentColor)
                 // THE FIX 3: Removed redundant .bounceClick
             ) {
-                Icon(WitcherIcons.Play, contentDescription = null, tint = Color.White)
+                Icon(WitcherIcons.Play, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "START RITUAL",
                     fontWeight = FontWeight.Black,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 16.sp,
                     letterSpacing = 1.sp
                 )

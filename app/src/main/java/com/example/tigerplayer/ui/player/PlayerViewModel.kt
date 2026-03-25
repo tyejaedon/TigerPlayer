@@ -161,51 +161,74 @@ class PlayerViewModel @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeHistory() {
+        // 1. THE RECOMMENDATION TICKER: Rotates the 'Discover' seed every 2 hours
         val recommendationTicker = flow {
             while (true) {
                 emit(System.currentTimeMillis() / (2 * 60 * 60 * 1000))
-                delay(30 * 60 * 1000)
+                delay(30 * 60 * 1000) // Check every 30 mins, but only emits when hours change
             }
         }.distinctUntilChanged()
 
         viewModelScope.launch {
+            // 2. THE COMBINED FLOWS (6 Sources of Power)
             combine(
                 historyRepository.recentTracks,
                 historyRepository.totalListeningTime,
+                historyRepository.listeningTimeToday,
                 historyRepository.topArtist,
+                // We observe the main library state to map ID's to actual AudioTrack objects
                 _uiState.map { it.tracks }.distinctUntilChanged(),
                 recommendationTicker
-            ) { recent, totalTime, topArtist, allTracks, seed ->
-                val hours = (totalTime ?: 0L) / (1000 * 60 * 60)
-                val minutes = ((totalTime ?: 0L) / (1000 * 60)) % 60
+            ) { args: Array<Any?> ->
+
+                // 3. UNPACKING THE ARCHIVES (Explicit Casting)
+                val recentEntities = args[0] as List<PlaybackHistoryEntity>
+                val totalMs = args[1] as? Long ?: 0L
+                val todayMs = args[2] as? Long ?: 0L
+                val topArtist = args[3] as? String
+                val allTracks = args[4] as List<AudioTrack>
+                val seed = args[5] as Long
+
+                // 4. THE TIME CALCULATIONS
+                val totalHours = totalMs / (1000 * 60 * 60)
+                val todayHours = todayMs / (1000 * 60 * 60)
+                val todayMinutes = (todayMs / (1000 * 60)) % 60
 
                 val random = Random(seed)
+
+                // 5. RECOMMENDATION LOGIC: Grouping by Volume (Album)
                 val recommended = if (allTracks.isNotEmpty()) {
                     allTracks.asSequence()
-                        .filter { it.album.isNotBlank() }
+                        .filter { it.album.isNotBlank() && !it.album.equals("Unknown", true) }
                         .groupBy { it.album }
                         .values
                         .toList()
                         .shuffled(random)
-                        .take(5)
+                        .take(5) // Suggest 5 different albums
                         .flatten()
                 } else emptyList()
 
+                // 6. RECENT TRACKS MAPPING: Linking History IDs to Local Files
+                val recentlyPlayed = recentEntities.mapNotNull { entity ->
+                    allTracks.find { it.id == entity.trackId }
+                }
+
+                // 7. EMITTING THE FINAL UI STATE
                 HomeUiState(
                     statistics = UserStatistics(
-                        totalListeningTimeHours = hours.toInt(),
+                        listeningTimeToday = "${todayHours}h ${todayMinutes}m",
+                        listeningTimeTodayMs = todayMs,
                         topArtistThisWeek = topArtist ?: "New Recruit",
-                        listeningTimeToday = "${hours}h ${minutes}m",
-                        totalTracksCount = allTracks.size
+                        totalTracksCount = allTracks.size,
+                        totalListeningTimeHours = totalHours.toInt()
                     ),
-                    discoverTracks = allTracks.shuffled(random).take(10),
-                    recentlyPlayedTracks = recent.mapNotNull { entity ->
-                        allTracks.find { it.id == entity.trackId }
-                    },
+                    discoverTracks = allTracks.shuffled(random).take(12),
+                    recentlyPlayedTracks = recentlyPlayed,
                     recommendedTracks = recommended,
                     isLoading = false
                 )
             }.collect { state ->
+                // Update the state holder for the Compose UI
                 _homeUiState.value = state
             }
         }
@@ -224,6 +247,7 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { it.copy(currentPosition = currentPos) }
 
                 val currentTrack = _uiState.value.currentTrack
+                // 10-second history anchor
                 if (currentTrack != null && currentTrack.id != lastRecordedMediaId && currentPos > 10000) {
                     recordPlaybackHistory(currentTrack)
                     lastRecordedMediaId = currentTrack.id
@@ -235,6 +259,7 @@ class PlayerViewModel @Inject constructor(
             mediaControllerManager.currentMediaId.collect { mediaId ->
                 val track = _uiState.value.tracks.find { it.id == mediaId }
                 if (track != null && _uiState.value.currentTrack?.id != track.id) {
+                    // Clear old metadata instantly so the UI shows placeholders
                     _uiState.update {
                         it.copy(currentTrack = track, currentLyrics = null, artistImageUrl = null)
                     }
@@ -242,10 +267,20 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         }
+
+        // THE FIX: Merged the two mediaControllerState collectors into one clean pipeline
         viewModelScope.launch {
-            // We observe the mediaControllerState flow from your manager
             mediaControllerManager.mediaControllerState.collect { _ ->
-                // Whenever the state of the controller changes (Connection/Timeline)
+                val controller = mediaControllerManager.mediaController ?: return@collect
+                val queueTracks = mutableListOf<AudioTrack>()
+
+                for (i in 0 until controller.mediaItemCount) {
+                    val mediaId = controller.getMediaItemAt(i).mediaId
+                    _uiState.value.tracks.find { it.id == mediaId }?.let { queueTracks.add(it) }
+                }
+
+                _uiState.update { it.copy(queue = queueTracks) }
+
                 updateQueue()
             }
         }
@@ -256,25 +291,13 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
+
         viewModelScope.launch {
             mediaControllerManager.repeatMode.collect { mode ->
                 _uiState.update { it.copy(repeatMode = mode) }
             }
         }
-
-        viewModelScope.launch {
-            mediaControllerManager.mediaControllerState.collect { _ ->
-                val controller = mediaControllerManager.mediaController ?: return@collect
-                val queueTracks = mutableListOf<AudioTrack>()
-                for (i in 0 until controller.mediaItemCount) {
-                    val mediaId = controller.getMediaItemAt(i).mediaId
-                    _uiState.value.tracks.find { it.id == mediaId }?.let { queueTracks.add(it) }
-                }
-                _uiState.update { it.copy(queue = queueTracks) }
-            }
-        }
     }
-
     private fun observeSpotifyRemote() {
         viewModelScope.launch {
             spotifyRepository.currentSpotifyTrack.collect { spotifyInfo ->
@@ -547,15 +570,18 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    // --- RECTIFIED HISTORY RECORDING ---
     private suspend fun recordPlaybackHistory(track: AudioTrack) {
+        // We record the track's actual duration (or at least the milestone reached)
+        // rather than a hardcoded 10 seconds.
         historyRepository.addTrackToHistory(
             trackId = track.id,
             title = track.title,
             artist = track.artist,
             album = track.album,
-            imageUrl = track.artworkUri?.toString(),
-            durationMs = 10000,
-            source = MediaSource.LOCAL
+            imageUrl = track.artworkUri.toString(),
+            durationMs = track.durationMs, // Use the actual track duration
+            source =  MediaSource.LOCAL
         )
     }
 
@@ -731,46 +757,26 @@ class PlayerViewModel @Inject constructor(
      */
     private fun updateQueue() {
         val controller = mediaControllerManager.mediaController ?: return
-
-        // 1. Gather the current known tracks for fast lookup
         val knownTracks = _uiState.value.tracks.associateBy { it.id }
 
-        val resolvedQueue = mutableListOf<AudioTrack>()
-
-        // 2. Iterate through the Controller's playlist
-        for (i in 0 until controller.mediaItemCount) {
+        val resolvedQueue = (0 until controller.mediaItemCount).map { i ->
             val mediaItem = controller.getMediaItemAt(i)
-
-            // Try to find the full AudioTrack in our library first
-            val resolvedTrack = knownTracks[mediaItem.mediaId] ?: mediaItem.toAudioTrack()
-            resolvedQueue.add(resolvedTrack)
+            knownTracks[mediaItem.mediaId] ?: mediaItem.toAudioTrack()
         }
 
-        // 3. Update the UI State
         _uiState.update { it.copy(queue = resolvedQueue) }
+        Log.d("TigerVM", "Queue Manifested: ${resolvedQueue.size} items.")
+    }    // Inside PlayerViewModel.kt
 
-        Log.d("TigerVM", "Queue Manifested: ${resolvedQueue.size} items following.")
-    }
-    // Inside PlayerViewModel.kt
-
+    // THE MISSING RITUAL: Sever the shadow
     fun removeFromQueue(track: AudioTrack) {
-        val controller = mediaControllerManager.mediaController ?: return
+        // Tell the Media3 Engine to drop the track
+        mediaControllerManager.removeFromQueue(track.id)
 
-        // 1. Find the index of the track in the current Media3 timeline
-        for (i in 0 until controller.mediaItemCount) {
-            if (controller.getMediaItemAt(i).mediaId == track.id) {
-                // 2. Remove from the actual player engine
-                controller.removeMediaItem(i)
-
-                // 3. Update the UI State queue immediately for responsiveness
-                _uiState.update { state ->
-                    state.copy(queue = state.queue.filterIndexed { index, _ -> index != i })
-                }
-                break
-            }
-        }
-    }
-    @OptIn(UnstableApi::class)
+        // NOTE: You do NOT need to call updateQueue() here manually!
+        // The MediaController will fire 'onTimelineChanged', which automatically
+        // triggers the observer we just set up above. It's perfectly reactive.
+    }    @OptIn(UnstableApi::class)
     private fun androidx.media3.common.MediaItem.toAudioTrack(): AudioTrack {
         val metadata = mediaMetadata
         return AudioTrack(

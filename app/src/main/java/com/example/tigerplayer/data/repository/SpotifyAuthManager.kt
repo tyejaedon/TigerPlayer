@@ -126,7 +126,7 @@ class SpotifyAuthManager @Inject constructor(
      * THE SWAP RITUAL
      * Takes the temporary Authorization Code and securely exchanges it for an Access Token.
      */
-    suspend fun exchangeCodeForToken(authCode: String, redirectUri: String): String {
+    suspend fun exchangeCodeForToken(authCode: String?, redirectUri: String): String {
         return try {
             val authString = "$clientId:$clientSecret"
             val encodedAuth = Base64.encodeToString(authString.toByteArray(), Base64.NO_WRAP)

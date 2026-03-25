@@ -32,19 +32,24 @@ class MediaDataRepository @Inject constructor(
     private val lastFmApi: LastFmApi
 ) {
 
-    /**
-     * THE ARTIST MANIFESTATION:
-     * Orchestrates a parallel hunt across Spotify and Last.fm to retrieve
-     * high-fidelity imagery and deep lore.
-     */
     fun getArtistDetails(artistName: String): Flow<ArtistDetails> = flow {
-        // 1. THE ARCHIVE CHECK (Cache)
-        val cachedData = tigerDao.getArtistCache(artistName)
+        val cleanArtist = artistName.trim()
 
-        if (cachedData != null && !cachedData.imageUrl.isNullOrBlank() && !cachedData.bio.isNullOrBlank()) {
-            Log.d("MediaRepo", "Cache Hit: $artistName. Metadata restored.")
+        // 1. THE FAST-FAIL: Do not bother the Oracles with empty questions
+        if (cleanArtist.isBlank() || cleanArtist.equals("<unknown>", ignoreCase = true)) {
+            emit(ArtistDetails(cleanArtist, null, "Unknown entity."))
+            return@flow
+        }
+
+        // 2. THE ARCHIVE CHECK (Cache)
+        val cachedData = tigerDao.getArtistCache(cleanArtist)
+
+        // THE FIX: We accept the cache hit even if bio/image is null.
+        // This prevents re-querying artists we already know don't exist online.
+        if (cachedData != null) {
+            Log.d("MediaRepo", "Cache Hit: $cleanArtist. Metadata restored.")
             emit(ArtistDetails(
-                name = artistName,
+                name = cleanArtist,
                 imageUrl = cachedData.imageUrl,
                 bio = cachedData.bio,
                 genres = cachedData.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
@@ -52,20 +57,20 @@ class MediaDataRepository @Inject constructor(
             return@flow
         }
 
-        // 2. THE API RITUAL (Cache Miss)
+        // 3. THE API RITUAL (Cache Miss)
         try {
             coroutineScope {
                 val spotifyDeferred = async {
                     val token = authManager.getValidToken()
                     if (token.isNotEmpty()) {
-                        val response = spotifyApiService.searchArtist("Bearer $token", artistName)
+                        val response = spotifyApiService.searchArtist("Bearer $token", cleanArtist)
                         if (response.isSuccessful) response.body()?.artists?.items?.firstOrNull() else null
                     } else null
                 }
 
                 val lastFmDeferred = async {
                     try {
-                        val response = lastFmApi.getArtistInfo(artistName = artistName)
+                        val response = lastFmApi.getArtistInfo(artistName = cleanArtist)
                         if (response.isSuccessful) response.body()?.artist else null
                     } catch (e: Exception) { null }
                 }
@@ -74,39 +79,32 @@ class MediaDataRepository @Inject constructor(
                 val lastFmArtist = lastFmDeferred.await()
 
                 if (spotifyDetail != null || lastFmArtist != null) {
-
-                    // --- IMAGE LOGIC (High-Res Priority) ---
-                    // 1. Spotify 640x640 is the Gold Standard
-                    // 2. Fallback to Last.fm "Mega" or "Extralarge" via getBestImage()
                     var imageUrl = spotifyDetail?.images?.firstOrNull()?.url
 
                     if (imageUrl.isNullOrBlank()) {
-                        // Using your new extraction logic for the Last.fm XML response
                         imageUrl = lastFmArtist?.image?.getBestImage()
                     }
 
-                    // --- GENRE LOGIC ---
                     val genreList = spotifyDetail?.genres?.takeIf { it.isNotEmpty() }
                         ?: lastFmArtist?.tags?.tag?.mapNotNull { it.name }
                         ?: emptyList()
 
-                    // --- BIO LOGIC ---
                     val finalBio = lastFmArtist?.bio?.summary?.let {
                         if (it.isNotBlank()) it.substringBefore("<a href").trim() else null
                     } ?: spotifyDetail?.let { buildSyntheticBio(it) } ?: "No records found."
 
                     val freshDetails = ArtistDetails(
-                        name = spotifyDetail?.name ?: lastFmArtist?.name ?: artistName,
+                        name = spotifyDetail?.name ?: lastFmArtist?.name ?: cleanArtist,
                         imageUrl = imageUrl,
                         bio = finalBio,
                         genres = genreList,
                         popularity = spotifyDetail?.popularity ?: 0
                     )
 
-                    // 3. SECURING THE LOOT (Cache Storage)
+                    // SECURING THE LOOT
                     tigerDao.insertArtistCache(
                         ArtistCacheEntity(
-                            artistName = artistName,
+                            artistName = cleanArtist,
                             imageUrl = imageUrl,
                             bio = finalBio,
                             genres = genreList.joinToString(",")
@@ -115,18 +113,26 @@ class MediaDataRepository @Inject constructor(
 
                     emit(freshDetails)
                 } else {
-                    emit(ArtistDetails(artistName, null, "Lore not found."))
+                    // THE FIX: Cache the negative result (The Void)
+                    val voidBio = "Lore not found in the grand archives."
+                    tigerDao.insertArtistCache(
+                        ArtistCacheEntity(
+                            artistName = cleanArtist,
+                            imageUrl = null,
+                            bio = voidBio,
+                            genres = ""
+                        )
+                    )
+                    emit(ArtistDetails(cleanArtist, null, voidBio))
                 }
             }
         } catch (e: Exception) {
             Log.e("MediaRepo", "Ritual failed: ${e.message}")
-            emit(ArtistDetails(artistName, null, "Connection to oracles lost."))
+            // Do not cache network failures, so it can retry later
+            emit(ArtistDetails(cleanArtist, null, "Connection to oracles lost."))
         }
     }.flowOn(Dispatchers.IO)
 
-    /**
-     * Extension logic to navigate the Last.fm XML image nodes.
-     */
     private fun List<LastFmImage>.getBestImage(): String? {
         return this.find { it.size == "mega" }?.url
             ?: this.find { it.size == "extralarge" }?.url
@@ -135,11 +141,11 @@ class MediaDataRepository @Inject constructor(
     }
 
     private fun buildSyntheticBio(artist: SpotifyArtistDetail): String {
-        val genreText = artist.genres?.take(2)?.joinToString(", ")?.lowercase() ?: "various styles"
+        val genreText = artist.genres?.take(2)?.joinToString(", ")?.uppercase() ?: "VARIOUS STYLES"
         val renown = when {
-            (artist.popularity ?: 0) > 80 -> "a legendary figure"
-            (artist.popularity ?: 0) > 50 -> "a renowned master"
-            else -> "an emerging force"
+            (artist.popularity ?: 0) > 80 -> "A LEGENDARY FIGURE"
+            (artist.popularity ?: 0) > 50 -> "A RENOWNED MASTER"
+            else -> "AN EMERGING FORCE"
         }
         return "Known in the archives as $renown of $genreText. Their potency is marked at ${artist.popularity ?: 0}/100."
     }
@@ -170,5 +176,4 @@ class MediaDataRepository @Inject constructor(
             emit(null)
         }
     }.flowOn(Dispatchers.IO)
-
 }

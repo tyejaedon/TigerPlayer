@@ -7,12 +7,12 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 interface LastFmApi {
-    @GET("2.0/")
+
+    // THE FIX: Bake the static parameters directly into the endpoint path.
+    // This keeps the function signature clean and prevents accidental overrides.
+    @GET("2.0/?method=artist.getinfo&format=json&autocorrect=1")
     suspend fun getArtistInfo(
-        @Query("method") method: String = "artist.getinfo",
         @Query("artist") artistName: String,
-        @Query("api_key") apiKey: String = BuildConfig.LASTFM_API_KEY,
-        @Query("format") format: String = "json",
-        @Query("autocorrect") autocorrect: Int = 1
+        @Query("api_key") apiKey: String = BuildConfig.LASTFM_API_KEY
     ): Response<LastFmResponse>
 }

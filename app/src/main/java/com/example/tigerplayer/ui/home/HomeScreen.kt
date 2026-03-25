@@ -2,10 +2,13 @@ package com.example.tigerplayer.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -14,12 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,22 +30,16 @@ import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.components.DiscoverCarousel
-import com.example.tigerplayer.ui.components.RecentlyPlayedRow
-import com.example.tigerplayer.ui.library.AlbumSearchRow
-import com.example.tigerplayer.ui.library.ArtistAlbumCard
-import com.example.tigerplayer.ui.library.ArtistSearchRow
-import com.example.tigerplayer.ui.library.SearchEmptyState
-import com.example.tigerplayer.ui.library.SearchSectionTitle
-import com.example.tigerplayer.ui.library.SongListItem
+import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.player.PlayerUiState
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
-// --- Thematic Witcher Colors ---
-private val IgniRed = Color(0xFFF11F1A)
+// --- VANGUARD THEME CONSTANTS ---
 private val AardBlue = Color(0xFF4FC3F7)
+private val IgniRed = Color(0xFFFF5252)
 private val SpotifyGreen = Color(0xFF1DB954)
 
 @Composable
@@ -67,11 +64,12 @@ fun HomeScreen(
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 120.dp)
+            contentPadding = PaddingValues(bottom = 140.dp)
         ) {
+            // --- 1. THE HEADER RITUAL ---
             item {
                 HomeHeader(
-                    title = "Tiger Player",
+                    title = "TIGER PLAYER",
                     searchQuery = uiState.searchQuery,
                     isSearchActive = isSearchActive,
                     onSearchToggle = {
@@ -84,24 +82,10 @@ fun HomeScreen(
             }
 
             if (uiState.searchQuery.isNotEmpty()) {
-                // --- SEARCH MODE: Unified with Library Style ---
-                val results = uiState.filteredTracks
-                if (results.isEmpty()) {
-                    item { SearchEmptyState(uiState.searchQuery) }
-                } else {
-                    item { SectionTitle("Echoes Found") }
-                    items(results) { track ->
-                        SongListItem(
-                            track = track,
-                            isCurrentTrack = uiState.currentTrack?.id == track.id,
-                            isPlaying = uiState.isPlaying,
-                            onClick = { viewModel.playTrack(track) },
-                            onOptionsClick = { /* Track Options */ }
-                        )
-                    }
-                }
+                // --- 2. THE SEARCH VISION (Rectified: Flattened List) ---
+                renderSearchResults(uiState, viewModel, onNavigateToAlbum)
             } else {
-                // --- DEFAULT MODE ---
+                // --- 3. THE ANALYTICS (Glow Enhanced) ---
                 item {
                     UserStatisticsHeader(
                         statistics = homeState.statistics,
@@ -109,8 +93,9 @@ fun HomeScreen(
                     )
                 }
 
+                // --- 4. THE VANGUARD (Carousel) ---
                 if (homeState.discoverTracks.isNotEmpty()) {
-                    item { SectionTitle("The Vanguard") }
+                    item { SectionTitle("THE VANGUARD") }
                     item {
                         DiscoverCarousel(
                             tracks = homeState.discoverTracks,
@@ -119,30 +104,32 @@ fun HomeScreen(
                     }
                 }
 
+                // --- 5. RECENT RITUALS ---
                 if (homeState.recentlyPlayedTracks.isNotEmpty()) {
-                    item { SectionTitle("Recent Rituals") }
-                    items(homeState.recentlyPlayedTracks.take(5)) { track ->
-                        SongListItem(
+                    item { SectionTitle("RECENT RITUALS") }
+                    items(homeState.recentlyPlayedTracks.take(6)) { track ->
+                        ArchiveSongRow(
                             track = track,
                             isCurrentTrack = uiState.currentTrack?.id == track.id,
                             isPlaying = uiState.isPlaying,
                             onClick = { viewModel.playTrack(track) },
-                            onOptionsClick = { /* Options */ }
+                            onOptionsClick = { /* Track Options Portal */ },
                         )
                     }
                 }
 
+                // --- 6. RECOMMENDED VOLUMES (Rectified UI) ---
                 if (homeState.recommendedTracks.isNotEmpty()) {
-                    item { SectionTitle("Recommended Archives") }
+                    item { SectionTitle("RECOMMENDED VOLUMES") }
                     item {
-                        // Using a Horizontal Grid to show off high-res album art
+                        val uniqueAlbums = homeState.recommendedTracks.distinctBy { it.album }
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 24.dp),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp)
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.padding(vertical = 8.dp)
                         ) {
-                            val uniqueAlbums = homeState.recommendedTracks.distinctBy { it.album }
                             items(uniqueAlbums) { track ->
-                                ArtistAlbumCard(
+                                RecommendedAlbumCard(
                                     track = track,
                                     onClick = { onNavigateToAlbum(track.album) }
                                 )
@@ -164,6 +151,220 @@ fun HomeScreen(
     }
 }
 
+// ==========================================
+// --- RECTIFIED COMPONENTS ---
+// ==========================================
+
+/**
+ * RECTIFIED SEARCH: Flattened into the main LazyColumn to fix scroll issues.
+ */
+private fun LazyListScope.renderSearchResults(
+    uiState: PlayerUiState,
+    viewModel: PlayerViewModel,
+    onNavigateToAlbum: (String) -> Unit
+) {
+    val query = uiState.searchQuery
+    val matchedArtists = uiState.artists.filter { it.name.contains(query, ignoreCase = true) }
+    val matchedAlbums = uiState.tracks
+        .filter { it.album.contains(query, ignoreCase = true) }
+        .distinctBy { it.album.lowercase() }
+
+    if (matchedArtists.isEmpty() && matchedAlbums.isEmpty() && uiState.filteredTracks.isEmpty()) {
+        item { SearchEmptyState(query) }
+    } else {
+        if (matchedArtists.isNotEmpty()) {
+            item { SearchSectionTitle("THE VANGUARD") }
+            items(matchedArtists) { artist ->
+                ArtistSearchRow(artist) { /* Navigate */ }
+            }
+        }
+        if (matchedAlbums.isNotEmpty()) {
+            item { SearchSectionTitle("THE VOLUMES") }
+            items(matchedAlbums) { track ->
+                AlbumSearchRow(track) { onNavigateToAlbum(track.album) }
+            }
+        }
+        item { SearchSectionTitle("CHANTS") }
+        items(uiState.filteredTracks) { track ->
+            SongItem(
+                track = track,
+                isActive = uiState.currentTrack?.id == track.id,
+                isPlaying = uiState.isPlaying,
+                onClick = { viewModel.playTrack(track) },
+                onMoreClick = { /* Options */ }
+            )
+        }
+    }
+}
+
+/**
+ * RECTIFIED RECOMMENDED CARD: High-visibility grid style
+ */
+@Composable
+fun RecommendedAlbumCard(track: AudioTrack, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(160.dp)
+            .bounceClick { onClick() }
+    ) {
+        AsyncImage(
+            model = track.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            fallback = painterResource(R.drawable.ic_tiger_logo),
+            modifier = Modifier
+                .size(160.dp)
+                .clip(MaterialTheme.shapes.large)
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f), MaterialTheme.shapes.large)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = track.album,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = track.artist.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = AardBlue,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+@Composable
+fun UserStatisticsHeader(
+    statistics: UserStatistics,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp) // Tighter vertical
+            .glassEffect(MaterialTheme.shapes.extraLarge)
+            .bounceClick { onClick() }
+            .padding(16.dp) // Dropped from 24dp for S22 width
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "ARCHIVE ANALYTICS",
+                    style = MaterialTheme.typography.labelLarge, // 11sp from our new theme
+                    color = AardBlue,
+                    letterSpacing = 1.5.sp
+                )
+                Text(
+                    text = "Your sessional wisdom",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+            Icon(WitcherIcons.Expand, null, tint = AardBlue, modifier = Modifier.size(18.dp))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp)) // Dropped from 24dp
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatGlassWidget(
+                modifier = Modifier.weight(1f),
+                title = "CHANTED TODAY",
+                value = statistics.listeningTimeToday,
+                icon = WitcherIcons.Duration,
+                accentColor = AardBlue
+            )
+            StatGlassWidget(
+                modifier = Modifier.weight(1f),
+                title = "ARCHIVE SIZE",
+                value = "${statistics.totalTracksCount}",
+                icon = WitcherIcons.Library,
+                accentColor = IgniRed
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        StatGlassWidget(
+            modifier = Modifier.fillMaxWidth(),
+            title = "PREVAILED ARTIST (THIS WEEK)",
+            value = statistics.topArtistThisWeek.uppercase(),
+            icon = WitcherIcons.Artist,
+            accentColor = SpotifyGreen,
+            isFullWidth = true
+        )
+    }
+}
+
+@Composable
+private fun StatGlassWidget(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    isFullWidth: Boolean = false
+) {
+    Surface(
+        modifier = modifier.height(if (isFullWidth) 72.dp else 88.dp), // Sharpened profile
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(if (isFullWidth) 40.dp else 32.dp) // Scaled down for S22
+                    .background(accentColor.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = accentColor, modifier = Modifier.size(16.dp))
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium, // 10sp
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    maxLines = 1
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.headlineMedium, // 18sp Bold
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SectionTitle(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.headlineMedium, // 18sp
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(
+            start = 16.dp,
+            end = 16.dp,
+            top = 24.dp,
+            bottom = 8.dp
+        )
+    )
+}
 @Composable
 fun HomeHeader(
     title: String,
@@ -176,28 +377,27 @@ fun HomeHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .statusBarsPadding() // THE FIX: Drops the header below the camera notch
-            .padding(horizontal = 24.dp, vertical = 20.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp), // Tighter header
     ) {
         Box(modifier = Modifier.weight(1f)) {
-            androidx.compose.animation.AnimatedVisibility(
+            // --- TITLE DISPLAY ---
+            this@Row.AnimatedVisibility(
                 visible = !isSearchActive,
                 enter = fadeIn() + expandHorizontally(),
                 exit = fadeOut() + shrinkHorizontally()
             ) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Black,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    letterSpacing = 2.sp
                 )
             }
 
-            androidx.compose.animation.AnimatedVisibility(
+            // --- SEARCH INPUT ---
+            this@Row.AnimatedVisibility(
                 visible = isSearchActive,
                 enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End),
                 exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End)
@@ -207,25 +407,16 @@ fun HomeHeader(
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), CircleShape)
+                        .height(48.dp) // Dropped from 52dp
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)
                         .glassEffect(CircleShape),
                     placeholder = {
-                        Text("Search your realm...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        Text("Search archives...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                     },
                     trailingIcon = {
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = searchQuery.isNotEmpty(),
-                            enter = fadeIn() + scaleIn(),
-                            exit = fadeOut() + scaleOut()
-                        ) {
+                        if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(
-                                    imageVector = WitcherIcons.Close,
-                                    contentDescription = "Clear Search",
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Icon(WitcherIcons.Close, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                             }
                         }
                     },
@@ -246,7 +437,7 @@ fun HomeHeader(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Search Toggle
+        // Search Toggle Button
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -255,265 +446,77 @@ fun HomeHeader(
                 .bounceClick { onSearchToggle() },
             contentAlignment = Alignment.Center
         ) {
-            Crossfade(targetState = isSearchActive, label = "") { active ->
-                Icon(
-                    imageVector = if (active) WitcherIcons.Collapse else WitcherIcons.Search,
-                    contentDescription = "Search Toggle",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            Icon(
+                imageVector = if (isSearchActive) WitcherIcons.Collapse else WitcherIcons.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(24.dp)
+            )
         }
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Settings Button
+        // Settings Medallion
         IconButton(
             onClick = onSettingsClick,
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
         ) {
-            Icon(
-                imageVector = WitcherIcons.Settings,
-                contentDescription = "Settings",
-                tint = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.size(24.dp)
-            )
+            Icon(WitcherIcons.Settings, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
         }
     }
 }
 
 @Composable
-fun SearchLibraryResults(
-    uiState: PlayerUiState,
-    viewModel: PlayerViewModel,
-    onNavigateToArtist: (String) -> Unit,
-    onNavigateToAlbum: (String) -> Unit
-) {
-    val query = uiState.searchQuery
-    val matchedArtists = remember(query, uiState.artists) {
-        uiState.artists.filter { it.name.contains(query, ignoreCase = true) }
-    }
-    val matchedAlbums = remember(query, uiState.tracks) {
-        uiState.tracks.filter { it.album.contains(query, ignoreCase = true) }.distinctBy { it.album.lowercase().trim() }
-    }
-    val matchedSongs = remember(query, uiState.filteredTracks) {
-        uiState.filteredTracks.filter { it.title.contains(query, ignoreCase = true) }
-    }
-
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
-        if (matchedArtists.isNotEmpty()) {
-            item { SearchSectionTitle("THE VANGUARD (Artists)") }
-            items(matchedArtists) { artist -> ArtistSearchRow(artist) { onNavigateToArtist(artist.name) } }
-        }
-        if (matchedAlbums.isNotEmpty()) {
-            item { SearchSectionTitle("THE VOLUMES (Albums)") }
-            items(matchedAlbums) { track -> AlbumSearchRow(track) { onNavigateToAlbum(track.album) } }
-        }
-        if (matchedSongs.isNotEmpty()) {
-            item { SectionTitle("Echoes Found") } // Thematic header
-
-            items(matchedSongs) { track ->
-                // SWAP: SearchResultItem -> SongListItem
-                SongListItem(
-                    track = track,
-                    isCurrentTrack = uiState.currentTrack?.id == track.id,
-                    isPlaying = uiState.isPlaying,
-                    onClick = { viewModel.playTrack(track) },
-                    onOptionsClick = { /* Add to playlist or show details */ }
-                )
-            }
-        }
-    }
-}
-@Composable
-fun UserStatisticsHeader(
-    statistics: UserStatistics,
-    onClick: () -> Unit
-) {
-    Column(
+fun AlbumSearchRow(track: AudioTrack, onClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .glassEffect(MaterialTheme.shapes.extraLarge)
-            .clip(MaterialTheme.shapes.extraLarge)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .glassEffect(MaterialTheme.shapes.large)
             .bounceClick { onClick() }
-            .padding(24.dp)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Library Analytics",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Black
-            )
-            Icon(
-                imageVector = WitcherIcons.Expand,
-                contentDescription = "Expand",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatGlassWidget(
-                modifier = Modifier.weight(1f),
-                title = "Listening Today",
-                value = statistics.listeningTimeToday,
-                icon = WitcherIcons.Duration,
-                accentColor = AardBlue
-            )
-
-            StatGlassWidget(
-                modifier = Modifier.weight(1f),
-                title = "Audio Archives",
-                value = "${statistics.totalTracksCount}",
-                icon = WitcherIcons.HiRes,
-                accentColor = IgniRed
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        StatGlassWidget(
-            modifier = Modifier.fillMaxWidth(),
-            title = "Top Artist (This Week)",
-            value = statistics.topArtistThisWeek,
-            icon = WitcherIcons.Library,
-            accentColor = SpotifyGreen
+        // Reusing our "Armor" logic for the cover
+        AsyncImage(
+            model = track.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            fallback = painterResource(R.drawable.ic_tiger_logo),
+            modifier = Modifier
+                .size(56.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f), MaterialTheme.shapes.medium)
         )
-    }
-}
 
-@Composable
-fun StatGlassWidget(
-    modifier: Modifier = Modifier,
-    title: String,
-    value: String,
-    icon: ImageVector,
-    accentColor: Color
-) {
-    Box(
-        modifier = modifier
-            .glassEffect(MaterialTheme.shapes.medium)
-            .background(accentColor.copy(alpha = 0.08f), MaterialTheme.shapes.medium)
-            .border(1.dp, accentColor.copy(alpha = 0.2f), MaterialTheme.shapes.medium)
-            .padding(16.dp)
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = title.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = accentColor.copy(alpha = 0.9f),
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = value,
+                text = track.album,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Black,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Text(
+                text = track.artist.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = AardBlue,
+                letterSpacing = 1.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
-    }
-}
 
-
-@Composable
-fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.headlineLarge,
-        color = MaterialTheme.colorScheme.onBackground,
-        fontWeight = FontWeight.Black,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
-        letterSpacing = (-1).sp
-    )
-}
-
-@Composable
-fun RecommendedAlbumsList(
-    tracks: List<AudioTrack>,
-    onAlbumClick: (String) -> Unit
-) {
-    val albumGroups = remember(tracks) {
-        tracks.groupBy { it.album }.values.toList()
-    }
-
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        albumGroups.forEach { albumTracks ->
-            val firstTrack = albumTracks.first()
-            val albumName = firstTrack.album.ifBlank { "Unknown Album" }
-            val artistName = firstTrack.artist
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .glassEffect(MaterialTheme.shapes.medium)
-                    .clip(MaterialTheme.shapes.medium)
-                    .bounceClick { onAlbumClick(firstTrack.album) },
-                color = Color.Transparent
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    AsyncImage(
-                        model = firstTrack.artworkUri,
-                        contentDescription = "Cover for $albumName",
-                        contentScale = ContentScale.Crop,
-                        fallback = painterResource(R.drawable.ic_tiger_logo), // THE FIX: Network resiliency
-                        error = painterResource(R.drawable.ic_tiger_logo),
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                    )
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = albumName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = artistName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
+        Icon(
+            imageVector = WitcherIcons.Library,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }

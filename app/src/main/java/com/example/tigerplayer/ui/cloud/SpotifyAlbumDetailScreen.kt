@@ -80,12 +80,12 @@ fun SpotifyAlbumDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(WitcherIcons.Back, contentDescription = "Back", tint = Color.White)
+                        Icon(WitcherIcons.Back, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent,
-                    titleContentColor = Color.White
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -121,7 +121,7 @@ fun SpotifyAlbumDetailScreen(
                         text = albumName,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center
                     )
 
@@ -189,7 +189,7 @@ fun SpotifyAlbumTrackRow(index: Int, track: SpotifyTrack, onClick: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.name,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -197,7 +197,7 @@ fun SpotifyAlbumTrackRow(index: Int, track: SpotifyTrack, onClick: () -> Unit) {
                 )
                 Text(
                     text = track.artists.joinToString { it.name },
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -206,7 +206,7 @@ fun SpotifyAlbumTrackRow(index: Int, track: SpotifyTrack, onClick: () -> Unit) {
             Icon(
                 imageVector = WitcherIcons.Options,
                 contentDescription = "Options",
-                tint = Color.White.copy(alpha = 0.3f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 modifier = Modifier.size(20.dp)
             )
         }
