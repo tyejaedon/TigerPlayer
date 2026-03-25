@@ -60,6 +60,8 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sin
@@ -76,11 +78,32 @@ fun FullPlayerScreen(
     onCollapse: () -> Unit,
     onNavigateToAlbum: (String) -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val track = uiState.currentTrack ?: return
+    // --- 1. SLICED STATE COLLECTION ---
+    // This stops the entire screen from recomposing on every playback tick.
+    val currentTrack by remember(viewModel) {
+        viewModel.uiState.map { it.currentTrack }.distinctUntilChanged()
+    }.collectAsState(initial = null)
+
+    val track = currentTrack ?: return
     val context = LocalContext.current
 
-    // --- 1. THEME-AWARE STATE HOISTING ---
+    val currentLyrics by remember(viewModel) {
+        viewModel.uiState.map { it.currentLyrics }.distinctUntilChanged()
+    }.collectAsState(initial = null)
+
+    val queue by remember(viewModel) {
+        viewModel.uiState.map { it.queue }.distinctUntilChanged()
+    }.collectAsState(initial = emptyList())
+
+    val artistImageUrl by remember(viewModel) {
+        viewModel.uiState.map { it.artistImageUrl }.distinctUntilChanged()
+    }.collectAsState(initial = null)
+
+    val isPlaying by remember(viewModel) {
+        viewModel.uiState.map { it.isPlaying }.distinctUntilChanged()
+    }.collectAsState(initial = false)
+
+    // --- 2. THEME-AWARE STATE HOISTING ---
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
@@ -89,7 +112,6 @@ fun FullPlayerScreen(
     val themeSurface = MaterialTheme.colorScheme.surface
     val themeOnSurface = MaterialTheme.colorScheme.onSurface
 
-    // The "Dominant Resonance" colors
     var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
     var dynamicTextColor by remember(themeOnSurface) { mutableStateOf(themeOnSurface) }
     var dynamicSecondaryTextColor by remember(themeOnSurface) { mutableStateOf(themeOnSurface.copy(alpha = 0.6f)) }
@@ -97,8 +119,8 @@ fun FullPlayerScreen(
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
 
-    // --- 2. THE DYNAMIC COLOR RITUAL ---
-    val imageUrl = if (showLyrics) uiState.artistImageUrl ?: track.artworkUri else track.artworkUri
+    // --- 3. THE DYNAMIC COLOR RITUAL ---
+    val imageUrl = if (showLyrics) artistImageUrl ?: track.artworkUri else track.artworkUri
 
     val imageRequest = remember(imageUrl) {
         ImageRequest.Builder(context)
@@ -109,18 +131,14 @@ fun FullPlayerScreen(
                 val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                 bitmap?.let { b ->
                     Palette.from(b).generate { palette ->
-                        // 1. Extract the deep base color for the background gradient
                         val dominantSwatch = palette?.dominantSwatch ?: palette?.mutedSwatch
                         dominantBgColor = dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
 
-                        // 2. Extract luminance to flip text color for legibility
-                        val luminance = ColorUtils.calculateLuminance(dominantBgColor.value.toLong().toInt()) // Convert Compose Color to Int
+                        val luminance = ColorUtils.calculateLuminance(dominantBgColor.value.toLong().toInt())
                         if (luminance > 0.4) {
-                            // Bright Art -> Obsidian Text
                             dynamicTextColor = Color(0xFF1A1A1A)
                             dynamicSecondaryTextColor = Color(0xFF1A1A1A).copy(alpha = 0.7f)
                         } else {
-                            // Dark Art -> White Text
                             dynamicTextColor = Color(0xFFF5F5F5)
                             dynamicSecondaryTextColor = Color(0xFFF5F5F5).copy(alpha = 0.7f)
                         }
@@ -130,11 +148,11 @@ fun FullPlayerScreen(
             .build()
     }
 
-    // --- 3. THE UI STRUCTURE ---
+    // --- 4. THE UI STRUCTURE ---
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(dominantBgColor) // Base falls back to the dominant color
+            .background(dominantBgColor)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDrag = { change, dragAmount ->
@@ -152,22 +170,15 @@ fun FullPlayerScreen(
                 )
             }
     ) {
-        // --- LAYER 1: THE BACKDROP RITUAL ---
         AsyncImage(
             model = imageRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    val infiniteScale = 1.05f
-                    scaleX = infiniteScale; scaleY = infiniteScale
-                }
+                .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
         )
 
-        // --- LAYER 2: THE DOMINANT RESONANCE SCRIM ---
-        // Fades from transparent (top) down to solid dominant color (bottom)
-        // This ensures the album art is visible up top, but the text is perfectly readable below.
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -181,20 +192,16 @@ fun FullPlayerScreen(
                 )
         )
 
-        // --- LAYER 3: THE FOREGROUND UI ---
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp) // Tightened for S22
+                .padding(horizontal = 20.dp)
                 .statusBarsPadding()
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // --- HEADER RITUAL ---
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -202,7 +209,6 @@ fun FullPlayerScreen(
                     Icon(WitcherIcons.Collapse, "Collapse", tint = dynamicTextColor)
                 }
 
-                // Toggle Switches for Lyrics/Queue
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(onClick = { showLyrics = !showLyrics; showQueue = false }) {
                         Icon(
@@ -221,43 +227,30 @@ fun FullPlayerScreen(
                 }
             }
 
-            // --- VIEWPORT: LYRICS / QUEUE / EMPTY (Art shines through) ---
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 AnimatedContent(
                     targetState = if (showQueue) "queue" else if (showLyrics) "lyrics" else "artwork",
                     label = "ContentAnim"
                 ) { type ->
                     when (type) {
                         "queue" -> QueueDisplay(
-                            queue = uiState.queue,
+                            queue = queue,
                             currentTrackId = track.id,
-                            isPlaying = uiState.isPlaying,
+                            isPlaying = isPlaying,
                             dynamicTextColor = dynamicTextColor,
                             onTrackClick = { viewModel.playTrack(it) },
                             onRemoveFromQueue = { viewModel.removeFromQueue(it) }
                         )
                         "lyrics" -> LyricsDisplay(
-                            lyrics = uiState.currentLyrics,
-                            currentPositionMs = uiState.currentPosition,
+                            lyrics = currentLyrics,
+                            viewModel = viewModel, // Passed so it can collect its own state
                             textColor = dynamicTextColor
                         )
-                        else -> {
-                            // THE FIX: Leave this empty!
-                            // The background AsyncImage provides the artwork.
-                            // Placing the TrackInfoCard here caused the "double render" bug.
-                            Box(modifier = Modifier.fillMaxSize())
-                        }
+                        else -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
             }
 
-            // --- THE TRACK INFO CARD & CONTROLS ---
-            // Sits anchored at the bottom of the screen inside the solid color zone
             AnimatedVisibility(
                 visible = !showLyrics && !showQueue,
                 enter = fadeIn() + slideInVertically { it / 4 },
@@ -278,15 +271,23 @@ fun FullPlayerScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            FieryWavySeeker(uiState, viewModel, dynamicTextColor)
+            // Seeker now isolates its own recomposition
+            FieryWavySeeker(viewModel = viewModel, textColor = dynamicTextColor)
 
             Spacer(modifier = Modifier.height(16.dp))
-            PlaybackControls(uiState, viewModel, dynamicTextColor, 1f)
+            // We use a wrapper here so existing PlaybackControls doesn't force FullPlayerScreen to recompose
+            ScopedPlaybackControls(viewModel = viewModel, dynamicTextColor = dynamicTextColor)
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
+@Composable
+private fun ScopedPlaybackControls(viewModel: PlayerViewModel, dynamicTextColor: Color) {
+    // This wrapper traps the fast-changing uiState so it doesn't leak to FullPlayerScreen
+    val uiState by viewModel.uiState.collectAsState()
+    PlaybackControls(uiState, viewModel, dynamicTextColor, 1f)
+}
 // ==========================================
 // --- TRACK INFO CARD (Rectified) ---
 // ==========================================
@@ -449,12 +450,122 @@ private fun MetadataBadge(
 // --- CONTROLS & SEEKER ---
 // ==========================================
 
+
 @Composable
-private fun FieryWavySeeker(
-    uiState: PlayerUiState,
+private fun LyricsDisplay(
+    lyrics: String?,
     viewModel: PlayerViewModel,
     textColor: Color
 ) {
+    if (lyrics.isNullOrBlank()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = "INSTRUMENTAL",
+                color = textColor.copy(alpha = 0.4f),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            )
+        }
+        return
+    }
+
+    val parsedLyrics = remember(lyrics) { parseLrc(lyrics) }
+
+    if (parsedLyrics.isEmpty()) {
+        val scrollState = rememberScrollState()
+        Text(
+            text = lyrics,
+            color = textColor,
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp)
+                .padding(bottom = 200.dp),
+            style = MaterialTheme.typography.titleLarge.copy(
+                lineHeight = 38.sp,
+                fontWeight = FontWeight.Bold
+            ),
+            textAlign = TextAlign.Center
+        )
+        return
+    }
+
+    val listState = rememberLazyListState()
+
+    // Collect ONLY the position as a State to feed into derivedStateOf
+    val currentPositionState = remember(viewModel) {
+        viewModel.uiState.map { it.currentPosition }
+    }.collectAsState(initial = 0L)
+
+    // THE FIX: This derived state ensures the UI ONLY recomposes when the lyric line changes,
+    // not every single time the millisecond updates.
+    val activeIndex by remember(parsedLyrics) {
+        derivedStateOf {
+            val currentMs = currentPositionState.value
+            parsedLyrics.indexOfLast { it.timeMs <= currentMs }.coerceAtLeast(0)
+        }
+    }
+
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+
+    LaunchedEffect(activeIndex) {
+        // Restored check so users can manually read ahead without being yanked back!
+        if (parsedLyrics.isNotEmpty() && !listState.isScrollInProgress) {
+            listState.animateScrollToItem(index = activeIndex, scrollOffset = 0)
+        }
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // maxHeight is the exact height of the Lyrics box, NOT the whole phone.
+        // We subtract about 24.dp (half a line height) to ensure the text is visually dead-center.
+        val verticalPadding = (maxHeight / 2) - 24.dp
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            // Now the padding perfectly aligns with the middle of the available viewing area
+            contentPadding = PaddingValues(top = verticalPadding, bottom = verticalPadding),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            itemsIndexed(parsedLyrics, key = { _, line -> line.timeMs }) { index, line ->
+                val isActive = index == activeIndex
+
+                val alpha by animateFloatAsState(
+                    if (isActive) 1f else 0.3f,
+                    tween(400),
+                    label = "Alpha"
+                )
+                val scale by animateFloatAsState(
+                    if (isActive) 1.15f else 1f,
+                    spring(dampingRatio = Spring.DampingRatioLowBouncy),
+                    label = "Scale"
+                )
+
+                Text(
+                    text = if (line.text.isBlank()) "•••" else line.text,
+                    color = if (isActive) IgniRed else textColor.copy(alpha = alpha),
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
+                        lineHeight = 38.sp,
+                        fontSize = if (isActive) 24.sp else 20.sp
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp, horizontal = 24.dp)
+                        .graphicsLayer { scaleX = scale; scaleY = scale }
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun FieryWavySeeker(
+    viewModel: PlayerViewModel,
+    textColor: Color
+) {
+    // Collecting here isolates the recomposition boundary exclusively to the seeker
+    val uiState by viewModel.uiState.collectAsState()
     val track = uiState.currentTrack ?: return
     val accentColor = if (uiState.isPlaying) IgniRed else AardBlue
 
@@ -518,7 +629,7 @@ private fun FieryWavySeeker(
                 )
 
                 val path = Path()
-                val waveAmplitude = if (uiState.isPlaying) 12f else 0f // Tighter wave for S22
+                val waveAmplitude = if (uiState.isPlaying) 12f else 0f
                 val waveFrequency = 0.05f
 
                 path.moveTo(0f, centerY)
@@ -801,87 +912,6 @@ private fun parseLrc(lrc: String?): List<LyricLine> {
     }
 }
 
-@Composable
-private fun LyricsDisplay(lyrics: String?, currentPositionMs: Long, textColor: Color) {
-    if (lyrics.isNullOrBlank()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = "INSTRUMENTAL",
-                color = textColor.copy(alpha = 0.4f),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp
-            )
-        }
-        return
-    }
-
-    val parsedLyrics = remember(lyrics) { parseLrc(lyrics) }
-
-    // Fallback if the parser found zero valid timestamps
-    if (parsedLyrics.isEmpty()) {
-        val scrollState = rememberScrollState()
-        Text(
-            text = lyrics,
-            color = textColor,
-            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp).padding(bottom = 200.dp),
-            style = MaterialTheme.typography.titleLarge.copy(lineHeight = 38.sp, fontWeight = FontWeight.Bold),
-            textAlign = TextAlign.Center
-        )
-        return
-    }
-
-    val listState = rememberLazyListState()
-
-    // THE FIX 1: Clean calculation without derivedStateOf traps
-    val activeIndex = remember(currentPositionMs, parsedLyrics) {
-        parsedLyrics.indexOfLast { it.timeMs <= currentPositionMs }.coerceAtLeast(0)
-    }
-
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-
-    // THE MASTER SCROLL RITUAL
-    LaunchedEffect(activeIndex) {
-        if (parsedLyrics.isNotEmpty()) {
-            // THE FIX 2: We removed the `!isScrollInProgress` check.
-            // Now, every time the lyric changes, it commands the list to move.
-            // By passing scrollOffset = 0, we align the item exactly at the start
-            // of the content padding (which is the center of your S22 screen).
-            listState.animateScrollToItem(index = activeIndex, scrollOffset = 0)
-        }
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        // THE CENTERING ANCHOR: Pushes the very first item down to the exact middle
-        contentPadding = PaddingValues(top = screenHeight / 2, bottom = screenHeight / 2),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        itemsIndexed(parsedLyrics) { index, line ->
-            val isActive = index == activeIndex
-
-            val alpha by animateFloatAsState(if (isActive) 1f else 0.3f, tween(400), label = "Alpha")
-            val scale by animateFloatAsState(if (isActive) 1.15f else 1f, spring(dampingRatio = Spring.DampingRatioLowBouncy), label = "Scale")
-
-            Text(
-                text = if (line.text.isBlank()) "•••" else line.text,
-                color = if (isActive) IgniRed else textColor.copy(alpha = alpha),
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
-                    lineHeight = 38.sp,
-                    // S22 Optimization: Kept large enough to read, small enough to fit long lines
-                    fontSize = if (isActive) 24.sp else 20.sp
-                ),
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp, horizontal = 24.dp)
-                    .graphicsLayer { scaleX = scale; scaleY = scale }
-            )
-        }
-    }
-}
 private fun formatDuration(ms: Long): String {
     val minutes = TimeUnit.MILLISECONDS.toMinutes(ms)
     val seconds = TimeUnit.MILLISECONDS.toSeconds(ms) % 60
