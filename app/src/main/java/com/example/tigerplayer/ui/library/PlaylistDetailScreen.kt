@@ -1,12 +1,9 @@
 package com.example.tigerplayer.ui.library
 
-import androidx.compose.animation.AnimatedVisibility
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,17 +24,27 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.ColorUtils
+import androidx.palette.graphics.Palette
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun PlaylistDetailsScreen(
     playlistId: Long,
     playlistName: String,
@@ -47,42 +54,87 @@ fun PlaylistDetailsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val playlistTracks by viewModel.getPlaylistTracks(playlistId).collectAsState(initial = emptyList())
     val scrollState = rememberLazyListState()
+    val context = LocalContext.current
+
+    val primaryFromTheme = MaterialTheme.colorScheme.primary
+    var dominantColor by remember { mutableStateOf(primaryFromTheme) }
+
+    val firstTrackArt = remember(playlistTracks) { playlistTracks.firstOrNull()?.artworkUri }
+
+    LaunchedEffect(firstTrackArt) {
+        if (firstTrackArt != null) {
+            val loader = ImageLoader(context)
+            val request = ImageRequest.Builder(context).data(firstTrackArt).allowHardware(false).build()
+            val result = (loader.execute(request) as? SuccessResult)?.drawable
+            val bitmap = (result as? BitmapDrawable)?.bitmap
+            bitmap?.let { b ->
+                Palette.from(b).generate { palette ->
+                    // Favor vibrant over dominant for better UI pop
+                    val swatch = palette?.vibrantSwatch ?: palette?.dominantSwatch
+                    swatch?.rgb?.let { dominantColor = Color(it) }
+                }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-
-        // --- PARALLAX ARTIFACT HEADER ---
-        PlaylistParallaxHeader(
-            scrollState = scrollState,
-            playlistId = playlistId,
-            playlistName = playlistName,
-            trackCount = playlistTracks.size,
-            onPlayAll = { viewModel.mediaControllerManager.setPlaylistAndPlay(playlistTracks, 0) }
+        // --- AMBIENT AURA ---
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(dominantColor.copy(alpha = 0.25f), Color.Transparent),
+                        endY = 1000f
+                    )
+                )
         )
 
-        // --- TRACKS LIST ---
+        // --- THE ARCHIVE LIST (Header is now inside!) ---
         LazyColumn(
             state = scrollState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 400.dp, bottom = 120.dp)
+            contentPadding = PaddingValues(bottom = 120.dp) // Removed the massive top padding
         ) {
-            itemsIndexed(playlistTracks) { index, track ->
-                val isCurrent = uiState.currentTrack?.id == track.id
-
-                // Unified Song Item with Index numbering
-                SongListItem(
-                    track = track,
-                    isCurrentTrack = isCurrent,
-                    isPlaying = uiState.isPlaying,
-                    indexNumber = (index + 1).toString().padStart(2, '0'), // Pass index to the component
-                    onClick = {
-                        viewModel.mediaControllerManager.setPlaylistAndPlay(playlistTracks, index)
-                    },
-                    onOptionsClick = { /* Track Options */ }
+            // 1. THE PARALLAX HEADER
+            item {
+                PlaylistParallaxHeader(
+                    scrollState = scrollState,
+                    playlistId = playlistId,
+                    playlistName = playlistName,
+                    trackCount = playlistTracks.size,
+                    accentColor = dominantColor,
+                    onPlayAll = {
+                        if (playlistTracks.isNotEmpty()) {
+                            viewModel.mediaControllerManager.setPlaylistAndPlay(playlistTracks, 0)
+                        }
+                    }
                 )
+            }
+
+            // 2. THE CHANTS
+            if (playlistTracks.isEmpty()) {
+                item { EmptyArchiveState("The grimoire is empty.") }
+            } else {
+                itemsIndexed(items = playlistTracks, key = { _, track -> track.id }) { index, track ->
+                    val isCurrent = uiState.currentTrack?.id == track.id
+
+                    ChapterSongRow(
+                        indexString = (index + 1).toString().padStart(2, '0'),
+                        index = index,
+                        track = track,
+                        isCurrentTrack = isCurrent,
+                        isPlaying = uiState.isPlaying,
+                        onClick = {
+                            viewModel.mediaControllerManager.setPlaylistAndPlay(playlistTracks, index)
+                        },
+                        onOptionsClick = { /* Track Portal Ritual */ }
+                    )
+                }
             }
         }
 
-        // --- STICKY TOP BAR ---
+        // --- TOP BAR: VANGUARD GLASS ---
         PlaylistTopBar(
             name = playlistName,
             scrollState = scrollState,
@@ -90,124 +142,69 @@ fun PlaylistDetailsScreen(
         )
     }
 }
+
+// ==========================================
+// --- THE COMPONENTS ---
+// ==========================================
+
 @Composable
-fun ActionPlaylistRow(
-    icon: ImageVector,
-    title: String,
-    accentColor: Color,
-    onClick: () -> Unit
+fun ChapterSongRow(
+    indexString: String,
+    index: Int,
+    track: AudioTrack,
+    isCurrentTrack: Boolean,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    onOptionsClick: () -> Unit
 ) {
+    val activeTint = MaterialTheme.colorScheme.primary
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .glassEffect(MaterialTheme.shapes.medium)
-            .bounceClick { onClick() }
-            .padding(16.dp),
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp), // S22: Tightened horizontal padding
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(accentColor.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, null, tint = accentColor, modifier = Modifier.size(24.dp))
+        // S22: Reduced width to 32dp to give more room to song titles
+        Box(modifier = Modifier.width(32.dp), contentAlignment = Alignment.CenterStart) {
+            if (isCurrentTrack && isPlaying) {
+                Icon(WitcherIcons.VolumeUp, null, tint = activeTint, modifier = Modifier.size(18.dp))
+            } else {
+                Text(
+                    text = indexString,
+                    style = MaterialTheme.typography.labelMedium, // Scaled down for sleekness
+                    color = if (isCurrentTrack) activeTint else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    fontWeight = FontWeight.Black
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-@Composable
-fun PlaylistParallaxHeader(
-    scrollState: LazyListState,
-    playlistId: Long,
-    playlistName: String,
-    trackCount: Int,
-    onPlayAll: () -> Unit
-) {
-    val scrollOffset = scrollState.firstVisibleItemScrollOffset
-    val isScrolled = scrollState.firstVisibleItemIndex > 0
-
-    // Animates the icon smaller as you scroll up
-    val artScale by animateFloatAsState(
-        targetValue = if (isScrolled) 0.8f else 1f,
-        animationSpec = tween(500),
-        label = "artScale"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(420.dp)
-            .graphicsLayer {
-                translationY = -scrollOffset.toFloat() * 0.45f
-                alpha = (1f - (scrollOffset / 800f)).coerceIn(0f, 1f)
-                scaleX = artScale
-                scaleY = artScale
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(
-                modifier = Modifier
-                    .size(200.dp)
-                    .shadow(32.dp, RoundedCornerShape(28.dp), spotColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (playlistId == -1L) WitcherIcons.Favorite else WitcherIcons.Playlist,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(80.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = playlistName.uppercase(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp,
-                color = MaterialTheme.colorScheme.onBackground
+                text = track.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (isCurrentTrack) FontWeight.Black else FontWeight.Bold,
+                color = if (isCurrentTrack) activeTint else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-
             Text(
-                text = "$trackCount TRACKS RECORDED",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
+                text = track.artist.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                letterSpacing = 0.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+        }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Button(
-                onClick = onPlayAll,
-                shape = CircleShape,
-                modifier = Modifier.width(220.dp).height(52.dp).bounceClick { onPlayAll() },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Icon(WitcherIcons.Play, null, tint = MaterialTheme.colorScheme.onPrimary)
-                Spacer(modifier = Modifier.width(12.dp))
-                Text("COMMENCE RITUAL", fontWeight = FontWeight.Black)
-            }
+        IconButton(onClick = onOptionsClick, modifier = Modifier.size(32.dp)) {
+            Icon(WitcherIcons.Options, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), modifier = Modifier.size(20.dp))
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistTopBar(
@@ -215,9 +212,9 @@ fun PlaylistTopBar(
     scrollState: LazyListState,
     onBackClick: () -> Unit
 ) {
-    // Derived state for performance: True when we've scrolled enough to frost the bar
+    // S22: Trigger the frost earlier because the header is smaller
     val isScrolled by remember {
-        derivedStateOf { scrollState.firstVisibleItemIndex > 0 || scrollState.firstVisibleItemScrollOffset > 300 }
+        derivedStateOf { scrollState.firstVisibleItemIndex > 0 || scrollState.firstVisibleItemScrollOffset > 250 }
     }
 
     TopAppBar(
@@ -231,7 +228,9 @@ fun PlaylistTopBar(
                     text = name.uppercase(),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp
+                    letterSpacing = 1.sp, // Tighter for S22
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         },
@@ -241,21 +240,130 @@ fun PlaylistTopBar(
                 modifier = Modifier
                     .padding(8.dp)
                     .background(
-                        if (isScrolled) Color.Transparent else Color.Black.copy(alpha = 0.2f),
+                        if (isScrolled) Color.Transparent else Color.Black.copy(alpha = 0.3f),
                         CircleShape
                     )
             ) {
-                Icon(WitcherIcons.Back, "Back", tint = Color.White)
+                Icon(WitcherIcons.Back, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = if (isScrolled)
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-            else Color.Transparent
+            containerColor = if (isScrolled) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f) else Color.Transparent
         ),
         modifier = Modifier
-            .statusBarsPadding()
-            // Apply glass only when scrolled to maintain the transparent hero look at the top
             .then(if (isScrolled) Modifier.glassEffect(RectangleShape) else Modifier)
     )
+}
+
+@Composable
+fun PlaylistParallaxHeader(
+    scrollState: LazyListState,
+    playlistId: Long,
+    playlistName: String,
+    trackCount: Int,
+    accentColor: Color,
+    onPlayAll: () -> Unit
+) {
+    // Calculate precise offset only when the header is actually the first item
+    val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(340.dp) // S22 Optimization: Dropped from 420.dp
+            .padding(top = 40.dp) // Push down slightly to clear status bar
+            .graphicsLayer {
+                // The Parallax Math: Scroll slower than the list
+                translationY = offset * 0.4f
+                alpha = (1f - (offset / 600f)).coerceIn(0f, 1f)
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Surface(
+                // S22 Optimization: Scaled art size down to 140.dp
+                modifier = Modifier.size(140.dp).shadow(32.dp, RoundedCornerShape(24.dp), spotColor = accentColor),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (playlistId == -1L) WitcherIcons.Favorite else WitcherIcons.Playlist,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(64.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = playlistName.uppercase(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+            Text(
+                text = "$trackCount CHANTS COLLECTED",
+                style = MaterialTheme.typography.labelMedium, // Sleeker subtext
+                color = accentColor,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Contrast Check: Ensure button text is readable against the accent color
+            val buttonTextColor = if (ColorUtils.calculateLuminance(accentColor.value.toLong().toInt()) > 0.5)
+                Color.Black else Color.White
+
+            Button(
+                onClick = onPlayAll,
+                shape = CircleShape,
+                modifier = Modifier
+                    .width(220.dp) // S22: Slimmer button
+                    .height(48.dp)
+                    .bounceClick { onPlayAll() },
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+            ) {
+                Icon(WitcherIcons.Play, null, tint = buttonTextColor, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "COMMENCE RITUAL",
+                    fontWeight = FontWeight.Black,
+                    color = buttonTextColor,
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyArchiveState(message: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = WitcherIcons.Search,
+            contentDescription = null,
+            modifier = Modifier.size(56.dp).graphicsLayer { alpha = 0.15f },
+            tint = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = message.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp
+        )
+    }
 }

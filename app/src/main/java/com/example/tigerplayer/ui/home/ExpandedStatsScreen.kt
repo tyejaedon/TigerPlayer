@@ -15,10 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -27,83 +29,150 @@ import com.example.tigerplayer.ui.player.StatItem
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.glassEffect
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExpandedStatsScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
+fun ExpandedStatsScreen(
+    viewModel: PlayerViewModel,
+    onClose: () -> Unit
+) {
     val statsState by viewModel.detailedStatsState.collectAsState()
     val filters = listOf("Today", "This Week", "This Month", "Lifetime")
 
-    // --- LIVE BACKGROUND ANIMATION ---
+    // --- LIVE BACKGROUND ANIMATION (The Aard Mesh) ---
     val infiniteTransition = rememberInfiniteTransition(label = "MeshGradient")
     val xOffset by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 400f,
-        animationSpec = infiniteRepeatable(tween(20000, easing = LinearEasing), RepeatMode.Reverse), label = "X"
+        initialValue = 0f,
+        targetValue = 600f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(25000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "X"
     )
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // 1. Live Animated Mesh Gradient
         val primaryColor = MaterialTheme.colorScheme.primary
-        Canvas(modifier = Modifier.fillMaxSize().blur(100.dp)) {
-            drawRect(
+        Canvas(modifier = Modifier.fillMaxSize().blur(120.dp)) {
+            drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(primaryColor.copy(alpha = 0.2f), Color.Transparent),
-                    center = androidx.compose.ui.geometry.Offset(xOffset, 200f),
-                    radius = 800f
+                    colors = listOf(primaryColor.copy(alpha = 0.15f), Color.Transparent),
+                    center = Offset(xOffset, size.height * 0.2f),
+                    radius = 1000f
                 )
             )
         }
 
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-            // --- Top Bar ---
+            // --- TOP BAR: THE ARCHIVE HEADER ---
             Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onClose, modifier = Modifier.glassEffect(CircleShape)) {
-                    Icon(WitcherIcons.Back, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground)
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.glassEffect(CircleShape)
+                ) {
+                    Icon(WitcherIcons.Back, contentDescription = "Return", tint = MaterialTheme.colorScheme.onSurface)
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text("Chronicle Insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = "CHRONICLE INSIGHTS",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp
+                )
             }
 
-            // --- Filter Selection ---
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // --- FILTER SELECTION: TEMPORAL AXIS ---
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
                 items(filters) { filter ->
                     val isSelected = filter == statsState.selectedFilter
                     FilterChip(
                         selected = isSelected,
                         onClick = { viewModel.updateStatsFilter(filter) },
-                        label = { Text(filter) },
+                        label = {
+                            Text(
+                                text = filter.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold
+                            )
+                        },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         border = null,
-                        shape = MaterialTheme.shapes.medium
+                        shape = CircleShape
                     )
                 }
             }
 
-            // --- Content ---
-            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-
-                // Hero Card: Total Time
-                Box(modifier = Modifier.fillMaxWidth().glassEffect(MaterialTheme.shapes.extraLarge).padding(24.dp)) {
+            // --- CONTENT: THE SCROLL OF KNOWLEDGE ---
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+            ) {
+                // HERO CARD: TOTAL RITUAL TIME
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassEffect(MaterialTheme.shapes.extraLarge)
+                        .padding(24.dp)
+                ) {
                     Column {
-                        Text("TOTAL RITUAL TIME", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(statsState.totalListeningHours.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Black)
-                            Text("h ", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
-                            Text(statsState.totalListeningMinutes.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Black)
-                            Text("m", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+                        Text(
+                            text = "TOTAL MANIFESTATION TIME",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Text(
+                                text = statsState.totalListeningHours.toString(),
+                                style = MaterialTheme.typography.displayLarge,
+                                fontWeight = FontWeight.Black
+                            )
+                            Text(
+                                text = "H ",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            Text(
+                                text = statsState.totalListeningMinutes.toString(),
+                                style = MaterialTheme.typography.displayLarge,
+                                fontWeight = FontWeight.Black
+                            )
+                            Text(
+                                text = "M",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Section: Top Artists
+                // SECTION: TOP ARTISTS (THE VANGUARD)
                 if (statsState.topArtists.isNotEmpty()) {
-                    SectionTitle("THE VANGUARD", "Most summoned artists")
+                    DetailedSectionTitle(main = "THE VANGUARD", sub = "Most summoned artists in this era")
                     statsState.topArtists.forEachIndexed { index, artist ->
                         StatRow(rank = index + 1, item = artist, isArtist = true)
                     }
@@ -111,58 +180,82 @@ fun ExpandedStatsScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Section: Top Tracks
+                // SECTION: TOP TRACKS (THE CHANTS)
                 if (statsState.topTracks.isNotEmpty()) {
-                    SectionTitle("THE CHANTS", "Top frequencies recorded")
+                    DetailedSectionTitle(main = "THE CHANTS", sub = "Top frequencies recorded in the archives")
                     statsState.topTracks.forEachIndexed { index, track ->
                         StatRow(rank = index + 1, item = track, isArtist = false)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(100.dp))
+                Spacer(modifier = Modifier.height(120.dp)) // Padding for MiniPlayer
             }
         }
     }
 }
 
 @Composable
-private fun SectionTitle(main: String, sub: String) {
-    Column(modifier = Modifier.padding(bottom = 16.dp)) {
-        Text(main, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-        Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun DetailedSectionTitle(main: String, sub: String) {
+    Column(modifier = Modifier.padding(bottom = 20.dp)) {
+        Text(
+            text = main,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.5.sp,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = sub.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
 @Composable
 private fun StatRow(rank: Int, item: StatItem, isArtist: Boolean) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // RANK INDICATOR
         Text(
-            "#$rank",
-            modifier = Modifier.width(36.dp),
+            text = "#$rank",
+            modifier = Modifier.width(40.dp),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Black,
-            color = if (rank == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            color = if (rank == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
         )
 
+        // IMAGE MEDALLION
         AsyncImage(
             model = item.imageUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(56.dp)
-                .clip(if (isArtist) CircleShape else MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .size(60.dp)
+                .clip(if (isArtist) CircleShape else MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
         )
 
+        // METADATA
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-            Text(item.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, maxLines = 1)
             Text(
-                "${item.playCount} summons • ${item.secondaryText}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${item.playCount} SUMMONS • ${item.secondaryText.uppercase()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
             )
         }
     }

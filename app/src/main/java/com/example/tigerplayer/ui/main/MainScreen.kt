@@ -25,6 +25,7 @@ import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.library.ScanningOverlay // Adjust import to wherever you placed it
 
 @Composable
 fun MainScreen(
@@ -46,19 +47,19 @@ fun MainScreen(
 
     val tabs = listOf(BottomNavTab.Home, BottomNavTab.Library, BottomNavTab.Cloud)
 
-    // THE MASTER BOX: Layering the Full Player over the Main UI
+    // THE MASTER BOX: The Z-Axis Controller
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // --- LAYER 1: The App Shell (Scaffold) ---
+        // --- LAYER 1: THE APP SHELL (Bottom Z-Index) ---
         Scaffold(
             // Use background color so the Glass Bar has something to "frost"
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
-                // Apply glassEffect once to the entire bottom stack
+                // The Consolidated Glass Deck (MiniPlayer + Nav Bar)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                        .glassEffect(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) // Slightly sharper corners
                         .windowInsetsPadding(WindowInsets.navigationBars)
                 ) {
                     val currentTrack = uiState.currentTrack
@@ -73,15 +74,15 @@ fun MainScreen(
                         // Subtle visual separation
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 24.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                            thickness = 0.5.dp, // S22 Precision line
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                         )
                     }
 
                     NavigationBar(
                         containerColor = Color.Transparent, // Let the Column's glass show
                         tonalElevation = 0.dp,
-                        modifier = Modifier.height(80.dp)
+                        modifier = Modifier.height(72.dp) // S22: Dropped from 80.dp for a sleeker footprint
                     ) {
                         val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
@@ -128,6 +129,7 @@ fun MainScreen(
                 }
             }
         ) { innerPadding ->
+            // --- LAYER 2: THE NAVIGATION VIEWPORT ---
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -136,32 +138,32 @@ fun MainScreen(
                 NavHost(
                     navController = tabNavController,
                     startDestination = BottomNavTab.Home.route,
-                    // THE GLOBAL RITUAL: All tab switches will use these animations
+                    // THE SLY GLIDE: Tighter, faster animations optimized for high-refresh screens
                     enterTransition = {
                         slideInHorizontally(
-                            initialOffsetX = { 300 }, // Slide in from the right
-                            animationSpec = tween(400, easing = FastOutSlowInEasing)
-                        ) + fadeIn(animationSpec = tween(400))
+                            initialOffsetX = { 100 }, // Dropped from 300 to 100
+                            animationSpec = tween(300, easing = FastOutSlowInEasing) // Faster duration
+                        ) + fadeIn(animationSpec = tween(300))
                     },
                     exitTransition = {
                         slideOutHorizontally(
-                            targetOffsetX = { -300 }, // Slide out to the left
-                            animationSpec = tween(400, easing = FastOutSlowInEasing)
-                        ) + fadeOut(animationSpec = tween(400))
+                            targetOffsetX = { -100 },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(300))
                     },
                     popEnterTransition = {
                         slideInHorizontally(
-                            initialOffsetX = { -300 }, // Slide in from the left
-                            animationSpec = tween(400, easing = FastOutSlowInEasing)
-                        ) + fadeIn(animationSpec = tween(400))
+                            initialOffsetX = { -100 },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(300))
                     },
                     popExitTransition = {
                         slideOutHorizontally(
-                            targetOffsetX = { 300 }, // Slide out to the right
-                            animationSpec = tween(400, easing = FastOutSlowInEasing)
-                        ) + fadeOut(animationSpec = tween(400))
+                            targetOffsetX = { 100 },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(300))
                     }
-                ){
+                ) {
                     composable(BottomNavTab.Home.route) {
                         HomeScreen(
                             viewModel = playerViewModel,
@@ -190,7 +192,7 @@ fun MainScreen(
             }
         }
 
-        // --- LAYER 2: The Full Player Overlay ---
+        // --- LAYER 3: THE FULL PLAYER OVERLAY ---
         AnimatedVisibility(
             visible = isPlayerExpanded,
             enter = slideInVertically(
@@ -199,7 +201,7 @@ fun MainScreen(
             ),
             exit = slideOutVertically(
                 targetOffsetY = { it },
-                animationSpec = tween(450, easing = FastOutSlowInEasing)
+                animationSpec = tween(400, easing = FastOutSlowInEasing) // Slightly faster exit
             )
         ) {
             FullPlayerScreen(
@@ -209,6 +211,15 @@ fun MainScreen(
                     isPlayerExpanded = false
                     onNavigateToAlbum(albumName)
                 }
+            )
+        }
+
+        // --- LAYER 4: THE Z-AXIS ZENITH (Scanning Overlay) ---
+        // This sits above absolutely everything, including the Full Player and Bottom Nav
+        if (uiState.isScanning) {
+            ScanningOverlay(
+                progress = uiState.scanProgress,
+                total = uiState.totalFilesToScan
             )
         }
 

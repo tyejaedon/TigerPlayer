@@ -1,35 +1,22 @@
 package com.example.tigerplayer.ui.library
 
-import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,196 +29,198 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.tigerGlow
+
+// --- VANGUARD CONSTANTS ---
+
+
+// ==========================================
+// --- 1. THE MAIN GRID (Adaptive Layout) ---
+// ==========================================
 
 @Composable
-fun AlbumSearchRow(track: AudioTrack, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .bounceClick { onClick() }
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = track.artworkUri,
-            contentDescription = null,
-            fallback = painterResource(R.drawable.ic_tiger_logo),
-            modifier = Modifier
-                .size(56.dp)
-                .clip(MaterialTheme.shapes.medium),
-            contentScale = ContentScale.Crop
-        )
-        Column(modifier = Modifier.padding(start = 16.dp)) {
-            Text(
-                text = track.album,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = track.artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-@Composable
-fun AlbumCard(track: AudioTrack, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .bounceClick { onClick() }
-            .glassEffect(MaterialTheme.shapes.medium)
-            .padding(8.dp)
-    ) {
-        AsyncImage(
-            model = track.artworkUri,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            fallback = painterResource(R.drawable.ic_tiger_logo),
-            modifier = Modifier
-                .aspectRatio(1f)
-                .clip(MaterialTheme.shapes.medium)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = track.album,
-            style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
-            fontWeight = FontWeight.Bold,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = track.artist,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-@Composable
-fun AlbumsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
+fun AlbumsGrid(
+    viewModel: PlayerViewModel,
+    onAlbumClick: (String) -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
-    val albums = remember(uiState.tracks) {
-        uiState.tracks.distinctBy { it.album.lowercase().trim() }.sortedBy { it.album }
+    val tracks = uiState.tracks
+
+    // Grouping tracks into unique Volumes (Albums)
+    val albums = remember(tracks) {
+        tracks.groupBy { it.album.trim() }
+            .filterKeys { it.isNotEmpty() && !it.equals("Unknown", ignoreCase = true) }
+            .entries.toList()
+            .sortedBy { it.key }
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Adaptive(minSize = 160.dp),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 140.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        items(albums) { track ->
-            AlbumCard(track) { onNavigateToAlbum(track.album) }
+        items(albums, key = { it.key }) { entry ->
+            val firstTrack = entry.value.first()
+            AlbumGridItem(
+                albumName = entry.key,
+                artistName = firstTrack.artist,
+                artworkUri = firstTrack.artworkUri,
+                trackCount = entry.value.size,
+                onClick = { onAlbumClick(entry.key) }
+            )
         }
     }
 }
+
+// ==========================================
+// --- 2. THE GRID ITEM (Individual Card) ---
+// ==========================================
+
 @Composable
 fun AlbumGridItem(
     albumName: String,
     artistName: String,
-    artworkUri: Uri?,
+    artworkUri: android.net.Uri?,
     trackCount: Int,
     onClick: () -> Unit
 ) {
+    val PrimaryText = MaterialTheme.colorScheme.onSurface
+    val SecondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val ArmorBorder = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .bounceClick { onClick() }
     ) {
-        // High-Quality Square Album Art
-        AsyncImage(
-            model = artworkUri,
-            contentDescription = "Album Art for $albumName",
-            contentScale = ContentScale.Crop,
+        // THE VOLUME COVER: 1:1 Aspect Ratio with Armor Border
+        AlbumArtWithArmor(
+            artworkUri = artworkUri,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f) // Forces the image to be a perfect square regardless of column width
-                .clip(MaterialTheme.shapes.medium) // Applies the sharp Witcher cut corners!
+                .aspectRatio(1f)
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // 1. Album Name (Primary)
+        // Metadata: High-Contrast Titles
         Text(
             text = albumName,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Black,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
-        // 2. Album Artist & Track Count (Secondary)
-        Text(
-            text = "$artistName • $trackCount Tracks",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = artistName.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = SecondaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+                letterSpacing = 0.5.sp
+            )
+
+            Text(
+                text = " • $trackCount",
+                style = MaterialTheme.typography.labelSmall,
+                color = AardBlue,
+                fontWeight = FontWeight.Black
+            )
+        }
     }
 }
 
+// ==========================================
+// --- 3. THE HORIZONTAL ROW (Featured) ---
+// ==========================================
+
 @Composable
-fun ArtistAlbumCard(
-    track: AudioTrack,
-    onClick: () -> Unit
+fun HorizontalAlbumRow(
+    title: String,
+    albums: List<Pair<String, List<AudioTrack>>>,
+    onAlbumClick: (String) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .width(144.dp) // Slightly wider for better balance
-            .bounceClick { onClick() }, // Restoring the "weighty" tactile feel
-        horizontalAlignment = Alignment.Start // Gallery-style alignment
-    ) {
-        // --- THE CANVAS: Glow-Enhanced Artwork ---
-        Box(
-            modifier = Modifier
-                .size(144.dp)
-                .tigerGlow() // Using the signature glow instead of standard shadow
-                .clip(RoundedCornerShape(18.dp)) // Softer, premium corners
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            AsyncImage(
-                model = track.artworkUri,
-                contentDescription = "Album Art for ${track.album}",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                fallback = painterResource(R.drawable.ic_tiger_logo)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // --- THE METADATA: Manifesting the Year ---
+    Column(modifier = Modifier.padding(vertical = 16.dp)) {
         Text(
-            text = track.album,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Black, // High-contrast hierarchy
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            letterSpacing = (-0.5).sp
-        )
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelLarge,
+            color = AardBlue,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 2.sp,
+// ✅ This Ritual Succeeds
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp)        )
 
-        // Adding your Year logic back in with better thematic contrast
-        track.year?.let { year ->
-            Text(
-                text = year,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f), // Witcher accent color
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(albums) { (albumName, tracks) ->
+                val firstTrack = tracks.first()
+                Column(modifier = Modifier.width(140.dp).bounceClick { onAlbumClick(albumName) }) {
+                    AlbumArtWithArmor(
+                        artworkUri = firstTrack.artworkUri,
+                        modifier = Modifier.size(140.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = albumName,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// --- 4. CORE UTILITIES (The Visual Identity) ---
+// ==========================================
+
+@Composable
+fun AlbumArtWithArmor(
+    artworkUri: android.net.Uri?,
+    modifier: Modifier = Modifier
+) {
+    AsyncImage(
+        model = artworkUri,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        fallback = painterResource(R.drawable.ic_tiger_logo),
+        error = painterResource(R.drawable.ic_tiger_logo),
+        modifier = modifier
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            // THE ARMOR BORDER: Essential for visibility on deep blacks
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
+                shape = MaterialTheme.shapes.large
             )
-        } ?: Text(
-            text = "Unknown Era",
+    )
+}
+
+@Composable
+fun AlbumMetadataBadge(text: String, isHighlight: Boolean = false) {
+    Surface(
+        color = if (isHighlight) AardBlue.copy(alpha = 0.2f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+        shape = androidx.compose.foundation.shape.CircleShape,
+        border = BorderStroke(1.dp, if (isHighlight) AardBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+    ) {
+        Text(
+            text = text.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            color = if (isHighlight) AardBlue else MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            letterSpacing = 1.sp
         )
     }
 }

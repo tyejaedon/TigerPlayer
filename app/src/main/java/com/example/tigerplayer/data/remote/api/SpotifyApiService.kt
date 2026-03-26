@@ -84,7 +84,7 @@ interface SpotifyAuthApi {
     suspend fun getUserToken(
         @Header("Authorization") authHeader: String,
         @Field("grant_type") grantType: String = "authorization_code",
-        @Field("code") code: String,
+        @Field("code") code: String?,
         @Field("redirect_uri") redirectUri: String
     ): Response<SpotifyTokenResponse> //
 }

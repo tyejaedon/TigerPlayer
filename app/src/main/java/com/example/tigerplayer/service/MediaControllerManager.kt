@@ -45,13 +45,15 @@ class MediaControllerManager @Inject constructor(
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
 
-    // Added for external observation of controller availability/state changes
-    private val _mediaControllerState = MutableStateFlow<MediaController?>(null)
-    val mediaControllerState: StateFlow<MediaController?> = _mediaControllerState.asStateFlow()
+    // Used to signal the ViewModel that the queue/timeline has shifted
+    private val _mediaControllerState = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val mediaControllerState: SharedFlow<Unit> = _mediaControllerState.asSharedFlow()
 
-    // Coroutine tools for the Position Ticker
     private val managerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionJob: Job? = null
+
+    // Player listener reference so we can remove it during teardown
+    private var playerListener: Player.Listener? = null
 
     init {
         initializeController()
@@ -68,7 +70,6 @@ class MediaControllerManager @Inject constructor(
             try {
                 val controller = controllerFuture?.get() ?: return@addListener
                 mediaController = controller
-                _mediaControllerState.value = controller
 
                 // Initial State Sync
                 _isPlaying.update { controller.isPlaying }
@@ -77,8 +78,6 @@ class MediaControllerManager @Inject constructor(
                 _currentMediaId.update { controller.currentMediaItem?.mediaId ?: "" }
 
                 setupPlayerListener()
-                
-                // --- THE RESTORATION RITUAL ---
                 restorePlaybackState(controller)
 
                 if (controller.isPlaying) startPositionTicker()
@@ -90,10 +89,12 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun setupPlayerListener() {
-        mediaController?.addListener(object : Player.Listener {
+        val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.update { isPlaying }
-                if (isPlaying) startPositionTicker() else {
+                if (isPlaying) {
+                    startPositionTicker()
+                } else {
                     positionJob?.cancel()
                     saveCurrentState()
                 }
@@ -102,6 +103,7 @@ class MediaControllerManager @Inject constructor(
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                 _shuffleModeEnabled.update { shuffleModeEnabled }
                 managerScope.launch { playbackPrefs.saveShuffleMode(shuffleModeEnabled) }
+                _mediaControllerState.tryEmit(Unit) // Queue order visually changes
             }
 
             override fun onRepeatModeChanged(repeatMode: Int) {
@@ -113,15 +115,16 @@ class MediaControllerManager @Inject constructor(
                 _currentMediaId.update { mediaItem?.mediaId ?: "" }
                 _currentPosition.update { 0L }
                 saveCurrentState()
-                // Update state flow to trigger queue updates in ViewModel
-                _mediaControllerState.value = mediaController
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-                // Triggered when queue changes
-                _mediaControllerState.value = mediaController
+                // THE FIX: Trigger the ViewModel to pull the fresh queue
+                _mediaControllerState.tryEmit(Unit)
             }
-        })
+        }
+
+        playerListener = listener
+        mediaController?.addListener(listener)
     }
 
     private fun startPositionTicker() {
@@ -132,8 +135,8 @@ class MediaControllerManager @Inject constructor(
                 mediaController?.let { controller ->
                     val pos = controller.currentPosition
                     _currentPosition.update { pos }
-                    
-                    // Periodically save position even while playing (every 5 seconds)
+
+                    // Periodically save position (every 5 seconds)
                     if (++tickCount % 10 == 0) {
                         playbackPrefs.savePosition(pos)
                     }
@@ -147,9 +150,13 @@ class MediaControllerManager @Inject constructor(
         val controller = mediaController ?: return
         val currentId = controller.currentMediaItem?.mediaId ?: return
         val currentPos = controller.currentPosition
+
+        // Ensure we don't save an empty state if the player just crashed
+        if (controller.mediaItemCount == 0) return
+
         val queueIds = mutableListOf<String>()
         for (i in 0 until controller.mediaItemCount) {
-            controller.getMediaItemAt(i).mediaId.let { queueIds.add(it) }
+            queueIds.add(controller.getMediaItemAt(i).mediaId)
         }
 
         managerScope.launch {
@@ -166,23 +173,19 @@ class MediaControllerManager @Inject constructor(
             val savedRepeat = playbackPrefs.repeatMode.first()
 
             if (queueIds.isNotEmpty() && lastId != null) {
-                // Fetch tracks from repository to recreate MediaItems
-                audioRepository.getLocalTracks().first().let { allTracks ->
-                    val tracksToRestore = queueIds.mapNotNull { id -> 
-                        allTracks.find { it.id == id } 
-                    }
-                    
-                    if (tracksToRestore.isNotEmpty()) {
-                        val startIndex = tracksToRestore.indexOfFirst { it.id == lastId }.coerceAtLeast(0)
-                        val mediaItems = tracksToRestore.map { createMediaItem(it) }
-                        
-                        controller.setMediaItems(mediaItems, startIndex, lastPos)
-                        controller.shuffleModeEnabled = savedShuffle
-                        controller.repeatMode = savedRepeat
-                        controller.prepare()
-                        // Update state to trigger UI
-                        _mediaControllerState.value = controller
-                    }
+                val allTracks = audioRepository.getLocalTracks().first()
+                val tracksToRestore = queueIds.mapNotNull { id -> allTracks.find { it.id == id } }
+
+                if (tracksToRestore.isNotEmpty()) {
+                    val startIndex = tracksToRestore.indexOfFirst { it.id == lastId }.coerceAtLeast(0)
+                    val mediaItems = tracksToRestore.map { createMediaItem(it) }
+
+                    controller.setMediaItems(mediaItems, startIndex, lastPos)
+                    controller.shuffleModeEnabled = savedShuffle
+                    controller.repeatMode = savedRepeat
+                    controller.prepare()
+
+                    _mediaControllerState.tryEmit(Unit)
                 }
             }
         }
@@ -217,15 +220,29 @@ class MediaControllerManager @Inject constructor(
         }
     }
 
+    // THE MISSING RITUAL: Queue Modification
+    fun removeFromQueue(trackId: String) {
+        val controller = mediaController ?: return
+        for (i in 0 until controller.mediaItemCount) {
+            if (controller.getMediaItemAt(i).mediaId == trackId) {
+                controller.removeMediaItem(i)
+                break // Remove only the first instance if there are duplicates
+            }
+        }
+    }
+
+    // Clear the entire queue and stop playback
+    fun clearQueue() {
+        val controller = mediaController ?: return
+        controller.clearMediaItems()
+        controller.stop()
+    }
+
     private fun createMediaItem(track: AudioTrack): MediaItem {
         return MediaItem.Builder()
             .setMediaId(track.id)
             .setUri(track.uri)
-            .setRequestMetadata(
-                MediaItem.RequestMetadata.Builder()
-                    .setMediaUri(track.uri)
-                    .build()
-            )
+            // THE FIX: Pass absolute metadata for the notification/lockscreen
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(track.title)
@@ -260,9 +277,12 @@ class MediaControllerManager @Inject constructor(
     fun release() {
         saveCurrentState()
         positionJob?.cancel()
-        managerScope.cancel()
+
+        // Prevent memory leak by removing listener
+        playerListener?.let { mediaController?.removeListener(it) }
+
         controllerFuture?.let { MediaController.releaseFuture(it) }
         mediaController = null
-        _mediaControllerState.value = null
+        managerScope.cancel()
     }
 }

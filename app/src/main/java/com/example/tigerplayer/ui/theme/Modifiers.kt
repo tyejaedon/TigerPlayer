@@ -38,12 +38,12 @@ fun Modifier.bounceClick(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Animates the scale from 100% down to 92% when pressed
+    // S22 Optimization: Subtler scale (0.96f) for high-density targets
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
+        targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+            stiffness = Spring.StiffnessMedium // Increased stiffness for faster recovery
         ),
         label = "bounce"
     )
@@ -55,11 +55,10 @@ fun Modifier.bounceClick(
         }
         .clickable(
             interactionSource = interactionSource,
-            indication = ripple(bounded = true), // New Material 3 ripple API
+            indication = ripple(bounded = true),
             onClick = onClick
         )
 }
-
 /**
  * A modifier that adds a "Glass" effect appearance.
  * To prevent text blurring, we do NOT apply .blur() here.
@@ -80,40 +79,32 @@ fun Modifier.glassEffect(
     shape: Shape
 ) = composed {
     val isDark = isSystemInDarkTheme()
-
-    // Use the theme's surface color as the base for maximum readability
     val surfaceBase = MaterialTheme.colorScheme.surface
 
-    // Higher opacities (0.8f - 0.95f) ensure content underneath
-    // doesn't interfere with icon/text legibility.
-    val alphaTop = if (isDark) 0.92f else 0.85f
-    val alphaBottom = if (isDark) 0.98f else 0.95f
+    // S22 Optimization: Higher opacities for better legibility in bright Nairobi sun
+    val alphaTop = if (isDark) 0.94f else 0.88f
+    val alphaBottom = if (isDark) 0.99f else 0.96f
 
-    // Brighter, more distinct border for separation
     val borderColor = if (isDark) {
-        Color.White.copy(alpha = 0.15f)
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
     } else {
-        Color.Black.copy(alpha = 0.08f)
+        Color.Black.copy(alpha = 0.1f)
     }
 
     this
         .clip(shape)
-        // Layer 1: Solid-ish Surface (The "Visibility" layer)
         .background(surfaceBase.copy(alpha = alphaTop))
-        // Layer 2: The Gradient (The "Aesthetic" layer)
         .background(
             Brush.verticalGradient(
                 colors = listOf(
-                    surfaceBase.copy(alpha = 0.0f), // Let the base show through
-                    if (isDark) Color.Black.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f)
+                    surfaceBase.copy(alpha = 0.0f),
+                    if (isDark) Color.Black.copy(alpha = 0.15f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                 )
             )
         )
-        // Layer 3: High-contrast border
-        .border(1.dp, borderColor, shape)
-}/**
- * A custom modifier to give cards a "Glowing Border" when in dark mode
- */
+        // S22 Optimization: 0.5.dp border for high-res precision
+        .border(0.5.dp, borderColor, shape)
+}
 fun Modifier.tigerGlow() = composed {
     val glowColor = MaterialTheme.colorScheme.primary
     this.drawBehind {
