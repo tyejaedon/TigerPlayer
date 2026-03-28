@@ -117,13 +117,14 @@ class PlayerViewModel @Inject constructor(
 
     init {
         observeLibrary()
+        loadLocalAudio()
+
         observeMediaEngine()
         observeHistory()
         observeSpotifyRemote()
         performAutoRitual()
 
 
-        loadLocalAudio()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

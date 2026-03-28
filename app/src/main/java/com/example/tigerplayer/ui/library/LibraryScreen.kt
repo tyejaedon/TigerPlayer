@@ -42,6 +42,7 @@ import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.spotify.protocol.types.Artist
 import kotlinx.coroutines.launch
+import kotlin.collections.emptyList
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
@@ -164,7 +165,10 @@ fun LibraryScreen(
                 userScrollEnabled = true,
             ) { page ->
                 when (page) {
-                    0 -> SongsTab(viewModel)
+                    0 -> SongsTab(
+                        viewModel,
+                        onNavigateToAlbum = onNavigateToAlbum
+                    )
                     1 -> AlbumsTab(viewModel, onNavigateToAlbum)
                     2 -> ArtistsList(viewModel = viewModel, onArtistClick = onNavigateToArtist)
                     3 -> PlaylistsTab(viewModel, onNavigateToPlaylist)
@@ -182,9 +186,20 @@ fun AlbumsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
 
 
 @Composable
-fun SongsTab(viewModel: PlayerViewModel) {
+fun SongsTab(viewModel: PlayerViewModel,
+             onNavigateToAlbum: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     val currentTrack = uiState.currentTrack
+
+    // 1. THE STATE CONTROLLER
+    // This holds the track that the user just clicked "Options" on.
+    // If it's null, the sheet is hidden.
+    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+
+    // Fetch playlists to pass down to the dialog
+    val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
+
+
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -210,11 +225,28 @@ fun SongsTab(viewModel: PlayerViewModel) {
                 isActive = isActive,
                 isPlaying = uiState.isPlaying,
                 onClick = { viewModel.playTrack(track) },
-                onMoreClick = { /* Trigger Options Ritual */ }
-            )
+                onMoreClick = { trackForOptions = track }            )
         }
     }
+    trackForOptions?.let { selectedTrack ->
+        SongOptionsSheet(
+            track = selectedTrack,
+            playlists = playlists,
+            onDismiss = { trackForOptions = null }, // Clear the state to close
+            onPlayNext = {
+                viewModel.addToQueue(selectedTrack)
+            },
+            onAddToPlaylist = { playlistId ->
+                // Assuming you have this function in your ViewModel
+                viewModel.addTrackToPlaylist(playlistId, selectedTrack)
+            },
+            onGoToAlbum = { albumName ->
+                onNavigateToAlbum(albumName)
+            }
+        )
+    }
 }
+
 @Composable
 fun PlaylistsTab(
     viewModel: PlayerViewModel,

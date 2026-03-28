@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -26,14 +27,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.components.DiscoverCarousel
+import com.example.tigerplayer.ui.components.RecentlyPlayedRow
 import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.player.PlayerUiState
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
@@ -107,14 +111,14 @@ fun HomeScreen(
                 // --- 5. RECENT RITUALS ---
                 if (homeState.recentlyPlayedTracks.isNotEmpty()) {
                     item { SectionTitle("RECENT RITUALS") }
-                    items(homeState.recentlyPlayedTracks.take(6)) { track ->
-                        ArchiveSongRow(
-                            track = track,
-                            isCurrentTrack = uiState.currentTrack?.id == track.id,
-                            isPlaying = uiState.isPlaying,
-                            onClick = { viewModel.playTrack(track) },
-                            onOptionsClick = { /* Track Options Portal */ },
-                        )
+                   item {
+                       RecentlyPlayedRow(
+                           tracks = homeState.recentlyPlayedTracks,
+                           onTrackClick = { viewModel.playTrack(it) },
+                           viewModel = viewModel,
+                           modifier = Modifier
+                       )
+                   }
                     }
                 }
 
@@ -149,7 +153,7 @@ fun HomeScreen(
             ExpandedStatsScreen(viewModel = viewModel, onClose = { isStatsExpanded = false })
         }
     }
-}
+
 
 // ==========================================
 // --- RECTIFIED COMPONENTS ---
@@ -191,7 +195,8 @@ private fun LazyListScope.renderSearchResults(
                 isActive = uiState.currentTrack?.id == track.id,
                 isPlaying = uiState.isPlaying,
                 onClick = { viewModel.playTrack(track) },
-                onMoreClick = { /* Options */ }
+
+                onMoreClick = { /* Track Options Portal */ }
             )
         }
     }
@@ -200,24 +205,77 @@ private fun LazyListScope.renderSearchResults(
 /**
  * RECTIFIED RECOMMENDED CARD: High-visibility grid style
  */
+
+
 @Composable
 fun RecommendedAlbumCard(track: AudioTrack, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .width(160.dp)
             .bounceClick { onClick() }
+            .padding(bottom = 8.dp) // Prevents the shadow from clipping into items below it
     ) {
-        AsyncImage(
-            model = track.artworkUri,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            fallback = painterResource(R.drawable.ic_tiger_logo),
+        // --- THE TACTILE VIEWPORT ---
+        Box(
             modifier = Modifier
                 .size(160.dp)
+                // 1. The Shadow Bleed (Must be before clip)
+                // Using a slight AardBlue tint for the shadow makes the UI feel alive
+                .shadow(
+                    elevation = 16.dp,
+                    shape = MaterialTheme.shapes.large,
+                    spotColor = MaterialTheme.aardBlue.copy(alpha = 0.4f)
+                )
                 .clip(MaterialTheme.shapes.large)
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f), MaterialTheme.shapes.large)
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                // Inner armor border for contrast
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), MaterialTheme.shapes.large)
+        ) {
+            // The Canvas
+            AsyncImage(
+                model = track.artworkUri,
+                contentDescription = "Cover for ${track.album}",
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.ic_tiger_logo),
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // 2. The Gradient Grounding
+            // Ensures the glass button always has enough contrast, even on white album covers
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)),
+                            startY = 200f // Starts the gradient near the bottom
+                        )
+                    )
+            )
+
+            // 3. The Glass Action Anchor
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(12.dp)
+                    .size(32.dp)
+                    .glassEffect(CircleShape) // Uses your custom frosted glass modifier
+                    .background(Color.Black.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = WitcherIcons.Play,
+                    contentDescription = null,
+                    tint = MaterialTheme.aardBlue,
+                    // Nudge the play icon slightly right so it looks optically centered
+                    modifier = Modifier.size(14.dp).padding(start = 2.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- TYPOGRAPHY ---
         Text(
             text = track.album,
             style = MaterialTheme.typography.titleMedium,
@@ -226,12 +284,18 @@ fun RecommendedAlbumCard(track: AudioTrack, onClick: () -> Unit) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+
+        Spacer(modifier = Modifier.height(2.dp))
+
         Text(
             text = track.artist.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = AardBlue,
+            // Adaptive tinting
+            color = MaterialTheme.aardBlue.copy(alpha = 0.8f),
             fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
+            letterSpacing = 1.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -301,48 +365,56 @@ fun UserStatisticsHeader(
         )
     }
 }
-
 @Composable
-private fun StatGlassWidget(
+fun StatGlassWidget(
     title: String,
     value: String,
-    icon: ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     accentColor: Color,
     modifier: Modifier = Modifier,
     isFullWidth: Boolean = false
 ) {
     Surface(
-        modifier = modifier.height(if (isFullWidth) 72.dp else 88.dp), // Sharpened profile
+        modifier = modifier.height(if (isFullWidth) 72.dp else 88.dp),
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
         shape = MaterialTheme.shapes.large,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)) // Slightly thicker for definition
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxSize() // Force it to use the full height of the Surface
+                .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(if (isFullWidth) 40.dp else 32.dp) // Scaled down for S22
+                    .size(if (isFullWidth) 40.dp else 44.dp) // Scaled appropriately
                     .background(accentColor.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                // Scaled from 16dp to 20dp. 16dp is too small for a primary visual anchor
+                Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(20.dp))
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
-            Column {
+            Column(verticalArrangement = Arrangement.Center) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium, // 10sp
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    text = title.uppercase(),
+                    // THE FIX: Semantic Typography
+                    style = MaterialTheme.typography.labelSmall,
+                    // THE FIX: 60% opacity guarantees 4.5:1 contrast ratios on AMOLED
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp, // Makes tiny uppercase text readable
                     maxLines = 1
                 )
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.headlineMedium, // 18sp Bold
+                    // THE FIX: Semantic Typography for ~16-18sp
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Black, // The Vanguard aesthetic
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -350,18 +422,20 @@ private fun StatGlassWidget(
         }
     }
 }
-
 @Composable
 fun SectionTitle(title: String) {
     Text(
         text = title.uppercase(),
-        style = MaterialTheme.typography.headlineMedium, // 18sp
-        color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.titleMedium, // Semantic match for 18sp
+        // Dimmed slightly to 80% so it doesn't visually overpower the actual album art below it
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+        fontWeight = FontWeight.Black,
+        letterSpacing = 1.5.sp, // THE FIX: Premium spacing for section headers
         modifier = Modifier.padding(
-            start = 16.dp,
-            end = 16.dp,
-            top = 24.dp,
-            bottom = 8.dp
+            start = 24.dp, // Aligned with your global screen padding
+            end = 24.dp,
+            top = 32.dp, // Gives the section above it room to breathe
+            bottom = 12.dp
         )
     )
 }

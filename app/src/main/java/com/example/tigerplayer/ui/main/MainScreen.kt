@@ -21,11 +21,11 @@ import com.example.tigerplayer.navigation.BottomNavTab
 import com.example.tigerplayer.ui.cloud.CloudScreen
 import com.example.tigerplayer.ui.home.HomeScreen
 import com.example.tigerplayer.ui.library.LibraryScreen
+import com.example.tigerplayer.ui.library.ScanningOverlay
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.library.ScanningOverlay // Adjust import to wherever you placed it
 
 @Composable
 fun MainScreen(
@@ -42,7 +42,7 @@ fun MainScreen(
     val uiState by playerViewModel.uiState.collectAsState()
     var isPlayerExpanded by remember { mutableStateOf(false) }
 
-    // THE WITCHER'S REFLEX: Handle back gesture to collapse the player
+    // THE WITCHER'S REFLEX: Handle back gesture to collapse the player securely
     BackHandler(enabled = isPlayerExpanded) { isPlayerExpanded = false }
 
     val tabs = listOf(BottomNavTab.Home, BottomNavTab.Library, BottomNavTab.Cloud)
@@ -52,37 +52,43 @@ fun MainScreen(
 
         // --- LAYER 1: THE APP SHELL (Bottom Z-Index) ---
         Scaffold(
-            // Use background color so the Glass Bar has something to "frost"
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
-                // The Consolidated Glass Deck (MiniPlayer + Nav Bar)
+                // The Consolidated Glass Deck
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .glassEffect(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) // Slightly sharper corners
+                        .glassEffect(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                         .windowInsetsPadding(WindowInsets.navigationBars)
                 ) {
                     val currentTrack = uiState.currentTrack
 
-                    // MiniPlayer remains consistent inside the glass container
-                    if (currentTrack != null && !isPlayerExpanded) {
-                        MiniPlayer(
-                            viewModel = playerViewModel,
-                            onExpandClick = { isPlayerExpanded = true }
-                        )
+                    // THE FIX: The Smooth Handoff Animation
+                    // When expanded, the MiniPlayer smoothly collapses away so the bottom bar shrinks.
+                    AnimatedVisibility(
+                        visible = currentTrack != null && !isPlayerExpanded,
+                        enter = expandVertically(animationSpec = tween(300)) + fadeIn(tween(300)),
+                        exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(tween(300))
+                    ) {
+                        Column {
+                            MiniPlayer(
+                                viewModel = playerViewModel,
+                                onExpandClick = { isPlayerExpanded = true }
+                            )
 
-                        // Subtle visual separation
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 24.dp),
-                            thickness = 0.5.dp, // S22 Precision line
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                        )
+                            // Subtle visual separation
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 24.dp),
+                                thickness = 0.5.dp, // S22 Precision line
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                            )
+                        }
                     }
 
                     NavigationBar(
-                        containerColor = Color.Transparent, // Let the Column's glass show
+                        containerColor = Color.Transparent,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.height(72.dp) // S22: Dropped from 80.dp for a sleeker footprint
+                        modifier = Modifier.height(72.dp)
                     ) {
                         val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
@@ -138,11 +144,11 @@ fun MainScreen(
                 NavHost(
                     navController = tabNavController,
                     startDestination = BottomNavTab.Home.route,
-                    // THE SLY GLIDE: Tighter, faster animations optimized for high-refresh screens
+                    // THE SLY GLIDE: Optimized lateral transitions
                     enterTransition = {
                         slideInHorizontally(
-                            initialOffsetX = { 100 }, // Dropped from 300 to 100
-                            animationSpec = tween(300, easing = FastOutSlowInEasing) // Faster duration
+                            initialOffsetX = { 100 },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeIn(animationSpec = tween(300))
                     },
                     exitTransition = {
@@ -201,7 +207,7 @@ fun MainScreen(
             ),
             exit = slideOutVertically(
                 targetOffsetY = { it },
-                animationSpec = tween(400, easing = FastOutSlowInEasing) // Slightly faster exit
+                animationSpec = tween(400, easing = FastOutSlowInEasing)
             )
         ) {
             FullPlayerScreen(
@@ -215,7 +221,6 @@ fun MainScreen(
         }
 
         // --- LAYER 4: THE Z-AXIS ZENITH (Scanning Overlay) ---
-        // This sits above absolutely everything, including the Full Player and Bottom Nav
         if (uiState.isScanning) {
             ScanningOverlay(
                 progress = uiState.scanProgress,

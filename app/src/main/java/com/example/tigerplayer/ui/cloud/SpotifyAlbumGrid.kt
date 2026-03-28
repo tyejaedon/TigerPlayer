@@ -45,14 +45,24 @@ fun SpotifyAlbumsGrid(
             CircularProgressIndicator(color = SpotifyGreen)
         }
     } else {
+        // ... inside SpotifyAlbumsGrid ...
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 120.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = 16.dp,
+                end = 16.dp,
+                bottom = 120.dp
+            ),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(albums) { album ->
+            items(
+                items = albums,
+                // THE FIX: The Performance Anchor
+                key = { it.id }
+            ) { album ->
                 SpotifyAlbumCard(
                     name = album.name,
                     artist = album.artists.firstOrNull()?.name ?: "Various",

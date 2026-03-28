@@ -285,7 +285,7 @@ fun LibraryHeader(
         Box(modifier = Modifier.weight(1f)) {
 
             // --- THE TITLE ---
-            androidx.compose.animation.AnimatedVisibility(
+            this@Row.AnimatedVisibility(
                 visible = !isSearchActive,
                 enter = fadeIn() + expandHorizontally(),
                 exit = fadeOut() + shrinkHorizontally()
@@ -300,7 +300,7 @@ fun LibraryHeader(
             }
 
             // --- THE SEARCH INPUT ---
-            androidx.compose.animation.AnimatedVisibility(
+            this@Row.AnimatedVisibility(
                 visible = isSearchActive,
                 enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End),
                 exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End)
@@ -311,8 +311,7 @@ fun LibraryHeader(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp) // Sleeker height for S22
-                        .focusRequester(focusRequester) // Attach focus anchor
-                        .glassEffect(CircleShape), // REMOVED the redundant .background()
+                        .focusRequester(focusRequester),
                     placeholder = {
                         Text("Search archives...", color = placeholderColor)
                     },

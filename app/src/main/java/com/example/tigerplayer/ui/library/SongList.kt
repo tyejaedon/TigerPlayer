@@ -23,6 +23,7 @@ import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.tigerGlow
@@ -34,18 +35,17 @@ import java.util.concurrent.TimeUnit
 // ==========================================
 // --- 1. THE MAIN SONG ITEM (Library/Search) ---
 // ==========================================
-
 @Composable
 fun SongItem(
     track: AudioTrack,
     isActive: Boolean,
     isPlaying: Boolean,
     onClick: () -> Unit,
-    onMoreClick: () -> Unit
+    onMoreClick: () -> Unit // This is the trigger
 ) {
-    val PrimaryText = MaterialTheme.colorScheme.onSurface
-    val SecondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-    val ArmorBorder = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+    val primaryText = MaterialTheme.colorScheme.onSurface
+    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -75,7 +75,7 @@ fun SongItem(
                     modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(WitcherIcons.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+                    Icon(WitcherIcons.VolumeUp, null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -86,7 +86,7 @@ fun SongItem(
             Text(
                 text = track.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (isActive) AardBlue else MaterialTheme.colorScheme.onSurface,
+                color = if (isActive) MaterialTheme.aardBlue else primaryText,
                 fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -94,7 +94,7 @@ fun SongItem(
             Text(
                 text = "${track.artist} • ${track.album.uppercase()}",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (isActive) AardBlue.copy(alpha = 0.7f) else SecondaryText,
+                color = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.7f) else secondaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 letterSpacing = 0.5.sp
@@ -105,13 +105,13 @@ fun SongItem(
             Text(
                 text = formatDuration(track.durationMs),
                 style = MaterialTheme.typography.labelSmall,
-                color = SecondaryText.copy(alpha = 0.5f),
+                color = secondaryText.copy(alpha = 0.5f),
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
 
         IconButton(onClick = onMoreClick) {
-            Icon(WitcherIcons.Options, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+            Icon(WitcherIcons.Options, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
         }
     }
 }

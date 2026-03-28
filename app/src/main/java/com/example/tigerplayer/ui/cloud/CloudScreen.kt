@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -42,7 +43,11 @@ fun CloudScreen(
     val playlists by viewModel.filteredPlaylists.collectAsState()
     val albums by viewModel.filteredAlbums.collectAsState()
     val isConnected by viewModel.isSpotifyConnected.collectAsState()
+
+    // THE FIX: Unified connectivity state
     val isLoadingTracks by viewModel.isLoadingTracks.collectAsState()
+    val isLoadingAlbums by viewModel.isLoadingAlbums.collectAsState()
+    val isSyncing = isLoadingTracks || isLoadingAlbums
 
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Playlists", "Albums")
@@ -71,22 +76,19 @@ fun CloudScreen(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 CloudHeader(
-                    title = "Cloud Archives",
+                    title = "CLOUD ARCHIVES",
                     query = query,
                     onQueryChange = { viewModel.onSearchQueryChange(it) }
                 )
 
-                SecondaryTabRow(
+                // THE FIX: Safe TabRow with correct position mapping
+                TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
                     divider = {},
-                    // THE FIX: Remove "tabPositions ->" and use the selectedTab index directly
-                    indicator = {
+                    indicator = { tabPositions ->
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(
-                                selectedTabIndex = selectedTab,
-                                matchContentSize = false // Set to true if you want the bar to match text width
-                            ),
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
                             height = 3.dp,
                             color = SpotifyGreen
                         )
@@ -102,7 +104,7 @@ fun CloudScreen(
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 1.sp,
-                                    color = if (selectedTab == index) SpotifyGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                    color = if (selectedTab == index) SpotifyGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                 )
                             }
                         )
@@ -110,7 +112,7 @@ fun CloudScreen(
                 }
 
                 Box(modifier = Modifier.fillMaxSize()) {
-                    if (isLoadingTracks && playlists.isEmpty() && albums.isEmpty()) {
+                    if (isSyncing && playlists.isEmpty() && albums.isEmpty()) {
                         CircularProgressIndicator(
                             modifier = Modifier.align(Alignment.Center),
                             color = SpotifyGreen
@@ -136,7 +138,8 @@ fun CloudScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CloudHeader(title: String, query: String, onQueryChange: (String) -> Unit) {
-    Column(modifier = Modifier.padding(24.dp)) {
+    // THE FIX: Added statusBarsPadding to push it safely below the camera cutout
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp).statusBarsPadding()) {
         Text(
             text = title,
             style = MaterialTheme.typography.displaySmall,
@@ -149,16 +152,30 @@ private fun CloudHeader(title: String, query: String, onQueryChange: (String) ->
         TextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth().height(56.dp).glassEffect(MaterialTheme.shapes.medium),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp) // Sleeker profile for S22
+                .glassEffect(CircleShape),
             placeholder = { Text("Search the cloud...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
-            leadingIcon = { Icon(WitcherIcons.Search, null, tint = SpotifyGreen) },
+            leadingIcon = { Icon(WitcherIcons.Search, null, tint = SpotifyGreen, modifier = Modifier.size(20.dp)) },
+            // THE FIX: Quick Clear Ritual
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(WitcherIcons.Close, "Clear", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                    }
+                }
+            },
             colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedIndicatorColor = SpotifyGreen,
-                unfocusedIndicatorColor = Color.Transparent
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = SpotifyGreen
             ),
-            shape = MaterialTheme.shapes.medium,
+            shape = CircleShape,
             singleLine = true
         )
     }
@@ -258,7 +275,11 @@ private fun ArchiveGrid(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        items(items) { item ->
+        // THE FIX: Stutter Removal via Performance Keys
+        items(
+            items = items,
+            key = { it.id }
+        ) { item ->
             Column(modifier = Modifier.bounceClick { onClick(item.id, item.name, item.imageUrl) }) {
                 AsyncImage(
                     model = item.imageUrl,
