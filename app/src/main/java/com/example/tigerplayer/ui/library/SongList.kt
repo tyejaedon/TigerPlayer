@@ -4,15 +4,17 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -35,86 +37,7 @@ import java.util.concurrent.TimeUnit
 // ==========================================
 // --- 1. THE MAIN SONG ITEM (Library/Search) ---
 // ==========================================
-@Composable
-fun SongItem(
-    track: AudioTrack,
-    isActive: Boolean,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    onMoreClick: () -> Unit // This is the trigger
-) {
-    val primaryText = MaterialTheme.colorScheme.onSurface
-    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .bounceClick { onClick() }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Thumbnail with Armor Border
-        Box(
-            modifier = Modifier
-                .size(54.dp)
-                .then(if (isActive) Modifier.tigerGlow() else Modifier)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
-        ) {
-            AsyncImage(
-                model = track.artworkUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                fallback = painterResource(R.drawable.ic_tiger_logo),
-                modifier = Modifier.fillMaxSize()
-            )
-
-            if (isActive && isPlaying) {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(WitcherIcons.VolumeUp, null, tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (isActive) MaterialTheme.aardBlue else primaryText,
-                fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "${track.artist} • ${track.album.uppercase()}",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.7f) else secondaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                letterSpacing = 0.5.sp
-            )
-        }
-
-        if (!isActive) {
-            Text(
-                text = formatDuration(track.durationMs),
-                style = MaterialTheme.typography.labelSmall,
-                color = secondaryText.copy(alpha = 0.5f),
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-        }
-
-        IconButton(onClick = onMoreClick) {
-            Icon(WitcherIcons.Options, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-        }
-    }
-}
 
 // ==========================================
 // --- 2. THE CHAPTER ROW (Playlists/Albums) ---
@@ -134,54 +57,102 @@ fun ArchiveSongRow(
     onClick: () -> Unit,
     onOptionsClick: () -> Unit
 ) {
-    val PrimaryText = MaterialTheme.colorScheme.onSurface
-    val SecondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-    val ArmorBorder = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val aardPulse = if (isCurrentTrack && isPlaying) rememberAardPulse() else 1f
+
+    // THE FIX: Format the duration once here to avoid redundant calls
+    val displayDuration = remember(track.durationMs) { formatDuration(track.durationMs) }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp) // Tighter vertical spacing for lists
             .bounceClick { onClick() }
             .glassEffect(MaterialTheme.shapes.large),
-        color = if (isCurrentTrack) AardBlue.copy(alpha = 0.1f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
-        border = if (isCurrentTrack) BorderStroke(1.dp, AardBlue.copy(alpha = 0.4f)) else null
+        // S22 AMOLED Optimization: Deep translucency
+        color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.08f)
+        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f),
+        border = if (isCurrentTrack) BorderStroke(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.3f))
+        else BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .padding(10.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = track.artworkUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                fallback = painterResource(R.drawable.ic_tiger_logo),
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), MaterialTheme.shapes.medium)
-            )
+            // --- 1. THE ARTWORK ARMOR ---
+            Box(contentAlignment = Alignment.Center) {
+                AsyncImage(
+                    model = track.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    fallback = painterResource(R.drawable.ic_tiger_logo),
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), MaterialTheme.shapes.medium)
+                        // Pulsing alpha when active
+                        .graphicsLayer { alpha = if (isCurrentTrack && isPlaying) aardPulse else 1f }
+                )
+
+                // Active Pulse Indicator (The Witcher's Sign)
+                if (isCurrentTrack && isPlaying) {
+                    Icon(
+                        imageVector = WitcherIcons.VolumeUp,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp).shadow(8.dp, CircleShape)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.width(16.dp))
 
+            // --- 2. THE METADATA ---
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
-                    color = if (isCurrentTrack) AardBlue else MaterialTheme.colorScheme.onSurface,
+                    color = if (isCurrentTrack) MaterialTheme.aardBlue else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
                     text = track.artist.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isCurrentTrack) AardBlue.copy(alpha = 0.7f) else SecondaryText,
-                    letterSpacing = 1.sp
+                    color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.7f) else secondaryText,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            IconButton(onClick = onOptionsClick) {
-                Icon(WitcherIcons.Options, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), modifier = Modifier.size(20.dp))
+            // --- 3. THE DURATION (New Addition) ---
+            Text(
+                text = displayDuration,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.6f) else secondaryText,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+
+            // --- 4. OPTIONS PORTAL ---
+            IconButton(
+                onClick = onOptionsClick,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = WitcherIcons.Options,
+                    contentDescription = "Song Options",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
@@ -197,18 +168,4 @@ private fun formatDuration(durationMs: Long): String {
     return String.format("%02d:%02d", minutes, seconds)
 }
 
-@Composable
-private fun rememberAardPulse(): Float {
-    val infiniteTransition = rememberInfiniteTransition(label = "AardPulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "Alpha"
-    )
-    return alpha
-}
 

@@ -116,7 +116,10 @@ fun PlaylistDetailsScreen(
             if (playlistTracks.isEmpty()) {
                 item { EmptyArchiveState("The grimoire is empty.") }
             } else {
-                itemsIndexed(items = playlistTracks, key = { _, track -> track.id }) { index, track ->
+                itemsIndexed(
+                    items = playlistTracks,
+                    key = { index, track -> "playlist_track_${track.id}_$index" }
+                ) { index, track ->
                     val isCurrent = uiState.currentTrack?.id == track.id
 
                     ChapterSongRow(
