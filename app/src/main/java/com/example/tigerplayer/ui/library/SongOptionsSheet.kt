@@ -1,29 +1,37 @@
 package com.example.tigerplayer.ui.library
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.igniRed
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,114 +45,145 @@ fun SongOptionsSheet(
 ) {
     var showPlaylistSelector by remember { mutableStateOf(false) }
 
+    // THE FIX: Set containerColor to Transparent to prevent the "White Box" glitch.
+    // We will draw our own glass container inside.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        scrimColor = Color.Black.copy(alpha = 0.5f)
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        scrimColor = Color.Black.copy(alpha = 0.7f),
+        dragHandle = {
+            // Custom Glass Drag Handle
+            Box(
+                Modifier
+                    .padding(vertical = 12.dp)
+                    .size(36.dp, 4.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), CircleShape)
+            )
+        }
     ) {
-        Column(
+        // --- 1. THE PROFOUND GLASS BODY ---
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 32.dp, start = 16.dp, end = 16.dp)
-        ) {
-            // --- HEADER WITH ARTWORK ---
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                AsyncImage(
-                    model = track.artworkUri,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(MaterialTheme.shapes.small)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
-                    contentScale = ContentScale.Crop,
-                    fallback = painterResource(R.drawable.ic_tiger_logo) // Ensure you have this
+                .padding(start = 8.dp, end = 8.dp, bottom = 12.dp)
+                .glassEffect(RoundedCornerShape(32.dp)), // Heavy rounding
+            color = Color.Transparent, // Managed by glassEffect
+            shape = RoundedCornerShape(32.dp),
+            border = BorderStroke(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.2f), // Specular rim light
+                        Color.Transparent
+                    )
                 )
-                Column(modifier = Modifier.padding(start = 12.dp)) {
-                    Text(
-                        text = track.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // --- HEADER: THE MEDALLION ---
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    AsyncImage(
+                        model = track.artworkUri,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop,
+                        fallback = painterResource(R.drawable.ic_tiger_logo)
                     )
-                    Text(
-                        text = track.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Column(modifier = Modifier.padding(start = 16.dp)) {
+                        Text(
+                            text = track.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = track.artist.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+
+                // --- ACTIONS RITUAL ---
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SheetActionRow(
+                        icon = WitcherIcons.Play,
+                        text = "Play Next",
+                        accentColor = MaterialTheme.aardBlue
+                    ) {
+                        onPlayNext()
+                        onDismiss()
+                    }
+
+                    SheetActionRow(
+                        icon = WitcherIcons.Add,
+                        text = "Add to Playlist",
+                        accentColor = MaterialTheme.aardBlue
+                    ) {
+                        showPlaylistSelector = true
+                    }
+
+                    SheetActionRow(
+                        icon = WitcherIcons.Album,
+                        text = "Go to Album",
+                        accentColor = MaterialTheme.igniRed
+                    ) {
+                        onGoToAlbum(track.album)
+                        onDismiss()
+                    }
                 }
             }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-
-            // --- ACTIONS ---
-            SheetActionRow(icon = WitcherIcons.Play, text = "Play Next", onClick = {
-                onPlayNext()
-                onDismiss()
-            })
-
-            SheetActionRow(icon = WitcherIcons.Add, text = "Add to Playlist", onClick = {
-                showPlaylistSelector = true
-            })
-
-            SheetActionRow(icon = WitcherIcons.Album, text = "Go to Album", onClick = {
-                onGoToAlbum(track.album)
-                onDismiss()
-            })
         }
     }
 
-    // --- THE PLAYLIST SELECTOR DIALOG ---
+    // --- 2. THE FLOATING GRIMOIRE (Playlist Selector) ---
     if (showPlaylistSelector) {
         Dialog(onDismissRequest = { showPlaylistSelector = false }) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.6f)
-                    .glassEffect(MaterialTheme.shapes.large),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.background.copy(alpha = 0.95f)
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.5f)
+                    .glassEffect(MaterialTheme.shapes.extraLarge),
+                color = Color.Transparent,
+                shape = MaterialTheme.shapes.extraLarge,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        text = "ADD TO COLLECTION",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
+                        text = "SELECT COLLECTION",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.padding(bottom = 20.dp)
                     )
 
                     if (playlists.isEmpty()) {
-                        Text("No custom collections forged yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No grimoires forged yet.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                        }
                     } else {
-                        LazyColumn {
-                            items(playlists) { playlist ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .bounceClick {
-                                            onAddToPlaylist(playlist.id)
-                                            showPlaylistSelector = false
-                                            onDismiss() // Close the whole bottom sheet
-                                        }
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(WitcherIcons.Playlist, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Text(
-                                        text = playlist.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(playlists, key = { it.id }) { playlist ->
+                                PlaylistSelectionRow(playlist) {
+                                    onAddToPlaylist(playlist.id)
+                                    showPlaylistSelector = false
+                                    onDismiss()
                                 }
                             }
                         }
@@ -156,17 +195,58 @@ fun SongOptionsSheet(
 }
 
 @Composable
-private fun SheetActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
+private fun SheetActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .bounceClick { onClick() }
-            .padding(vertical = 16.dp, horizontal = 8.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(vertical = 12.dp, horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(imageVector = icon, contentDescription = text, tint = MaterialTheme.colorScheme.onSurface)
+        // The Icon Orb
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(accentColor.copy(alpha = 0.15f), CircleShape)
+                .border(1.dp, accentColor.copy(alpha = 0.2f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = accentColor, modifier = Modifier.size(20.dp))
+        }
         Spacer(modifier = Modifier.width(16.dp))
-        Text(text = text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+@Composable
+private fun PlaylistSelectionRow(playlist: Playlist, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .clickable { onClick() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(WitcherIcons.Playlist, null, tint = MaterialTheme.aardBlue)
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = playlist.name,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

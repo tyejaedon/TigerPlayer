@@ -13,6 +13,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -60,6 +61,7 @@ import com.example.tigerplayer.ui.library.SongOptionsSheet
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -76,45 +78,27 @@ private val IgniRed = Color(0xFFF11F1A)
 private val AardBlue = Color(0xFF4FC3F7)
 private val SpotifyGreen = Color(0xFF1DB954)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FullPlayerScreen(
     viewModel: PlayerViewModel,
     onCollapse: () -> Unit,
     onNavigateToAlbum: (String) -> Unit
 ) {
-    // --- 1. SLICED STATE COLLECTION ---
-    val currentTrack by remember(viewModel) {
-        viewModel.uiState.map { it.currentTrack }.distinctUntilChanged()
-    }.collectAsState(initial = null)
-
-    val track = currentTrack ?: return
+    // --- 1. SINGLE SOURCE OF TRUTH ---
+    val uiState by viewModel.uiState.collectAsState()
+    val track = uiState.currentTrack ?: return
     val context = LocalContext.current
 
-    val currentLyrics by remember(viewModel) {
-        viewModel.uiState.map { it.currentLyrics }.distinctUntilChanged()
-    }.collectAsState(initial = null)
+    // --- 2. THE MOTION THROTTLE ---
+    val motionThrottle by animateFloatAsState(
+        targetValue = if (uiState.isPlaying) 1f else 0f,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "MotionThrottle"
+    )
 
-    val queue by remember(viewModel) {
-        viewModel.uiState.map { it.queue }.distinctUntilChanged()
-    }.collectAsState(initial = emptyList())
-
-    val artistImageUrl by remember(viewModel) {
-        viewModel.uiState.map { it.artistImageUrl }.distinctUntilChanged()
-    }.collectAsState(initial = null)
-
-    val isPlaying by remember(viewModel) {
-        viewModel.uiState.map { it.isPlaying }.distinctUntilChanged()
-    }.collectAsState(initial = false)
-    val playlists by remember(viewModel) {
-        viewModel.customPlaylists
-    }.collectAsState(initial = emptyList())
-
+    // --- 3. UI STATE ---
     var showOptionsSheet by remember { mutableStateOf(false) }
-
-    // The trigger for the portal
-
-    // --- 2. THEME-AWARE STATE HOISTING ---
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
@@ -122,19 +106,16 @@ fun FullPlayerScreen(
 
     val themeSurface = MaterialTheme.colorScheme.surface
     val themeOnSurface = MaterialTheme.colorScheme.onSurface
-
     var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
     var dynamicTextColor by remember(themeOnSurface) { mutableStateOf(themeOnSurface) }
     var dynamicSecondaryTextColor by remember(themeOnSurface) { mutableStateOf(themeOnSurface.copy(alpha = 0.6f)) }
 
-    // Gesture Animation State
     val scope = rememberCoroutineScope()
     val offsetXAnimate = remember { Animatable(0f) }
     val dragThreshold = 150f
 
-    // --- 3. THE DYNAMIC COLOR RITUAL ---
-    val imageUrl = if (showLyrics) artistImageUrl ?: track.artworkUri else track.artworkUri
-
+    // --- 4. COLOR EXTRACTION ---
+    val imageUrl = if (showLyrics) uiState.artistImageUrl ?: track.artworkUri else track.artworkUri
     val imageRequest = remember(imageUrl) {
         ImageRequest.Builder(context)
             .data(imageUrl)
@@ -144,57 +125,68 @@ fun FullPlayerScreen(
                 val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                 bitmap?.let { b ->
                     Palette.from(b).generate { palette ->
-                        val dominantSwatch = palette?.dominantSwatch ?: palette?.mutedSwatch
-                        dominantBgColor = dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
-
-                        val luminance = ColorUtils.calculateLuminance(dominantBgColor.value.toLong().toInt())
-                        if (luminance > 0.4) {
-                            dynamicTextColor = Color(0xFF1A1A1A)
-                            dynamicSecondaryTextColor = Color(0xFF1A1A1A).copy(alpha = 0.7f)
-                        } else {
-                            dynamicTextColor = Color(0xFFF5F5F5)
-                            dynamicSecondaryTextColor = Color(0xFFF5F5F5).copy(alpha = 0.7f)
-                        }
+                        dominantBgColor = palette?.dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
+                        val luminance = ColorUtils.calculateLuminance(dominantBgColor.toArgb())
+                        dynamicTextColor = if (luminance > 0.4) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
+                        dynamicSecondaryTextColor = dynamicTextColor.copy(alpha = 0.7f)
                     }
                 }
             })
             .build()
     }
 
-    // --- 4. THE UI STRUCTURE ---
-    // THE MASTER BOX handles the vertical swipe to close
+    // --- 5. DRIFT ENGINE ---
+    val infiniteTransition = rememberInfiniteTransition(label = "ArtworkDrift")
+    val driftScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f, targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(tween(25000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftScale"
+    )
+    val driftPanX by infiniteTransition.animateFloat(
+        initialValue = -25f, targetValue = 25f,
+        animationSpec = infiniteRepeatable(tween(18000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftPanX"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(dominantBgColor)
+            .background(Color.Black)
             .pointerInput(Unit) {
-                // Vertical drag to close the player
-                detectDragGestures(
-                    onDragEnd = { /* Cleanup if needed */ }
-                ) { change, dragAmount ->
+                detectDragGestures { change, dragAmount ->
                     change.consume()
-                    // If they swipe down fast enough
-                    if (dragAmount.y > 20) {
-                        onCollapse()
-                    }
+                    if (dragAmount.y > 20) onCollapse()
                 }
             }
     ) {
-        // --- LAYER 1: BACKDROP SCRIM ---
+        // LAYER 1: BACKDROP
+        AsyncImage(
+            model = imageRequest,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val scaleFactor = 1f + ((driftScale - 1f) * motionThrottle)
+                    scaleX = scaleFactor
+                    scaleY = scaleFactor
+                    translationX = offsetXAnimate.value + (driftPanX * motionThrottle)
+                    alpha = 0.45f + (0.55f * motionThrottle)
+                }
+        )
+
+        // LAYER 2: SCRIM
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to dominantBgColor.copy(alpha = 0.1f),
-                        0.4f to dominantBgColor.copy(alpha = 0.6f),
-                        0.8f to dominantBgColor.copy(alpha = 0.98f),
-                        1.0f to dominantBgColor
+                        0.0f to Color.Black.copy(alpha = 0.3f),
+                        0.4f to dominantBgColor.copy(alpha = 0.5f * (0.8f + (0.2f * motionThrottle))),
+                        1.0f to dominantBgColor.copy(alpha = 0.98f)
                     )
                 )
         )
 
-        // --- LAYER 2: FOREGROUND UI ---
+        // LAYER 3: FOREGROUND
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -203,279 +195,177 @@ fun FullPlayerScreen(
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // --- HEADER RITUAL ---
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                IconButton(
-                    onClick = onCollapse,
-                    modifier = Modifier.align(Alignment.CenterStart)
-                ) {
-                    Icon(WitcherIcons.Collapse, "Collapse", tint = dynamicTextColor)
-                }
+            HeaderRitual(
+                dynamicTextColor = dynamicTextColor,
+                onCollapse = onCollapse,
+                showLyrics = showLyrics,
+                onToggleLyrics = { showLyrics = it; showQueue = false },
+                showQueue = showQueue,
+                onToggleQueue = { showQueue = it; showLyrics = false },
+                onShowOptions = { showOptionsSheet = true },
+                uiState = uiState
+            )
 
-                var showAlbum by remember { mutableStateOf(false) }
-
-                LaunchedEffect(track.id) {
-                    showAlbum = false
-                    while (isActive) {
-                        delay(5000)
-                        if (track.album.isNotBlank() && !track.album.contains("Unknown", ignoreCase = true)) {
-                            showAlbum = !showAlbum
-                        }
-                    }
-                }
-
-                val currentDisplayText = if (showAlbum) track.album.uppercase() else "NOW PLAYING"
-
-                AnimatedContent(
-                    targetState = currentDisplayText,
-                    transitionSpec = {
-                        val isResettingToNowPlaying = targetState == "NOW PLAYING"
-                        if (isResettingToNowPlaying) {
-                            (slideInVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) { -it } +
-                                    fadeIn(animationSpec = tween(300)) +
-                                    scaleIn(initialScale = 0.9f, animationSpec = tween(400, easing = FastOutSlowInEasing))) togetherWith
-                                    slideOutVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) { it } +
-                                    fadeOut(animationSpec = tween(300)) +
-                                    scaleOut(targetScale = 0.9f, animationSpec = tween(400, easing = FastOutSlowInEasing))
-                        } else {
-                            (slideInVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) { it } +
-                                    fadeIn(animationSpec = tween(300)) +
-                                    scaleIn(initialScale = 0.9f, animationSpec = tween(400, easing = FastOutSlowInEasing))) togetherWith
-                                    slideOutVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) { -it } +
-                                    fadeOut(animationSpec = tween(300)) +
-                                    scaleOut(targetScale = 0.9f, animationSpec = tween(400, easing = FastOutSlowInEasing))
-                        }.using(SizeTransform(clip = false))
-                    },
-                    label = "HeaderTicker",
-                    modifier = Modifier.padding(horizontal = 80.dp)
-                ) { displayedText ->
-                    Text(
-                        text = displayedText,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = dynamicTextColor.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                ) {
-                    IconButton(onClick = { showLyrics = !showLyrics; showQueue = false }) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.Subject,
-                            "Lyrics",
-                            tint = if (showLyrics) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.5f)
-                        )
-                    }
-
-                    IconButton(onClick = { showQueue = !showQueue; showLyrics = false }) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.QueueMusic,
-                            "Queue",
-                            tint = if (showQueue) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.5f)
-                        )
-                    }
-
-                    // THE NEW GUARD: The Options Portal
-                    IconButton(onClick = { showOptionsSheet = true }) {
-                        Icon(
-                            imageVector = WitcherIcons.Options,
-                            contentDescription = "Options",
-                            tint = dynamicTextColor.copy(alpha = 0.5f)
-                        )
-                    }
-                }
-            }
-
-            // --- VIEWPORT (Artwork / Queue / Lyrics) ---
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 AnimatedContent(
                     targetState = if (showQueue) "queue" else if (showLyrics) "lyrics" else "artwork",
+                    transitionSpec = { fadeIn(tween(500)).togetherWith(fadeOut(tween(400))) },
                     label = "ContentAnim"
                 ) { type ->
                     when (type) {
                         "queue" -> QueueDisplay(
-                            queue = queue,
+                            queue = uiState.queue,
                             currentTrackId = track.id,
-                            isPlaying = isPlaying,
+                            isPlaying = uiState.isPlaying,
                             dynamicTextColor = dynamicTextColor,
                             onTrackClick = { viewModel.playTrack(it) },
                             onRemoveFromQueue = { viewModel.removeFromQueue(it) }
                         )
-
                         "lyrics" -> LyricsDisplay(
-                            lyrics = currentLyrics,
-                            viewModel = viewModel,
+                            lyrics = uiState.currentLyrics,
+                            currentPosition = uiState.currentPosition,
                             textColor = dynamicTextColor
                         )
-
                         "artwork" -> {
-                            // --- 1. THE CINEMATIC DRIFT ENGINE ---
-                            val infiniteTransition =
-                                rememberInfiniteTransition(label = "ArtworkDrift")
-
-                            // We use mismatched, prime-number durations (25s, 18s, 22s) so the animations
-                            // desync from each other. This creates an organic, unpredictable floating
-                            // effect rather than a cheap, repeating ping-pong loop.
-                            val driftScale by infiniteTransition.animateFloat(
-                                initialValue = 1.0f,
-                                targetValue = 1.15f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(25000, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Reverse
-                                ),
-                                label = "DriftScale"
-                            )
-
-                            val driftPanX by infiniteTransition.animateFloat(
-                                initialValue = -15f,
-                                targetValue = 15f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(18000, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Reverse
-                                ),
-                                label = "DriftPanX"
-                            )
-
-                            val driftPanY by infiniteTransition.animateFloat(
-                                initialValue = -10f,
-                                targetValue = 10f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(22000, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Reverse
-                                ),
-                                label = "DriftPanY"
-                            )
-
-                            // --- 2. THE VIEWPORT CONTAINER ---
-                            // The Box handles the physical realm: Swipe physics, constraints, and shadows.
                             Box(
                                 modifier = Modifier
-                                    .offset { IntOffset(offsetXAnimate.value.roundToInt(), 0) }
+                                    .fillMaxSize()
                                     .pointerInput(Unit) {
                                         detectHorizontalDragGestures(
                                             onHorizontalDrag = { change, dragAmount ->
                                                 change.consume()
-                                                scope.launch {
-                                                    offsetXAnimate.snapTo(offsetXAnimate.value + (dragAmount * 0.5f))
-                                                }
+                                                scope.launch { offsetXAnimate.snapTo(offsetXAnimate.value + (dragAmount * 0.5f)) }
                                             },
                                             onDragEnd = {
                                                 scope.launch {
-                                                    if (offsetXAnimate.value > dragThreshold) {
-                                                        viewModel.skipToPrevious()
-                                                    } else if (offsetXAnimate.value < -dragThreshold) {
-                                                        viewModel.skipToNext()
-                                                    }
-                                                    offsetXAnimate.animateTo(
-                                                        targetValue = 0f,
-                                                        animationSpec = tween(
-                                                            300,
-                                                            easing = FastOutSlowInEasing
-                                                        )
-                                                    )
+                                                    if (offsetXAnimate.value > dragThreshold) viewModel.skipToPrevious()
+                                                    else if (offsetXAnimate.value < -dragThreshold) viewModel.skipToNext()
+                                                    offsetXAnimate.animateTo(0f, spring(dampingRatio = Spring.DampingRatioLowBouncy))
                                                 }
                                             }
                                         )
                                     }
-                                    .size(320.dp)
-                                    // The neon shadow bleed cast by the extracted Palette color
-                                    .shadow(
-                                        40.dp,
-                                        MaterialTheme.shapes.extraLarge,
-                                        spotColor = dominantBgColor
-                                    )
-                                    .clip(MaterialTheme.shapes.extraLarge)
-                            ) {
-                                // --- 3. THE LIVING CANVAS ---
-                                // The Image handles the visual realm: Drifting slowly within the clipped bounds.
-                                AsyncImage(
-                                    model = imageRequest,
-                                    contentDescription = "Album Art",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize() // Fills the container safely
-                                        .graphicsLayer {
-                                            // Apply the sophisticated parallax only when the music is actively playing
-                                            if (isPlaying) {
-                                                scaleX = driftScale
-                                                scaleY = driftScale
-                                                translationX = driftPanX
-                                                translationY = driftPanY
-                                            }
-                                        }
-                                )
-                            }
+                            )
                         }
                     }
                 }
             }
 
-            // --- TRACK INFO ---
+            // --- THE GLASS DECK ---
             AnimatedVisibility(
                 visible = !showLyrics && !showQueue,
-                enter = fadeIn() + slideInVertically { it / 4 },
-                exit = fadeOut() + slideOutVertically { it / 4 }
+                enter = fadeIn(tween(600)) + slideInVertically(initialOffsetY = { it / 3 }, animationSpec = spring(stiffness = Spring.StiffnessLow)),
+                exit = fadeOut(tween(400)) + slideOutVertically(targetOffsetY = { it / 3 })
             ) {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                        .shadow(elevation = 24.dp * motionThrottle, shape = RoundedCornerShape(32.dp), spotColor = dominantBgColor.copy(alpha = 0.5f))
+                        .clip(RoundedCornerShape(32.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(32.dp))
+                        .padding(vertical = 20.dp, horizontal = 12.dp)
+                ) {
                     TrackInfoCard(
-                        track = track,
-                        viewModel = viewModel,
-                        textColor = dynamicTextColor,
-                        secondaryTextColor = dynamicSecondaryTextColor,
-                        isLiked = isLikedLocally,
-                        onLikeClick = { isLikedLocally = it },
-                        showTechnicalInfo = showTechnicalInfo,
+                        track = track, viewModel = viewModel, textColor = dynamicTextColor,
+                        secondaryTextColor = dynamicSecondaryTextColor, isLiked = isLikedLocally,
+                        onLikeClick = { isLikedLocally = it }, showTechnicalInfo = showTechnicalInfo,
                         onToggleTechInfo = { showTechnicalInfo = it }
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FieryWavySeeker(uiState = uiState, viewModel = viewModel, textColor = dynamicTextColor)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    PlaybackControls(uiState = uiState, viewModel = viewModel, textColor = dynamicTextColor)
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            FieryWavySeeker(viewModel = viewModel, textColor = dynamicTextColor)
-
-            Spacer(modifier = Modifier.height(16.dp))
-            PlaybackControls(viewModel = viewModel, textColor = dynamicTextColor, igniFlickerAlpha = 1f)
-            Spacer(modifier = Modifier.height(24.dp))
         }
-// --- LAYER 4: THE OPTIONS PORTAL ---
+
         if (showOptionsSheet) {
             SongOptionsSheet(
                 track = track,
-                playlists = playlists,
+                playlists = viewModel.customPlaylists.collectAsState(emptyList()).value,
                 onDismiss = { showOptionsSheet = false },
-                onPlayNext = {
-                    viewModel.addToQueue(track)
-                },
-                onAddToPlaylist = { playlistId ->
-                    viewModel.addTrackToPlaylist(playlistId, track)
-                },
+                onPlayNext = { viewModel.addToQueue(track) },
+                onAddToPlaylist = { viewModel.addTrackToPlaylist(it, track) },
                 onGoToAlbum = { albumName ->
-                    // 1. Close the sheet
                     showOptionsSheet = false
-                    // 2. Collapse the player
                     onCollapse()
-                    // 3. Navigate to the album
                     onNavigateToAlbum(albumName)
                 }
             )
         }
-    } // <-- This is the final closing brace of your Master Box
+    }
 }
+
+@Composable
+fun HeaderRitual(
+    dynamicTextColor: Color,
+    onCollapse: () -> Unit,
+    showLyrics: Boolean,
+    onToggleLyrics: (Boolean) -> Unit,
+    showQueue: Boolean,
+    onToggleQueue: (Boolean) -> Unit,
+    onShowOptions: () -> Unit,
+    uiState: PlayerUiState
+) {
+    val track = uiState.currentTrack ?: return
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onCollapse, modifier = Modifier.background(dynamicTextColor.copy(alpha = 0.05f), CircleShape)) {
+                Icon(WitcherIcons.Collapse, "Collapse", tint = dynamicTextColor)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(onClick = { onToggleLyrics(!showLyrics) }) {
+                    Icon(Icons.AutoMirrored.Rounded.Subject, null, tint = if (showLyrics) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.5f))
+                }
+                IconButton(onClick = { onToggleQueue(!showQueue) }) {
+                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = if (showQueue) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.5f)
+                    )
+                }
+                IconButton(onClick = onShowOptions) {
+                    Icon(WitcherIcons.Options, null, tint = dynamicTextColor.copy(alpha = 0.5f))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        var showAlbumTitle by remember { mutableStateOf(false) }
+        LaunchedEffect(track.id) {
+            showAlbumTitle = false
+            while (isActive) {
+                delay(5000)
+                if (track.album.isNotBlank() && !track.album.contains("Unknown", ignoreCase = true)) {
+                    showAlbumTitle = !showAlbumTitle
+                }
+            }
+        }
+
+        AnimatedContent(
+            targetState = if (showAlbumTitle) track.album.uppercase() else "NOW PLAYING",
+            transitionSpec = { (slideInVertically { it } + fadeIn()).togetherWith(slideOutVertically { -it } + fadeOut()) },
+            label = "Ticker"
+        ) { text ->
+            Text(
+                text = text, style = MaterialTheme.typography.labelLarge,
+                color = dynamicTextColor.copy(alpha = 0.6f), fontWeight = FontWeight.Black,
+                letterSpacing = 2.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+
 
 // ==========================================
 // --- TRACK INFO CARD ---
@@ -517,7 +407,7 @@ fun TrackInfoCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp), // Removed vertical padding to tighten the glass deck
         horizontalAlignment = Alignment.Start
     ) {
         Row(
@@ -549,8 +439,6 @@ fun TrackInfoCard(
                 onClick = {
                     val newLikedState = !isLiked
                     onLikeClick(newLikedState)
-                    // Ensure your ViewModel logic exists
-                    // viewModel.addTrackToLikedSongs(track)
                 },
                 modifier = Modifier
                     .padding(start = 16.dp)
@@ -559,7 +447,6 @@ fun TrackInfoCard(
                 Icon(
                     imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                     contentDescription = "Like Song",
-                    // THE FIX: Adaptive IgniRed
                     tint = if (isLiked) MaterialTheme.igniRed else textColor,
                     modifier = Modifier.size(32.dp)
                 )
@@ -568,7 +455,6 @@ fun TrackInfoCard(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- THE MISSING METADATA BADGES RESTORED ---
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val format = track.mimeType.split("/").lastOrNull()?.uppercase() ?: "AUDIO"
 
@@ -580,19 +466,11 @@ fun TrackInfoCard(
             )
 
             if (track.bitrate > 0) {
-                MetadataBadge(
-                    text = "${track.bitrate / 1000} KBPS",
-                    textColor = textColor,
-                    onLongClick = { onToggleTechInfo(true) }
-                )
+                MetadataBadge(text = "${track.bitrate / 1000} KBPS", textColor = textColor, onLongClick = { onToggleTechInfo(true) })
             }
 
             track.year?.let {
-                MetadataBadge(
-                    text = it,
-                    textColor = textColor,
-                    onLongClick = { onToggleTechInfo(true) }
-                )
+                MetadataBadge(text = it, textColor = textColor, onLongClick = { onToggleTechInfo(true) })
             }
         }
     }
@@ -636,14 +514,8 @@ private fun MetadataBadge(
 // ==========================================
 
 @Composable
-fun FieryWavySeeker(
-    viewModel: PlayerViewModel,
-    textColor: Color
-) {
-    val uiState by viewModel.uiState.collectAsState()
+fun FieryWavySeeker(uiState: PlayerUiState, viewModel: PlayerViewModel, textColor: Color) {
     val track = uiState.currentTrack ?: return
-
-    // THE FIX: Adaptive Signs
     val accentColor = if (uiState.isPlaying) MaterialTheme.igniRed else MaterialTheme.aardBlue
 
     var isDragging by remember { mutableStateOf(false) }
@@ -653,36 +525,25 @@ fun FieryWavySeeker(
     val progressValue = (uiState.currentPosition.toFloat() / duration)
     val actualProgress = if (progressValue.isNaN()) 0f else progressValue.coerceIn(0f, 1f)
 
-    val targetProgress = if (isDragging) dragProgress else actualProgress
-
     val animatedProgress by animateFloatAsState(
-        targetValue = if (targetProgress.isNaN()) 0f else targetProgress,
-        animationSpec = if (uiState.isPlaying && !isDragging)
-            tween(1000, easing = LinearEasing)
-        else spring(),
-        label = "SmoothProgress"
+        targetValue = if (isDragging) dragProgress else actualProgress,
+        animationSpec = if (uiState.isPlaying && !isDragging) tween(1000, easing = LinearEasing) else spring(),
+        label = "SeekerAnim"
     )
 
-    val infiniteTransition = rememberInfiniteTransition(label = "WaveMotion")
+    val infiniteTransition = rememberInfiniteTransition(label = "Wave")
     val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2 * Math.PI.toFloat(),
-        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
-        label = "Phase"
+        initialValue = 0f, targetValue = 2 * Math.PI.toFloat(),
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "Phase"
     )
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
+            modifier = Modifier.fillMaxWidth().height(40.dp)
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { isDragging = true },
-                        onDragEnd = {
-                            isDragging = false
-                            viewModel.seekTo((dragProgress * track.durationMs).toLong())
-                        },
+                        onDragEnd = { isDragging = false; viewModel.seekTo((dragProgress * duration).toLong()) },
                         onDragCancel = { isDragging = false }
                     ) { change, _ ->
                         change.consume()
@@ -691,55 +552,44 @@ fun FieryWavySeeker(
                 }
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
-                val centerY = height / 2
+                val centerY = size.height / 2
+                val progressX = size.width * animatedProgress
 
-                val progressX = width * animatedProgress
+                drawLine(textColor.copy(0.2f), Offset(0f, centerY), Offset(size.width, centerY), 4.dp.toPx(), StrokeCap.Round)
 
-                drawLine(
-                    color = textColor.copy(alpha = 0.2f),
-                    start = Offset(0f, centerY),
-                    end = Offset(width, centerY),
-                    strokeWidth = 4.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-
-                val path = androidx.compose.ui.graphics.Path()
-                val waveAmplitude = if (uiState.isPlaying) 12f else 0f
-                val waveFrequency = 0.05f
-
+                val path = Path()
+                val amp = if (uiState.isPlaying) 12f else 0f
                 path.moveTo(0f, centerY)
                 for (x in 0..progressX.toInt() step 5) {
-                    val y = centerY + (waveAmplitude * kotlin.math.sin(x * waveFrequency + phase))
-                    path.lineTo(x.toFloat(), y)
+                    path.lineTo(x.toFloat(), centerY + (amp * sin(x * 0.05f + phase)))
                 }
-
-                drawPath(path = path, color = accentColor, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
-                drawCircle(color = accentColor, radius = 6.dp.toPx(), center = Offset(progressX, centerY + (waveAmplitude * kotlin.math.sin(progressX * waveFrequency + phase))))
+                drawPath(path, accentColor, style = Stroke(4.dp.toPx(), cap = StrokeCap.Round))
+                drawCircle(accentColor, 6.dp.toPx(), Offset(progressX, centerY + (amp * sin(progressX * 0.05f + phase))))
             }
         }
-
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            val displayPosition = if (isDragging) (dragProgress * track.durationMs).toLong() else uiState.currentPosition
-            Text(text = formatDuration(displayPosition), color = textColor.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
-            Text(text = formatDuration(track.durationMs), color = textColor.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
+            Text(formatDuration(if (isDragging) (dragProgress * duration).toLong() else uiState.currentPosition), color = textColor.copy(0.6f), style = MaterialTheme.typography.labelMedium)
+            Text(formatDuration(duration), color = textColor.copy(0.6f), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun PlaybackControls(
+    uiState: PlayerUiState, // Using the monolithic state
     viewModel: PlayerViewModel,
-    textColor: Color,
-    igniFlickerAlpha: Float
+    textColor: Color
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val isPlaying = uiState.isPlaying
+    val aardBlue = MaterialTheme.aardBlue
+    val igniRed = MaterialTheme.igniRed
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // --- LEFT WING: UTILITY ---
         Row(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -749,63 +599,90 @@ fun PlaybackControls(
                 Icon(
                     imageVector = WitcherIcons.Shuffle,
                     contentDescription = "Shuffle",
-                    // THE FIX: Adaptive AardBlue
-                    tint = if (uiState.isShuffleEnabled) MaterialTheme.aardBlue else textColor.copy(alpha = 0.6f)
+                    tint = if (uiState.isShuffleEnabled) aardBlue else textColor.copy(alpha = 0.5f),
+                    modifier = Modifier.size(22.dp)
                 )
             }
             IconButton(
                 onClick = { viewModel.skipToPrevious() },
                 modifier = Modifier.size(56.dp)
             ) {
-                Icon(WitcherIcons.Previous, "Previous", modifier = Modifier.size(32.dp), tint = textColor)
+                Icon(WitcherIcons.Previous, "Previous", modifier = Modifier.size(36.dp), tint = textColor)
             }
         }
 
-        val dynamicPulseTransition = rememberInfiniteTransition(label = "DynamicPulse")
-        val targetPulseScale = if (uiState.isPlaying) 1.15f else 1.0f
-        val dynamicPulseScale by dynamicPulseTransition.animateFloat(
-            initialValue = 1.0f, targetValue = targetPulseScale,
+        // --- THE CENTRAL CORE: THE GLASS ORB ---
+        val infiniteTransition = rememberInfiniteTransition(label = "PulseCore")
+
+        // Dynamic Pulse for the shadow and scale
+        val pulseScale by infiniteTransition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = if (isPlaying) 1.12f else 1.0f,
             animationSpec = infiniteRepeatable(
-                animation = tween(if (uiState.isPlaying) 700 else 2000, easing = FastOutSlowInEasing),
+                animation = tween(if (isPlaying) 800 else 2000, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse
             ),
-            label = "PulsingAnimation"
+            label = "Pulse"
         )
 
-        val isPlaying = uiState.isPlaying
-        val elementTransition = rememberInfiniteTransition(label = "ElementPulse")
-        // These elemental colors remain raw to preserve the exact Fire/Ice visual effect
-        val heatingColor by elementTransition.animateColor(initialValue = Color(0xFFF11F1A), targetValue = Color(0xFFFF9100), animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "Heating")
-        val coolingColor by elementTransition.animateColor(initialValue = Color(0xFF0D47A1), targetValue = Color(0xFF81D4FA), animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "Cooling")
-
-        val color1 by animateColorAsState(if (isPlaying) heatingColor else coolingColor, tween(500), label = "C1")
-        val color2 by animateColorAsState(if (isPlaying) Color(0xFFFFD700) else Color(0xFFE1F5FE), tween(500), label = "C2")
-
-        val gradientBrush = Brush.linearGradient(colors = listOf(color1, color2))
-        val actionIcon = if (isPlaying) Icons.Rounded.LocalFireDepartment else Icons.Rounded.AcUnit
+        // Elemental Color Shift
+        val coreColor by animateColorAsState(
+            targetValue = if (isPlaying) igniRed else aardBlue,
+            animationSpec = tween(600, easing = FastOutSlowInEasing),
+            label = "CoreColor"
+        )
 
         Box(
             modifier = Modifier
-                .size(80.dp)
+                .size(84.dp)
+                // 1. The Neon Bleed: The shadow pulses with the music
+                .shadow(
+                    elevation = (12.dp * pulseScale),
+                    shape = CircleShape,
+                    spotColor = coreColor.copy(alpha = 0.6f),
+                    ambientColor = Color.Transparent
+                )
                 .clip(CircleShape)
-                .background(brush = gradientBrush)
-                .graphicsLayer {
-                    scaleX = dynamicPulseScale;
-                    scaleY = dynamicPulseScale;
-                    alpha = if (!isPlaying) 1.0f else igniFlickerAlpha
-                }
-                .bounceClick { viewModel.togglePlayPause() }
-                .padding(4.dp),
+                // 2. The Glass Layering
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            coreColor.copy(alpha = 0.25f),
+                            coreColor.copy(alpha = 0.05f)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.5.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.4f),
+                            coreColor.copy(alpha = 0.1f)
+                        )
+                    ),
+                    shape = CircleShape
+                )
+                .bounceClick { viewModel.togglePlayPause() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = actionIcon,
-                contentDescription = "Play/Pause",
-                modifier = Modifier.size(48.dp),
-                tint = if (ColorUtils.calculateLuminance(color1.toArgb()) > 0.5) Color.Black else Color.White
-            )
+            // 3. The Animated Icon Transition
+            AnimatedContent(
+                targetState = isPlaying,
+                transitionSpec = {
+                    (scaleIn(tween(400)) + fadeIn()).togetherWith(scaleOut(tween(400)) + fadeOut())
+                },
+                label = "PlayPauseAnim"
+            ) { playing ->
+                Icon(
+                    imageVector = if (playing) WitcherIcons.Pause else WitcherIcons.Play,
+                    contentDescription = "Play/Pause",
+                    tint = if (playing) Color.White else coreColor,
+                    modifier = Modifier.size(38.dp)
+                )
+            }
         }
 
+        // --- RIGHT WING: UTILITY ---
         Row(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -815,14 +692,17 @@ fun PlaybackControls(
                 onClick = { viewModel.skipToNext() },
                 modifier = Modifier.size(56.dp)
             ) {
-                Icon(WitcherIcons.Next, "Next", modifier = Modifier.size(32.dp), tint = textColor)
+                Icon(WitcherIcons.Next, "Next", modifier = Modifier.size(36.dp), tint = textColor)
             }
             IconButton(onClick = { viewModel.toggleRepeat() }) {
                 Icon(
-                    imageVector = WitcherIcons.Repeat,
+                    imageVector = when (uiState.repeatMode) {
+                        Player.REPEAT_MODE_ONE -> WitcherIcons.RepeatOne
+                        else -> WitcherIcons.Repeat
+                    },
                     contentDescription = "Repeat",
-                    // THE FIX: Assuming you have access to androidx.media3.common.Player
-                    tint = if (uiState.repeatMode != androidx.media3.common.Player.REPEAT_MODE_OFF) MaterialTheme.aardBlue else textColor.copy(alpha = 0.6f)
+                    tint = if (uiState.repeatMode != Player.REPEAT_MODE_OFF) aardBlue else textColor.copy(alpha = 0.5f),
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
@@ -931,62 +811,46 @@ private fun parseLrc(lrc: String?): List<LyricLine> {
 }
 
 @Composable
-private fun LyricsDisplay(lyrics: String?, viewModel: PlayerViewModel, textColor: Color) {
+private fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Color) {
     if (lyrics.isNullOrBlank()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "FETCHING LYRICS HANG ON!", color = textColor.copy(alpha = 0.4f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+        Box(Modifier.fillMaxSize(), Alignment.Center) {
+            Text("NO LYRICS FOUND", color = textColor.copy(0.4f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
         }
     } else {
-        val parsedLyrics = remember(lyrics) { parseLrc(lyrics) }
+        val parsed = remember(lyrics) { parseLrc(lyrics) }
+        val listState = rememberLazyListState()
+        val activeIndex = remember(currentPosition, parsed) {
+            parsed.indexOfLast { it.timeMs <= currentPosition }.coerceAtLeast(0)
+        }
 
-        if (parsedLyrics.isEmpty()) {
-            val scrollState = rememberScrollState()
-            Text(text = lyrics, color = textColor, modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp).padding(bottom = 200.dp), style = MaterialTheme.typography.titleLarge.copy(lineHeight = 38.sp, fontWeight = FontWeight.Bold), textAlign = TextAlign.Center)
-        } else {
-            val listState = rememberLazyListState()
-            val currentPositionState = remember(viewModel) { viewModel.uiState.map { it.currentPosition } }.collectAsState(initial = 0L)
+        LaunchedEffect(activeIndex) { listState.animateScrollToItem(activeIndex) }
 
-            val activeIndex by remember(parsedLyrics) {
-                derivedStateOf {
-                    val currentMs = currentPositionState.value
-                    parsedLyrics.indexOfLast { it.timeMs <= currentMs }.coerceAtLeast(0)
-                }
-            }
-
-            LaunchedEffect(activeIndex) {
-                if (parsedLyrics.isNotEmpty() && !listState.isScrollInProgress) {
-                    listState.animateScrollToItem(index = activeIndex, scrollOffset = 0)
-                }
-            }
-
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val verticalPadding = (maxHeight / 2) - 24.dp
-
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = verticalPadding, bottom = verticalPadding),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    itemsIndexed(parsedLyrics, key = { _, line -> line.timeMs }) { index, line ->
-                        val isActive = index == activeIndex
-                        val alpha by animateFloatAsState(if (isActive) 1f else 0.3f, tween(400), label = "Alpha")
-                        val scale by animateFloatAsState(if (isActive) 1.15f else 1f, spring(dampingRatio = Spring.DampingRatioLowBouncy), label = "Scale")
-
-                        Text(
-                            text = if (line.text.isBlank()) "•••" else line.text,
-                            color = if (isActive) IgniRed else textColor.copy(alpha = alpha),
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold, lineHeight = 38.sp, fontSize = if (isActive) 24.sp else 20.sp),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 24.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-                        )
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 200.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            itemsIndexed(
+                items = parsed,
+                // THE FIX: Salted timestamp prevents collision in duplicate LRC lines
+                key = { index, line -> "lyric_${line.timeMs}_$index" }
+            ) { index, line ->
+                val isActive = index == activeIndex
+                Text(
+                    text = line.text.ifBlank { "•••" },
+                    color = if (isActive) MaterialTheme.igniRed else textColor.copy(if (isActive) 1f else 0.3f),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black, fontSize = if (isActive) 24.sp else 20.sp),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp).graphicsLayer {
+                        val s = if (isActive) 1.1f else 1f
+                        scaleX = s; scaleY = s
                     }
-                }
+                )
             }
         }
     }
 }
-
 
 
 

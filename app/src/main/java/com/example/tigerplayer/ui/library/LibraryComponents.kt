@@ -48,6 +48,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.toArgb
@@ -189,23 +190,40 @@ fun LikedSongsCard(trackCount: Int, onClick: () -> Unit) {
     }
 }
 @Composable
-fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
+fun PlaylistRow(
+    playlist: Playlist,
+    modifier: Modifier = Modifier, // THE FIX: Essential for animateItem() to work
+    onClick: () -> Unit
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .clip(MaterialTheme.shapes.large) // Keeps the ripple contained
-            .bounceClick { onClick() } // S22 Optimization: Tactile mechanical feedback
-            .padding(horizontal = 4.dp, vertical = 8.dp), // Tighter inner padding to align with headers
+            .clip(MaterialTheme.shapes.large)
+            .bounceClick { onClick() }
+            // 1. THE GLASS ANCHOR: A subtle inner glow for the row
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // THE MEDALLION
+        // --- THE MEDALLION (Glass-Cut Edition) ---
         Box(
             modifier = Modifier
-                .size(48.dp) // S22 Optimization: Scaled down from 52dp
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.shapes.medium)
-                // Added a diamond-cut border to match the ActionPlaylistRow
-                .border(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), MaterialTheme.shapes.medium),
+                .size(48.dp)
+                .shadow(4.dp, MaterialTheme.shapes.medium, spotColor = AardBlue.copy(alpha = 0.2f))
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                // 2. DIAMOND-CUT BORDER: Specular highlight on the icon box
+                .border(
+                    width = 0.5.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = MaterialTheme.shapes.medium
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -218,35 +236,37 @@ fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        // THE METADATA
+        // --- THE METADATA ---
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = playlist.name,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black, // Bumped to Black for the Vanguard look
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1, // CRUCIAL: Prevents long playlist names from breaking the S22 layout
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
             Text(
-                text = if (playlist.trackCount == 1) "1 CHANT" else "${playlist.trackCount} CHANTS", // Thematic consistency
+                text = if (playlist.trackCount == 1) "1 CHANT" else "${playlist.trackCount} CHANTS",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                letterSpacing = 0.5.sp
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
             )
         }
 
-        // NAVIGATION HINT
+        // --- NAVIGATION HINT ---
         Icon(
-            // Use WitcherIcons.Next if you have a chevron arrow, otherwise keep it subtle
             imageVector = WitcherIcons.Next,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
             modifier = Modifier.size(16.dp)
         )
     }
 }
-
 
 
 @Composable
@@ -593,7 +613,7 @@ private fun formatDuration(durationMs: Long): String {
 }
 
 @Composable
-private fun rememberAardPulse(): Float {
+ fun rememberAardPulse(): Float {
     val infiniteTransition = rememberInfiniteTransition(label = "AardPulse")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.5f,

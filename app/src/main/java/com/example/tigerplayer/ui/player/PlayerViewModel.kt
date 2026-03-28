@@ -106,6 +106,10 @@ class PlayerViewModel @Inject constructor(
     private var lyricsFetchJob: Job? = null
     private var artistImageFetchJob: Job? = null
     private var metadataFetchJob: Job? = null
+    val currentTrackTitle: StateFlow<String> = uiState
+        .map { it.currentTrack?.title ?: "Unknown" }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Unknown")
 
     val customPlaylists: StateFlow<List<Playlist>> =
         audioRepository.getCustomPlaylists()
@@ -114,6 +118,8 @@ class PlayerViewModel @Inject constructor(
                 started = SharingStarted.WhileSubscribed(5000),
                 initialValue = emptyList()
             )
+
+
 
     init {
         observeLibrary()
@@ -126,6 +132,7 @@ class PlayerViewModel @Inject constructor(
 
 
     }
+
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeLibrary() {
@@ -634,8 +641,12 @@ class PlayerViewModel @Inject constructor(
         onSearchQueryChanged("")
     }
 
+    // 1. HARDEN THE LIBRARY AGGREGATION
     private fun aggregateLibrary(tracks: List<AudioTrack>, query: String = ""): PlayerUiState {
-        val filtered = if (query.isEmpty()) tracks else tracks.filter {
+        // Filter out duplicates from the source
+        val uniqueSource = tracks.distinctBy { it.id }
+
+        val filtered = if (query.isEmpty()) uniqueSource else uniqueSource.filter {
             it.title.contains(query, ignoreCase = true) ||
                     it.artist.contains(query, ignoreCase = true) ||
                     it.album.contains(query, ignoreCase = true)
@@ -654,7 +665,7 @@ class PlayerViewModel @Inject constructor(
             .sortedBy { it.name }
 
         return _uiState.value.copy(
-            tracks = tracks,
+            tracks = uniqueSource,
             filteredTracks = filtered,
             artists = aggregatedArtists,
             albums = filtered.map { it.album.trim() }.distinct().sorted(),
@@ -662,6 +673,20 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    // 2. HARDEN THE QUEUE SYNC
+    private fun updateQueue() {
+        val controller = mediaControllerManager.mediaController ?: return
+        val knownTracks = _uiState.value.tracks.associateBy { it.id }
+
+        val resolvedQueue = (0 until controller.mediaItemCount).map { i ->
+            val mediaItem = controller.getMediaItemAt(i)
+            // If the track is in our library, use the full object.
+            // Otherwise, use the converted MediaItem.
+            knownTracks[mediaItem.mediaId] ?: mediaItem.toAudioTrack()
+        }
+
+        _uiState.update { it.copy(queue = resolvedQueue) }
+    }
     fun connectToNavidrome(
         url: String,
         user: String,
@@ -756,18 +781,6 @@ class PlayerViewModel @Inject constructor(
      * Synchronizes the internal Media3 playlist with the UI state,
      * resolving IDs into full AudioTrack objects.
      */
-    private fun updateQueue() {
-        val controller = mediaControllerManager.mediaController ?: return
-        val knownTracks = _uiState.value.tracks.associateBy { it.id }
-
-        val resolvedQueue = (0 until controller.mediaItemCount).map { i ->
-            val mediaItem = controller.getMediaItemAt(i)
-            knownTracks[mediaItem.mediaId] ?: mediaItem.toAudioTrack()
-        }
-
-        _uiState.update { it.copy(queue = resolvedQueue) }
-        Log.d("TigerVM", "Queue Manifested: ${resolvedQueue.size} items.")
-    }    // Inside PlayerViewModel.kt
 
     // THE MISSING RITUAL: Sever the shadow
     fun removeFromQueue(track: AudioTrack) {

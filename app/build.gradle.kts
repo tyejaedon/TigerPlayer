@@ -104,6 +104,8 @@ dependencies {
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.compose.ui.unit)
+    implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.androidx.ui.graphics)
 
     // Media3 (The Heart of TigerPlayer)
     val media3_version = "1.9.3"

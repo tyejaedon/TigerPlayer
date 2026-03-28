@@ -64,7 +64,6 @@ fun MainScreen(
                     val currentTrack = uiState.currentTrack
 
                     // THE FIX: The Smooth Handoff Animation
-                    // When expanded, the MiniPlayer smoothly collapses away so the bottom bar shrinks.
                     AnimatedVisibility(
                         visible = currentTrack != null && !isPlayerExpanded,
                         enter = expandVertically(animationSpec = tween(300)) + fadeIn(tween(300)),
@@ -99,9 +98,11 @@ fun MainScreen(
                             NavigationBarItem(
                                 selected = isSelected,
                                 onClick = {
-                                    if (!isSelected) {
-                                        playerViewModel.clearSearch()
-                                    }
+                                    // 1. THE UNCONDITIONAL WIPE
+                                    // Clears the search whether swapping tabs OR resetting the current tab
+                                    playerViewModel.clearSearch()
+
+                                    // 2. THE NAVIGATION
                                     tabNavController.navigate(tab.route) {
                                         popUpTo(tabNavController.graph.findStartDestination().id) {
                                             saveState = true
@@ -174,7 +175,8 @@ fun MainScreen(
                         HomeScreen(
                             viewModel = playerViewModel,
                             onNavigateToAlbum = onNavigateToAlbum,
-                            onNavigateToSettings = onNavigateToSettings
+                            onNavigateToSettings = onNavigateToSettings,
+                            onNavigatetoArtist = onNavigateToArtist
                         )
                     }
 
@@ -183,7 +185,7 @@ fun MainScreen(
                             viewModel = playerViewModel,
                             onNavigateToArtist = onNavigateToArtist,
                             onNavigateToAlbum = onNavigateToAlbum,
-                            onNavigateToPlaylist = onNavigateToPlaylist
+                            onNavigateToPlaylist = onNavigateToPlaylist,
                         )
                     }
 
