@@ -88,49 +88,74 @@ class AudioRepository @Inject constructor(
      * LOCAL CACHE LOGIC
      * Retrieves bit-perfect local files from the internal vault.
      */
+    /**
+     * LOCAL CACHE LOGIC
+     * Emits the zero-latency cache instantly, then silently patrols
+     * the device storage for newly forged or banished tracks.
+     */
     fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = flow {
-        if (forceRefresh) {
-            tigerDao.clearTrackCache()
+        // 1. THE FAST PATH: Instantly load the archive from Room
+        val cachedEntities = tigerDao.getCachedTracks()
+        val cachedTracks = cachedEntities.map { it.toDomainModel() }
+
+        if (cachedTracks.isNotEmpty() && !forceRefresh) {
+            emit(cachedTracks)
         }
 
-        val cachedEntities = tigerDao.getCachedTracks()
+        // 2. THE SILENT PATROL: Scan the device in the background
+        localAudioDataSource.getLocalAudioFiles().collect { status ->
+            if (status is LocalAudioDataSource.ScanStatus.Complete) {
+                val freshTracks = status.tracks
 
-        if (cachedEntities.isNotEmpty()) {
-            emit(cachedEntities.map { it.toDomainModel() })
-        } else {
-            localAudioDataSource.getLocalAudioFiles().collect { status ->
-                if (status is LocalAudioDataSource.ScanStatus.Complete) {
-                    if (status.tracks.isNotEmpty()) {
-                        tigerDao.insertCachedTracks(status.tracks.map { it.toEntity() })
+                // 3. THE RECONCILIATION: Check if the user downloaded or deleted music
+                val isArchiveOutdated = forceRefresh ||
+                        cachedTracks.size != freshTracks.size ||
+                        cachedTracks != freshTracks
+
+                if (isArchiveOutdated) {
+                    // Purge the stale ledger and secure the new loot
+                    tigerDao.clearTrackCache()
+                    if (freshTracks.isNotEmpty()) {
+                        tigerDao.insertCachedTracks(freshTracks.map { it.toEntity() })
                     }
-                    emit(status.tracks)
+                    // Emit the freshly forged tracks so the UI updates seamlessly
+                    emit(freshTracks)
                 }
             }
         }
     }
 
+    /**
+     * Used specifically when the UI needs to display the ScanningOverlay.
+     */
     fun getLocalTracksWithProgress(forceRefresh: Boolean = false): Flow<LocalAudioDataSource.ScanStatus> = flow {
-        if (forceRefresh) {
-            tigerDao.clearTrackCache()
+        val cachedEntities = tigerDao.getCachedTracks()
+        val cachedTracks = cachedEntities.map { it.toDomainModel() }
+
+        if (cachedTracks.isNotEmpty() && !forceRefresh) {
+            emit(LocalAudioDataSource.ScanStatus.Complete(cachedTracks))
         }
 
-        val cachedEntities = tigerDao.getCachedTracks()
+        // Always scan to ensure the ledger is accurate, emitting progress to the UI
+        localAudioDataSource.getLocalAudioFiles().collect { status ->
+            emit(status)
 
-        if (cachedEntities.isNotEmpty()) {
-            val tracks = cachedEntities.map { it.toDomainModel() }
-            emit(LocalAudioDataSource.ScanStatus.Started(tracks.size))
-            emit(LocalAudioDataSource.ScanStatus.Complete(tracks))
-        } else {
-            localAudioDataSource.getLocalAudioFiles().collect { status ->
-                if (status is LocalAudioDataSource.ScanStatus.Complete) {
-                    if (status.tracks.isNotEmpty()) {
-                        tigerDao.insertCachedTracks(status.tracks.map { it.toEntity() })
+            if (status is LocalAudioDataSource.ScanStatus.Complete) {
+                val freshTracks = status.tracks
+                val isArchiveOutdated = forceRefresh ||
+                        cachedTracks.size != freshTracks.size ||
+                        cachedTracks != freshTracks
+
+                if (isArchiveOutdated) {
+                    tigerDao.clearTrackCache()
+                    if (freshTracks.isNotEmpty()) {
+                        tigerDao.insertCachedTracks(freshTracks.map { it.toEntity() })
                     }
                 }
-                emit(status)
             }
         }
     }
+
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
         return playlistDao.getAllPlaylists().map { entities ->

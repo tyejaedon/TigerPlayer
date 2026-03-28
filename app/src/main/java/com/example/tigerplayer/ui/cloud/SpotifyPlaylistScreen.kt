@@ -127,7 +127,11 @@ fun SpotifyPlaylistScreen(
                     contentPadding = PaddingValues(bottom = 140.dp)
                 ) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier
+                            .size(260.dp)
+                            // SHADOW MUST BE BEFORE CLIP
+                            .shadow(32.dp, MaterialTheme.shapes.extraLarge, spotColor = accentColor)
+                            .clip(MaterialTheme.shapes.extraLarge),) {
                             AsyncImage(
                                 model = imageRequest,
                                 contentDescription = "Playlist Art",
@@ -140,7 +144,10 @@ fun SpotifyPlaylistScreen(
                         }
                     }
 
-                    itemsIndexed(tracks) { index, track ->
+                    itemsIndexed(
+                        items = tracks,
+                        key = { index, track -> "${track.id}_$index" }
+                    ) { index, track ->
                         SpotifyTrackRow(
                             index = index + 1,
                             track = track,
