@@ -27,10 +27,10 @@ android {
 
     defaultConfig {
         applicationId = "com.example.tigerplayer"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.2" // or "1.0-beta", or "1.0"
+        versionName = "0.1.3" // or "1.0-beta", or "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -54,8 +54,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -106,6 +105,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.unit)
     implementation(libs.androidx.compose.foundation.layout)
     implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.compose.remote.creation.compose)
 
     // Media3 (The Heart of TigerPlayer)
     val media3_version = "1.9.3"

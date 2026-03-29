@@ -22,7 +22,9 @@ import com.example.tigerplayer.service.MediaControllerManager
 import com.example.tigerplayer.ui.home.HomeUiState
 import com.example.tigerplayer.ui.home.UserStatistics
 import com.example.tigerplayer.utils.ArtistUtils
+import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -105,6 +107,9 @@ class PlayerViewModel @Inject constructor(
 
     private var lyricsFetchJob: Job? = null
     private var artistImageFetchJob: Job? = null
+
+    private val _localTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
+    private val _remoteTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
     private var metadataFetchJob: Job? = null
     val currentTrackTitle: StateFlow<String> = uiState
         .map { it.currentTrack?.title ?: "Unknown" }
@@ -129,6 +134,9 @@ class PlayerViewModel @Inject constructor(
         observeHistory()
         observeSpotifyRemote()
         performAutoRitual()
+        syncNavidromeArchives()
+
+
 
 
     }
@@ -345,6 +353,8 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
+
+
 
     private fun fetchSpotifyHighResArt(title: String, artist: String) {
         viewModelScope.launch {
@@ -607,9 +617,34 @@ class PlayerViewModel @Inject constructor(
 
             likedPlaylist?.let {
                 audioRepository.addTrackToPlaylist(it.id, track.id)
+                track.isliked = true
             }
         }
     }
+    fun removeTrackFromLikedSongs(track: AudioTrack) {
+        viewModelScope.launch {
+            if (track.isliked) {
+                val playlists = customPlaylists.value
+                val likedPlaylist = playlists.find { it.name.equals("Liked Songs", ignoreCase = true) }
+                likedPlaylist?.let {
+                    audioRepository.removeTrackFromPlaylist(it.id, track.id)
+                    track.isliked = false
+                }
+            }
+        }
+
+
+    }
+
+    fun toggleTrackLikeStatus(track: AudioTrack) {
+        // We check the current state of the track and route accordingly
+        if (track.isliked) {
+            removeTrackFromLikedSongs(track)
+        } else {
+            addTrackToLikedSongs(track)
+        }
+    }
+
 
     fun createPlaylist(name: String) {
         viewModelScope.launch {
@@ -671,6 +706,49 @@ class PlayerViewModel @Inject constructor(
             albums = filtered.map { it.album.trim() }.distinct().sorted(),
             searchQuery = query
         )
+    }
+
+    fun syncNavidromeArchives() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Grab the latest credentials from DataStore
+            val url = navidromePrefs.serverUrl.firstOrNull()
+            val user = navidromePrefs.username.firstOrNull()
+            val pass = navidromePrefs.password.firstOrNull()
+
+            // If no credentials, the user hasn't logged in. Abort gracefully.
+            if (url.isNullOrBlank() || user.isNullOrBlank() || pass.isNullOrBlank()) {
+                Log.d("LibrarySync", "No Navidrome credentials found. Skipping remote sync.")
+                _remoteTracks.value = emptyList() // Ensure remote is cleared if they logged out
+                return@launch
+            }
+
+            try {
+                Log.d("LibrarySync", "Contacting Navidrome Server at $url...")
+
+                // Fetch the Subsonic JSON models
+                val result = navidromeRepository.getAllRemoteTracks(user, pass)
+
+                result.onSuccess { remoteList ->
+                    // THE TRANMUTATION: Convert RemoteTrack -> AudioTrack using our Mapper
+                    val mappedTracks = remoteList.map { remoteTrack ->
+                        remoteTrack.toAudioTrack(
+                            serverUrl = url,
+                            username = user,
+                            pass = pass
+                        )
+                    }
+
+                    Log.d("LibrarySync", "Navidrome sync complete! Added ${mappedTracks.size} tracks.")
+                    _remoteTracks.value = mappedTracks
+
+                }.onFailure { error ->
+                    Log.e("LibrarySync", "Failed to reach Navidrome: ${error.message}")
+                    // Don't clear existing _remoteTracks on network error, so they can still see cached UI
+                }
+            } catch (e: Exception) {
+                Log.e("LibrarySync", "Critical failure during Navidrome sync", e)
+            }
+        }
     }
 
     // 2. HARDEN THE QUEUE SYNC

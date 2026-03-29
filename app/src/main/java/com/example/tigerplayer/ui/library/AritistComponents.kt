@@ -175,7 +175,7 @@ fun SongItem(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp) // Optimized vertical gaps
+            .padding(horizontal = 16.dp, vertical = 7.dp) // Optimized vertical gaps
             .bounceClick { onClick() }
             .glassEffect(MaterialTheme.shapes.large),
         // AMOLED Optimization: Use very low alpha for inactive items

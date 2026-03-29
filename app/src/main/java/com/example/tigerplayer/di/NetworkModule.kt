@@ -68,9 +68,15 @@ object NetworkModule {
     @Provides
     @Singleton
     @SubsonicRetrofit
-    fun provideSubsonicClient(base: OkHttpClient, host: SubsonicHostManager): OkHttpClient =
-        base.newBuilder().addInterceptor(DynamicUrlInterceptor(host)).build()
-
+    fun provideSubsonicClient(base: OkHttpClient, host: SubsonicHostManager): OkHttpClient {
+        return base.newBuilder()
+            .addInterceptor(DynamicUrlInterceptor(host))
+            // THE FORTIFICATION: Extend timeouts just for the self-hosted archive
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
     // --- Retrofit Builders ---
 
     @Provides

@@ -14,21 +14,27 @@ import javax.inject.Singleton
 class NavidromeRepository @Inject constructor(
     private val apiService: NavidromeApiService
 ) {
+    // Cache the payload in memory so we don't recalculate MD5s constantly
+    private var cachedAuthMap: Map<String, String>? = null
+    private var currentUsername: String? = null
 
-    /**
-     * Generates the authentication map for the Subsonic API ritual.
-     * u: username, t: token (md5), s: salt, v: version, c: client
-     */
     private fun getAuthMap(username: String, pass: String): Map<String, String> {
+        // Return cache if it exists for this user
+        if (cachedAuthMap != null && currentUsername == username) {
+            return cachedAuthMap!!
+        }
+
         val payload = NavidromeSecurity.generateAuthPayload(username, pass)
-        return mapOf(
+        cachedAuthMap = mapOf(
             "u" to payload.u,
             "t" to payload.t,
             "s" to payload.s,
             "v" to payload.v,
             "c" to payload.c,
-            "f" to "json" // Forces the server to speak JSON instead of XML
+            "f" to "json"
         )
+        currentUsername = username
+        return cachedAuthMap!!
     }
 
     /**

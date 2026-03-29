@@ -1,6 +1,7 @@
 package com.example.tigerplayer.data.repository
 
 import android.net.Uri
+import android.util.Log
 import androidx.core.net.toUri
 import com.example.tigerplayer.data.local.dao.PlaylistDao
 import com.example.tigerplayer.data.local.dao.TigerDao
@@ -43,11 +44,16 @@ class AudioRepository @Inject constructor(
             if (!user.isNullOrBlank() && !pass.isNullOrBlank() && !baseUrl.isNullOrBlank()) {
                 if (remoteCache.isEmpty() || forceRefresh) {
                     val remoteResult = navidromeRepository.getAllRemoteTracks(user, pass)
-                    val remoteTracks = remoteResult.getOrDefault(emptyList())
-                    // High-Quality: We ensure suffix is handled properly for codec selection
-                    remoteCache = remoteTracks.map { it.toAudioTrack(baseUrl, user, pass) }
+
+                    // THE SAFEGUARD: Only overwrite the cache if the server actually responds
+                    remoteResult.onSuccess { remoteTracks ->
+                        remoteCache = remoteTracks.map { it.toAudioTrack(baseUrl, user, pass) }
+                    }.onFailure { error ->
+                        Log.e("AudioRepository", "Archive sync failed, relying on cache: ${error.message}")
+                        // We don't touch remoteCache here. It retains whatever it had before!
+                    }
                 }
-                emit(remoteCache)
+                emit(remoteCache) // Emits either the new data, or the surviving cached data
             } else {
                 emit(emptyList())
             }
@@ -86,12 +92,7 @@ class AudioRepository @Inject constructor(
 
     /**
      * LOCAL CACHE LOGIC
-     * Retrieves bit-perfect local files from the internal vault.
-     */
-    /**
-     * LOCAL CACHE LOGIC
-     * Emits the zero-latency cache instantly, then silently patrols
-     * the device storage for newly forged or banished tracks.
+     * retrieves bit-perfect local files from the internal vault.
      */
     fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = flow {
         // 1. THE FAST PATH: Instantly load the archive from Room
@@ -158,16 +159,8 @@ class AudioRepository @Inject constructor(
 
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
-        return playlistDao.getAllPlaylists().map { entities ->
-            entities.map { entity ->
-                Playlist(
-                    id = entity.playlistId,
-                    name = entity.name,
-                    trackCount = 0,
-                    createdAt = entity.createdAt
-                )
-            }
-        }
+        // THE REFACTOR: Use the dynamic join query to get real-time track counts
+        return playlistDao.getPlaylistsWithCount()
     }
 
     suspend fun createPlaylist(name: String) {
@@ -220,4 +213,11 @@ class AudioRepository @Inject constructor(
         path = path,
         year = year
     )
+
+    suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
+        playlistDao.removeTrackFromPlaylist(
+            playlistId = playlistId,
+            trackId = trackId
+        )
+    }
 }

@@ -1,5 +1,8 @@
 package com.example.tigerplayer.ui.library
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,11 +15,14 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.remote.creation.compose.state.abs
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,6 +46,8 @@ import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.launch
 import kotlin.collections.emptyList
+import kotlin.math.abs
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
@@ -166,30 +174,26 @@ fun AlbumsTab(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val albums = uiState.albums
-
-    // 1. THE SHARED GRID STATE: Essential for tracking scroll velocity and position
     val gridState = rememberLazyGridState()
+
+    // --- THE NAVIDROME SAFEGUARD ---
+    if (albums.isEmpty()) {
+        ArchiveLoadingState(message = "Forging Albums...")
+        return
+    }
 
     LazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
-        // THE FIX: Explicit padding labels to avoid the compilation error
-        contentPadding = PaddingValues(
-            start = 20.dp,
-            end = 20.dp,
-            top = 24.dp,
-            bottom = 140.dp
-        ),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 140.dp),
         horizontalArrangement = Arrangement.spacedBy(20.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp) // Extra vertical space for 3D tilting
+        verticalArrangement = Arrangement.spacedBy(28.dp)
     ) {
         items(
             items = albums,
-            // Salted key for absolute list stability
             key = { albumName -> "alb_${albumName.hashCode()}" }
         ) { albumName ->
-            // --- DATA RITUAL ---
             val albumTrack = remember(albumName, uiState.tracks) {
                 uiState.tracks.find { it.album == albumName }
             }
@@ -197,34 +201,27 @@ fun AlbumsTab(
                 uiState.tracks.count { it.album == albumName }
             }
 
-            // --- 2. THE GEAR ROTATION MATH ---
             var itemYOffset by remember { mutableStateOf(0f) }
 
             AlbumGridCard(
                 title = albumName,
                 artist = albumTrack?.artist ?: "Unknown Artist",
+                // Coil handles the Navidrome URL seamlessly here!
                 artworkUri = albumTrack?.artworkUri,
                 trackCount = trackCount,
                 modifier = Modifier
-                    .animateItem() // Keeps grid changes smooth
+                    .animateItem()
                     .onGloballyPositioned { coordinates ->
-                        // Tracks the item's vertical center relative to the window
                         itemYOffset = coordinates.positionInWindow().y + (coordinates.size.height / 2)
                     }
                     .graphicsLayer {
-                        // We calculate the offset relative to the middle of the screen
-                        // On an S22, roughly 1000px is the vertical center
                         val viewportCenter = size.height * 2.5f
                         val distanceFromCenter = (itemYOffset - viewportCenter) / viewportCenter
                         val coercedOffset = distanceFromCenter.coerceIn(-1f, 1f)
 
-                        // 3D Tilt: The Gear Wheel Rotation
                         rotationX = coercedOffset * -35f
-
-                        // Perspective: Prevents the 3D warp from looking "flat"
                         cameraDistance = 12f * density
 
-                        // Edge Polish: Cards shrink and fade slightly as they roll away
                         val scale = 1f - (kotlin.math.abs(coercedOffset) * 0.15f)
                         scaleX = scale
                         scaleY = scale
@@ -237,7 +234,28 @@ fun AlbumsTab(
 }
 
 
-
+@Composable
+fun ArchiveLoadingState(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                letterSpacing = 2.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
 
 
 
@@ -247,57 +265,88 @@ fun SongsTab(
     viewModel: PlayerViewModel,
     onNavigateToAlbum: (String) -> Unit
 ) {
-    // --- 1. THE SINGLE SOURCE OF TRUTH ---
     val uiState by viewModel.uiState.collectAsState()
     val currentTrack = uiState.currentTrack
-    val tracks = uiState.tracks // We display the master list here
+    val tracks = uiState.tracks
 
-    // Fetch playlists for the options portal
     val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
-
-    // State for the Options Sheet
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+    val listState = rememberLazyListState()
 
-    // --- 2. THE VIEWPORT ---
+    // --- THE NAVIDROME SAFEGUARD ---
+    // If the library is empty, show the sync state.
+    // (You can also tie this to an explicit 'isSyncing' boolean in your uiState)
+    if (tracks.isEmpty()) {
+        ArchiveLoadingState(message = "Summoning Archives...")
+        return
+    }
+
+    // --- THE VIEWPORT ---
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
-        // Bottom padding ensures the last song breathes above the MiniPlayer
         contentPadding = PaddingValues(top = 12.dp, bottom = 140.dp)
     ) {
-        // We use itemsIndexed to solve the "Duplicate Key" crash.
-        // Even if two files have the same ID, their index is unique.
-        items(
+        itemsIndexed(
             items = tracks,
-            key = { track -> "song_${track.id}_${track.path.hashCode()}" }
-        ) { track ->
+            key = { _, track -> "song_${track.id}_${track.path.hashCode()}" }
+        ) { index, track ->
             val isActive = currentTrack?.id == track.id
+
+            val tiltX by animateFloatAsState(
+                targetValue = if (isActive) -12f else 0f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                label = "tiltX_animation"
+            )
+
+            val activeScale by animateFloatAsState(
+                targetValue = if (isActive) 1.05f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                label = "scale_animation"
+            )
 
             SongItem(
                 track = track,
                 isActive = isActive,
                 isPlaying = uiState.isPlaying,
-                modifier = Modifier.animateItem(), // Enables smooth list reordering
+                modifier = Modifier
+                    .animateItem()
+                    .graphicsLayer {
+                        val itemInfo = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                        if (itemInfo != null) {
+                            val viewportHeight = listState.layoutInfo.viewportSize.height
+                            val viewportCenter = viewportHeight / 2f
+                            val itemCenter = itemInfo.offset + (itemInfo.size / 2f)
+                            val fractionFromCenter = (itemCenter - viewportCenter) / viewportCenter
+                            val clampedFraction = fractionFromCenter.coerceIn(-1f, 1f)
+
+                            translationX = (clampedFraction * clampedFraction) * 150f
+                            rotationZ = clampedFraction * 20f
+
+                            val baseScale = 1f - (abs(clampedFraction) * 0.15f)
+                            scaleX = baseScale * activeScale
+                            scaleY = baseScale * activeScale
+
+                            alpha = 1f - (abs(clampedFraction) * 0.5f)
+                            rotationX = tiltX
+                            cameraDistance = 8 * density
+                        }
+                    },
                 onClick = { viewModel.playTrack(track) },
                 onMoreClick = { trackForOptions = track },
             )
         }
     }
 
-    // --- 3. THE OPTIONS PORTAL ---
+    // --- THE OPTIONS PORTAL ---
     trackForOptions?.let { selectedTrack ->
         SongOptionsSheet(
             track = selectedTrack,
             playlists = playlists,
             onDismiss = { trackForOptions = null },
-            onPlayNext = {
-                viewModel.addToQueue(selectedTrack)
-            },
-            onAddToPlaylist = { playlistId ->
-                viewModel.addTrackToPlaylist(playlistId, selectedTrack)
-            },
-            onGoToAlbum = { albumName ->
-                onNavigateToAlbum(albumName)
-            }
+            onPlayNext = { viewModel.addToQueue(selectedTrack) },
+            onAddToPlaylist = { playlistId -> viewModel.addTrackToPlaylist(playlistId, selectedTrack) },
+            onGoToAlbum = { albumName -> onNavigateToAlbum(albumName) }
         )
     }
 }
@@ -318,9 +367,9 @@ fun PlaylistsTab(
         playlists.filterNot { it.name.equals("Liked Songs", ignoreCase = true) }
     }
 
-    // Dynamic count for Liked Songs
-    val playlistTracks by viewModel.getPlaylistTracks(likedPlaylist?.id ?: 0)
-        .collectAsState(initial = emptyList())
+
+
+
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -328,7 +377,7 @@ fun PlaylistsTab(
     ) {
         // --- 1. THE HERO: LIKED SONGS ---
         item(key = "hero_liked") {
-            LikedSongsCard(trackCount = playlistTracks.size) {
+            LikedSongsCard(trackCount = likedPlaylist?.trackCount ?: 0) {
                 onNavigateToPlaylist(likedPlaylist?.id ?: -1L, "Liked Songs")
             }
             Spacer(modifier = Modifier.height(16.dp))

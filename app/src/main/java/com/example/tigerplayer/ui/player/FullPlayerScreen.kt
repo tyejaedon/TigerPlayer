@@ -102,7 +102,6 @@ fun FullPlayerScreen(
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
-    var isLikedLocally by remember(track.id) { mutableStateOf(false) }
 
     val themeSurface = MaterialTheme.colorScheme.surface
     val themeOnSurface = MaterialTheme.colorScheme.onSurface
@@ -267,10 +266,13 @@ fun FullPlayerScreen(
                         .padding(vertical = 20.dp, horizontal = 12.dp)
                 ) {
                     TrackInfoCard(
-                        track = track, viewModel = viewModel, textColor = dynamicTextColor,
-                        secondaryTextColor = dynamicSecondaryTextColor, isLiked = isLikedLocally,
-                        onLikeClick = { isLikedLocally = it }, showTechnicalInfo = showTechnicalInfo,
-                        onToggleTechInfo = { showTechnicalInfo = it }
+                        track = track,
+                        textColor = dynamicTextColor,
+                        secondaryTextColor = dynamicSecondaryTextColor,
+                        showTechnicalInfo = showTechnicalInfo,
+                        onToggleTechInfo = { showTechnicalInfo = it },
+                        // Pass the ViewModel's router command via lambda
+                        onToggleLike = { viewModel.toggleTrackLikeStatus(track) }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     FieryWavySeeker(uiState = uiState, viewModel = viewModel, textColor = dynamicTextColor)
@@ -370,18 +372,20 @@ fun HeaderRitual(
 // ==========================================
 // --- TRACK INFO CARD ---
 // ==========================================
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackInfoCard(
     track: AudioTrack,
-    viewModel: PlayerViewModel,
     textColor: Color,
     secondaryTextColor: Color,
-    isLiked: Boolean,
-    onLikeClick: (Boolean) -> Unit,
     showTechnicalInfo: Boolean,
-    onToggleTechInfo: (Boolean) -> Unit
+    onToggleTechInfo: (Boolean) -> Unit,
+    onToggleLike: () -> Unit // THE FIX: Hoisted action parameter
 ) {
+    // Optimistic Local State
+    var isLikedLocally by remember(track.id) { mutableStateOf(track.isliked) }
+
     if (showTechnicalInfo) {
         AlertDialog(
             onDismissRequest = { onToggleTechInfo(false) },
@@ -407,7 +411,7 @@ fun TrackInfoCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp), // Removed vertical padding to tighten the glass deck
+            .padding(horizontal = 8.dp),
         horizontalAlignment = Alignment.Start
     ) {
         Row(
@@ -435,22 +439,21 @@ fun TrackInfoCard(
                 )
             }
 
-            IconButton(
-                onClick = {
-                    val newLikedState = !isLiked
-                    onLikeClick(newLikedState)
-                },
+            // THE FIX: Direct bounceClick on the Icon, removing the IconButton wrapper
+            Icon(
+                imageVector = if (isLikedLocally) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                contentDescription = "Like Song",
+                tint = if (isLikedLocally) MaterialTheme.igniRed else textColor,
                 modifier = Modifier
                     .padding(start = 16.dp)
-                    .bounceClick { }
-            ) {
-                Icon(
-                    imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    contentDescription = "Like Song",
-                    tint = if (isLiked) MaterialTheme.igniRed else textColor,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
+                    .size(36.dp) // Slightly larger to compensate for removing the IconButton's padding
+                    .bounceClick {
+                        // 1. Instantly flip the UI
+                        isLikedLocally = !isLikedLocally
+                        // 2. Alert the parent screen to update the database
+                        onToggleLike()
+                    }
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -483,6 +486,7 @@ private fun TechRow(label: String, value: String, textColor: Color) {
         Text(value, style = MaterialTheme.typography.bodyMedium, color = textColor, fontWeight = FontWeight.Bold)
     }
 }
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
