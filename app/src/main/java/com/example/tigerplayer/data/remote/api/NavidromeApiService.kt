@@ -87,10 +87,11 @@ data class RemoteTrack(
     val bitRate: Int,
     val year: Int?,
 
-    // --- THE ADDITIONS ---
-    val albumId: String?,       // Better for high-res cover art
-    val genre: String?,         // For library categorization
-    val size: Long?             // Useful for showing "Cloud Storage" usage
+    @SerializedName("coverArt")
+    val coverArtId: String?,    // CRITICAL: Used for the getCoverArt.view endpoint
+    val albumId: String?,
+    val genre: String?,
+    val size: Long?
 )
 
 data class SubsonicError(
