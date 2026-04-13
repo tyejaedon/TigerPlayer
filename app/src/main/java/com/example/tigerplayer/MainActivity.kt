@@ -122,30 +122,30 @@ class MainActivity : ComponentActivity() {
      */
     fun authenticateSpotify() {
         val clientId = BuildConfig.SPOTIFY_CLIENT_ID
-        val redirectUri = "tigerplayer://callback" // Ensure this matches the dashboard
+        // CRITICAL: Ensure this is character-perfect with the Spotify Dashboard
+        val redirectUri = "tigerplayer://callback"
 
         val builder = AuthorizationRequest.Builder(
             clientId,
             AuthorizationResponse.Type.CODE,
             redirectUri
-        )
-
-        builder.setScopes(arrayOf(
-            "playlist-read-private",
-            "playlist-read-collaborative",
-            "user-library-read",
-            "user-read-private",
-            "streaming"
-        ))
-
-        // THE FIX: Forces a clean handshake and bypasses cached session errors
-        builder.setShowDialog(true)
+        ).apply {
+            setScopes(arrayOf(
+                "playlist-read-private",
+                "playlist-read-collaborative",
+                "user-library-read",
+                "user-read-private",
+                "streaming"
+            ))
+            // THE FIX: Forces the "Grant Access" screen.
+            // This clears stale SSO states that cause SERVICE_UNAVAILABLE.
+            setShowDialog(true)
+        }
 
         val request = builder.build()
 
-        // Optimization: The SDK will automatically detect the Spotify App.
-        // If it fails, it will automatically fallback to the Browser.
+        // The SDK creates an intent that tries the Spotify App (SSO) first.
+        // If the Manifest <queries> below are wrong, this will fail.
         val intent = AuthorizationClient.createLoginActivityIntent(this, request)
         spotifyAuthLauncher.launch(intent)
-    }
-}
+    }}

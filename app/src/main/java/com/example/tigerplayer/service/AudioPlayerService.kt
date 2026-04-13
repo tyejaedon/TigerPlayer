@@ -117,16 +117,27 @@ class AudioPlayerService : MediaSessionService() {
         super.onDestroy()
     }
 
+
+    // ... inside AudioPlayerService ...
+
     private inner class CustomMediaSessionCallback : MediaSession.Callback {
         @OptIn(UnstableApi::class)
-        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            // 1. Define the commands the System UI is allowed to send
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
                 .add(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
                 .build()
 
+            // 2. THE OPTIMIZATION: Build the initial layout immediately for the handshake
+            val initialLayout = createCustomLayoutList()
+
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
+                .setCustomLayout(initialLayout) // Push layout during the first handshake
                 .build()
         }
 
@@ -149,4 +160,39 @@ class AudioPlayerService : MediaSessionService() {
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
     }
+
+    /**
+     * Refactored to return the list so it can be used in both
+     * invalidateCustomLayout() and onConnect().
+     */
+    private fun createCustomLayoutList(): List<CommandButton> {
+        val shuffleIcon = if (player.shuffleModeEnabled) {
+            R.drawable.ic_material_shuffle_on
+        } else {
+            R.drawable.ic_material_shuffle_off
+        }
+
+        val repeatIcon = when (player.repeatMode) {
+            Player.REPEAT_MODE_ONE -> R.drawable.ic_material_repeat_one
+            Player.REPEAT_MODE_ALL -> R.drawable.ic_material_repeat_all
+            else -> R.drawable.ic_material_repeat_off
+        }
+
+        return listOf(
+            CommandButton.Builder()
+                .setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
+                .setIconResId(shuffleIcon)
+                .setDisplayName("Shuffle")
+                .setEnabled(true)
+                .build(),
+            CommandButton.Builder()
+                .setSessionCommand(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
+                .setIconResId(repeatIcon)
+                .setDisplayName("Repeat")
+                .setEnabled(true)
+                .build()
+        )
+    }
+
+
 }
