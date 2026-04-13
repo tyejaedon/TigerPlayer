@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.library
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -10,6 +11,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -18,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
@@ -31,11 +34,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.home.SectionTitle
 import com.example.tigerplayer.ui.player.LibraryArtist
@@ -44,6 +50,7 @@ import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.collections.emptyList
 import kotlin.math.abs
@@ -94,46 +101,13 @@ fun LibraryScreen(
             onSearchQueryChange = { viewModel.onSearchQueryChanged(it) }
         )
 
-        // --- 2. TAB RITUAL: DYNAMIC FROST ---
-        val isDark = isSystemInDarkTheme()
-        val aardBlue = MaterialTheme.aardBlue
-
-        ScrollableTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassEffect(RectangleShape),
-            containerColor = Color.Transparent,
-            edgePadding = 16.dp,
-            divider = {},
-            indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
-                    height = 2.dp,
-                    color = aardBlue
-                )
-            }
-        ) {
-            tabs.forEachIndexed { index, title ->
-                val isSelected = pagerState.currentPage == index
-                val tabColor = if (isSelected) aardBlue
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.7f else 0.4f)
-
-                Tab(
-                    selected = isSelected,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                    text = {
-                        Text(
-                            text = title.uppercase(),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
-                            color = tabColor,
-                            letterSpacing = 1.5.sp
-                        )
-                    }
-                )
-            }
-        }
+        // --- 2. TAB RITUAL: THE ISOLATED ARMOR PILLS ---
+        // This completely replaces the frail ScrollableTabRow with tactile, massive hit targets
+        VanguardLibraryTabs(
+            tabs = tabs,
+            pagerState = pagerState,
+            coroutineScope = scope
+        )
 
         // --- 3. THE VIEWPORT ---
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -167,6 +141,12 @@ fun LibraryScreen(
         }
     }
 }
+
+// ==========================================
+// --- TACTILE NAVIGATION COMPONENTS ---
+// ==========================================
+
+
 @Composable
 fun AlbumsTab(
     viewModel: PlayerViewModel,
@@ -175,11 +155,24 @@ fun AlbumsTab(
     val uiState by viewModel.uiState.collectAsState()
     val albums = uiState.albums
     val gridState = rememberLazyGridState()
+    val hapticFeedback = LocalHapticFeedback.current
+
 
     // --- THE NAVIDROME SAFEGUARD ---
     if (albums.isEmpty()) {
         ArchiveLoadingState(message = "Forging Albums...")
         return
+    }
+    val firstVisibleItem by remember {
+        derivedStateOf { gridState.firstVisibleItemIndex }
+    }
+
+    // 3. THE TRIGGER
+    // Every time the index changes (a new song hits the top of the screen), it fires.
+    LaunchedEffect(firstVisibleItem) {
+        // TextHandleMove is the lightest, fastest micro-tick the Android OS allows.
+        // It feels like a physical mechanical gear clicking on the S22.
+        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
     LazyVerticalGrid(
@@ -271,7 +264,10 @@ fun SongsTab(
 
     val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(
+
+    )
+    val hapticFeedback = LocalHapticFeedback.current
 
     // --- THE NAVIDROME SAFEGUARD ---
     // If the library is empty, show the sync state.
@@ -280,7 +276,17 @@ fun SongsTab(
         ArchiveLoadingState(message = "Summoning Archives...")
         return
     }
+    val firstVisibleItem by remember {
+        derivedStateOf { listState.firstVisibleItemIndex }
+    }
 
+    // 3. THE TRIGGER
+    // Every time the index changes (a new song hits the top of the screen), it fires.
+    LaunchedEffect(firstVisibleItem) {
+        // TextHandleMove is the lightest, fastest micro-tick the Android OS allows.
+        // It feels like a physical mechanical gear clicking on the S22.
+        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
     // --- THE VIEWPORT ---
     LazyColumn(
         state = listState,
@@ -499,7 +505,7 @@ fun ActionPlaylistRow(
  * THE SEARCH VISION:
  * A flattened list extension to prevent nested scroll conflicts on the S22.
  */
-private fun LazyListScope.renderSearchResults(
+fun LazyListScope.renderSearchResults(
     uiState: PlayerUiState,
     viewModel: PlayerViewModel,
     matchedArtists: List<LibraryArtist>, // Received from parent
@@ -559,6 +565,74 @@ private fun LazyListScope.renderSearchResults(
                     modifier = Modifier.animateItem(),
                     onClick = { viewModel.playTrack(track) },
                     onMoreClick = { /* Track Options Portal */ }
+                )
+            }
+        }
+    }
+}
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun VanguardLibraryTabs(
+    tabs: List<String>,
+    pagerState: PagerState,
+    coroutineScope: CoroutineScope
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp), // Gives the header breathing room
+        // 24.dp edge padding perfectly aligns the first tab with your Section Titles!
+        contentPadding = PaddingValues(horizontal = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        itemsIndexed(tabs) { index, title ->
+            val isSelected = pagerState.currentPage == index
+
+            // 1. The Color Crossfade
+            val backgroundColor by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.aardBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                animationSpec = spring(stiffness = Spring.StiffnessLow),
+                label = "TabBackground"
+            )
+
+            // Forces pure pitch-black text when selected for maximum OLED contrast
+            val textColor by animateColorAsState(
+                targetValue = if (isSelected) Color(0xFF121212) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                animationSpec = spring(stiffness = Spring.StiffnessLow),
+                label = "TabText"
+            )
+
+            // 2. The Physical Pill
+            Box(
+                modifier = Modifier
+                    .height(48.dp) // The absolute perfect hit-target size for thumbs
+                    .clip(CircleShape)
+                    .background(backgroundColor)
+                    .bounceClick {
+                        // The Mechanical Confirmation
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        coroutineScope.launch {
+                            // Animates the pager instead of just jumping instantly
+                            pagerState.animateScrollToPage(index)
+                        }
+                    }
+                    .border(
+                        width = 1.dp,
+                        // The border vanishes when selected so it looks like a solid block of blue armor
+                        color = if (isSelected) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                        shape = CircleShape
+                    )
+                    .padding(horizontal = 28.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = textColor,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.5.sp
                 )
             }
         }

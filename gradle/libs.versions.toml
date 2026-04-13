@@ -26,6 +26,7 @@ animation = "1.10.5"
 foundationVersion = "1.10.6"
 uiUnit = "1.10.6"
 remoteCreationCompose = "1.0.0-alpha07"
+material3 = "1.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.18.0" }
@@ -64,6 +65,7 @@ androidx-compose-animation = { group = "androidx.compose.animation", name = "ani
 androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundationVersion" }
 androidx-compose-ui-unit = { group = "androidx.compose.ui", name = "ui-unit", version.ref = "uiUnit" }
 androidx-compose-remote-creation-compose = { group = "androidx.compose.remote", name = "remote-creation-compose", version.ref = "remoteCreationCompose" }
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
