@@ -20,6 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.tigerplayer.navigation.BottomNavTab
 import com.example.tigerplayer.ui.cloud.CloudScreen
 import com.example.tigerplayer.ui.home.HomeScreen
+import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.library.LibraryScreen
 import com.example.tigerplayer.ui.library.ScanningOverlay
 import com.example.tigerplayer.ui.player.FullPlayerScreen
@@ -36,7 +37,8 @@ fun MainScreen(
     onNavigateToNavidromeLogin: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToPlaylist: (Long, String) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    homeViewModel : HomeViewModel
 ) {
     val tabNavController = rememberNavController()
     val uiState by playerViewModel.uiState.collectAsState()
@@ -176,7 +178,8 @@ fun MainScreen(
                             viewModel = playerViewModel,
                             onNavigateToAlbum = onNavigateToAlbum,
                             onNavigateToSettings = onNavigateToSettings,
-                            onNavigatetoArtist = onNavigateToArtist
+                            onNavigatetoArtist = onNavigateToArtist,
+                            homeViewModel = homeViewModel
                         )
                     }
 

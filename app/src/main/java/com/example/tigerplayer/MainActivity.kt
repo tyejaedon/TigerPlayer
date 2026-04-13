@@ -16,9 +16,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.navigation.TigerPlayerNavGraph
+import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.settings.SettingsViewModel
 import com.example.tigerplayer.ui.settings.ThemeMode
@@ -40,6 +42,7 @@ class MainActivity : ComponentActivity() {
     // THE FIX: Removed SpotifyRepository. The ViewModels will handle data fetching reactively.
 
     private val playerViewModel: PlayerViewModel by viewModels()
+    private val homeViewModel : HomeViewModel by viewModels()
 
     private val redirectUri = "tigerplayer://callback"
 
@@ -105,7 +108,8 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     TigerPlayerNavGraph(
                         navController = navController,
-                        playerViewModel = playerViewModel
+                        playerViewModel = playerViewModel,
+                        homeViewModel = homeViewModel
                     )
                 }
             }
@@ -118,6 +122,8 @@ class MainActivity : ComponentActivity() {
      */
     fun authenticateSpotify() {
         val clientId = BuildConfig.SPOTIFY_CLIENT_ID
+        val redirectUri = "tigerplayer://callback" // Ensure this matches the dashboard
+
         val builder = AuthorizationRequest.Builder(
             clientId,
             AuthorizationResponse.Type.CODE,
@@ -132,7 +138,13 @@ class MainActivity : ComponentActivity() {
             "streaming"
         ))
 
+        // THE FIX: Forces a clean handshake and bypasses cached session errors
+        builder.setShowDialog(true)
+
         val request = builder.build()
+
+        // Optimization: The SDK will automatically detect the Spotify App.
+        // If it fails, it will automatically fallback to the Browser.
         val intent = AuthorizationClient.createLoginActivityIntent(this, request)
         spotifyAuthLauncher.launch(intent)
     }

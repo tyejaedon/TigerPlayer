@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -74,8 +75,6 @@ fun RecentlyPlayedRow(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Removed unused homeState to prevent unnecessary recompositions
-
     Column(modifier = modifier) {
         SectionHeader(title = "RECENT CONTRACTS", subtitle = "Echoes of past chants")
 
@@ -84,18 +83,19 @@ fun RecentlyPlayedRow(
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(
+            // THE REINFORCEMENT: Switching to itemsIndexed to solve Key Collision
+            itemsIndexed(
                 items = tracks,
-                key = { it.id } // THE FIX: Performance Anchor
-            ) { track ->
+                // THE COMPOSITE KEY: Merges the ID with the index.
+                // Even if the same song appears 5 times, each instance now has a unique UI signature.
+                key = { index, track -> "${track.id}_$index" }
+            ) { index, track ->
                 SmallTrackCard(
                     track = track,
                     isActive = uiState.currentTrack?.id == track.id,
                     isPlaying = uiState.isPlaying,
                     onClick = { onTrackClick(track) },
-                    // THE FIX: Proper lambda scope. Empty for now unless you have an Options menu.
-                    onMoreClick = { /* Open options dialog here in the future */ }
-                    // Notice we don't pass a 'modifier' here, so it safely defaults to 280.dp!
+                    onMoreClick = { /* Future options dialog */ }
                 )
             }
         }

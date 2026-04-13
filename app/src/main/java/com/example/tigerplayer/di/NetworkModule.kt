@@ -1,6 +1,9 @@
 package com.example.tigerplayer.di
 
 import com.example.tigerplayer.data.remote.api.*
+import com.example.tigerplayer.data.repository.WeatherRepository
+import com.example.tigerplayer.data.repository.WeatherRepositoryImpl
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -78,6 +81,19 @@ object NetworkModule {
             .build()
     }
     // --- Retrofit Builders ---
+
+
+    @Provides
+    @Singleton
+    fun provideWeatherApi(): WeatherApiService {
+        return Retrofit.Builder()
+            .baseUrl("https://api.open-meteo.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(WeatherApiService::class.java)
+    }
+
+
 
     @Provides
     @Singleton
@@ -189,4 +205,15 @@ object NetworkModule {
     fun provideLastFmApi(@Named("LastFmRetrofit") retrofit: Retrofit): LastFmApi {
         return retrofit.create(LastFmApi::class.java)
     }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class RepositoryModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindWeatherRepository(
+        weatherRepositoryImpl: WeatherRepositoryImpl
+    ): WeatherRepository
 }

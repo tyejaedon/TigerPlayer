@@ -43,6 +43,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import com.example.tigerplayer.ui.home.HomeViewModel
 
 @Composable
 fun TigerBranding() {
@@ -57,7 +58,7 @@ fun TigerBranding() {
 }
 
 @Composable
-fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: PlayerViewModel) {
+fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: PlayerViewModel,homeViewModel: HomeViewModel) {
     val context = LocalContext.current
 
     // THE FIX: Removed sharedPlayerViewModel to ensure the music never skips
@@ -161,7 +162,8 @@ fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: Playe
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
-                }
+                },
+                homeViewModel = homeViewModel
             )
         }
 
