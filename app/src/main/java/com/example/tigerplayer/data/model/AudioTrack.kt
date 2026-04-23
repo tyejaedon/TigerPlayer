@@ -18,7 +18,7 @@ data class AudioTrack(
     val trackNumber: Int = 0,
     val serverPath: String? = null,
     val year: String? = null,
-    var isliked: Boolean = false,
+    var isLiked: Boolean = false,
 
     // --- THE MISSING LINK ---
     // This must exist for track.path to work in the LyricsRepository!

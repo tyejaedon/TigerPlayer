@@ -2,6 +2,7 @@ package com.example.tigerplayer.service
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.audiofx.Equalizer
 import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -22,14 +23,18 @@ import com.example.tigerplayer.R
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
+enum class EqMode { BALANCE, TRANSPARENCY, ISOLATION }
 class AudioPlayerService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private lateinit var player: ExoPlayer
+    private var equalizer: Equalizer? = null
+    private var currentMode = EqMode.BALANCE
 
     companion object {
         private const val CUSTOM_COMMAND_SHUFFLE = "ACTION_SHUFFLE"
         private const val CUSTOM_COMMAND_REPEAT = "ACTION_REPEAT"
+        const val ACTION_SET_EQ = "ACTION_SET_EQ"
     }
 
     @OptIn(UnstableApi::class)
@@ -69,6 +74,33 @@ class AudioPlayerService : MediaSessionService() {
 
         invalidateCustomLayout()
     }
+
+    fun applyEqMode(mode: EqMode) {
+        currentMode = mode
+        val eq = equalizer ?: return
+
+        when (mode) {
+            EqMode.BALANCE -> {
+                // Flatten all bands
+                for (i in 0 until eq.numberOfBands) {
+                    eq.setBandLevel(i.toShort(), 0)
+                }
+            }
+            EqMode.TRANSPARENCY -> {
+                // Boost High-Mids and Treble for clarity
+                eq.setBandLevel(0, -200) // Cut Bass
+                eq.setBandLevel(3, 600)  // Boost 2kHz (+6dB)
+                eq.setBandLevel(4, 800)  // Boost 4kHz (+8dB)
+            }
+            EqMode.ISOLATION -> {
+                // The "Igni" Boost (Sub-bass emphasis)
+                eq.setBandLevel(0, 1000) // Heavy Bass (+10dB)
+                eq.setBandLevel(1, 400)  // Mid Bass (+4dB)
+                eq.setBandLevel(4, -400) // Cut Treble (-4dB)
+            }
+        }
+    }
+
 
     /**
      * Updates the Notification Shade using Material Design Icons.
@@ -130,6 +162,7 @@ class AudioPlayerService : MediaSessionService() {
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
                 .add(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_SET_EQ, Bundle.EMPTY))
                 .build()
 
             // 2. THE OPTIMIZATION: Build the initial layout immediately for the handshake
@@ -155,6 +188,10 @@ class AudioPlayerService : MediaSessionService() {
                         Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                         else -> Player.REPEAT_MODE_OFF
                     }
+                }
+                ACTION_SET_EQ -> {
+                    val modeName = args.getString("mode") ?: EqMode.BALANCE.name
+                    applyEqMode(EqMode.valueOf(modeName))
                 }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))

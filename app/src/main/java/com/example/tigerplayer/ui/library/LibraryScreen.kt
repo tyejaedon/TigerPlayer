@@ -367,14 +367,12 @@ fun PlaylistsTab(
 
     // THE ALIGNMENT RITUAL: Filtering Liked Songs
     val likedPlaylist = remember(playlists) {
-        playlists.find { it.name.equals("Liked Songs", ignoreCase = true) }
+        playlists.find { it.id == PlayerViewModel.LIKED_SONGS_ID }
     }
+
     val userPlaylists = remember(playlists) {
-        playlists.filterNot { it.name.equals("Liked Songs", ignoreCase = true) }
+        playlists.filterNot { it.id == PlayerViewModel.LIKED_SONGS_ID }
     }
-
-
-
 
 
     LazyColumn(

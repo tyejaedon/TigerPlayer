@@ -384,7 +384,7 @@ fun TrackInfoCard(
     onToggleLike: () -> Unit // THE FIX: Hoisted action parameter
 ) {
     // Optimistic Local State
-    var isLikedLocally by remember(track.id) { mutableStateOf(track.isliked) }
+    var isLikedLocally by remember(track.id) { mutableStateOf(track.isLiked) }
 
     if (showTechnicalInfo) {
         AlertDialog(

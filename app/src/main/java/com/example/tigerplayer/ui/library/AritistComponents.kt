@@ -348,8 +348,7 @@ fun ArtistGenreCloud(genres: List<String>) {
 }
 
 @Composable
-fun ArtistVanguardStats(viewModel: PlayerViewModel, profile: ArtistDetails?) {
-
+fun ArtistVanguardStats(profile: ArtistDetails?) {
     Column(
         modifier = Modifier
             .padding(16.dp)
@@ -361,41 +360,76 @@ fun ArtistVanguardStats(viewModel: PlayerViewModel, profile: ArtistDetails?) {
             )
             .padding(20.dp)
     ) {
+        // --- HEADER SECTION ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-            Text(
-                text = "VANGUARD STATS",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp
-            )
-            val statsState by viewModel.detailedStatsState.collectAsState()
+            Column {
+                Text(
+                    text = "VANGUARD STATS",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
 
-            val formattedListeners = NumberFormat.getNumberInstance(Locale.US).format(profile?.popularity ?: 0)
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ArtistMetadataBadge(
-                    text = "LISTENERS: $formattedListeners",
-                    textColor = MaterialTheme.colorScheme.primary
+                Text(
+                    text = "Global Resonance: ${profile?.popularity ?: 0}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            val localPlays = profile?.localPlayCount ?: 0
+            ArtistMetadataBadge(
+                text = "ARCHIVE PLAYS: $localPlays",
+                textColor = if (localPlays > 50) MaterialTheme.colorScheme.primary else Color.Gray,
+                isHighlight = localPlays > 100
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
+        // --- BIO / LORE SECTION ---
         val bio = profile?.bio
         if (!bio.isNullOrBlank()) {
             Text(
                 text = bio,
-                style = MaterialTheme.typography.bodyLarge,
-                lineHeight = 26.sp,
-                color = MaterialTheme.colorScheme.onBackground
+                style = MaterialTheme.typography.bodyMedium,
+                lineHeight = 24.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f)
             )
+
+            // --- GENRE TAGS (The Lore Categories) ---
+            if (profile.genres.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                FlowRow( // Ensure you have the 'androidx.compose.layout.FlowRow' import
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    profile.genres.take(5).forEach { genre ->
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                        ) {
+                            Text(
+                                text = genre.uppercase(),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
         } else {
+            // THE LOADING RITUAL: Consulting the Archives
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -405,19 +439,19 @@ fun ArtistVanguardStats(viewModel: PlayerViewModel, profile: ArtistDetails?) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(2.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                    trackColor = Color.Transparent
+                        .height(2.dp)
+                        .clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                 )
             }
         }
     }
-}
-@Composable
+}@Composable
 fun ArtistMetadataBadge(
     text: String,
     isHighlight: Boolean = false,
