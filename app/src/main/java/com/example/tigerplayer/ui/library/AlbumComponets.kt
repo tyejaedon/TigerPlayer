@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -16,8 +18,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,6 +34,7 @@ import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
@@ -38,36 +46,85 @@ import com.example.tigerplayer.ui.theme.glassEffect
 // ==========================================
 
 @Composable
-fun AlbumsGrid(
-    viewModel: PlayerViewModel,
-    onAlbumClick: (String) -> Unit
+fun AlbumGridCard(
+    title: String,
+    artist: String,
+    artworkUri: Any?,
+    trackCount: Int,
+    modifier: Modifier = Modifier, // THE FIX: Receives 3D math from the Grid
+    onClick: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val tracks = uiState.tracks
-
-    // Grouping tracks into unique Volumes (Albums)
-    val albums = remember(tracks) {
-        tracks.groupBy { it.album.trim() }
-            .filterKeys { it.isNotEmpty() && !it.equals("Unknown", ignoreCase = true) }
-            .entries.toList()
-            .sortedBy { it.key }
-    }
-
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 160.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 140.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .bounceClick { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        items(albums, key = { it.key }) { entry ->
-            val firstTrack = entry.value.first()
-            AlbumGridItem(
-                albumName = entry.key,
-                artistName = firstTrack.artist,
-                artworkUri = firstTrack.artworkUri,
-                trackCount = entry.value.size,
-                onClick = { onAlbumClick(entry.key) }
+        // --- THE VOLUME COVER (Glass Armor) ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .shadow(16.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.5f))
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                // Specular highlight catching the "light"
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.25f), Color.Transparent)
+                    ),
+                    shape = RoundedCornerShape(24.dp)
+                )
+        ) {
+            AsyncImage(
+                model = artworkUri,
+                contentDescription = title,
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.ic_tiger_logo),
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // The Inner Vignette (Depth Ritual)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f))
+                        )
+                    )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // --- METADATA ---
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = artist.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = " • $trackCount",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.aardBlue,
+                fontWeight = FontWeight.Black
             )
         }
     }
@@ -129,6 +186,71 @@ fun AlbumGridItem(
                 style = MaterialTheme.typography.labelSmall,
                 color = AardBlue,
                 fontWeight = FontWeight.Black
+            )
+        }
+    }
+}
+
+@Composable
+fun AlbumsGrid(
+    viewModel: PlayerViewModel,
+    onAlbumClick: (String) -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val albums = uiState.albums
+    val gridState = rememberLazyGridState()
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 20.dp,
+            end = 20.dp,
+            top = 24.dp,
+            bottom = 140.dp
+        ),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp)
+    ) {
+        items(albums, key = { it }) { albumName ->
+            val albumTrack = remember(albumName) {
+                uiState.tracks.find { it.album == albumName }
+            }
+
+            // We use a Box to calculate the per-item 3D math
+            var itemYOffset by remember { mutableStateOf(0f) }
+            val screenHeight = 2000f // Approximate, will be refined by viewport
+
+            AlbumGridCard(
+                title = albumName,
+                artist = albumTrack?.artist ?: "Unknown Artist",
+                artworkUri = albumTrack?.artworkUri,
+                trackCount = uiState.tracks.count { it.album == albumName },
+                modifier = Modifier
+                    .onGloballyPositioned { coordinates ->
+                        // Track the item's center Y relative to the screen
+                        itemYOffset = coordinates.positionInWindow().y + (coordinates.size.height / 2)
+                    }
+                    .graphicsLayer {
+                        // --- THE GEAR ROTATION LOGIC ---
+                        val viewportCenter = size.height * 2.5f // Adjust center point
+                        val distanceFromCenter = (itemYOffset - viewportCenter) / viewportCenter
+                        val coercedOffset = distanceFromCenter.coerceIn(-1f, 1f)
+
+                        // 1. Tilt on the X-axis (Vertical Gear Effect)
+                        rotationX = coercedOffset * -35f
+
+                        // 2. Perspective Camera
+                        cameraDistance = 12f * density
+
+                        // 3. Scale and Alpha fade at the edges
+                        val scale = 1f - (kotlin.math.abs(coercedOffset) * 0.15f)
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = 1f - (kotlin.math.abs(coercedOffset) * 0.4f)
+                    },
+                onClick = { onAlbumClick(albumName) }
             )
         }
     }

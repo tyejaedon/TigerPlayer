@@ -1,6 +1,7 @@
 package com.example.tigerplayer.ui.library
 
 import android.graphics.drawable.BitmapDrawable
+import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -44,6 +47,9 @@ fun AlbumDetailsScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
+
+    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
 
     val albumTracks = remember(uiState.tracks, albumName) {
         uiState.tracks.filter { it.album == albumName }.sortedBy { it.trackNumber }
@@ -172,7 +178,10 @@ fun AlbumDetailsScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .glassEffect(MaterialTheme.shapes.extraLarge)
-                            .background(accentColor.copy(alpha = 0.15f), MaterialTheme.shapes.extraLarge)
+                            .background(
+                                accentColor.copy(alpha = 0.15f),
+                                MaterialTheme.shapes.extraLarge
+                            )
                             .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -203,9 +212,27 @@ fun AlbumDetailsScreen(
                         track = track.copy(),
                         isCurrentTrack = isCurrentTrack,
                         isPlaying = uiState.isPlaying,
-                        onClick = { viewModel.playTrack(track) }
-                    ) { }
+                        onClick = { viewModel.playTrack(track) },
+                        onOptionsClick = { trackForOptions}
+                    )
                 }
+            }
+            // --- 3. THE OPTIONS PORTAL ---
+            trackForOptions?.let { selectedTrack ->
+                SongOptionsSheet(
+                    track = selectedTrack,
+                    playlists = playlists,
+                    onDismiss = { trackForOptions = null },
+                    onPlayNext = {
+                        viewModel.addToQueue(selectedTrack)
+                    },
+                    onAddToPlaylist = { playlistId ->
+                        viewModel.addTrackToPlaylist(playlistId, selectedTrack)
+                    },
+                    onGoToAlbum = { albumName ->
+                        Toast.makeText(context, "Album: $albumName", Toast.LENGTH_SHORT).show()
+                    }
+                )
             }
         }
 

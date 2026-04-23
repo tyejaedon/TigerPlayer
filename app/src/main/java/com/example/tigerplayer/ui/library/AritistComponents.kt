@@ -2,6 +2,7 @@ package com.example.tigerplayer.ui.library
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -27,30 +30,42 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.tigerplayer.R
+import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.ui.player.LibraryArtist
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.tigerGlow
 import java.text.NumberFormat
 import java.util.Locale
-import com.example.tigerplayer.ui.home.HomeUiState
+import java.util.concurrent.TimeUnit
 
 @Composable
-fun ArtistSearchRow(artist: LibraryArtist, onClick: () -> Unit) {
+fun ArtistSearchRow(
+    artist: LibraryArtist,
+    modifier: Modifier = Modifier, // Moved to standard position with default
+    onClick: () -> Unit
+) {
     Row(
-        modifier = Modifier
+        // THE FIX 1: Chain the incoming modifier so animations work!
+        modifier = modifier
             .fillMaxWidth()
             .bounceClick { onClick() }
             .padding(horizontal = 24.dp, vertical = 12.dp),
@@ -80,6 +95,191 @@ fun ArtistSearchRow(artist: LibraryArtist, onClick: () -> Unit) {
     }
 }
 
+@Composable
+fun AlbumSearchRow(
+    track: AudioTrack,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    // THE FIX 2: Prevent Garbage Collection stutter by remembering the uppercase string
+    val uppercaseArtist = remember(track.artist) { track.artist.uppercase() }
+
+    Row(
+        modifier = modifier // Chained the incoming modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .glassEffect(MaterialTheme.shapes.large)
+            .bounceClick { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = track.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            fallback = painterResource(R.drawable.ic_tiger_logo),
+            modifier = Modifier
+                .size(56.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f), MaterialTheme.shapes.medium)
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.album,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = uppercaseArtist, // Used the cached string
+                style = MaterialTheme.typography.labelSmall,
+                color = AardBlue,
+                letterSpacing = 1.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Icon(
+            imageVector = WitcherIcons.Library,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+@Composable
+fun SongItem(
+    track: AudioTrack,
+    isActive: Boolean,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onMoreClick: () -> Unit
+) {
+    val primaryText = MaterialTheme.colorScheme.onSurface
+    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+
+    // THE RITUAL: Pulsing energy for the active track
+    val aardPulse = if (isActive && isPlaying) rememberAardPulse() else 1f
+
+    // THE CACHE RITUAL: Prevents string allocation churn on 120Hz scrolls
+    val subtitleText = remember(track.artist, track.album) {
+        "${track.artist} • ${track.album.uppercase()}"
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 7.dp) // Optimized vertical gaps
+            .bounceClick { onClick() }
+            .glassEffect(MaterialTheme.shapes.large),
+        // AMOLED Optimization: Use very low alpha for inactive items
+        color = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.08f)
+        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f),
+        border = if (isActive) BorderStroke(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f))
+        else BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // --- 1. THE THUMBNAIL (Armor-Clad) ---
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    // Apply the glow behind the glass tile when active
+                    .then(if (isActive) Modifier.tigerGlow() else Modifier),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = track.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    fallback = painterResource(R.drawable.ic_tiger_logo),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        // Specular highlight on the thumbnail edge
+                        .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                        .graphicsLayer { alpha = if (isActive && isPlaying) aardPulse else 1f }
+                )
+
+                if (isActive && isPlaying) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = WitcherIcons.VolumeUp,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // --- 2. THE CHANT METADATA ---
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isActive) MaterialTheme.aardBlue else primaryText,
+                    fontWeight = if (isActive) FontWeight.Black else FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = subtitleText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.7f) else secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    letterSpacing = 0.8.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // --- 3. DURATION & ACTIONS ---
+            // Only show duration if not active to keep the active row clean
+            if (!isActive) {
+                Text(
+                    text = formatDuration(track.durationMs),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = secondaryText.copy(alpha = 0.4f),
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onMoreClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = WitcherIcons.Options,
+                    contentDescription = "Song Options",
+                    tint = primaryText.copy(alpha = 0.2f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
 @Composable
 fun ArtistRow(artist: LibraryArtist, onClick: () -> Unit) {
     Row(
@@ -148,8 +348,7 @@ fun ArtistGenreCloud(genres: List<String>) {
 }
 
 @Composable
-fun ArtistVanguardStats(viewModel: PlayerViewModel, profile: ArtistDetails?) {
-
+fun ArtistVanguardStats(profile: ArtistDetails?) {
     Column(
         modifier = Modifier
             .padding(16.dp)
@@ -161,41 +360,76 @@ fun ArtistVanguardStats(viewModel: PlayerViewModel, profile: ArtistDetails?) {
             )
             .padding(20.dp)
     ) {
+        // --- HEADER SECTION ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-            Text(
-                text = "VANGUARD STATS",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp
-            )
-            val statsState by viewModel.detailedStatsState.collectAsState()
+            Column {
+                Text(
+                    text = "VANGUARD STATS",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
 
-            val formattedListeners = NumberFormat.getNumberInstance(Locale.US).format(profile?.popularity ?: 0)
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ArtistMetadataBadge(
-                    text = "LISTENERS: $formattedListeners",
-                    textColor = MaterialTheme.colorScheme.primary
+                Text(
+                    text = "Global Resonance: ${profile?.popularity ?: 0}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            val localPlays = profile?.localPlayCount ?: 0
+            ArtistMetadataBadge(
+                text = "ARCHIVE PLAYS: $localPlays",
+                textColor = if (localPlays > 50) MaterialTheme.colorScheme.primary else Color.Gray,
+                isHighlight = localPlays > 100
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
+        // --- BIO / LORE SECTION ---
         val bio = profile?.bio
         if (!bio.isNullOrBlank()) {
             Text(
                 text = bio,
-                style = MaterialTheme.typography.bodyLarge,
-                lineHeight = 26.sp,
-                color = MaterialTheme.colorScheme.onBackground
+                style = MaterialTheme.typography.bodyMedium,
+                lineHeight = 24.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f)
             )
+
+            // --- GENRE TAGS (The Lore Categories) ---
+            if (profile.genres.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                FlowRow( // Ensure you have the 'androidx.compose.layout.FlowRow' import
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    profile.genres.take(5).forEach { genre ->
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                        ) {
+                            Text(
+                                text = genre.uppercase(),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
         } else {
+            // THE LOADING RITUAL: Consulting the Archives
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -205,19 +439,19 @@ fun ArtistVanguardStats(viewModel: PlayerViewModel, profile: ArtistDetails?) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(2.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                    trackColor = Color.Transparent
+                        .height(2.dp)
+                        .clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                 )
             }
         }
     }
-}
-@Composable
+}@Composable
 fun ArtistMetadataBadge(
     text: String,
     isHighlight: Boolean = false,
@@ -249,5 +483,12 @@ fun ArtistsTab(viewModel: PlayerViewModel, onNavigateToArtist: (String) -> Unit)
             ArtistRow(artist) { onNavigateToArtist(artist.name) }
         }
     }
+}
+
+
+private fun formatDuration(durationMs: Long): String {
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(durationMs)
+    val seconds = TimeUnit.MILLISECONDS.toSeconds(durationMs) - TimeUnit.MINUTES.toSeconds(minutes)
+    return String.format("%02d:%02d", minutes, seconds)
 }
 

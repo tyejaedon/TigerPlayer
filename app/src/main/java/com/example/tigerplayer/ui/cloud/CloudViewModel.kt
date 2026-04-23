@@ -125,20 +125,39 @@ class CloudViewModel @Inject constructor(
         viewModelScope.launch {
             val token = ensureValidToken() ?: return@launch
             _isLoadingAlbums.value = true
-            spotifyRepository.fetchUserSavedAlbums(token)
-            _isLoadingAlbums.value = false
+
+            try {
+                spotifyRepository.fetchUserSavedAlbums(token)
+            } catch (e: Exception) {
+                Log.e("CloudVM", "Album ledger fetch failed: ${e.message}")
+            } finally {
+                // Guaranteed to stop the spinner, even if the network fails
+                _isLoadingAlbums.value = false
+            }
         }
     }
-
 
     fun fetchUserPlaylists() {
         viewModelScope.launch {
             val token = ensureValidToken() ?: return@launch
+
+            // Note: You originally used _isLoadingTracks here. I kept it to prevent
+            // breaking your UI state, but functionally it triggers the unified loader perfectly.
             _isLoadingTracks.value = true
-            spotifyRepository.fetchUserPlaylists(token)
-            _isLoadingTracks.value = false
+
+            try {
+                spotifyRepository.fetchUserPlaylists(token)
+            } catch (e: Exception) {
+                Log.e("CloudVM", "Playlist ledger fetch failed: ${e.message}")
+            } finally {
+                // The Safeguard
+                _isLoadingTracks.value = false
+            }
         }
     }
+
+
+
 
     /**
      * Commands the Spotify App Remote.

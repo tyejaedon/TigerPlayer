@@ -48,10 +48,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
+
 // --- THE VANGUARD PALETTE (High Visibility) ---
 val AardBlue = Color(0xFF4FC3F7) // Brighter blue for better dark-mode contrast
 val IgniRed = Color(0xFFFF5252)  // Brighter red for visibility
@@ -189,23 +192,40 @@ fun LikedSongsCard(trackCount: Int, onClick: () -> Unit) {
     }
 }
 @Composable
-fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
+fun PlaylistRow(
+    playlist: Playlist,
+    modifier: Modifier = Modifier, // THE FIX: Essential for animateItem() to work
+    onClick: () -> Unit
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .clip(MaterialTheme.shapes.large) // Keeps the ripple contained
-            .bounceClick { onClick() } // S22 Optimization: Tactile mechanical feedback
-            .padding(horizontal = 4.dp, vertical = 8.dp), // Tighter inner padding to align with headers
+            .clip(MaterialTheme.shapes.large)
+            .bounceClick { onClick() }
+            // 1. THE GLASS ANCHOR: A subtle inner glow for the row
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // THE MEDALLION
+        // --- THE MEDALLION (Glass-Cut Edition) ---
         Box(
             modifier = Modifier
-                .size(48.dp) // S22 Optimization: Scaled down from 52dp
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.shapes.medium)
-                // Added a diamond-cut border to match the ActionPlaylistRow
-                .border(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), MaterialTheme.shapes.medium),
+                .size(48.dp)
+                .shadow(4.dp, MaterialTheme.shapes.medium, spotColor = AardBlue.copy(alpha = 0.2f))
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                // 2. DIAMOND-CUT BORDER: Specular highlight on the icon box
+                .border(
+                    width = 0.5.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = MaterialTheme.shapes.medium
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -218,35 +238,37 @@ fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        // THE METADATA
+        // --- THE METADATA ---
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = playlist.name,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black, // Bumped to Black for the Vanguard look
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1, // CRUCIAL: Prevents long playlist names from breaking the S22 layout
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
             Text(
-                text = if (playlist.trackCount == 1) "1 CHANT" else "${playlist.trackCount} CHANTS", // Thematic consistency
+                text =  "${playlist.trackCount} CHANTS",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                letterSpacing = 0.5.sp
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
             )
         }
 
-        // NAVIGATION HINT
+        // --- NAVIGATION HINT ---
         Icon(
-            // Use WitcherIcons.Next if you have a chevron arrow, otherwise keep it subtle
             imageVector = WitcherIcons.Next,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
             modifier = Modifier.size(16.dp)
         )
     }
 }
-
 
 
 @Composable
@@ -273,106 +295,111 @@ fun LibraryHeader(
             focusRequester.requestFocus()
         }
     }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            // S22 Optimization: Tightened from 24dp/20dp to 16dp/12dp
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically // Ensures the Row children stay aligned
     ) {
         Box(modifier = Modifier.weight(1f)) {
-
-            // --- THE TITLE ---
-            androidx.compose.animation.AnimatedVisibility(
+            // --- TITLE DISPLAY ---
+            this@Row.AnimatedVisibility(
                 visible = !isSearchActive,
                 enter = fadeIn() + expandHorizontally(),
                 exit = fadeOut() + shrinkHorizontally()
             ) {
                 Text(
                     text = title.uppercase(),
-                    style = MaterialTheme.typography.headlineMedium, // 18sp from our custom theme
+                    style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp
+                    letterSpacing = 2.sp
                 )
             }
 
-            // --- THE SEARCH INPUT ---
-            androidx.compose.animation.AnimatedVisibility(
+            // --- SEARCH INPUT (The Fix) ---
+            this@Row.AnimatedVisibility(
                 visible = isSearchActive,
                 enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End),
                 exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End)
             ) {
-                TextField(
+                // BasicTextField strips away the rigid Material padding
+                androidx.compose.foundation.text.BasicTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp) // Sleeker height for S22
-                        .focusRequester(focusRequester) // Attach focus anchor
-                        .glassEffect(CircleShape), // REMOVED the redundant .background()
-                    placeholder = {
-                        Text("Search archives...", color = placeholderColor)
-                    },
-                    // THE QUICK-CLEAR RITUAL: Allow users to instantly wipe their search
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(
-                                    imageVector = WitcherIcons.Close, // Make sure you have this!
-                                    contentDescription = "Clear Search",
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        cursorColor = AardBlue
+                        .height(48.dp) // Now perfectly respects the 48.dp height
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)
+                        .glassEffect(CircleShape),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface
                     ),
                     singleLine = true,
-                    shape = CircleShape
+                    cursorBrush = SolidColor(AardBlue),
+                    decorationBox = { innerTextField ->
+                        // This Row acts as your custom search bar layout
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp), // Perfect horizontal padding
+                            verticalAlignment = Alignment.CenterVertically // Centers text dead-center
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Search archives...",
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                                // This is where the actual typed text gets rendered
+                                innerTextField()
+                            }
+
+                            // Trailing Icon
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { onSearchQueryChange("") },
+                                    modifier = Modifier.size(24.dp) // Tighter tap target to fit 48dp
+                                ) {
+                                    Icon(
+                                        imageVector = WitcherIcons.Close,
+                                        contentDescription = "Clear",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 )
             }
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
-        // Contrast Check: Guarantee the icon is visible against the bright AardBlue
-        val buttonIconColor = if (ColorUtils.calculateLuminance(AardBlue.toArgb()) > 0.5)
-            Color.Black else Color.White
-
+        // Search Toggle Button
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
                 .background(AardBlue)
-                .bounceClick {
-                    onSearchToggle()
-                    // Automatically clear the text field when they close the search bar
-                    if (isSearchActive) onSearchQueryChange("")
-                },
+                .bounceClick { onSearchToggle() },
             contentAlignment = Alignment.Center
         ) {
-            Crossfade(targetState = isSearchActive, label = "SearchToggle") { active ->
-                Icon(
-                    imageVector = if (active) WitcherIcons.Collapse else WitcherIcons.Search,
-                    contentDescription = null,
-                    tint = buttonIconColor, // Applied contrast safety
-                    modifier = Modifier.size(22.dp)
-                )
-            }
+            Icon(
+                imageVector = if (isSearchActive) WitcherIcons.Collapse else WitcherIcons.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(24.dp)
+            )
+        }
         }
     }
-}
+
+
 
 @Composable
 fun SearchEmptyState(query: String) {
@@ -594,7 +621,7 @@ private fun formatDuration(durationMs: Long): String {
 }
 
 @Composable
-private fun rememberAardPulse(): Float {
+ fun rememberAardPulse(): Float {
     val infiniteTransition = rememberInfiniteTransition(label = "AardPulse")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.5f,

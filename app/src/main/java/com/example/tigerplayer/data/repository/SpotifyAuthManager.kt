@@ -128,12 +128,14 @@ class SpotifyAuthManager @Inject constructor(
      */
     suspend fun exchangeCodeForToken(authCode: String?, redirectUri: String): String {
         return try {
+            // Use the Client ID and Secret to forge the Basic Auth header
             val authString = "$clientId:$clientSecret"
             val encodedAuth = Base64.encodeToString(authString.toByteArray(), Base64.NO_WRAP)
             val basicAuth = "Basic $encodedAuth"
 
             val response = spotifyAuthApi.getUserToken(
                 authHeader = basicAuth,
+                grantType = "authorization_code", // Explicitly define the ritual type
                 code = authCode,
                 redirectUri = redirectUri
             )
@@ -142,16 +144,21 @@ class SpotifyAuthManager @Inject constructor(
                 val body = response.body()
                 if (body != null) {
                     val newToken = body.accessToken
-                    updateToken(newToken) // Save globally using your existing function
+                    updateToken(newToken)
                     Log.d("SpotifyAuth", "Token forged successfully from Code!")
                     newToken
-                } else ""
+                } else {
+                    Log.e("SpotifyAuth", "Ritual failed: Response body was empty.")
+                    ""
+                }
             } else {
-                Log.e("SpotifyAuth", "Swap failed: ${response.errorBody()?.string()}")
+                // Log the error body to see exactly why Spotify rejected the swap
+                val errorBody = response.errorBody()?.string()
+                Log.e("SpotifyAuth", "Swap failed with code ${response.code()}: $errorBody")
                 ""
             }
         } catch (e: Exception) {
-            Log.e("SpotifyAuth", "Exception during swap: ${e.message}")
+            Log.e("SpotifyAuth", "Exception during ritual: ${e.message}")
             ""
         }
     }

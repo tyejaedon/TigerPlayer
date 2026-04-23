@@ -22,7 +22,9 @@ import com.example.tigerplayer.service.MediaControllerManager
 import com.example.tigerplayer.ui.home.HomeUiState
 import com.example.tigerplayer.ui.home.UserStatistics
 import com.example.tigerplayer.utils.ArtistUtils
+import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -105,7 +107,14 @@ class PlayerViewModel @Inject constructor(
 
     private var lyricsFetchJob: Job? = null
     private var artistImageFetchJob: Job? = null
+
+    private val _localTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
+    private val _remoteTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
     private var metadataFetchJob: Job? = null
+    val currentTrackTitle: StateFlow<String> = uiState
+        .map { it.currentTrack?.title ?: "Unknown" }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Unknown")
 
     val customPlaylists: StateFlow<List<Playlist>> =
         audioRepository.getCustomPlaylists()
@@ -115,16 +124,23 @@ class PlayerViewModel @Inject constructor(
                 initialValue = emptyList()
             )
 
+
+
     init {
         observeLibrary()
+        loadLocalAudio()
+
         observeMediaEngine()
         observeHistory()
         observeSpotifyRemote()
         performAutoRitual()
+        syncNavidromeArchives()
 
 
-        loadLocalAudio()
+
+
     }
+
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeLibrary() {
@@ -337,6 +353,8 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
+
+
 
     private fun fetchSpotifyHighResArt(title: String, artist: String) {
         viewModelScope.launch {
@@ -584,24 +602,85 @@ class PlayerViewModel @Inject constructor(
             source =  MediaSource.LOCAL
         )
     }
+    companion object {
+        // THE ANCHOR: This ID is reserved for internal logic.
+        // It prevents "shadow" duplicates because Room/SQLite won't allow two -1L IDs.
+        const val LIKED_SONGS_ID = -1L
+    }
 
     fun addTrackToLikedSongs(track: AudioTrack) {
         viewModelScope.launch {
             val playlists = customPlaylists.value
-            var likedPlaylist = playlists.find { it.name.equals("Liked Songs", ignoreCase = true) }
+            val exists = playlists.any { it.id == LIKED_SONGS_ID }
 
-            if (likedPlaylist == null) {
-                audioRepository.createPlaylist("Liked Songs")
-                delay(200)
-                val updatedPlaylists = audioRepository.getCustomPlaylists().first()
-                likedPlaylist = updatedPlaylists.find { it.name.equals("Liked Songs", ignoreCase = true) }
+            // 1. Forge the vault if it's missing from the realm
+            if (!exists) {
+                // NOTE: Ensure your repository.createPlaylist supports an ID parameter
+                audioRepository.createPlaylist("Liked Songs", id = LIKED_SONGS_ID)
+
+                // Wait for the flow to emit the new list to ensure the DB has settled
+                customPlaylists.first { list -> list.any { it.id == LIKED_SONGS_ID } }
             }
 
-            likedPlaylist?.let {
-                audioRepository.addTrackToPlaylist(it.id, track.id)
-            }
+            // 2. Direct injection using the Constant ID
+            audioRepository.addTrackToPlaylist(LIKED_SONGS_ID, track.id)
+
+            // 3. Update the local entity and ensure the Repository persists this flag
+            track.isLiked = true
+            audioRepository.updateTrackLikeStatus(track.id, true)
         }
     }
+
+    fun removeTrackFromLikedSongs(track: AudioTrack) {
+        viewModelScope.launch {
+            // No need to "find" the playlist. We target the Anchor ID directly.
+            audioRepository.removeTrackFromPlaylist(LIKED_SONGS_ID, track.id)
+
+            // Update local state and persist to database
+            track.isLiked = false
+            audioRepository.updateTrackLikeStatus(track.id, false)
+        }
+    }
+
+    fun toggleTrackLikeStatus(track: AudioTrack) {
+        viewModelScope.launch {
+            // 1. Determine the new state
+            val newState = !track.isLiked
+
+            if (newState) {
+                // RITUAL OF ADDITION
+                ensureLikedPlaylistExists()
+                audioRepository.addTrackToPlaylist(PlayerViewModel.LIKED_SONGS_ID, track.id)
+            } else {
+                // RITUAL OF REMOVAL
+                audioRepository.removeTrackFromPlaylist(PlayerViewModel.LIKED_SONGS_ID, track.id)
+            }
+
+            // 2. Persist the 'Heart' flag in the cached_tracks table
+            // This ensures the heart stays filled even after a restart
+            audioRepository.updateTrackLikeStatus(track.id, newState)
+
+            // 3. Update the local track object if it's currently being viewed
+            // If your UI is observing a Flow of tracks, this update will propagate automatically.
+            track.isLiked = newState
+
+             _uiState.update { it.copy(currentTrack = it.currentTrack?.copy(isLiked = newState)) }
+        }
+    }
+
+    private suspend fun ensureLikedPlaylistExists() {
+        val playlists = customPlaylists.value
+        val exists = playlists.any { it.id == PlayerViewModel.LIKED_SONGS_ID }
+
+        if (!exists) {
+            // Create the singleton 'Liked Songs' vault with our reserved ID
+            audioRepository.createPlaylist("Liked Songs", id = PlayerViewModel.LIKED_SONGS_ID)
+
+            // Wait for the flow to acknowledge the new playlist to prevent race conditions
+            customPlaylists.first { list -> list.any { it.id == PlayerViewModel.LIKED_SONGS_ID } }
+        }
+    }
+
 
     fun createPlaylist(name: String) {
         viewModelScope.launch {
@@ -633,8 +712,12 @@ class PlayerViewModel @Inject constructor(
         onSearchQueryChanged("")
     }
 
+    // 1. HARDEN THE LIBRARY AGGREGATION
     private fun aggregateLibrary(tracks: List<AudioTrack>, query: String = ""): PlayerUiState {
-        val filtered = if (query.isEmpty()) tracks else tracks.filter {
+        // Filter out duplicates from the source
+        val uniqueSource = tracks.distinctBy { it.id }
+
+        val filtered = if (query.isEmpty()) uniqueSource else uniqueSource.filter {
             it.title.contains(query, ignoreCase = true) ||
                     it.artist.contains(query, ignoreCase = true) ||
                     it.album.contains(query, ignoreCase = true)
@@ -653,7 +736,7 @@ class PlayerViewModel @Inject constructor(
             .sortedBy { it.name }
 
         return _uiState.value.copy(
-            tracks = tracks,
+            tracks = uniqueSource,
             filteredTracks = filtered,
             artists = aggregatedArtists,
             albums = filtered.map { it.album.trim() }.distinct().sorted(),
@@ -661,6 +744,63 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    fun syncNavidromeArchives() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Grab the latest credentials from DataStore
+            val url = navidromePrefs.serverUrl.firstOrNull()
+            val user = navidromePrefs.username.firstOrNull()
+            val pass = navidromePrefs.password.firstOrNull()
+
+            // If no credentials, the user hasn't logged in. Abort gracefully.
+            if (url.isNullOrBlank() || user.isNullOrBlank() || pass.isNullOrBlank()) {
+                Log.d("LibrarySync", "No Navidrome credentials found. Skipping remote sync.")
+                _remoteTracks.value = emptyList() // Ensure remote is cleared if they logged out
+                return@launch
+            }
+
+            try {
+                Log.d("LibrarySync", "Contacting Navidrome Server at $url...")
+
+                // Fetch the Subsonic JSON models
+                val result = navidromeRepository.getAllRemoteTracks(user, pass)
+
+                result.onSuccess { remoteList ->
+                    // THE TRANMUTATION: Convert RemoteTrack -> AudioTrack using our Mapper
+                    val mappedTracks = remoteList.map { remoteTrack ->
+                        remoteTrack.toAudioTrack(
+                            serverUrl = url,
+                            username = user,
+                            pass = pass
+                        )
+                    }
+
+                    Log.d("LibrarySync", "Navidrome sync complete! Added ${mappedTracks.size} tracks.")
+                    _remoteTracks.value = mappedTracks
+
+                }.onFailure { error ->
+                    Log.e("LibrarySync", "Failed to reach Navidrome: ${error.message}")
+                    // Don't clear existing _remoteTracks on network error, so they can still see cached UI
+                }
+            } catch (e: Exception) {
+                Log.e("LibrarySync", "Critical failure during Navidrome sync", e)
+            }
+        }
+    }
+
+    // 2. HARDEN THE QUEUE SYNC
+    private fun updateQueue() {
+        val controller = mediaControllerManager.mediaController ?: return
+        val knownTracks = _uiState.value.tracks.associateBy { it.id }
+
+        val resolvedQueue = (0 until controller.mediaItemCount).map { i ->
+            val mediaItem = controller.getMediaItemAt(i)
+            // If the track is in our library, use the full object.
+            // Otherwise, use the converted MediaItem.
+            knownTracks[mediaItem.mediaId] ?: mediaItem.toAudioTrack()
+        }
+
+        _uiState.update { it.copy(queue = resolvedQueue) }
+    }
     fun connectToNavidrome(
         url: String,
         user: String,
@@ -755,18 +895,6 @@ class PlayerViewModel @Inject constructor(
      * Synchronizes the internal Media3 playlist with the UI state,
      * resolving IDs into full AudioTrack objects.
      */
-    private fun updateQueue() {
-        val controller = mediaControllerManager.mediaController ?: return
-        val knownTracks = _uiState.value.tracks.associateBy { it.id }
-
-        val resolvedQueue = (0 until controller.mediaItemCount).map { i ->
-            val mediaItem = controller.getMediaItemAt(i)
-            knownTracks[mediaItem.mediaId] ?: mediaItem.toAudioTrack()
-        }
-
-        _uiState.update { it.copy(queue = resolvedQueue) }
-        Log.d("TigerVM", "Queue Manifested: ${resolvedQueue.size} items.")
-    }    // Inside PlayerViewModel.kt
 
     // THE MISSING RITUAL: Sever the shadow
     fun removeFromQueue(track: AudioTrack) {

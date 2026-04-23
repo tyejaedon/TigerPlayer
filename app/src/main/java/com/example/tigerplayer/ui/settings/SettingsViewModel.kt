@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.example.tigerplayer.data.repository.LyricsRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
+import com.example.tigerplayer.service.EqMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,9 +36,20 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     private val _cacheSizeFormatted = MutableStateFlow("Calculating...")
     val cacheSizeFormatted = _cacheSizeFormatted.asStateFlow()
+    val currentEqMode: Flow<EqMode> = dataStore.data.map { pref ->
+        val mode = pref[EQ_MODE_KEY] ?: EqMode.BALANCE.name
+        EqMode.valueOf(mode)
+    }
+
 
     init {
         calculateTotalCache()
+    }
+    fun setEqMode(mode: EqMode) {
+        viewModelScope.launch {
+            dataStore.edit { it[EQ_MODE_KEY] = mode.name }
+
+        }
     }
 
     private fun calculateTotalCache() {
@@ -122,5 +134,6 @@ class SettingsViewModel @Inject constructor(
 
     companion object {
         private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
+        private val EQ_MODE_KEY = stringPreferencesKey("eq_mode") // NEW KEY
     }
 }

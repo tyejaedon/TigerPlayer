@@ -116,11 +116,13 @@ fun PlaylistDetailsScreen(
             if (playlistTracks.isEmpty()) {
                 item { EmptyArchiveState("The grimoire is empty.") }
             } else {
-                itemsIndexed(items = playlistTracks, key = { _, track -> track.id }) { index, track ->
+                itemsIndexed(
+                    items = playlistTracks,
+                    key = { index, track -> "playlist_track_${track.id}_$index" }
+                ) { index, track ->
                     val isCurrent = uiState.currentTrack?.id == track.id
 
                     ChapterSongRow(
-                        indexString = (index + 1).toString().padStart(2, '0'),
                         index = index,
                         track = track,
                         isCurrentTrack = isCurrent,
@@ -147,63 +149,7 @@ fun PlaylistDetailsScreen(
 // --- THE COMPONENTS ---
 // ==========================================
 
-@Composable
-fun ChapterSongRow(
-    indexString: String,
-    index: Int,
-    track: AudioTrack,
-    isCurrentTrack: Boolean,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    onOptionsClick: () -> Unit
-) {
-    val activeTint = MaterialTheme.colorScheme.primary
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp), // S22: Tightened horizontal padding
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // S22: Reduced width to 32dp to give more room to song titles
-        Box(modifier = Modifier.width(32.dp), contentAlignment = Alignment.CenterStart) {
-            if (isCurrentTrack && isPlaying) {
-                Icon(WitcherIcons.VolumeUp, null, tint = activeTint, modifier = Modifier.size(18.dp))
-            } else {
-                Text(
-                    text = indexString,
-                    style = MaterialTheme.typography.labelMedium, // Scaled down for sleekness
-                    color = if (isCurrentTrack) activeTint else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    fontWeight = FontWeight.Black
-                )
-            }
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isCurrentTrack) FontWeight.Black else FontWeight.Bold,
-                color = if (isCurrentTrack) activeTint else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = track.artist.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                letterSpacing = 0.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        IconButton(onClick = onOptionsClick, modifier = Modifier.size(32.dp)) {
-            Icon(WitcherIcons.Options, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), modifier = Modifier.size(20.dp))
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

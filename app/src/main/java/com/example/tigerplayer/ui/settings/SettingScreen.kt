@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ColorLens
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.example.tigerplayer.service.EqMode
 import com.example.tigerplayer.ui.theme.glassEffect
 
 // --- Thematic Colors ---
@@ -85,6 +88,32 @@ fun SettingsScreen(
                     onModeSelected = { viewModel.setThemeMode(it) }
                 )
             }
+            SettingsSection(
+                title = "ACOUSTIC RESONANCE",
+                icon = Icons.Rounded.Audiotrack // You might need to import this
+            ) {
+                val currentEq by viewModel.currentEqMode.collectAsState(initial = EqMode.BALANCE)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassEffect(shape = MaterialTheme.shapes.large)
+                        .padding(20.dp)
+                ) {
+                    Text("Environmental Profiles", fontWeight = FontWeight.Bold)
+                    Text("Calibrate the output for your SpaceBuds Z",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EqOption("BALANCE", currentEq == EqMode.BALANCE, { viewModel.setEqMode(EqMode.BALANCE) }, Modifier.weight(1f))
+                        EqOption("TRANSPARENT", currentEq == EqMode.TRANSPARENCY, { viewModel.setEqMode(EqMode.TRANSPARENCY) }, Modifier.weight(1f))
+                        EqOption("ISOLATION", currentEq == EqMode.ISOLATION, { viewModel.setEqMode(EqMode.ISOLATION) }, Modifier.weight(1f))
+                    }
+                }
+            }
 
             // --- SECTION: REMOTE SERVICES ---
             SettingsSection(
@@ -137,7 +166,20 @@ fun SettingsScreen(
         }
     }
 }
-
+@Composable
+fun EqOption(label: String, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected) AardBlue.copy(alpha = 0.2f) else Color.Transparent,
+        border = BorderStroke(1.dp, if (isSelected) AardBlue else Color.Gray.copy(alpha = 0.3f)),
+        modifier = modifier.height(48.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Black, color = if (isSelected) AardBlue else Color.Gray)
+        }
+    }
+}
 @Composable
 fun SettingsSection(
     title: String,
