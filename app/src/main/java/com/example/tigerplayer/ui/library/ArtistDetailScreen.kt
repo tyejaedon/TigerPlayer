@@ -144,7 +144,7 @@ fun ArtistDetailsScreen(
 
                 // --- 3. VANGUARD STATS ---
                 item { ArtistVanguardStats(
-viewModel,profile
+profile
                 ) }
 
                 // --- 4. DISCOGRAPHY (Albums) ---

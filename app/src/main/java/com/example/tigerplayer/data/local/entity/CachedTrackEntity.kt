@@ -22,6 +22,7 @@ data class CachedTrackEntity(
     val sampleRate: Int,
     val trackNumber: Int,
     val year: String? = null,
+    val isLiked: Boolean,
 
     // --- THE FIX: The Absolute Path ---
     // Critical for the LyricsRepository to locate .lrc files in the same folder

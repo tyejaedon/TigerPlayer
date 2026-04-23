@@ -163,9 +163,20 @@ class AudioRepository @Inject constructor(
         return playlistDao.getPlaylistsWithCount()
     }
 
-    suspend fun createPlaylist(name: String) {
-        playlistDao.insertPlaylist(PlaylistEntity(name = name))
+    suspend fun createPlaylist(name: String, id: Long? = null) {
+        playlistDao.insertPlaylist(
+            PlaylistEntity(
+                playlistId = id ?: 0L, // If null, Room auto-generates; if -1L, Room uses that.
+                name = name
+            )
+        )
     }
+    suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean) {
+        tigerDao.updateTrackLikeStatus(trackId, isLiked)
+    }
+
+
+
 
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
         playlistDao.insertTrackIntoPlaylist(
@@ -180,7 +191,6 @@ class AudioRepository @Inject constructor(
     }
 
     // --- MAPPING HELPERS ---
-
     private fun CachedTrackEntity.toDomainModel() = AudioTrack(
         id = id,
         title = title,
@@ -195,7 +205,8 @@ class AudioRepository @Inject constructor(
         sampleRate = sampleRate,
         trackNumber = trackNumber,
         path = path,
-        year = year
+        year = year,
+        isLiked = isLiked// THE FIX: Pulling persistence from the Entity
     )
 
     private fun AudioTrack.toEntity() = CachedTrackEntity(
@@ -211,7 +222,8 @@ class AudioRepository @Inject constructor(
         sampleRate = sampleRate,
         trackNumber = trackNumber,
         path = path,
-        year = year
+        year = year,
+        isLiked = isLiked // THE FIX: Storing UI state into the Entity
     )
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {

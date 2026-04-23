@@ -21,7 +21,9 @@ data class ArtistDetails(
     val imageUrl: String?,
     val bio: String?,
     val genres: List<String> = emptyList(),
+    val localPlayCount: Int = 0,
     val popularity: Int = 0
+
 )
 
 @Singleton
@@ -40,6 +42,7 @@ class MediaDataRepository @Inject constructor(
             emit(ArtistDetails(cleanArtist, null, "Unknown entity."))
             return@flow
         }
+        val localCount = tigerDao.getArtistPlayCount(cleanArtist)
 
         // 2. THE ARCHIVE CHECK (Cache)
         val cachedData = tigerDao.getArtistCache(cleanArtist)
@@ -52,7 +55,8 @@ class MediaDataRepository @Inject constructor(
                 name = cleanArtist,
                 imageUrl = cachedData.imageUrl,
                 bio = cachedData.bio,
-                genres = cachedData.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+                genres = cachedData.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
+                localPlayCount = localCount
             ))
             return@flow
         }
@@ -98,7 +102,8 @@ class MediaDataRepository @Inject constructor(
                         imageUrl = imageUrl,
                         bio = finalBio,
                         genres = genreList,
-                        popularity = spotifyDetail?.popularity ?: 0
+                        popularity = spotifyDetail?.popularity ?: 0,
+                        localPlayCount = localCount
                     )
 
                     // SECURING THE LOOT
@@ -123,13 +128,13 @@ class MediaDataRepository @Inject constructor(
                             genres = ""
                         )
                     )
-                    emit(ArtistDetails(cleanArtist, null, voidBio))
+                    emit(ArtistDetails(cleanArtist, null, voidBio,localPlayCount = localCount))
                 }
             }
         } catch (e: Exception) {
             Log.e("MediaRepo", "Ritual failed: ${e.message}")
             // Do not cache network failures, so it can retry later
-            emit(ArtistDetails(cleanArtist, null, "Connection to oracles lost."))
+            emit(ArtistDetails(cleanArtist, null, "Connection to oracles lost.",localPlayCount = localCount))
         }
     }.flowOn(Dispatchers.IO)
 

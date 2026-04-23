@@ -65,10 +65,6 @@ interface TigerDao {
     )
     fun getTopArtist(): Flow<String?>
 
-    /**
-     * THE TOP ARTISTS LIST
-     * Direct SQL ritual to split featuring artists and rank them.
-     */
     @Query(
         """
         SELECT 
@@ -121,7 +117,15 @@ interface TigerDao {
     @Query("DELETE FROM cached_tracks")
     suspend fun clearTrackCache(): Int
 
-    // Inside your TigerDao interface:
+    /**
+     * THE PERSISTENCE RITUAL
+     * Updates the 'isLiked' state of a track in the local vault.
+     * This is the "Truth Anchor" for your Heart icons.
+     */
+    @Query("UPDATE cached_tracks SET isLiked = :isLiked WHERE id = :trackId")
+    suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean): Int
+
+    // --- THE LYRIC ARCHIVE ---
 
     @Query("SELECT * FROM lyrics_cache WHERE trackId = :trackId")
     suspend fun getLyricsCache(trackId: String): LyricsCacheEntity?
@@ -133,22 +137,34 @@ interface TigerDao {
     suspend fun updateLyricsAccessTime(
         trackId: String,
         timestamp: Long = System.currentTimeMillis()
-    ): Int // <-- THE FIX IS HERE
+    ): Int
 
-    // The space-saving ritual (2000 rows = ~10MB max)
     @Query("DELETE FROM lyrics_cache WHERE trackId NOT IN (SELECT trackId FROM lyrics_cache ORDER BY lastAccessed DESC LIMIT 2000)")
-    suspend fun enforceLyricsCacheLimit(): Int // <-- AND HERE
+    suspend fun enforceLyricsCacheLimit(): Int
 
-    // The space-saving ritual (2000 rows = ~10MB max)
 
-    /**
-     * PURGE RITUAL
-     * Deletes playback history older than 90 days to keep the S22 snappy.
-     */
-    // THE FIX
+    @Query("""
+        SELECT COUNT(*) 
+        FROM playback_history 
+        WHERE trim(CASE 
+            WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
+            WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
+            WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
+            WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+            ELSE artist 
+        END) = :artistName
+    """)
+    suspend fun getArtistPlayCount(artistName: String): Int
+
+
+    // --- PURGE RITUALS ---
+
     @Query("DELETE FROM lyrics_cache")
     suspend fun clearAllLyrics(): Int
 
     @Query("DELETE FROM artist_cache")
     suspend fun clearArtistCache(): Int
+
+    @Query("DELETE FROM playback_history WHERE timestamp <= :cutoffTime")
+    suspend fun purgeOldHistory(cutoffTime: Long): Int
 }

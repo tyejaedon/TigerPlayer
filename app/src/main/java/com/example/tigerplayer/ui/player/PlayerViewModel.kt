@@ -602,46 +602,82 @@ class PlayerViewModel @Inject constructor(
             source =  MediaSource.LOCAL
         )
     }
+    companion object {
+        // THE ANCHOR: This ID is reserved for internal logic.
+        // It prevents "shadow" duplicates because Room/SQLite won't allow two -1L IDs.
+        const val LIKED_SONGS_ID = -1L
+    }
 
     fun addTrackToLikedSongs(track: AudioTrack) {
         viewModelScope.launch {
             val playlists = customPlaylists.value
-            var likedPlaylist = playlists.find { it.name.equals("Liked Songs", ignoreCase = true) }
+            val exists = playlists.any { it.id == LIKED_SONGS_ID }
 
-            if (likedPlaylist == null) {
-                audioRepository.createPlaylist("Liked Songs")
-                delay(200)
-                val updatedPlaylists = audioRepository.getCustomPlaylists().first()
-                likedPlaylist = updatedPlaylists.find { it.name.equals("Liked Songs", ignoreCase = true) }
+            // 1. Forge the vault if it's missing from the realm
+            if (!exists) {
+                // NOTE: Ensure your repository.createPlaylist supports an ID parameter
+                audioRepository.createPlaylist("Liked Songs", id = LIKED_SONGS_ID)
+
+                // Wait for the flow to emit the new list to ensure the DB has settled
+                customPlaylists.first { list -> list.any { it.id == LIKED_SONGS_ID } }
             }
 
-            likedPlaylist?.let {
-                audioRepository.addTrackToPlaylist(it.id, track.id)
-                track.isliked = true
-            }
+            // 2. Direct injection using the Constant ID
+            audioRepository.addTrackToPlaylist(LIKED_SONGS_ID, track.id)
+
+            // 3. Update the local entity and ensure the Repository persists this flag
+            track.isLiked = true
+            audioRepository.updateTrackLikeStatus(track.id, true)
         }
     }
+
     fun removeTrackFromLikedSongs(track: AudioTrack) {
         viewModelScope.launch {
-            if (track.isliked) {
-                val playlists = customPlaylists.value
-                val likedPlaylist = playlists.find { it.name.equals("Liked Songs", ignoreCase = true) }
-                likedPlaylist?.let {
-                    audioRepository.removeTrackFromPlaylist(it.id, track.id)
-                    track.isliked = false
-                }
-            }
+            // No need to "find" the playlist. We target the Anchor ID directly.
+            audioRepository.removeTrackFromPlaylist(LIKED_SONGS_ID, track.id)
+
+            // Update local state and persist to database
+            track.isLiked = false
+            audioRepository.updateTrackLikeStatus(track.id, false)
         }
-
-
     }
 
     fun toggleTrackLikeStatus(track: AudioTrack) {
-        // We check the current state of the track and route accordingly
-        if (track.isliked) {
-            removeTrackFromLikedSongs(track)
-        } else {
-            addTrackToLikedSongs(track)
+        viewModelScope.launch {
+            // 1. Determine the new state
+            val newState = !track.isLiked
+
+            if (newState) {
+                // RITUAL OF ADDITION
+                ensureLikedPlaylistExists()
+                audioRepository.addTrackToPlaylist(PlayerViewModel.LIKED_SONGS_ID, track.id)
+            } else {
+                // RITUAL OF REMOVAL
+                audioRepository.removeTrackFromPlaylist(PlayerViewModel.LIKED_SONGS_ID, track.id)
+            }
+
+            // 2. Persist the 'Heart' flag in the cached_tracks table
+            // This ensures the heart stays filled even after a restart
+            audioRepository.updateTrackLikeStatus(track.id, newState)
+
+            // 3. Update the local track object if it's currently being viewed
+            // If your UI is observing a Flow of tracks, this update will propagate automatically.
+            track.isLiked = newState
+
+             _uiState.update { it.copy(currentTrack = it.currentTrack?.copy(isLiked = newState)) }
+        }
+    }
+
+    private suspend fun ensureLikedPlaylistExists() {
+        val playlists = customPlaylists.value
+        val exists = playlists.any { it.id == PlayerViewModel.LIKED_SONGS_ID }
+
+        if (!exists) {
+            // Create the singleton 'Liked Songs' vault with our reserved ID
+            audioRepository.createPlaylist("Liked Songs", id = PlayerViewModel.LIKED_SONGS_ID)
+
+            // Wait for the flow to acknowledge the new playlist to prevent race conditions
+            customPlaylists.first { list -> list.any { it.id == PlayerViewModel.LIKED_SONGS_ID } }
         }
     }
 

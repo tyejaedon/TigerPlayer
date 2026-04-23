@@ -116,7 +116,7 @@ object NavidromeMapper {
             trackNumber = this.track ?: 0,
             serverPath = streamUrl,
             year = this.year?.toString(),
-            isliked = false,
+            isLiked = false,
 
             // --- THE LYRICS LINK ---
             // Since remote tracks don't have a local file path (like /storage/emulated/0/...),
