@@ -7,44 +7,31 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ripple
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.draw.*
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 
-/**
- * A custom modifier that physically depresses the UI element when pressed,
- * adding a weighty, tactile feel to the interaction.
- */
-fun Modifier.bounceClick(
-    onClick: () -> Unit
-) = composed {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+// ------------------------------
+// SAMSUNG-STYLE CLICK DEPTH
+// ------------------------------
+fun Modifier.bounceClick(onClick: () -> Unit) = composed {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
 
-    // S22 Optimization: Subtler scale (0.96f) for high-density targets
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
+        targetValue = if (pressed) 0.97f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+            stiffness = Spring.StiffnessLow
         ),
-        label = "bounce"
+        label = "press"
     )
 
     this
@@ -53,67 +40,68 @@ fun Modifier.bounceClick(
             scaleY = scale
         }
         .clickable(
-            interactionSource = interactionSource,
-            indication = ripple(bounded = true),
+            interactionSource = interaction,
+            indication = null,
             onClick = onClick
         )
 }
 
-/**
- * REFACTORED: Visibility-First Glass Effect
- * Drops opacity to actual glass levels while using a gradient to protect text legibility.
- */
-fun Modifier.glassEffect(
-    shape: Shape
-) = composed {
-    val isDark = isSystemInDarkTheme()
-    val surfaceBase = MaterialTheme.colorScheme.surface
+// ------------------------------
+// SAMSUNG GLASS (REALISTIC LAYERING)
+// ------------------------------
+fun Modifier.glassEffect(shape: Shape) = composed {
+    val dark = isSystemInDarkTheme()
 
-    // THE FIX: True glass needs lower opacities.
-    // alphaTop acts as the frosted glare, alphaBottom acts as the base translucency.
-    val alphaTop = if (isDark) 0.65f else 0.85f
-    val alphaBottom = if (isDark) 0.40f else 0.70f
-
-    val borderColor = if (isDark) {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f) // Crisp edge for AMOLED
-    } else {
-        Color.Black.copy(alpha = 0.15f)
-    }
+    val base = if (dark) Color.White.copy(0.04f) else Color.Black.copy(0.03f)
 
     this
         .clip(shape)
-        // 1. The Translucent Base
-        .background(surfaceBase.copy(alpha = alphaBottom))
-        // 2. The Directional Glare
+        .background(base)
+        .blur(0.6.dp) // subtle Samsung blur feel
         .background(
             Brush.verticalGradient(
-                colors = listOf(
-                    surfaceBase.copy(alpha = alphaTop), // Frosted top edge catches "light"
-                    Color.Transparent, // Clear middle to let artwork bleed
-                    // Dark anchor at the bottom ensures white typography remains readable
-                    if (isDark) Color.Black.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                listOf(
+                    Color.White.copy(alpha = if (dark) 0.06f else 0.12f),
+                    Color.Transparent
                 )
             )
         )
-        // 3. The Specular Edge Highlights
-        .border(0.5.dp, borderColor, shape)
+        .border(
+            0.5.dp,
+            Color.White.copy(alpha = if (dark) 0.12f else 0.08f),
+            shape
+        )
 }
 
-/**
- * Hardware-accelerated neon glow using native Canvas drawing.
- */
-fun Modifier.tigerGlow() = composed {
-    val glowColor = MaterialTheme.colorScheme.primary
-    this.drawBehind {
-        drawIntoCanvas { canvas ->
-            val paint = Paint().apply {
-                asFrameworkPaint().apply {
-                    // S22 Optimization: Blur radius kept at 20f to prevent GPU overdraw
-                    maskFilter = BlurMaskFilter(20f, BlurMaskFilter.Blur.NORMAL)
-                    this.color = glowColor.toArgb()
-                }
+// ------------------------------
+// SAMSUNG "DEPTH GLOW"
+// ------------------------------
+@Composable
+fun Modifier.tigerGlow(
+    color: Color = MaterialTheme.colorScheme.primary
+) = composed {
+
+    this.drawWithCache {
+
+        val paint = androidx.compose.ui.graphics.Paint().apply {
+            this.color = color.copy(alpha = 0.25f)
+            asFrameworkPaint().apply {
+                maskFilter =
+                    android.graphics.BlurMaskFilter(
+                        40f,
+                        android.graphics.BlurMaskFilter.Blur.NORMAL
+                    )
             }
-            canvas.drawCircle(center, size.width / 2, paint)
+        }
+
+        onDrawBehind {
+            val radius = size.minDimension / 2f
+
+            drawContext.canvas.drawCircle(
+                center = center,
+                radius = radius,
+                paint = paint
+            )
         }
     }
 }

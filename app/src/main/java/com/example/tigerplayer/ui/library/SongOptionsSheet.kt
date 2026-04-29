@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -44,9 +45,6 @@ fun SongOptionsSheet(
     onGoToAlbum: (String) -> Unit
 ) {
     var showPlaylistSelector by remember { mutableStateOf(false) }
-
-    // THE FIX: Set containerColor to Transparent to prevent the "White Box" glitch.
-    // We will draw our own glass container inside.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.Transparent,
@@ -247,6 +245,106 @@ private fun PlaylistSelectionRow(playlist: Playlist, onClick: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Black,
             color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaylistOptionsSheet(
+    playlist: Playlist,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        modifier = Modifier.glassEffect(MaterialTheme.shapes.extraLarge)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                text = playlist.name.uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
+            )
+            Text(
+                text = "${playlist.trackCount} CHANTS STORED",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            OptionRow(
+                icon = WitcherIcons.Edit,
+                label = "Rename Grimoire",
+                onClick = onRename
+            )
+
+            OptionRow(
+                icon = WitcherIcons.Delete,
+                label = "Destroy Grimoire",
+                accentColor = MaterialTheme.igniRed,
+                onClick = onDelete
+            )
+        }
+    }
+}
+@Composable
+fun OptionRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
+    isSubOption: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp) // Standardized height for thumb-friendly navigation
+            .clip(RoundedCornerShape(12.dp))
+            .bounceClick { onClick() }
+            .padding(start = if (isSubOption) 16.dp else 0.dp), // Indent sub-options
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // --- 1. THE ICON ORB ---
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(
+                    color = if (isSubOption) Color.Transparent else accentColor.copy(alpha = 0.1f),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSubOption) accentColor.copy(alpha = 0.6f) else accentColor,
+                modifier = Modifier.size(if (isSubOption) 20.dp else 24.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        // --- 2. THE COMMAND TEXT ---
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.5.sp
+            ),
+            color = if (isSubOption) {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
         )
     }
 }

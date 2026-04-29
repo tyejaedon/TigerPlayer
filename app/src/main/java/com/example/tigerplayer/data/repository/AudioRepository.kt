@@ -157,40 +157,59 @@ class AudioRepository @Inject constructor(
         }
     }
 
+    // ==========================================
+    // --- GRIMOIRE (PLAYLIST) OPERATIONS ---
+    // ==========================================
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
-        // THE REFACTOR: Use the dynamic join query to get real-time track counts
+        // Uses the dynamic join query to get real-time track counts and custom covers
         return playlistDao.getPlaylistsWithCount()
     }
 
     suspend fun createPlaylist(name: String, id: Long? = null) {
         playlistDao.insertPlaylist(
             PlaylistEntity(
-                playlistId = id ?: 0L, // If null, Room auto-generates; if -1L, Room uses that.
-                name = name
+                playlistId = id ?: 0L, // If null, Room auto-generates; if -1L, it uses the reserved Liked Songs ID
+                name = name,
+                artworkUri = null, // Default to null until the user sets a custom cover
+                createdAt = System.currentTimeMillis()
             )
         )
     }
+
     suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean) {
         tigerDao.updateTrackLikeStatus(trackId, isLiked)
     }
 
-
-
-
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
         playlistDao.insertTrackIntoPlaylist(
-            PlaylistTrackCrossRef(playlistId = playlistId, trackId = trackId)
+            PlaylistTrackCrossRef(
+                playlistId = playlistId,
+                trackId = trackId,
+                dateAdded = System.currentTimeMillis(),
+                position = 0 // Will fall back to dateAdded sorting initially
+            )
+        )
+    }
+
+    suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
+        playlistDao.removeTrackFromPlaylist(
+            playlistId = playlistId,
+            trackId = trackId
         )
     }
 
     fun getTracksForPlaylist(playlistId: Long): Flow<List<AudioTrack>> {
         return getLocalTracks().combine(playlistDao.getTrackIdsForPlaylist(playlistId)) { allTracks, trackIds ->
-            allTracks.filter { trackIds.contains(it.id) }
+            // THE CRITICAL FIX: Preserves the custom Drag-and-Drop order!
+            // Instead of filtering `allTracks`, we map over the sorted `trackIds`
+            // returned by the DB and find the matching track.
+            trackIds.mapNotNull { id -> allTracks.find { it.id == id } }
         }
     }
 
     // --- MAPPING HELPERS ---
+
     private fun CachedTrackEntity.toDomainModel() = AudioTrack(
         id = id,
         title = title,
@@ -206,7 +225,7 @@ class AudioRepository @Inject constructor(
         trackNumber = trackNumber,
         path = path,
         year = year,
-        isLiked = isLiked// THE FIX: Pulling persistence from the Entity
+        isLiked = isLiked
     )
 
     private fun AudioTrack.toEntity() = CachedTrackEntity(
@@ -223,13 +242,6 @@ class AudioRepository @Inject constructor(
         trackNumber = trackNumber,
         path = path,
         year = year,
-        isLiked = isLiked // THE FIX: Storing UI state into the Entity
+        isLiked = isLiked
     )
-
-    suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
-        playlistDao.removeTrackFromPlaylist(
-            playlistId = playlistId,
-            trackId = trackId
-        )
-    }
 }

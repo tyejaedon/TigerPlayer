@@ -20,7 +20,7 @@ import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
         CachedTrackEntity::class, // <-- Added
         LyricsCacheEntity::class // 2. Add it to the array
     ],
-    version = 6, // <-- Bumped to 5 for year addition
+    version = 7, // <-- Bumped to 5 for year addition
     exportSchema = false
 )
 @TypeConverters(Converters::class)

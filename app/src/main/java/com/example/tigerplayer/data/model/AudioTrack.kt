@@ -27,13 +27,13 @@ data class AudioTrack(
 
 /**
  * THE PLAYLIST MANIFEST:
- * Refactored to support dynamic counts from the database.
- * The 'trackCount' is now a 'val' because it is derived reactively 
- * from Room via a SQL JOIN in the PlaylistDao.
+ * Refactored to support dynamic counts from the database,
+ * and added artworkUri to support custom covers set by the user.
  */
 data class Playlist(
     val id: Long,
     val name: String,
     val trackCount: Int = 0,
+    val artworkUri: String? = null, // Added to support the new edit UI
     val createdAt: Long = System.currentTimeMillis()
 )

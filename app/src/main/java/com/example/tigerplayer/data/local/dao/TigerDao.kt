@@ -5,12 +5,9 @@ import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
 import com.example.tigerplayer.data.local.entity.CachedTrackEntity
 import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import kotlinx.coroutines.flow.Flow
 
-/**
- * THE CHRONICLE RECORDS
- * Data classes for aggregating your listening habits.
- */
 data class ArtistStats(
     val artistName: String,
     val playCount: Int,
@@ -27,28 +24,23 @@ data class TrackStats(
 
 @Dao
 @JvmSuppressWildcards
-interface TigerDao {
+abstract class TigerDao {
 
-    // --- THE CHRONICLES (Playback History) ---
+    // --- 1. THE CHRONICLES (Playback History) ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertHistory(history: PlaybackHistoryEntity): Long
+    abstract suspend fun insertHistory(history: PlaybackHistoryEntity): Long
 
     @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 50")
-    fun getRecentTracks(): Flow<List<PlaybackHistoryEntity>>
+    abstract fun getRecentTracks(): Flow<List<PlaybackHistoryEntity>>
 
     @Query("SELECT SUM(durationListenedMs) FROM playback_history")
-    fun getTotalListeningTimeMs(): Flow<Long?>
+    abstract fun getTotalListeningTimeMs(): Flow<Long?>
 
     @Query("SELECT SUM(durationListenedMs) FROM playback_history WHERE timestamp >= :startTime")
-    fun getTotalListeningTimeMs(startTime: Long): Flow<Long?>
+    abstract fun getTotalListeningTimeMs(startTime: Long): Flow<Long?>
 
-    /**
-     * THE SUPREME ARTIST
-     * Returns the most played artist, accounting for collaborations.
-     */
-    @Query(
-        """
+    @Query("""
         SELECT 
             trim(CASE 
                 WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
@@ -61,12 +53,10 @@ interface TigerDao {
         GROUP BY artistName 
         ORDER BY COUNT(*) DESC 
         LIMIT 1
-    """
-    )
-    fun getTopArtist(): Flow<String?>
+    """)
+    abstract fun getTopArtist(): Flow<String?>
 
-    @Query(
-        """
+    @Query("""
         SELECT 
             trim(CASE 
                 WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
@@ -82,66 +72,65 @@ interface TigerDao {
         GROUP BY artistName 
         ORDER BY playCount DESC 
         LIMIT :limit
-    """
-    )
-    fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>>
+    """)
+    abstract fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>>
 
-    @Query(
-        """
+    @Query("""
         SELECT trackId, title, artist, MAX(imageUrl) as imageUrl, COUNT(*) as playCount 
         FROM playback_history 
         WHERE timestamp >= :startTime 
         GROUP BY trackId 
         ORDER BY playCount DESC 
         LIMIT :limit
-    """
-    )
-    fun getTopTracks(startTime: Long, limit: Int): Flow<List<TrackStats>>
+    """)
+    abstract fun getTopTracks(startTime: Long, limit: Int): Flow<List<TrackStats>>
 
-    // --- THE METADATA SIGN (Artist Cache) ---
+    // --- 2. THE METADATA SIGN (Artist Cache) ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertArtistCache(artist: ArtistCacheEntity): Long
+    abstract suspend fun insertArtistCache(artist: ArtistCacheEntity): Long
 
     @Query("SELECT * FROM artist_cache WHERE artistName = :name LIMIT 1")
-    suspend fun getArtistCache(name: String): ArtistCacheEntity?
+    abstract suspend fun getArtistCache(name: String): ArtistCacheEntity?
 
-    // --- THE VAULT (Local Track Caching) ---
+    @Query("DELETE FROM artist_cache")
+    abstract suspend fun clearArtistCache(): Int
+
+    // --- 3. THE VAULT (Local Track Caching) ---
 
     @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
-    suspend fun getCachedTracks(): List<CachedTrackEntity>
+    abstract suspend fun getCachedTracks(): List<CachedTrackEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
+    abstract suspend fun insertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
 
     @Query("DELETE FROM cached_tracks")
-    suspend fun clearTrackCache(): Int
+    abstract suspend fun clearTrackCache(): Int
 
-    /**
-     * THE PERSISTENCE RITUAL
-     * Updates the 'isLiked' state of a track in the local vault.
-     * This is the "Truth Anchor" for your Heart icons.
-     */
     @Query("UPDATE cached_tracks SET isLiked = :isLiked WHERE id = :trackId")
-    suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean): Int
+    abstract suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean): Int
 
-    // --- THE LYRIC ARCHIVE ---
+    // --- 4. THE LYRIC ARCHIVE ---
 
     @Query("SELECT * FROM lyrics_cache WHERE trackId = :trackId")
-    suspend fun getLyricsCache(trackId: String): LyricsCacheEntity?
+    abstract suspend fun getLyricsCache(trackId: String): LyricsCacheEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertLyricsCache(lyrics: LyricsCacheEntity): Long
+    abstract suspend fun insertLyricsCache(lyrics: LyricsCacheEntity): Long
 
     @Query("UPDATE lyrics_cache SET lastAccessed = :timestamp WHERE trackId = :trackId")
-    suspend fun updateLyricsAccessTime(
+    abstract suspend fun updateLyricsAccessTime(
         trackId: String,
         timestamp: Long = System.currentTimeMillis()
     ): Int
 
     @Query("DELETE FROM lyrics_cache WHERE trackId NOT IN (SELECT trackId FROM lyrics_cache ORDER BY lastAccessed DESC LIMIT 2000)")
-    suspend fun enforceLyricsCacheLimit(): Int
+    abstract suspend fun enforceLyricsCacheLimit(): Int
 
+    @Query("DELETE FROM lyrics_cache")
+    abstract suspend fun clearAllLyrics(): Int
+
+    // --- 5. THE TEMPORAL DATA (Minutes & Play Counts) ---
 
     @Query("""
         SELECT COUNT(*) 
@@ -154,17 +143,52 @@ interface TigerDao {
             ELSE artist 
         END) = :artistName
     """)
-    suspend fun getArtistPlayCount(artistName: String): Int
+    abstract suspend fun getArtistPlayCount(artistName: String): Int
 
+    @Query("""
+        SELECT COALESCE(SUM(durationListenedMs), 0) / 60000 
+        FROM playback_history 
+        WHERE trim(CASE 
+            WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
+            WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
+            WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
+            WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+            ELSE artist 
+        END) = :artistName
+    """)
+    abstract suspend fun getArtistMinutesListened(artistName: String): Int
 
-    // --- PURGE RITUALS ---
+    // --- 6. GRIMOIRE MANAGEMENT (Playlists) ---
 
-    @Query("DELETE FROM lyrics_cache")
-    suspend fun clearAllLyrics(): Int
+    @Query("DELETE FROM playlists WHERE playlistId = :playlistId")
+    abstract suspend fun deletePlaylist(playlistId: Long): Int
 
-    @Query("DELETE FROM artist_cache")
-    suspend fun clearArtistCache(): Int
+    @Query("UPDATE playlists SET name = :newName WHERE playlistId = :playlistId")
+    abstract suspend fun renamePlaylist(playlistId: Long, newName: String): Int
+
+    @Query("UPDATE playlists SET artworkUri = :artworkUri WHERE playlistId = :playlistId")
+    abstract suspend fun updatePlaylistArtwork(playlistId: Long, artworkUri: String): Int
+
+    @Query("DELETE FROM playlist_track_cross_ref WHERE playlistId = :playlistId AND trackId = :trackId")
+    abstract suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertPlaylistTrackCrossRefs(crossRefs: List<PlaylistTrackCrossRef>): List<Long>
+
+    @Query("UPDATE playlist_track_cross_ref SET position = :position WHERE playlistId = :playlistId AND trackId = :trackId")
+    abstract suspend fun updatePlaylistTrackPosition(playlistId: Long, trackId: String, position: Int): Int
+
+    // --- 7. GLOBAL PURGE ---
 
     @Query("DELETE FROM playback_history WHERE timestamp <= :cutoffTime")
-    suspend fun purgeOldHistory(cutoffTime: Long): Int
+    abstract suspend fun purgeOldHistory(cutoffTime: Long): Int
+
+    @Query("""
+        SELECT artworkUriString FROM cached_tracks 
+        WHERE artist = :artistName 
+        AND artworkUriString IS NOT NULL 
+        AND artworkUriString != '' 
+        LIMIT 1
+    """)
+    abstract suspend fun getLocalArtworkForArtist(artistName: String): String?
 }

@@ -10,12 +10,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -29,35 +29,65 @@ import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.tigerGlow
+import com.example.tigerplayer.ui.theme.*
 
 private val AardBlue = Color(0xFF007AFF)
 private val LosslessGold = Color(0xFFFFD700)
 
+
+// =====================================================
+// SECTION HEADER (Cinematic Title Block)
+// =====================================================
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    subtitle: String
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 2.sp,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+    }
+}
+
+
+// =====================================================
+// DISCOVER CAROUSEL (Main Entry Point)
+// =====================================================
+
 @Composable
 fun DiscoverCarousel(
     tracks: List<AudioTrack>,
-    onTrackClick: (AudioTrack) -> Unit,
-    modifier: Modifier = Modifier
+    onTrackClick: (AudioTrack) -> Unit
 ) {
-    Column(modifier = modifier) {
-        // Aesthetic Polish: Uppercase to match the rest of your headers
-        SectionHeader(title = "NEW DISCOVERIES", subtitle = "Unearthed from the archives")
+    Column {
+        SectionHeader(
+            title = "NEW DISCOVERIES",
+            subtitle = "Unearthed from your sonic archive"
+        )
 
         LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(
                 items = tracks,
-                key = { it.id } // THE FIX: Performance Anchor
+                key = { it.id }
             ) { track ->
-                LargeAlbumCard(
+                HeroAlbumCard(
                     track = track,
                     onClick = { onTrackClick(track) }
                 )
@@ -66,46 +96,51 @@ fun DiscoverCarousel(
     }
 }
 
+
+// =====================================================
+// RECENTLY PLAYED ROW (History Stream)
+// =====================================================
+
 @Composable
 fun RecentlyPlayedRow(
     tracks: List<AudioTrack>,
-    onTrackClick: (AudioTrack) -> Unit,
     viewModel: PlayerViewModel,
-    modifier: Modifier = Modifier
+    onTrackClick: (AudioTrack) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Column(modifier = modifier) {
-        SectionHeader(title = "RECENT CONTRACTS", subtitle = "Echoes of past chants")
+    Column {
+        SectionHeader(
+            title = "RECENT CONTRACTS",
+            subtitle = "Echoes of your listening history"
+        )
 
         LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // THE REINFORCEMENT: Switching to itemsIndexed to solve Key Collision
             itemsIndexed(
                 items = tracks,
-                // THE COMPOSITE KEY: Merges the ID with the index.
-                // Even if the same song appears 5 times, each instance now has a unique UI signature.
-                key = { index, track -> "${track.id}_$index" }
-            ) { index, track ->
-                SmallTrackCard(
+                key = { index, track -> "${track.id}-$index" }
+            ) { _, track ->
+                MiniTrackCard(
                     track = track,
                     isActive = uiState.currentTrack?.id == track.id,
                     isPlaying = uiState.isPlaying,
-                    onClick = { onTrackClick(track) },
-                    onMoreClick = { /* Future options dialog */ }
+                    onClick = { onTrackClick(track) }
                 )
             }
         }
     }
 }
 
-// --- The Mastercrafted Cards ---
+
+// =====================================================
+// HERO ALBUM CARD (Main Visual Focus)
+// =====================================================
 
 @Composable
-private fun LargeAlbumCard(
+private fun HeroAlbumCard(
     track: AudioTrack,
     onClick: () -> Unit
 ) {
@@ -115,7 +150,6 @@ private fun LargeAlbumCard(
             .bounceClick { onClick() }
     ) {
         Box {
-            // THE IMAGE: Sharp cuts with a subtle Aard glow border
             AsyncImage(
                 model = track.artworkUri,
                 contentDescription = null,
@@ -123,193 +157,153 @@ private fun LargeAlbumCard(
                 fallback = painterResource(R.drawable.ic_tiger_logo),
                 modifier = Modifier
                     .size(220.dp)
-                    .clip(MaterialTheme.shapes.extraLarge)
-                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), MaterialTheme.shapes.extraLarge)
+                    .clip(RoundedCornerShape(28.dp))
+                    .border(
+                        1.dp,
+                        Color.White.copy(alpha = 0.08f),
+                        RoundedCornerShape(28.dp)
+                    )
+                    .shadow(20.dp, RoundedCornerShape(28.dp))
             )
 
-            // THE LOSSLESS BADGE: Appears if bit depth is high (FLAC ritual)
-            if (track.mimeType.contains("flac", ignoreCase = true)) {
-                LosslessBadge(modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
+            // cinematic gradient overlay
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.6f)
+                            )
+                        )
+                    )
+            )
+
+            if (track.mimeType.contains("flac", true)) {
+                LosslessBadge(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                )
             }
         }
 
-        // TEXT OVERLAY: Glassmorphic label attached to the card
-        Column(
-            modifier = Modifier
-                .padding(top = 12.dp)
-                .fillMaxWidth()
-        ) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = track.artist.uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = AardBlue,
-                letterSpacing = 1.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-        }
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = track.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Text(
+            text = track.artist.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = AardBlue,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            maxLines = 1
+        )
     }
 }
 
 
+// =====================================================
+// MINI TRACK CARD (Compact Experience View)
+// =====================================================
+
 @Composable
-fun SmallTrackCard(
+fun MiniTrackCard(
     track: AudioTrack,
     isActive: Boolean,
     isPlaying: Boolean,
-    onClick: () -> Unit,
-    onMoreClick: () -> Unit = {},
-    // THE FIX: Expose the modifier so it doesn't break LazyRows!
-    modifier: Modifier = Modifier.width(280.dp)
+    onClick: () -> Unit
 ) {
-    val primaryText = MaterialTheme.colorScheme.onSurface
-    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-
     Row(
-        // THE FIX: Apply the passed modifier instead of hardcoding fillMaxWidth()
-        modifier = modifier
+        modifier = Modifier
+            .width(280.dp)
             .glassEffect(MaterialTheme.shapes.large)
             .bounceClick { onClick() }
-            .padding(8.dp),
+            .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
+
+        AsyncImage(
+            model = track.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            fallback = painterResource(R.drawable.ic_tiger_logo),
             modifier = Modifier
-                .size(56.dp)
-                .then(if (isActive) Modifier.tigerGlow() else Modifier)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-        ) {
-            AsyncImage(
-                model = track.artworkUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                fallback = painterResource(R.drawable.ic_tiger_logo),
-                modifier = Modifier.fillMaxSize()
-            )
+                .size(54.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .border(
+                    1.dp,
+                    Color.White.copy(alpha = 0.08f),
+                    RoundedCornerShape(14.dp)
+                )
+        )
 
-            if (isActive && isPlaying) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = WitcherIcons.VolumeUp,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (isActive) MaterialTheme.aardBlue else primaryText,
-                fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
             )
             Text(
-                text = "${track.artist} • ${track.album.uppercase()}",
+                text = track.artist.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.7f) else secondaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                letterSpacing = 0.5.sp
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                maxLines = 1
             )
         }
 
-        if (isActive) {
+        if (isActive && isPlaying) {
             Icon(
-                imageVector = WitcherIcons.Play,
+                imageVector = WitcherIcons.VolumeUp,
                 contentDescription = null,
-                tint = MaterialTheme.aardBlue,
-                modifier = Modifier.size(20.dp).padding(end = 8.dp)
+                tint = AardBlue,
+                modifier = Modifier.size(18.dp)
             )
-        } else {
-            IconButton(
-                onClick = onMoreClick,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = WitcherIcons.Options,
-                    contentDescription = "Options",
-                    tint = secondaryText.copy(alpha = 0.4f)
-                )
-            }
         }
     }
 }
 
-// --- Internal Ornaments ---
 
-@Composable
-private fun SectionHeader(title: String, subtitle: String) {
-    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-        )
-    }
-}
+// =====================================================
+// LOSSLESS BADGE (High Fidelity Indicator)
+// =====================================================
 
 @Composable
 private fun LosslessBadge(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        // S22 Optimization: Increased alpha to 0.85f to block busy art patterns
         color = Color.Black.copy(alpha = 0.85f),
         shape = CircleShape,
-        // Thicker, high-contrast border to separate from light album covers
         border = BorderStroke(1.dp, AardBlue.copy(alpha = 0.8f))
     ) {
         Row(
-            modifier = Modifier
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-                .graphicsLayer {
-                    // Subtle shadow to lift the text off the dark surface
-                    shadowElevation = 4f
-                },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = WitcherIcons.HighRes,
                 contentDescription = null,
-                // Using a slightly "Electric" version of AardBlue for visibility
                 tint = AardBlue,
-                modifier = Modifier.size(12.dp) // Bumped from 10dp
+                modifier = Modifier.size(12.dp)
             )
+
+            Spacer(Modifier.width(4.dp))
+
             Text(
                 text = "HI-RES",
-                // Using labelMedium from our new S22 Typography (9sp)
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.ExtraBold,
-                color = Color.White, // Force white for absolute contrast
+                color = Color.White,
                 letterSpacing = 1.sp
             )
         }

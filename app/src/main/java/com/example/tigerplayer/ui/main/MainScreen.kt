@@ -2,21 +2,23 @@ package com.example.tigerplayer.ui.main
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.*
 import com.example.tigerplayer.navigation.BottomNavTab
 import com.example.tigerplayer.ui.cloud.CloudScreen
 import com.example.tigerplayer.ui.home.HomeScreen
@@ -28,6 +30,15 @@ import com.example.tigerplayer.ui.player.MiniPlayer
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
 
+// ------------------------------
+// UI STATE MACHINE (CLEAN CONTROL)
+// ------------------------------
+private enum class PlayerSheetState {
+    COLLAPSED,
+    MINI,
+    EXPANDED
+}
+
 @Composable
 fun MainScreen(
     playerViewModel: PlayerViewModel,
@@ -38,50 +49,86 @@ fun MainScreen(
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToPlaylist: (Long, String) -> Unit,
     onNavigateToSettings: () -> Unit,
-    homeViewModel : HomeViewModel
+    homeViewModel: HomeViewModel
 ) {
     val tabNavController = rememberNavController()
-    val uiState by playerViewModel.uiState.collectAsState()
-    var isPlayerExpanded by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
 
-    // THE WITCHER'S REFLEX: Handle back gesture to collapse the player securely
-    BackHandler(enabled = isPlayerExpanded) { isPlayerExpanded = false }
+    // THE FIX: Uses Lifecycle-Aware state collection to prevent background CPU drain
+    val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
 
-    val tabs = listOf(BottomNavTab.Home, BottomNavTab.Library, BottomNavTab.Cloud)
+    var playerState by remember { mutableStateOf(PlayerSheetState.MINI) }
+    val isExpanded = playerState == PlayerSheetState.EXPANDED
+    val hasTrack = uiState.currentTrack != null
 
-    // THE MASTER BOX: The Z-Axis Controller
-    Box(modifier = Modifier.fillMaxSize()) {
+    BackHandler(enabled = isExpanded) {
+        playerState = PlayerSheetState.MINI
+    }
 
-        // --- LAYER 1: THE APP SHELL (Bottom Z-Index) ---
+    // --- Z-AXIS MODAL PHYSICS (Apple Music / Spotify Style) ---
+    val appScale by animateFloatAsState(
+        targetValue = if (isExpanded) 0.93f else 1f,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = 250f),
+        label = "AppScale"
+    )
+    val appCornerRadius by animateDpAsState(
+        targetValue = if (isExpanded) 32.dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = 250f),
+        label = "AppCornerRadius"
+    )
+    val appAlpha by animateFloatAsState(
+        targetValue = if (isExpanded) 0.4f else 1f,
+        animationSpec = tween(400),
+        label = "AppAlpha"
+    )
+
+    val tabs = listOf(
+        BottomNavTab.Home,
+        BottomNavTab.Library,
+        BottomNavTab.Cloud
+    )
+
+    // A Black root background so when the app scales down, it fades into darkness
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+
+        // ==============================
+        // LAYER 1 — APP SHELL (WITH Z-AXIS PUSHBACK)
+        // ==============================
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = appScale
+                    scaleY = appScale
+                    alpha = appAlpha
+                }
+                .clip(RoundedCornerShape(appCornerRadius)),
             bottomBar = {
-                // The Consolidated Glass Deck
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .glassEffect(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 ) {
-                    val currentTrack = uiState.currentTrack
-
-                    // THE FIX: The Smooth Handoff Animation
+                    // MINI PLAYER (Spotify-style persistent dock)
                     AnimatedVisibility(
-                        visible = currentTrack != null && !isPlayerExpanded,
-                        enter = expandVertically(animationSpec = tween(300)) + fadeIn(tween(300)),
-                        exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(tween(300))
+                        visible = hasTrack && !isExpanded,
+                        enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
+                        exit = shrinkVertically(tween(250)) + fadeOut(tween(200))
                     ) {
                         Column {
                             MiniPlayer(
                                 viewModel = playerViewModel,
-                                onExpandClick = { isPlayerExpanded = true }
+                                onExpandClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    playerState = PlayerSheetState.EXPANDED
+                                }
                             )
 
-                            // Subtle visual separation
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 24.dp),
-                                thickness = 0.5.dp, // S22 Precision line
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                             )
                         }
                     }
@@ -89,22 +136,20 @@ fun MainScreen(
                     NavigationBar(
                         containerColor = Color.Transparent,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.height(72.dp)
+                        modifier = Modifier.background(Color.Transparent)
                     ) {
-                        val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
-                        val currentDestination = navBackStackEntry?.destination
+                        val backStack by tabNavController.currentBackStackEntryAsState()
+                        val destination = backStack?.destination
 
                         tabs.forEach { tab ->
-                            val isSelected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
+                            val selected = destination?.hierarchy?.any { it.route == tab.route } == true
 
                             NavigationBarItem(
-                                selected = isSelected,
+                                selected = selected,
                                 onClick = {
-                                    // 1. THE UNCONDITIONAL WIPE
-                                    // Clears the search whether swapping tabs OR resetting the current tab
+                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                                     playerViewModel.clearSearch()
 
-                                    // 2. THE NAVIGATION
                                     tabNavController.navigate(tab.route) {
                                         popUpTo(tabNavController.graph.findStartDestination().id) {
                                             saveState = true
@@ -117,58 +162,61 @@ fun MainScreen(
                                     Icon(
                                         imageVector = tab.icon,
                                         contentDescription = tab.title,
-                                        tint = if (isSelected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
                                 label = {
                                     Text(
                                         text = tab.title,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
                                 colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                 )
                             )
                         }
                     }
                 }
             }
-        ) { innerPadding ->
-            // --- LAYER 2: THE NAVIGATION VIEWPORT ---
+        ) { padding ->
+
+            // ==============================
+            // LAYER 2 — NAVIGATION STAGE
+            // ==============================
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = innerPadding.calculateBottomPadding())
+                    .padding(bottom = padding.calculateBottomPadding())
             ) {
                 NavHost(
                     navController = tabNavController,
                     startDestination = BottomNavTab.Home.route,
-                    // THE SLY GLIDE: Optimized lateral transitions
+                    // Silky Smooth Navigation Transitions
                     enterTransition = {
                         slideInHorizontally(
-                            initialOffsetX = { 100 },
+                            initialOffsetX = { fullWidth -> fullWidth }, // from right edge
                             animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeIn(animationSpec = tween(300))
                     },
+
                     exitTransition = {
                         slideOutHorizontally(
-                            targetOffsetX = { -100 },
+                            targetOffsetX = { fullWidth -> -fullWidth / 4 },
                             animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeOut(animationSpec = tween(300))
                     },
+
                     popEnterTransition = {
                         slideInHorizontally(
-                            initialOffsetX = { -100 },
+                            initialOffsetX = { fullWidth -> -fullWidth / 4 },
                             animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeIn(animationSpec = tween(300))
                     },
+
                     popExitTransition = {
                         slideOutHorizontally(
-                            targetOffsetX = { 100 },
+                            targetOffsetX = { fullWidth -> fullWidth },
                             animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeOut(animationSpec = tween(300))
                     }
@@ -176,10 +224,10 @@ fun MainScreen(
                     composable(BottomNavTab.Home.route) {
                         HomeScreen(
                             viewModel = playerViewModel,
+                            homeViewModel = homeViewModel,
                             onNavigateToAlbum = onNavigateToAlbum,
                             onNavigateToSettings = onNavigateToSettings,
-                            onNavigatetoArtist = onNavigateToArtist,
-                            homeViewModel = homeViewModel
+                            onNavigatetoArtist = onNavigateToArtist
                         )
                     }
 
@@ -188,7 +236,7 @@ fun MainScreen(
                             viewModel = playerViewModel,
                             onNavigateToArtist = onNavigateToArtist,
                             onNavigateToAlbum = onNavigateToAlbum,
-                            onNavigateToPlaylist = onNavigateToPlaylist,
+                            onNavigateToPlaylist = onNavigateToPlaylist
                         )
                     }
 
@@ -203,29 +251,47 @@ fun MainScreen(
             }
         }
 
-        // --- LAYER 3: THE FULL PLAYER OVERLAY ---
+        // ==============================
+        // LAYER 3 — FULL PLAYER SHEET
+        // ==============================
         AnimatedVisibility(
-            visible = isPlayerExpanded,
+            visible = isExpanded,
+            modifier = Modifier.fillMaxSize(),
             enter = slideInVertically(
-                initialOffsetY = { it },
-                animationSpec = tween(450, easing = FastOutSlowInEasing)
+                initialOffsetY = { fullHeight -> fullHeight },
+                animationSpec = spring(
+                    dampingRatio = 0.85f,
+                    stiffness = 250f
+                )
+            ) + fadeIn(
+                animationSpec = tween(200)
             ),
             exit = slideOutVertically(
-                targetOffsetY = { it },
-                animationSpec = tween(400, easing = FastOutSlowInEasing)
+                targetOffsetY = { fullHeight -> fullHeight },
+                animationSpec = tween(
+                    durationMillis = 350,
+                    easing = FastOutSlowInEasing
+                )
+            ) + fadeOut(
+                animationSpec = tween(250)
             )
         ) {
             FullPlayerScreen(
                 viewModel = playerViewModel,
-                onCollapse = { isPlayerExpanded = false },
-                onNavigateToAlbum = { albumName ->
-                    isPlayerExpanded = false
-                    onNavigateToAlbum(albumName)
+                onCollapse = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    playerState = PlayerSheetState.MINI
+                },
+                onNavigateToAlbum = {
+                    playerState = PlayerSheetState.MINI
+                    onNavigateToAlbum(it)
                 }
             )
         }
 
-        // --- LAYER 4: THE Z-AXIS ZENITH (Scanning Overlay) ---
+        // ==============================
+        // LAYER 4 — SYSTEM OVERLAY
+        // ==============================
         if (uiState.isScanning) {
             ScanningOverlay(
                 progress = uiState.scanProgress,
@@ -233,7 +299,9 @@ fun MainScreen(
             )
         }
 
-        // --- THE INITIATION RITUAL ---
+        // ==============================
+        // INIT
+        // ==============================
         LaunchedEffect(Unit) {
             playerViewModel.loadLocalAudio(forceRefresh = false)
         }

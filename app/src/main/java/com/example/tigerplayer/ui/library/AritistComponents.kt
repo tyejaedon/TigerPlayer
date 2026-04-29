@@ -3,7 +3,6 @@ package com.example.tigerplayer.ui.library
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -28,8 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +34,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,269 +43,23 @@ import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.ui.player.LibraryArtist
-import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.tigerGlow
-import java.text.NumberFormat
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-@Composable
-fun ArtistSearchRow(
-    artist: LibraryArtist,
-    modifier: Modifier = Modifier, // Moved to standard position with default
-    onClick: () -> Unit
-) {
-    Row(
-        // THE FIX 1: Chain the incoming modifier so animations work!
-        modifier = modifier
-            .fillMaxWidth()
-            .bounceClick { onClick() }
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = WitcherIcons.Artist,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-        Text(
-            text = artist.name,
-            modifier = Modifier.padding(start = 16.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
 
-@Composable
-fun AlbumSearchRow(
-    track: AudioTrack,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    // THE FIX 2: Prevent Garbage Collection stutter by remembering the uppercase string
-    val uppercaseArtist = remember(track.artist) { track.artist.uppercase() }
 
-    Row(
-        modifier = modifier // Chained the incoming modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .glassEffect(MaterialTheme.shapes.large)
-            .bounceClick { onClick() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = track.artworkUri,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            fallback = painterResource(R.drawable.ic_tiger_logo),
-            modifier = Modifier
-                .size(56.dp)
-                .clip(MaterialTheme.shapes.medium)
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f), MaterialTheme.shapes.medium)
-        )
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = track.album,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Black,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = uppercaseArtist, // Used the cached string
-                style = MaterialTheme.typography.labelSmall,
-                color = AardBlue,
-                letterSpacing = 1.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Icon(
-            imageVector = WitcherIcons.Library,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-            modifier = Modifier.size(20.dp)
-        )
-    }
-}
-@Composable
-fun SongItem(
-    track: AudioTrack,
-    isActive: Boolean,
-    isPlaying: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-    onMoreClick: () -> Unit
-) {
-    val primaryText = MaterialTheme.colorScheme.onSurface
-    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-
-    // THE RITUAL: Pulsing energy for the active track
-    val aardPulse = if (isActive && isPlaying) rememberAardPulse() else 1f
-
-    // THE CACHE RITUAL: Prevents string allocation churn on 120Hz scrolls
-    val subtitleText = remember(track.artist, track.album) {
-        "${track.artist} • ${track.album.uppercase()}"
-    }
-
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 7.dp) // Optimized vertical gaps
-            .bounceClick { onClick() }
-            .glassEffect(MaterialTheme.shapes.large),
-        // AMOLED Optimization: Use very low alpha for inactive items
-        color = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.08f)
-        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f),
-        border = if (isActive) BorderStroke(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f))
-        else BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // --- 1. THE THUMBNAIL (Armor-Clad) ---
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    // Apply the glow behind the glass tile when active
-                    .then(if (isActive) Modifier.tigerGlow() else Modifier),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = track.artworkUri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    fallback = painterResource(R.drawable.ic_tiger_logo),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(10.dp))
-                        // Specular highlight on the thumbnail edge
-                        .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                        .graphicsLayer { alpha = if (isActive && isPlaying) aardPulse else 1f }
-                )
-
-                if (isActive && isPlaying) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.3f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = WitcherIcons.VolumeUp,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // --- 2. THE CHANT METADATA ---
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (isActive) MaterialTheme.aardBlue else primaryText,
-                    fontWeight = if (isActive) FontWeight.Black else FontWeight.ExtraBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = subtitleText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.7f) else secondaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    letterSpacing = 0.8.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // --- 3. DURATION & ACTIONS ---
-            // Only show duration if not active to keep the active row clean
-            if (!isActive) {
-                Text(
-                    text = formatDuration(track.durationMs),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = secondaryText.copy(alpha = 0.4f),
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-            }
-
-            IconButton(
-                onClick = onMoreClick,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = WitcherIcons.Options,
-                    contentDescription = "Song Options",
-                    tint = primaryText.copy(alpha = 0.2f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
-@Composable
-fun ArtistRow(artist: LibraryArtist, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(50.dp)
-                .clip(CircleShape)
-                .background(AardBlue.copy(0.2f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(WitcherIcons.Artist, null, tint = AardBlue)
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
-            Text(
-                text = artist.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black
-            )
-            Text(
-                text = "${artist.trackCount} Tracks • ${artist.albumCount} Albums",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+fun formatMinutesListened(totalMinutes: Int): String {
+    return when {
+        totalMinutes == 0 -> "0 MINS"
+        totalMinutes < 60 -> "$totalMinutes MINS"
+        else -> {
+            val hours = totalMinutes / 60
+            val remainingMins = totalMinutes % 60
+            if (remainingMins == 0) "${hours}H" else "${hours}H ${remainingMins}M"
         }
     }
 }
@@ -331,36 +81,19 @@ fun ArtistHeroImage(model: Any?, artistName: String) {
         contentScale = ContentScale.Crop
     )
 }
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun ArtistGenreCloud(genres: List<String>) {
-    FlowRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        genres.take(4).forEach { genre ->
-            ArtistMetadataBadge(text = genre, isHighlight = true)
-        }
-    }
-}
 
 @Composable
-fun ArtistVanguardStats(profile: ArtistDetails?) {
+@OptIn(ExperimentalLayoutApi::class)
+fun ArtistVanguardStats(profile: ArtistDetails?, accentColor: Color) {
     Column(
         modifier = Modifier
             .padding(16.dp)
             .fillMaxWidth()
             .glassEffect(MaterialTheme.shapes.large)
-            .background(
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
-                MaterialTheme.shapes.large
-            )
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f), MaterialTheme.shapes.large)
+            .border(1.dp, accentColor.copy(alpha = 0.2f), MaterialTheme.shapes.large)
             .padding(20.dp)
     ) {
-        // --- HEADER SECTION ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -368,14 +101,13 @@ fun ArtistVanguardStats(profile: ArtistDetails?) {
         ) {
             Column {
                 Text(
-                    text = "VANGUARD STATS",
+                    text = "VANGUARD DOSSIER",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = accentColor,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 2.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
                     text = "Global Resonance: ${profile?.popularity ?: 0}%",
                     style = MaterialTheme.typography.bodySmall,
@@ -383,105 +115,118 @@ fun ArtistVanguardStats(profile: ArtistDetails?) {
                 )
             }
 
-            val localPlays = profile?.localPlayCount ?: 0
+            val totalMinutes = profile?.minutesListened ?: 0
             ArtistMetadataBadge(
-                text = "ARCHIVE PLAYS: $localPlays",
-                textColor = if (localPlays > 50) MaterialTheme.colorScheme.primary else Color.Gray,
-                isHighlight = localPlays > 100
+                text = formatMinutesListened(totalMinutes),
+                textColor = if (totalMinutes >= 60) MaterialTheme.aardBlue else Color.Gray,
+                isHighlight = totalMinutes >= 600
             )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // --- BIO / LORE SECTION ---
-        val bio = profile?.bio
-        if (!bio.isNullOrBlank()) {
+        if (profile?.bio != null) {
             Text(
-                text = bio,
+                text = profile.bio!!,
                 style = MaterialTheme.typography.bodyMedium,
-                lineHeight = 24.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f)
+                lineHeight = 22.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
 
-            // --- GENRE TAGS (The Lore Categories) ---
             if (profile.genres.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                FlowRow( // Ensure you have the 'androidx.compose.layout.FlowRow' import
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     profile.genres.take(5).forEach { genre ->
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                        ) {
-                            Text(
-                                text = genre.uppercase(),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        GenrePill(genre, accentColor)
                     }
                 }
             }
         } else {
-            // THE LOADING RITUAL: Consulting the Archives
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Consulting the Archives...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .clip(CircleShape),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                )
-            }
+            ConsultingArchivesState()
         }
     }
-}@Composable
+}
+
+@Composable
+fun ConsultingArchivesState() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // --- THE PULSE: A low-profile indicator ---
+        LinearProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth(0.6f) // Centered and not full-width for a sleeker look
+                .height(2.dp)
+                .clip(CircleShape),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- THE CHANT: Themed loading text ---
+        Text(
+            text = "CONSULTING THE ARCHIVES...",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+        )
+
+        Text(
+            text = "Summoning artist lore and global resonance data.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
 fun ArtistMetadataBadge(
     text: String,
-    isHighlight: Boolean = false,
-    textColor: Color = MaterialTheme.colorScheme.primary
+    textColor: Color,
+    isHighlight: Boolean
 ) {
     Surface(
-        color = if (isHighlight) textColor.copy(alpha = 0.2f) else textColor.copy(alpha = 0.1f),
+        color = if (isHighlight) textColor.copy(alpha = 0.2f) else Color.Transparent,
         shape = CircleShape,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isHighlight) textColor else textColor.copy(alpha = 0.3f)
-        )
+        border = BorderStroke(1.dp, if (isHighlight) textColor else textColor.copy(alpha = 0.3f))
     ) {
         Text(
             text = text.uppercase(),
             style = MaterialTheme.typography.labelSmall,
             color = textColor,
             fontWeight = FontWeight.Black,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             letterSpacing = 1.sp
         )
     }
 }
+
 @Composable
-fun ArtistsTab(viewModel: PlayerViewModel, onNavigateToArtist: (String) -> Unit) {
-    val uiState by viewModel.uiState.collectAsState()
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(uiState.artists) { artist ->
-            ArtistRow(artist) { onNavigateToArtist(artist.name) }
-        }
+fun GenrePill(name: String, accentColor: Color) {
+    Surface(
+        shape = CircleShape,
+        color = accentColor.copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.2f))
+    ) {
+        Text(
+            text = name.uppercase(),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = accentColor,
+            letterSpacing = 1.sp
+        )
     }
 }
 

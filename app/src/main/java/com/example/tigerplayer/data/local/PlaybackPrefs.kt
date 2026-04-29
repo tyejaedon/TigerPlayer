@@ -27,6 +27,7 @@ class PlaybackPrefs @Inject constructor(
         val LAST_QUEUE_IDS = stringPreferencesKey("last_queue_ids")
         val SHUFFLE_MODE = booleanPreferencesKey("shuffle_mode")
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
+        val ORIGINAL_QUEUE_IDS = stringPreferencesKey("original_queue_ids")
     }
 
     val lastTrackId: Flow<String?> = dataStore.data.map { it[LAST_TRACK_ID] }
@@ -36,15 +37,27 @@ class PlaybackPrefs @Inject constructor(
     }
     val shuffleMode: Flow<Boolean> = dataStore.data.map { it[SHUFFLE_MODE] ?: false }
     val repeatMode: Flow<Int> = dataStore.data.map { it[REPEAT_MODE] ?: 0 } // Player.REPEAT_MODE_OFF
+    val originalQueueIds: Flow<List<String>> = dataStore.data.map {
+        it[ORIGINAL_QUEUE_IDS]?.split(",")?.filter { id -> id.isNotEmpty() } ?: emptyList()
+    }
 
-    suspend fun savePlaybackState(trackId: String?, position: Long, queueIds: List<String>) {
+    suspend fun savePlaybackState(
+        trackId: String?,
+        position: Long,
+        queueIds: List<String>,
+        originalQueueIds: List<String>? = null
+    ) {
         dataStore.edit { prefs ->
             if (trackId != null) prefs[LAST_TRACK_ID] = trackId
             prefs[LAST_POSITION] = position
             prefs[LAST_QUEUE_IDS] = queueIds.joinToString(",")
+
+            // 🔥 Only save original queue when explicitly provided
+            originalQueueIds?.let {
+                prefs[ORIGINAL_QUEUE_IDS] = it.joinToString(",")
+            }
         }
     }
-
     suspend fun savePosition(position: Long) {
         dataStore.edit { it[LAST_POSITION] = position }
     }
@@ -52,6 +65,7 @@ class PlaybackPrefs @Inject constructor(
     suspend fun saveShuffleMode(enabled: Boolean) {
         dataStore.edit { it[SHUFFLE_MODE] = enabled }
     }
+
 
     suspend fun saveRepeatMode(mode: Int) {
         dataStore.edit { it[REPEAT_MODE] = mode }

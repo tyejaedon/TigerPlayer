@@ -212,8 +212,10 @@ fun AlbumDetailsScreen(
                         track = track.copy(),
                         isCurrentTrack = isCurrentTrack,
                         isPlaying = uiState.isPlaying,
-                        onClick = { viewModel.playTrack(track) },
-                        onOptionsClick = { trackForOptions}
+                        // THE QUEUE FIX: Load the entire album and start from the tapped track index
+                        onClick = { viewModel.setPlaylistAndPlay(albumTracks, index) },
+                        // OPTIONS FIX: Correctly pass the selected track
+                        onOptionsClick = { trackForOptions = track }
                     )
                 }
             }
@@ -245,7 +247,8 @@ fun AlbumDetailsScreen(
             contentAlignment = Alignment.Center
         ) {
             Button(
-                onClick = { viewModel.mediaControllerManager.setPlaylistAndPlay(albumTracks, 0) },
+                // Use the viewmodel's decoupled wrapper function
+                onClick = { viewModel.setPlaylistAndPlay(albumTracks, 0) },
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                 modifier = Modifier

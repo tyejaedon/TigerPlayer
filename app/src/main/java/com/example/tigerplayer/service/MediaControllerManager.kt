@@ -2,14 +2,14 @@ package com.example.tigerplayer.service
 
 import android.content.ComponentName
 import android.content.Context
-import android.os.Bundle // THE FIX: For custom command arguments
+import android.os.Bundle
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
-import androidx.media3.session.SessionCommand // THE FIX: For the EQ bridge
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.example.tigerplayer.data.local.PlaybackPrefs
 import com.example.tigerplayer.data.model.AudioTrack
@@ -28,34 +28,36 @@ class MediaControllerManager @Inject constructor(
     private val playbackPrefs: PlaybackPrefs,
     private val audioRepository: AudioRepository
 ) {
+
     private var controllerFuture: ListenableFuture<MediaController>? = null
     var mediaController: MediaController? = null
 
-    // --- 1. REACTIVE UI STATES ---
+    // =========================
+    // 🔁 UI STATE FLOWS
+    // =========================
     private val _isPlaying = MutableStateFlow(false)
-    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+    val isPlaying: StateFlow<Boolean> = _isPlaying
 
     private val _currentPosition = MutableStateFlow(0L)
-    val currentPosition: StateFlow<Long> = _currentPosition.asStateFlow()
+    val currentPosition: StateFlow<Long> = _currentPosition
 
     private val _currentMediaId = MutableStateFlow("")
-    val currentMediaId: StateFlow<String> = _currentMediaId.asStateFlow()
+    val currentMediaId: StateFlow<String> = _currentMediaId
 
     private val _shuffleModeEnabled = MutableStateFlow(false)
-    val shuffleModeEnabled: StateFlow<Boolean> = _shuffleModeEnabled.asStateFlow()
+    val shuffleModeEnabled: StateFlow<Boolean> = _shuffleModeEnabled
 
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
-    val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
+    val repeatMode: StateFlow<Int> = _repeatMode
 
     private val _mediaControllerState = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val mediaControllerState: SharedFlow<Unit> = _mediaControllerState.asSharedFlow()
+    val mediaControllerState: SharedFlow<Unit> = _mediaControllerState
 
     private val managerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionJob: Job? = null
     private var playerListener: Player.Listener? = null
 
     companion object {
-        // THE BRIDGE: Must match the action string in AudioPlayerService
         const val ACTION_SET_EQ = "ACTION_SET_EQ"
     }
 
@@ -63,6 +65,9 @@ class MediaControllerManager @Inject constructor(
         initializeController()
     }
 
+    // =========================
+    // 🎧 INITIALIZE CONTROLLER
+    // =========================
     private fun initializeController() {
         val sessionToken = SessionToken(
             context,
@@ -70,15 +75,16 @@ class MediaControllerManager @Inject constructor(
         )
 
         controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+
         controllerFuture?.addListener({
             try {
                 val controller = controllerFuture?.get() ?: return@addListener
                 mediaController = controller
 
-                _isPlaying.update { controller.isPlaying }
-                _shuffleModeEnabled.update { controller.shuffleModeEnabled }
-                _repeatMode.update { controller.repeatMode }
-                _currentMediaId.update { controller.currentMediaItem?.mediaId ?: "" }
+                _isPlaying.value = controller.isPlaying
+                _shuffleModeEnabled.value = controller.shuffleModeEnabled
+                _repeatMode.value = controller.repeatMode
+                _currentMediaId.value = controller.currentMediaItem?.mediaId ?: ""
 
                 setupPlayerListener()
                 restorePlaybackState(controller)
@@ -86,116 +92,83 @@ class MediaControllerManager @Inject constructor(
                 if (controller.isPlaying) startPositionTicker()
 
             } catch (e: Exception) {
-                Log.e("MediaManager", "Failed to bind MediaController", e)
+                Log.e("MediaManager", "Controller init failed", e)
             }
         }, MoreExecutors.directExecutor())
     }
 
+    // =========================
+    // 🎧 PLAYER LISTENER
+    // =========================
     private fun setupPlayerListener() {
         val listener = object : Player.Listener {
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _isPlaying.update { isPlaying }
+                _isPlaying.value = isPlaying
                 if (isPlaying) startPositionTicker() else positionJob?.cancel()
             }
 
-            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-                _shuffleModeEnabled.update { shuffleModeEnabled }
-                managerScope.launch { playbackPrefs.saveShuffleMode(shuffleModeEnabled) }
+            override fun onShuffleModeEnabledChanged(enabled: Boolean) {
+                _shuffleModeEnabled.value = enabled
+                managerScope.launch { playbackPrefs.saveShuffleMode(enabled) }
                 _mediaControllerState.tryEmit(Unit)
             }
 
-            override fun onRepeatModeChanged(repeatMode: Int) {
-                _repeatMode.update { repeatMode }
-                managerScope.launch { playbackPrefs.saveRepeatMode(repeatMode) }
+            override fun onRepeatModeChanged(mode: Int) {
+                _repeatMode.value = mode
+                managerScope.launch { playbackPrefs.saveRepeatMode(mode) }
             }
 
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                _currentMediaId.update { mediaItem?.mediaId ?: "" }
-                _currentPosition.update { 0L }
+            override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                _currentMediaId.value = item?.mediaId ?: ""
+                _currentPosition.value = 0L
                 saveCurrentState()
             }
 
-            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            override fun onTimelineChanged(
+                timeline: androidx.media3.common.Timeline,
+                reason: Int
+            ) {
                 _mediaControllerState.tryEmit(Unit)
             }
         }
+
         playerListener = listener
         mediaController?.addListener(listener)
     }
 
+    // =========================
+    // ⏱ POSITION TRACKER
+    // =========================
     private fun startPositionTicker() {
         positionJob?.cancel()
+
         positionJob = managerScope.launch {
-            var tickCount = 0
+            var tick = 0
+
             while (isActive) {
-                mediaController?.let { controller ->
-                    val pos = controller.currentPosition
-                    _currentPosition.update { pos }
-                    if (++tickCount % 10 == 0) playbackPrefs.savePosition(pos)
+                mediaController?.let {
+                    val pos = it.currentPosition
+                    _currentPosition.value = pos
+
+                    if (++tick % 10 == 0) {
+                        playbackPrefs.savePosition(pos)
+                    }
                 }
                 delay(500)
             }
         }
     }
 
-    // --- 2. COMMANDS: RECENTLY FORGED ---
-
-    /**
-     * THE EQ RITUAL
-     * Sends the custom command to the AudioPlayerService to adjust frequencies.
-     */
-    fun setEqMode(mode: EqMode) {
-        val controller = mediaController ?: return
-        val bundle = Bundle().apply {
-            putString("mode", mode.name)
-        }
-        // Send command to the Service's onCustomCommand
-        controller.sendCustomCommand(SessionCommand(ACTION_SET_EQ, Bundle.EMPTY), bundle)
+    // =========================
+    // 🎵 QUEUE HELPERS
+    // =========================
+    private fun getCurrentQueue(): List<MediaItem> {
+        val controller = mediaController ?: return emptyList()
+        return List(controller.mediaItemCount) { controller.getMediaItemAt(it) }
     }
 
-    fun playTrack(track: AudioTrack) {
-        val controller = mediaController ?: return
-        controller.setMediaItem(createMediaItem(track))
-        controller.prepare()
-        controller.play()
-    }
-
-    fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
-        val controller = mediaController ?: return
-        val mediaItems = tracks.map { createMediaItem(it) }
-        controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
-        controller.prepare()
-        controller.play()
-    }
-
-    fun addNextToQueue(track: AudioTrack) {
-        val controller = mediaController ?: return
-        val mediaItem = createMediaItem(track)
-        if (controller.mediaItemCount == 0) {
-            playTrack(track)
-        } else {
-            val insertIndex = controller.currentMediaItemIndex + 1
-            controller.addMediaItem(insertIndex, mediaItem)
-        }
-    }
-
-    fun removeFromQueue(trackId: String) {
-        val controller = mediaController ?: return
-        for (i in 0 until controller.mediaItemCount) {
-            if (controller.getMediaItemAt(i).mediaId == trackId) {
-                controller.removeMediaItem(i)
-                break
-            }
-        }
-    }
-
-    fun clearQueue() {
-        val controller = mediaController ?: return
-        controller.clearMediaItems()
-        controller.stop()
-    }
-
-    private fun createMediaItem(track: AudioTrack): MediaItem {
+    fun createMediaItem(track: AudioTrack): MediaItem {
         return MediaItem.Builder()
             .setMediaId(track.id)
             .setUri(track.uri)
@@ -210,22 +183,241 @@ class MediaControllerManager @Inject constructor(
             .build()
     }
 
+    // =========================
+    // ▶ PLAYLIST
+    // =========================
+    fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
+        val controller = mediaController ?: return
+
+        val mediaItems = tracks.map { createMediaItem(it) }
+        val ids = tracks.map { it.id }
+
+        controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+        controller.prepare()
+        controller.play()
+
+        managerScope.launch {
+            playbackPrefs.savePlaybackState(
+                trackId = tracks.getOrNull(startIndex)?.id,
+                position = 0L,
+                queueIds = ids,
+                originalQueueIds = ids
+            )
+        }
+    }
+    fun removeFromQueue(trackId: String) {
+        val controller = mediaController ?: return
+
+        val currentIndex = controller.currentMediaItemIndex
+        val currentItem = controller.currentMediaItem
+
+        // =========================
+        // 🎧 BUILD CURRENT QUEUE
+        // =========================
+        val queue = List(controller.mediaItemCount) { index ->
+            controller.getMediaItemAt(index)
+        }.toMutableList()
+
+        // Find item to remove
+        val removeIndex = queue.indexOfFirst { it.mediaId == trackId }
+        if (removeIndex == -1) return
+
+        // Remove item
+        queue.removeAt(removeIndex)
+
+        // =========================
+        // ⚠️ HANDLE PLAYBACK SAFELY
+        // =========================
+        var newStartIndex = currentIndex
+
+        when {
+            // If removing item before current → shift index left
+            removeIndex < currentIndex -> {
+                newStartIndex = currentIndex - 1
+            }
+
+            // If removing currently playing item
+            removeIndex == currentIndex -> {
+                newStartIndex = currentIndex.coerceAtMost(queue.lastIndex)
+            }
+
+            // If removing after current → no change
+            else -> {
+                newStartIndex = currentIndex
+            }
+        }
+
+        // Fix bounds
+        if (queue.isEmpty()) {
+            controller.stop()
+            controller.clearMediaItems()
+            return
+        }
+
+        newStartIndex = newStartIndex.coerceIn(0, queue.lastIndex)
+
+        // =========================
+        // 🎵 APPLY NEW QUEUE
+        // =========================
+        controller.setMediaItems(queue, newStartIndex, controller.currentPosition)
+        controller.prepare()
+
+        // =========================
+        // 💾 PERSIST STATE
+        // =========================
+        managerScope.launch {
+            playbackPrefs.savePlaybackState(
+                trackId = controller.currentMediaItem?.mediaId,
+                position = controller.currentPosition,
+                queueIds = queue.map { it.mediaId }
+            )
+        }
+
+        // =========================
+        // 🔔 NOTIFY UI
+        // =========================
+        _mediaControllerState.tryEmit(Unit)
+    }
+    fun addNextToQueue(track: AudioTrack) {
+        val controller = mediaController ?: return
+
+        val newItem = createMediaItem(track)
+
+        // =========================
+        // 🎧 CURRENT STATE
+        // =========================
+        val currentIndex = controller.currentMediaItemIndex
+        val currentItem = controller.currentMediaItem
+
+        // Build current queue snapshot
+        val queue = List(controller.mediaItemCount) { index ->
+            controller.getMediaItemAt(index)
+        }.toMutableList()
+
+        // =========================
+        // ⚠️ HANDLE EMPTY QUEUE
+        // =========================
+        if (queue.isEmpty()) {
+            controller.setMediaItem(newItem)
+            controller.prepare()
+            controller.play()
+
+            managerScope.launch {
+                playbackPrefs.savePlaybackState(
+                    trackId = track.id,
+                    position = 0L,
+                    queueIds = listOf(track.id)
+                )
+            }
+
+            _mediaControllerState.tryEmit(Unit)
+            return
+        }
+
+        // =========================
+        // ➕ INSERT NEXT TO CURRENT
+        // =========================
+        val insertIndex = (currentIndex + 1).coerceAtMost(queue.size)
+
+        queue.add(insertIndex, newItem)
+
+        // =========================
+        // 🎯 PRESERVE CURRENT PLAYBACK POSITION
+        // =========================
+        val newStartIndex = queue.indexOf(currentItem)
+            .let { if (it == -1) currentIndex else it }
+
+        // =========================
+        // 🎵 APPLY UPDATED QUEUE
+        // =========================
+        controller.setMediaItems(
+            queue,
+            newStartIndex,
+            controller.currentPosition
+        )
+        controller.prepare()
+
+        // =========================
+        // 💾 PERSIST STATE
+        // =========================
+        managerScope.launch {
+            playbackPrefs.savePlaybackState(
+                trackId = controller.currentMediaItem?.mediaId,
+                position = controller.currentPosition,
+                queueIds = queue.map { it.mediaId }
+            )
+        }
+
+        // =========================
+        // 🔔 NOTIFY UI
+        // =========================
+        _mediaControllerState.tryEmit(Unit)
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        val controller = mediaController ?: return
+
+        // Get current queue from Media3
+        val queue = List(controller.mediaItemCount) {
+            controller.getMediaItemAt(it)
+        }.toMutableList()
+
+        // Safety checks
+        if (fromIndex !in queue.indices || toIndex !in queue.indices) return
+
+        // Preserve current playback position item
+        val currentItem = controller.currentMediaItem
+
+        // =========================
+        // 🔀 REORDER LOGIC
+        // =========================
+        val movedItem = queue.removeAt(fromIndex)
+        queue.add(toIndex, movedItem)
+
+        // =========================
+        // 🎧 APPLY TO MEDIA3
+        // =========================
+        controller.setMediaItems(queue, queue.indexOf(currentItem).coerceAtLeast(0), controller.currentPosition)
+        controller.prepare()
+
+        // =========================
+        // 💾 PERSIST NEW ORDER
+        // =========================
+        managerScope.launch {
+            playbackPrefs.savePlaybackState(
+                trackId = controller.currentMediaItem?.mediaId,
+                position = controller.currentPosition,
+                queueIds = queue.map { it.mediaId }
+            )
+        }
+
+        // =========================
+        // 🔔 NOTIFY UI
+        // =========================
+        _mediaControllerState.tryEmit(Unit)
+    }
+
+    // =========================
+    // 💾 SAVE STATE
+    // =========================
     private fun saveCurrentState() {
         val controller = mediaController ?: return
         if (controller.mediaItemCount == 0) return
-        val queueIds = mutableListOf<String>()
-        for (i in 0 until controller.mediaItemCount) {
-            queueIds.add(controller.getMediaItemAt(i).mediaId)
-        }
+
+        val queueIds = getCurrentQueue().map { it.mediaId }
+
         managerScope.launch {
             playbackPrefs.savePlaybackState(
-                controller.currentMediaItem?.mediaId ?: "",
+                controller.currentMediaItem?.mediaId,
                 controller.currentPosition,
                 queueIds
             )
         }
     }
 
+    // =========================
+    // 🔄 RESTORE STATE
+    // =========================
     private fun restorePlaybackState(controller: MediaController) {
         managerScope.launch {
             val lastId = playbackPrefs.lastTrackId.first()
@@ -234,34 +426,116 @@ class MediaControllerManager @Inject constructor(
             val savedShuffle = playbackPrefs.shuffleMode.first()
             val savedRepeat = playbackPrefs.repeatMode.first()
 
-            if (queueIds.isNotEmpty() && lastId != null) {
-                val allTracks = audioRepository.getLocalTracks().first()
-                val tracksToRestore = queueIds.mapNotNull { id -> allTracks.find { it.id == id } }
+            if (queueIds.isEmpty() || lastId == null) return@launch
 
-                if (tracksToRestore.isNotEmpty()) {
-                    val startIndex = tracksToRestore.indexOfFirst { it.id == lastId }.coerceAtLeast(0)
-                    controller.setMediaItems(tracksToRestore.map { createMediaItem(it) }, startIndex, lastPos)
-                    controller.shuffleModeEnabled = savedShuffle
-                    controller.repeatMode = savedRepeat
-                    controller.prepare()
-                    _mediaControllerState.tryEmit(Unit)
-                }
+            val allTracks = audioRepository.getLocalTracks().first()
+
+            val restored = queueIds.mapNotNull { id ->
+                allTracks.find { it.id == id }
             }
+
+            if (restored.isEmpty()) return@launch
+
+            val startIndex = restored.indexOfFirst { it.id == lastId }
+                .let { if (it == -1) 0 else it }
+
+            controller.setMediaItems(
+                restored.map { createMediaItem(it) },
+                startIndex,
+                lastPos
+            )
+
+            controller.shuffleModeEnabled = savedShuffle
+            controller.repeatMode = savedRepeat
+            controller.prepare()
+
+            _mediaControllerState.tryEmit(Unit)
         }
     }
 
-    fun resume() = mediaController?.play()
-    fun pause() = mediaController?.pause()
-    fun seekTo(position: Long) = mediaController?.seekTo(position)
-    fun skipToNext() = mediaController?.seekToNext()
-    fun skipToPrevious() = mediaController?.seekToPrevious()
-
+    // =========================
+    // 🔀 SHUFFLE (FULL CONTROL)
+    // =========================
     fun toggleShuffleMode() {
-        mediaController?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled }
+        val controller = mediaController ?: return
+        val enableShuffle = !controller.shuffleModeEnabled
+
+        val currentItem = controller.currentMediaItem
+        val currentPosition = controller.currentPosition
+
+        managerScope.launch {
+
+            val currentQueue = getCurrentQueue()
+            val currentIds = currentQueue.map { it.mediaId }
+
+            val originalIdsStored = playbackPrefs.originalQueueIds.first()
+            val allTracks = audioRepository.getLocalTracks().first()
+
+            if (enableShuffle) {
+
+                // Save original if not already saved
+                if (originalIdsStored != currentIds) {
+                    playbackPrefs.savePlaybackState(
+                        trackId = currentItem?.mediaId,
+                        position = currentPosition,
+                        queueIds = currentIds,
+                        originalQueueIds = currentIds
+                    )
+                }
+
+                val shuffled = currentQueue.toMutableList().apply { shuffle() }
+
+                currentItem?.let {
+                    shuffled.remove(it)
+                    shuffled.add(0, it)
+                }
+
+                controller.setMediaItems(shuffled, 0, currentPosition)
+                controller.prepare()
+                controller.play()
+
+                playbackPrefs.savePlaybackState(
+                    trackId = currentItem?.mediaId,
+                    position = currentPosition,
+                    queueIds = shuffled.map { it.mediaId }
+                )
+
+            } else {
+
+                if (originalIdsStored.isEmpty()) return@launch
+
+                val restored = originalIdsStored.mapNotNull { id ->
+                    allTracks.find { it.id == id }
+                }.map { createMediaItem(it) }
+
+                if (restored.isEmpty()) return@launch
+
+                val startIndex = restored.indexOfFirst {
+                    it.mediaId == currentItem?.mediaId
+                }.let { if (it == -1) 0 else it }
+
+                controller.setMediaItems(restored, startIndex, currentPosition)
+                controller.prepare()
+                controller.play()
+
+                playbackPrefs.savePlaybackState(
+                    trackId = currentItem?.mediaId,
+                    position = currentPosition,
+                    queueIds = originalIdsStored
+                )
+            }
+
+            controller.shuffleModeEnabled = enableShuffle
+            _mediaControllerState.tryEmit(Unit)
+        }
     }
 
+    // =========================
+    // 🔁 REPEAT
+    // =========================
     fun toggleRepeatMode() {
         val controller = mediaController ?: return
+
         controller.repeatMode = when (controller.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
@@ -269,6 +543,18 @@ class MediaControllerManager @Inject constructor(
         }
     }
 
+    // =========================
+    // ▶ CONTROLS
+    // =========================
+    fun resume() = mediaController?.play()
+    fun pause() = mediaController?.pause()
+    fun seekTo(pos: Long) = mediaController?.seekTo(pos)
+    fun skipToNext() = mediaController?.seekToNext()
+    fun skipToPrevious() = mediaController?.seekToPrevious()
+
+    // =========================
+    // 🧹 CLEANUP
+    // =========================
     fun release() {
         saveCurrentState()
         positionJob?.cancel()

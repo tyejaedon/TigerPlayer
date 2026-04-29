@@ -26,8 +26,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
@@ -48,11 +50,19 @@ fun ArtistDetailsScreen(
     onAlbumClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val artistDetails by viewModel.artistDetails.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
-    val profile = artistDetails[artistName]
+    val artistDetails by viewModel.artistDetails.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // 1. DATA AGGREGATION
+    val normalizedKey = remember(artistName) {
+        ArtistUtils.getBaseArtist(artistName).lowercase().trim()
+    }
+
+    // THE FIX: Lookup using the normalizedKey, NOT the raw artistName
+    val profile = artistDetails[normalizedKey]
+
+    val playlists by viewModel.customPlaylists.collectAsStateWithLifecycle(initialValue = emptyList())
+    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+    // --- 1. THE DATA ARCHIVE ---
     val artistTracks = remember(uiState.tracks, artistName) {
         uiState.tracks.filter { track ->
             ArtistUtils.getBaseArtist(track.artist).equals(artistName, ignoreCase = true)
@@ -65,27 +75,42 @@ fun ArtistDetailsScreen(
             .sortedByDescending { it.year ?: "" }
     }
 
-    // 2. THE DYNAMIC PALETTE RITUAL
-    val imageUrl = profile?.imageUrl?.takeIf { it.isNotBlank() } ?: artistTracks.firstOrNull()?.artworkUri
+    // --- 2. THE DYNAMIC PALETTE RITUAL (Fixed & Keyed) ---
     val fallbackColor = MaterialTheme.colorScheme.background
-    var dominantColor by remember { mutableStateOf(fallbackColor) }
+
+    // THE FIX: Keying 'remember' to artistName ensures the color resets
+    // to fallback the moment you switch artists.
+    var dominantColor by remember(artistName) { mutableStateOf(fallbackColor) }
 
     val animatedDominantColor by animateColorAsState(
         targetValue = dominantColor,
-        animationSpec = tween(1000),
+        animationSpec = tween(1000), // Smooth transition as the palette is forged
         label = "DominantColorTransition"
     )
+
+    val imageUrl = remember(profile?.imageUrl, artistTracks) {
+        // Priority 1: The official Artist Lore image (Last.fm)
+        // Priority 2: The most recent track's artwork (Local)
+        profile?.imageUrl?.takeIf { it.isNotBlank() }
+            ?: artistTracks.firstOrNull()?.artworkUri?.toString()
+    }
 
     val imageRequest = remember(imageUrl) {
         ImageRequest.Builder(context)
             .data(imageUrl)
             .crossfade(800)
-            .allowHardware(false)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .allowHardware(false) // Required for Palette to read the bitmap
             .listener(onSuccess = { _, result ->
                 val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                 bitmap?.let { b ->
                     Palette.from(b).generate { palette ->
-                        val colorInt = palette?.dominantSwatch?.rgb ?: palette?.mutedSwatch?.rgb
+                        // Prioritize Vibrant or Dominant swatches
+                        val colorInt = palette?.vibrantSwatch?.rgb
+                            ?: palette?.dominantSwatch?.rgb
+                            ?: palette?.mutedSwatch?.rgb
+
                         colorInt?.let { dominantColor = Color(it) }
                     }
                 }
@@ -100,13 +125,23 @@ fun ArtistDetailsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(animatedDominantColor.copy(alpha = 0.4f), fallbackColor),
-                    endY = 1200f
-                )
-            )
+            .background(fallbackColor) // Use fallback as base
     ) {
+        // AMBIENT GLOW: Now correctly uses fallbackColor to prevent harsh edges
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            animatedDominantColor.copy(alpha = 0.35f),
+                            fallbackColor // The gradient now "sinks" into the background
+                        ),
+                        endY = 1400f
+                    )
+                )
+        )
+
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -116,16 +151,17 @@ fun ArtistDetailsScreen(
                             text = artistName.uppercase(),
                             fontWeight = FontWeight.Black,
                             letterSpacing = 2.sp,
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.titleLarge
                         )
                     },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(WitcherIcons.Back, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                            Icon(WitcherIcons.Back, contentDescription = "Back")
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
                     modifier = Modifier.glassEffect(RectangleShape)
                 )
             }
@@ -134,20 +170,10 @@ fun ArtistDetailsScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
-                // --- 1. HERO IMAGE ---
                 item { ArtistHeroImage(imageRequest, artistName) }
 
-                // --- 2. GENRE CLOUD ---
-                if (profile?.genres?.isNotEmpty() == true) {
-                    item { ArtistGenreCloud(profile.genres) }
-                }
+                item { ArtistVanguardStats(profile, animatedDominantColor) }
 
-                // --- 3. VANGUARD STATS ---
-                item { ArtistVanguardStats(
-profile
-                ) }
-
-                // --- 4. DISCOGRAPHY (Albums) ---
                 if (artistAlbums.isNotEmpty()) {
                     item {
                         SectionTitle(title = "DISCOGRAPHY")
@@ -166,7 +192,6 @@ profile
                     }
                 }
 
-                // --- 5. ALL MANIFESTATIONS (Songs) ---
                 if (artistTracks.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
@@ -179,14 +204,39 @@ profile
                             isCurrentTrack = uiState.currentTrack?.id == track.id,
                             isPlaying = uiState.isPlaying,
                             onClick = { viewModel.playTrack(track) },
-                            onOptionsClick = { /* Track Options Ritual */ }
+                            onOptionsClick = { trackForOptions = track }
                         )
                     }
                 }
             }
+
+            trackForOptions?.let { selectedTrack ->
+                SongOptionsSheet(
+                    track = selectedTrack,
+                    playlists = playlists,
+                    onDismiss = { trackForOptions = null },
+                    onPlayNext = {
+                        viewModel.addToQueue(selectedTrack) // Ensure your VM supports 'Play Next'
+                        trackForOptions = null
+                    },
+                    onAddToPlaylist = { playlistId ->
+                        viewModel.addTrackToPlaylist(playlistId, selectedTrack)
+                        trackForOptions = null
+                    },
+                    onGoToAlbum = { albumName ->
+                        trackForOptions = null
+                        onAlbumClick(albumName)
+                    }
+                )
+            }
         }
     }
-}
+    }
+
+
+
+
+
 
 
 @Composable
@@ -240,7 +290,4 @@ fun ArtistAlbumCard(
         )
     }
 }
-// ==========================================
-// --- RECONFIGURED COMPONENTS ---
-// ==========================================
 

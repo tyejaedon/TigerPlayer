@@ -4,13 +4,15 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,36 +22,29 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel // THE FIX: Modern Hilt Import
-import androidx.navigation.NavHostController
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.navArgument
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.navigation.*
+import androidx.navigation.compose.*
 import com.example.tigerplayer.R
-import com.example.tigerplayer.ui.cloud.SpotifyAlbumDetailScreen
-import com.example.tigerplayer.ui.cloud.SpotifyPlaylistScreen
-import com.example.tigerplayer.ui.library.AlbumDetailsScreen
-import com.example.tigerplayer.ui.library.ArtistDetailsScreen
-import com.example.tigerplayer.ui.library.NavidromeLoginScreen
-import com.example.tigerplayer.ui.library.PlaylistDetailsScreen
+import com.example.tigerplayer.ui.cloud.*
+import com.example.tigerplayer.ui.home.HomeViewModel
+import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.main.MainScreen
 import com.example.tigerplayer.ui.permissions.PermissionScreen
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.settings.SettingsScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import com.example.tigerplayer.ui.home.HomeViewModel
+
+// ----------------------------------
+// 🔹 Branding
+// ----------------------------------
 
 @Composable
 fun TigerBranding() {
     Image(
         painter = painterResource(id = R.drawable.ic_tiger_logo),
-        contentDescription = "The Tiger Head Logo",
+        contentDescription = "Tiger Player Logo",
         modifier = Modifier
             .size(100.dp)
             .clip(CircleShape),
@@ -57,79 +52,82 @@ fun TigerBranding() {
     )
 }
 
-@Composable
-fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: PlayerViewModel,homeViewModel: HomeViewModel) {
-    val context = LocalContext.current
+// ----------------------------------
+// 🔹 Navigation Graph
+// ----------------------------------
 
-    // THE FIX: Removed sharedPlayerViewModel to ensure the music never skips
-    // and relies entirely on the playerViewModel passed from the MainActivity.
+@Composable
+fun TigerPlayerNavGraph(
+    navController: NavHostController,
+    playerViewModel: PlayerViewModel,
+    homeViewModel: HomeViewModel
+) {
+    val context = LocalContext.current
 
     NavHost(
         navController = navController,
         startDestination = Screen.Splash.route,
+
+        // ✨ Smooth modern motion (Samsung-like)
         enterTransition = {
-            slideIntoContainer(
-                AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(300)
-            )
+            slideInHorizontally(
+                initialOffsetX = { it / 2 },
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(250))
         },
         exitTransition = {
-            fadeOut(animationSpec = tween(300))
+            slideOutHorizontally(
+                targetOffsetX = { -it / 4 },
+                animationSpec = tween(300)
+            ) + fadeOut(tween(200))
         },
         popEnterTransition = {
-            fadeIn(animationSpec = tween(300))
+            slideInHorizontally(
+                initialOffsetX = { -it / 4 },
+                animationSpec = tween(300)
+            ) + fadeIn(tween(250))
         },
         popExitTransition = {
-            slideOutOfContainer(
-                AnimatedContentTransitionScope.SlideDirection.Right,
+            slideOutHorizontally(
+                targetOffsetX = { it / 2 },
                 animationSpec = tween(300)
-            )
+            ) + fadeOut(tween(200))
         }
     ) {
-        composable(route = Screen.Splash.route) {
-            LaunchedEffect(key1 = Unit) {
-                val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
+        // ----------------------------------
+        // 🔹 Splash Screen
+        // ----------------------------------
+
+        composable(Screen.Splash.route) {
+
+            LaunchedEffect(Unit) {
+                val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     Manifest.permission.READ_MEDIA_AUDIO
                 } else {
                     Manifest.permission.READ_EXTERNAL_STORAGE
                 }
 
                 val hasPermission = ContextCompat.checkSelfPermission(
-                    context, audioPermission
+                    context, permission
                 ) == PackageManager.PERMISSION_GRANTED
 
-                if (hasPermission) {
-                    navController.navigate(Screen.MainApp.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                } else {
-                    navController.navigate(Screen.Permission.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
-                        launchSingleTop = true
-                    }
+                navController.navigate(
+                    if (hasPermission) Screen.MainApp.route else Screen.Permission.route
+                ) {
+                    popUpTo(Screen.Splash.route) { inclusive = true }
+                    launchSingleTop = true
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    TigerBranding()
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "TIGER PLAYER",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        letterSpacing = 4.sp
-                    )
-                }
-            }
+
+            SplashContent()
         }
 
-        composable(route = Screen.Permission.route) {
+        // ----------------------------------
+        // 🔹 Permission
+        // ----------------------------------
+
+        composable(Screen.Permission.route) {
             PermissionScreen(
                 onPermissionGranted = {
                     navController.navigate(Screen.MainApp.route) {
@@ -139,64 +137,77 @@ fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: Playe
             )
         }
 
-        composable(route = Screen.MainApp.route) {
+        // ----------------------------------
+        // 🔹 Main App Shell
+        // ----------------------------------
+
+        composable(Screen.MainApp.route) {
             MainScreen(
                 playerViewModel = playerViewModel,
+                homeViewModel = homeViewModel,
+
                 onNavigateToSpotifyPlaylist = { id, name, url ->
                     navController.navigate(Screen.SpotifyPlaylist.createRoute(id, name, url))
                 },
                 onNavigateToSpotifyAlbum = { id, name, url ->
                     navController.navigate(Screen.SpotifyAlbum.createRoute(id, name, url))
                 },
-                onNavigateToArtist = { name ->
-                    navController.navigate(Screen.ArtistDetail.createRoute(name))
+                onNavigateToArtist = {
+                    navController.navigate(Screen.ArtistDetail.createRoute(it))
                 },
-                onNavigateToAlbum = { name ->
-                    navController.navigate(Screen.AlbumDetail.createRoute(name))
-                },
-                onNavigateToNavidromeLogin = {
-                    navController.navigate(Screen.NavidromeLogin.route)
+                onNavigateToAlbum = {
+                    navController.navigate(Screen.AlbumDetail.createRoute(it))
                 },
                 onNavigateToPlaylist = { id, name ->
                     navController.navigate(Screen.LocalPlaylist.createRoute(id, name))
                 },
+                onNavigateToNavidromeLogin = {
+                    navController.navigate(Screen.NavidromeLogin.route)
+                },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
-                },
-                homeViewModel = homeViewModel
-            )
-        }
-
-        // --- Settings Route ---
-        composable(route = Screen.Settings.route) {
-            SettingsScreen(
-                onBackClick = { navController.popBackStack() }
-            )
-        }
-
-        composable(
-            route = Screen.ArtistDetail.route,
-            arguments = listOf(navArgument("artistName") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val name = Uri.decode(backStackEntry.arguments?.getString("artistName") ?: "")
-            ArtistDetailsScreen(
-                artistName = name,
-                viewModel = playerViewModel,
-                onBackClick = { navController.popBackStack() },
-                // THE FIX: Wire up the album cards to navigate deeper into the archive!
-                onAlbumClick = { albumName ->
-                    // Make sure to encode the name in case the album has a slash or question mark
-                    val safeAlbumName = Uri.encode(albumName)
-                    navController.navigate(Screen.AlbumDetail.createRoute(safeAlbumName))
                 }
             )
         }
 
+        // ----------------------------------
+        // 🔹 Settings
+        // ----------------------------------
+
+        composable(Screen.Settings.route) {
+            SettingsScreen(onBackClick = { navController.popBackStack() })
+        }
+
+        // ----------------------------------
+        // 🔹 Artist
+        // ----------------------------------
+
         composable(
-            route = Screen.AlbumDetail.route,
+            Screen.ArtistDetail.route,
+            arguments = listOf(navArgument("artistName") { type = NavType.StringType })
+        ) {
+            val name = it.decodeArg("artistName")
+
+            ArtistDetailsScreen(
+                artistName = name,
+                viewModel = playerViewModel,
+                onBackClick = { navController.popBackStack() },
+                onAlbumClick = { album ->
+                    navController.navigate(Screen.AlbumDetail.createRoute(album))
+                }
+            )
+        }
+
+        // ----------------------------------
+        // 🔹 Album
+        // ----------------------------------
+
+        composable(
+            Screen.AlbumDetail.route,
             arguments = listOf(navArgument("albumName") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val name = Uri.decode(backStackEntry.arguments?.getString("albumName") ?: "")
+        ) {
+            val name = it.decodeArg("albumName")
+
             AlbumDetailsScreen(
                 albumName = name,
                 viewModel = playerViewModel,
@@ -204,15 +215,19 @@ fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: Playe
             )
         }
 
+        // ----------------------------------
+        // 🔹 Local Playlist
+        // ----------------------------------
+
         composable(
-            route = Screen.LocalPlaylist.route,
+            Screen.LocalPlaylist.route,
             arguments = listOf(
                 navArgument("playlistId") { type = NavType.LongType },
                 navArgument("playlistName") { type = NavType.StringType }
             )
-        ) { backStackEntry ->
-            val id = backStackEntry.arguments?.getLong("playlistId") ?: -1L
-            val name = Uri.decode(backStackEntry.arguments?.getString("playlistName") ?: "Playlist")
+        ) {
+            val id = it.arguments?.getLong("playlistId") ?: -1L
+            val name = it.decodeArg("playlistName", "Playlist")
 
             PlaylistDetailsScreen(
                 playlistId = id,
@@ -222,7 +237,11 @@ fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: Playe
             )
         }
 
-        composable(route = Screen.NavidromeLogin.route) {
+        // ----------------------------------
+        // 🔹 Navidrome
+        // ----------------------------------
+
+        composable(Screen.NavidromeLogin.route) {
             NavidromeLoginScreen(
                 viewModel = playerViewModel,
                 onLoginSuccess = { navController.popBackStack() },
@@ -230,52 +249,93 @@ fun TigerPlayerNavGraph(navController: NavHostController, playerViewModel: Playe
             )
         }
 
+        // ----------------------------------
+        // 🔹 Spotify Album
+        // ----------------------------------
+
         composable(
-            route = Screen.SpotifyAlbum.route,
+            Screen.SpotifyAlbum.route,
             arguments = listOf(
                 navArgument("albumId") { type = NavType.StringType },
                 navArgument("albumName") { type = NavType.StringType },
-                navArgument("imageUrl") { type = NavType.StringType; nullable = true }
+                navArgument("imageUrl") { nullable = true }
             )
-        ) { backStackEntry ->
-            val albumId = backStackEntry.arguments?.getString("albumId") ?: ""
-            val albumName = backStackEntry.arguments?.getString("albumName") ?: ""
-            val encodedUrl = backStackEntry.arguments?.getString("imageUrl")
-            val imageUrl = encodedUrl?.takeIf { it.isNotEmpty() }?.let {
-                URLDecoder.decode(it, StandardCharsets.UTF_8.toString())
-            }
-
+        ) {
             SpotifyAlbumDetailScreen(
-                albumId = albumId,
-                albumName = albumName,
-                albumImageUrl = imageUrl,
-                viewModel = hiltViewModel(), // Scoped locally to this screen
+                albumId = it.getStringArg("albumId"),
+                albumName = it.getStringArg("albumName"),
+                albumImageUrl = it.decodeNullableUrl("imageUrl"),
+                viewModel = hiltViewModel(),
                 onBackClick = { navController.popBackStack() }
             )
         }
 
+        // ----------------------------------
+        // 🔹 Spotify Playlist
+        // ----------------------------------
+
         composable(
-            route = Screen.SpotifyPlaylist.route,
+            Screen.SpotifyPlaylist.route,
             arguments = listOf(
                 navArgument("playlistId") { type = NavType.StringType },
                 navArgument("playlistName") { type = NavType.StringType },
-                navArgument("imageUrl") { type = NavType.StringType; nullable = true }
+                navArgument("imageUrl") { nullable = true }
             )
-        ) { backStackEntry ->
-            val playlistId = backStackEntry.arguments?.getString("playlistId") ?: ""
-            val playlistName = backStackEntry.arguments?.getString("playlistName") ?: "Playlist"
-            val encodedUrl = backStackEntry.arguments?.getString("imageUrl")
-            val imageUrl = encodedUrl?.takeIf { it.isNotEmpty() }?.let {
-                URLDecoder.decode(it, StandardCharsets.UTF_8.toString())
-            }
-
+        ) {
             SpotifyPlaylistScreen(
-                playlistId = playlistId,
-                playlistName = playlistName,
-                playlistImageUrl = imageUrl,
-                viewModel = hiltViewModel(), // Scoped locally to this screen
+                playlistId = it.getStringArg("playlistId"),
+                playlistName = it.getStringArg("playlistName"),
+                playlistImageUrl = it.decodeNullableUrl("imageUrl"),
+                viewModel = hiltViewModel(),
                 onBackClick = { navController.popBackStack() }
             )
         }
+    }
+}
+
+// ----------------------------------
+// 🔹 Splash UI (cleaned)
+// ----------------------------------
+
+@Composable
+private fun SplashContent() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            TigerBranding()
+            Spacer(Modifier.height(24.dp))
+            Text(
+                text = "TIGER PLAYER",
+                style = MaterialTheme.typography.headlineMedium,
+                letterSpacing = 4.sp,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+    }
+}
+
+// ----------------------------------
+// 🔹 Helpers (BIG CLEANUP WIN)
+// ----------------------------------
+
+private fun NavBackStackEntry.getStringArg(key: String): String {
+    return arguments?.getString(key) ?: ""
+}
+
+private fun NavBackStackEntry.decodeArg(
+    key: String,
+    fallback: String = ""
+): String {
+    return Uri.decode(arguments?.getString(key) ?: fallback)
+}
+
+private fun NavBackStackEntry.decodeNullableUrl(key: String): String? {
+    val raw = arguments?.getString(key)
+    return raw?.takeIf { it.isNotEmpty() }?.let {
+        URLDecoder.decode(it, StandardCharsets.UTF_8.toString())
     }
 }

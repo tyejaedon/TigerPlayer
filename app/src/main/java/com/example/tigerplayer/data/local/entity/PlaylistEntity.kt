@@ -15,7 +15,12 @@ data class PlaylistEntity(
     val playlistId: Long = 0,
 
     val name: String,
-    val createdAt: Long = System.currentTimeMillis()
+
+    // 🔥 THE FIX: Stored safely as a String. Added default = null for cleaner object creation.
+    val artworkUri: String? = null,
+
+    val createdAt: Long = System.currentTimeMillis(),
+    val position: Int = 0
 )
 
 @Entity(
@@ -26,5 +31,6 @@ data class PlaylistEntity(
 data class PlaylistTrackCrossRef(
     val playlistId: Long,
     val trackId: String,
-    val dateAdded: Long = System.currentTimeMillis()
+    val dateAdded: Long = System.currentTimeMillis(),
+    val position: Int = 0
 )

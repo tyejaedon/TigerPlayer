@@ -7,20 +7,23 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.repository.SpotifyAuthManager
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
-import javax.inject.Inject
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import com.example.tigerplayer.data.repository.LyricsRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
-import com.example.tigerplayer.service.EqMode
+import com.example.tigerplayer.data.repository.SpotifyAuthManager
+import com.example.tigerplayer.engine.EqEngine
+import com.example.tigerplayer.engine.EqUiState
+import com.example.tigerplayer.service.PeqProfile
+import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.io.File
+import javax.inject.Inject
 
 enum class ThemeMode {
     LIGHT, DARK, SYSTEM
@@ -29,27 +32,30 @@ enum class ThemeMode {
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val dataStore: DataStore<Preferences>,
-    @ApplicationContext private val context: Context, // THE FIX 1: Ensure "private val" is here
+    @ApplicationContext private val context: Context,
     private val spotifyAuthManager: SpotifyAuthManager,
-    private val lyricsRepository: LyricsRepository, // THE NEW INJECTION
-    private val mediaDataRepository: MediaDataRepository
+    private val lyricsRepository: LyricsRepository,
+    private val mediaDataRepository: MediaDataRepository,
+    private val eqEngine: EqEngine // 🔥 NEW: Injected the sophisticated EqEngine
 ) : ViewModel() {
+
     private val _cacheSizeFormatted = MutableStateFlow("Calculating...")
     val cacheSizeFormatted = _cacheSizeFormatted.asStateFlow()
-    val currentEqMode: Flow<EqMode> = dataStore.data.map { pref ->
-        val mode = pref[EQ_MODE_KEY] ?: EqMode.BALANCE.name
-        EqMode.valueOf(mode)
+
+    // --- AUDIO FIDELITY DELEGATION ---
+    val eqState: StateFlow<EqUiState> = eqEngine.uiState
+
+    fun toggleBitPerfect() {
+        eqEngine.toggleBitPerfect()
     }
 
+    fun loadEqProfile(profile: PeqProfile) {
+        eqEngine.loadProfile(profile)
+    }
 
+    // --- CACHE & STORAGE ---
     init {
         calculateTotalCache()
-    }
-    fun setEqMode(mode: EqMode) {
-        viewModelScope.launch {
-            dataStore.edit { it[EQ_MODE_KEY] = mode.name }
-
-        }
     }
 
     private fun calculateTotalCache() {
@@ -79,7 +85,7 @@ class SettingsViewModel @Inject constructor(
         return size
     }
 
-
+    // --- APPEARANCE ---
     val themeMode: Flow<ThemeMode> = dataStore.data
         .map { preferences ->
             val modeName = preferences[THEME_MODE_KEY] ?: ThemeMode.SYSTEM.name
@@ -98,26 +104,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun clearLyricsCache(onComplete: () -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            lyricsRepository.clearLyricsCache()
-
-            // Switch back to Main thread to update the UI
-            launch(Dispatchers.Main) {
-                onComplete()
-            }
-        }
-
-    }
+    // --- PURGE ACTIONS ---
     fun clearTotalCache(onComplete: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            // 1. Purge the Physical Files (Coil Images, Temp Audio buffers)
-
-            // 2. Purge the Database Archives
             lyricsRepository.clearLyricsCache()
             mediaDataRepository.clearArtistCache()
 
-            // 3. Recalculate to show "0.00 KB" and notify UI
             calculateTotalCache()
 
             launch(Dispatchers.Main) {
@@ -134,6 +126,5 @@ class SettingsViewModel @Inject constructor(
 
     companion object {
         private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
-        private val EQ_MODE_KEY = stringPreferencesKey("eq_mode") // NEW KEY
     }
 }

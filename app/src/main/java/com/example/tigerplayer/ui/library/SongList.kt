@@ -31,23 +31,6 @@ import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.tigerGlow
 import java.util.concurrent.TimeUnit
 
-// --- VANGUARD CONSTANTS (Dark Mode Optimized) ---
-
-
-// ==========================================
-// --- 1. THE MAIN SONG ITEM (Library/Search) ---
-// ==========================================
-
-
-// ==========================================
-// --- 2. THE CHAPTER ROW (Playlists/Albums) ---
-// ==========================================
-
-
-
-// ==========================================
-// --- 3. THE ARCHIVE ROW (Home/Recent) ---
-// ==========================================
 
 @Composable
 fun ArchiveSongRow(
@@ -57,65 +40,107 @@ fun ArchiveSongRow(
     onClick: () -> Unit,
     onOptionsClick: () -> Unit
 ) {
-    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-    val aardPulse = if (isCurrentTrack && isPlaying) rememberAardPulse() else 1f
+    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
 
-    // THE FIX: Format the duration once here to avoid redundant calls
-    val displayDuration = remember(track.durationMs) { formatDuration(track.durationMs) }
+    val displayDuration = remember(track.durationMs) {
+        formatDuration(track.durationMs)
+    }
+
+    // Smooth identity transitions instead of binary state jumps
+    val activeProgress by animateFloatAsState(
+        targetValue = if (isCurrentTrack) 1f else 0f,
+        label = "activeProgress"
+    )
+
+    val pulseAlpha = if (isCurrentTrack && isPlaying) rememberAardPulse() else 1f
+
+    val elevation = animateDpAsState(
+        targetValue = if (isCurrentTrack) 6.dp else 0.dp,
+        label = "elevation"
+    )
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp) // Tighter vertical spacing for lists
+            .padding(horizontal = 14.dp, vertical = 5.dp)
             .bounceClick { onClick() }
-            .glassEffect(MaterialTheme.shapes.large),
-        // S22 AMOLED Optimization: Deep translucency
-        color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.08f)
-        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f),
-        border = if (isCurrentTrack) BorderStroke(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.3f))
-        else BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .graphicsLayer {
+                scaleX = 1f + (activeProgress * 0.01f)
+                scaleY = 1f + (activeProgress * 0.01f)
+                shadowElevation = elevation.value.toPx()
+                alpha = 1f
+            },
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface.copy(
+            alpha = 0.92f + (activeProgress * 0.05f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (isCurrentTrack)
+                MaterialTheme.aardBlue.copy(alpha = 0.35f)
+            else
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+        )
     ) {
         Row(
             modifier = Modifier
-                .padding(10.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // --- 1. THE ARTWORK ARMOR ---
-            Box(contentAlignment = Alignment.Center) {
+
+            // --- ARTWORK (now with motion depth) ---
+            Box(
+                contentAlignment = Alignment.Center
+            ) {
                 AsyncImage(
                     model = track.artworkUri,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     fallback = painterResource(R.drawable.ic_tiger_logo),
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(54.dp)
                         .clip(MaterialTheme.shapes.medium)
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), MaterialTheme.shapes.medium)
-                        // Pulsing alpha when active
-                        .graphicsLayer { alpha = if (isCurrentTrack && isPlaying) aardPulse else 1f }
+                        .graphicsLayer {
+                            alpha = 0.95f + (activeProgress * 0.05f)
+                            scaleX = 1f + (activeProgress * 0.03f)
+                            scaleY = 1f + (activeProgress * 0.03f)
+                        }
                 )
 
-                // Active Pulse Indicator (The Witcher's Sign)
+                // Active playback indicator
                 if (isCurrentTrack && isPlaying) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .background(
+                                MaterialTheme.aardBlue.copy(alpha = 0.12f),
+                                MaterialTheme.shapes.medium
+                            )
+                    )
+
                     Icon(
                         imageVector = WitcherIcons.VolumeUp,
                         contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp).shadow(8.dp, CircleShape)
+                        tint = MaterialTheme.aardBlue.copy(alpha = pulseAlpha),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
-            // --- 2. THE METADATA ---
+            // --- TEXT BLOCK ---
             Column(modifier = Modifier.weight(1f)) {
+
                 Text(
                     text = track.title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
-                    color = if (isCurrentTrack) MaterialTheme.aardBlue else MaterialTheme.colorScheme.onSurface,
+                    color = if (isCurrentTrack)
+                        MaterialTheme.aardBlue
+                    else
+                        MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -125,32 +150,39 @@ fun ArchiveSongRow(
                 Text(
                     text = track.artist.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.7f) else secondaryText,
+                    color = if (isCurrentTrack)
+                        MaterialTheme.aardBlue.copy(alpha = 0.75f)
+                    else
+                        secondaryText,
+                    letterSpacing = 1.1.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // --- 3. THE DURATION (New Addition) ---
+            // --- DURATION (subtle but stable) ---
             Text(
                 text = displayDuration,
                 style = MaterialTheme.typography.labelMedium,
-                color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.6f) else secondaryText,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                color = if (isCurrentTrack)
+                    MaterialTheme.aardBlue.copy(alpha = 0.7f)
+                else
+                    secondaryText,
+                modifier = Modifier.padding(horizontal = 10.dp)
             )
 
-            // --- 4. OPTIONS PORTAL ---
-            IconButton(
-                onClick = onOptionsClick,
-                modifier = Modifier.size(32.dp)
+            // --- OPTIONS BUTTON (isolated interaction zone) ---
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .bounceClick { onOptionsClick() },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = WitcherIcons.Options,
-                    contentDescription = "Song Options",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                    contentDescription = "Options",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
                     modifier = Modifier.size(18.dp)
                 )
             }
