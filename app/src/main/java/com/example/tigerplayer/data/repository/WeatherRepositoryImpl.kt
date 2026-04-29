@@ -1,7 +1,13 @@
 package com.example.tigerplayer.data.repository
 
+import android.content.Context
 import com.example.tigerplayer.data.remote.api.WeatherApiService
 import com.example.tigerplayer.utils.Resource
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -9,12 +15,23 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// 🔥 THE FIX: Tell Hilt to bind the WeatherRepository interface to the WeatherRepositoryImpl implementation
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class WeatherRepositoryModule {
+    @Binds
+    @Singleton
+    abstract fun bindWeatherRepository(
+        weatherRepositoryImpl: WeatherRepositoryImpl
+    ): WeatherRepository
+}
+
 @Singleton
 class WeatherRepositoryImpl @Inject constructor(
-    private val api: WeatherApiService
+    private val api: WeatherApiService,
+    @param:ApplicationContext private val context: Context
 ) : WeatherRepository {
 
-    // THE FIX: Added the lat and lon parameters to match the interface contract
     override fun getWeather(lat: Double, lon: Double): Flow<Resource<WeatherInfo>> = flow {
         emit(Resource.Loading())
         val defaultData = WeatherInfo("--", "Offline", "--", "--", true)

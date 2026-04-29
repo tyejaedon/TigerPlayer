@@ -2,295 +2,400 @@ package com.example.tigerplayer.ui.player
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
-import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.data.source.LocalAudioDataSource
-import com.example.tigerplayer.engine.LibraryEngine
-import com.example.tigerplayer.engine.MetadataEngine
-import com.example.tigerplayer.engine.NetworkEngine
-import com.example.tigerplayer.engine.PlaybackEngine
-import com.example.tigerplayer.engine.StatsEngine
-import com.example.tigerplayer.engine.EqEngine
-import com.example.tigerplayer.engine.EqUiState
-import com.example.tigerplayer.service.PeqProfile
+import com.example.tigerplayer.engine.*
+import com.example.tigerplayer.service.MediaControllerManager
 import com.example.tigerplayer.ui.home.HomeUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class LibraryArtist(val name: String, val trackCount: Int, val albumCount: Int)
-data class StatItem(val id: String, val name: String, val playCount: Int, val secondaryText: String, val imageUrl: String? = null)
-data class DetailedStatsUiState(val selectedFilter: String = "Today", val totalListeningHours: Int = 0, val totalListeningMinutes: Int = 0, val topArtists: List<StatItem> = emptyList(), val topTracks: List<StatItem> = emptyList())
+enum class PlayerVisualMode { ARTWORK, WAVEFORM }
 
-// Visual Mode Enum
-enum class PlayerVisualMode {
-    ARTWORK,
-    WAVEFORM
-}
+// --- UI DATA MODELS ---
+data class LibraryArtist(
+    val name: String,
+    val trackCount: Int,
+    val albumCount: Int
+)
+
+data class StatItem(
+    val id: String,
+    val name: String,
+    val playCount: Int,
+    val secondaryText: String = "",
+    val imageUrl: String? = null
+)
+
+data class DetailedStatsUiState(
+    val selectedFilter: String = "Today",
+    val totalListeningHours: Int = 0,
+    val totalListeningMinutes: Int = 0,
+    val topArtists: List<StatItem> = emptyList(),
+    val topTracks: List<StatItem> = emptyList()
+)
 
 data class PlayerUiState(
-    val tracks: List<AudioTrack> = emptyList(),
-    val filteredTracks: List<AudioTrack> = emptyList(),
-    val artists: List<LibraryArtist> = emptyList(),
-    val albums: List<String> = emptyList(),
     val searchQuery: String = "",
-    val currentTrack: AudioTrack? = null,
     val isPlaying: Boolean = false,
     val currentPosition: Long = 0L,
-    val isLoading: Boolean = true,
-    val errorMessage: String? = null,
-    val isShuffleEnabled: Boolean = false,
-    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val currentTrack: AudioTrack? = null,
     val currentLyrics: String? = null,
     val artistImageUrl: String? = null,
+    val isShuffleEnabled: Boolean = false,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val tracks: List<AudioTrack> = emptyList(),
+    val artists: List<LibraryArtist> = emptyList(),
+    val albums: List<String> = emptyList(),
+    val customPlaylists: List<Playlist> = emptyList(),
     val isScanning: Boolean = false,
     val scanProgress: Int = 0,
     val totalFilesToScan: Int = 0,
     val queue: List<AudioTrack> = emptyList(),
-    val visualMode: PlayerVisualMode = PlayerVisualMode.ARTWORK
+    val visualMode: PlayerVisualMode = PlayerVisualMode.ARTWORK,
+    val currentWaveform: List<Float> = emptyList()
 )
 
+@RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackEngine: PlaybackEngine,
+    private val mediaControllerManager: MediaControllerManager,
     private val metadataEngine: MetadataEngine,
     private val statsEngine: StatsEngine,
     private val libraryEngine: LibraryEngine,
     private val networkEngine: NetworkEngine,
-    private val eqEngine: EqEngine // 🔥 NEW: Injected EQ Engine
+    private val waveformEngine: WaveformEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
-    private val _homeUiState = MutableStateFlow(HomeUiState())
-    val homeUiState: StateFlow<HomeUiState> = _homeUiState.asStateFlow()
-
-    private val _trackColor = MutableStateFlow(Color(0xFF007AFF))
+    private val _trackColor = MutableStateFlow(Color(0xFF4FC3F7)) // Defaults to AardBlue
     val trackColor: StateFlow<Color> = _trackColor.asStateFlow()
 
-    val currentTrackTitle: StateFlow<String> = uiState
-        .map { it.currentTrack?.title ?: "Unknown" }
-        .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Unknown")
+    private var scanJob: Job? = null
 
-    val customPlaylists: StateFlow<List<Playlist>> = libraryEngine.getCustomPlaylists()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // 🔥 THE FIX: A trigger to force the library flow to re-fetch when scans complete
+    private val libraryRefreshTrigger = MutableStateFlow(0)
 
-    val artistDetails: StateFlow<Map<String, ArtistDetails>> = metadataEngine.artistDetails
+    @OptIn(ExperimentalCoroutinesApi::class)
+
+    private val unifiedTracksFlow: SharedFlow<List<AudioTrack>> = libraryRefreshTrigger
+        .flatMapLatest {
+            // Re-runs the extraction every time the trigger increments
+            networkEngine.getUnifiedLibraryFlow()
+        }
+        .shareIn(viewModelScope, SharingStarted.Lazily, replay = 1)
+
+    val homeUiState: StateFlow<HomeUiState> = libraryEngine.getHomeUiStateFlow(
+        unifiedTracksFlow
+    ).stateIn(viewModelScope, SharingStarted.Lazily, HomeUiState())
 
     val detailedStatsState: StateFlow<DetailedStatsUiState> = statsEngine.getDetailedStatsFlow(
-        allTracksFlow = _uiState.map { it.tracks },
-        artistDetailsMapFlow = metadataEngine.artistDetails
-    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DetailedStatsUiState())
+        unifiedTracksFlow,
+        metadataEngine.artistDetails
+    ).stateIn(viewModelScope, SharingStarted.Lazily, DetailedStatsUiState())
 
-    // 🔥 NEW: Expose the Audio Fidelity / EQ State
-    val eqState: StateFlow<EqUiState> = eqEngine.uiState
+    val customPlaylists: StateFlow<List<Playlist>> = libraryEngine.getCustomPlaylists()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val artistDetails = metadataEngine.artistDetails
 
     init {
-        observeLibrary()
-        observeHistory()
-        performAutoRitual()
-        syncNavidromeArchives()
-        observePlaybackEngine()
-        observeMetadataEngine()
-    }
-
-    // --- VISUAL & UI DELEGATION ---
-
-    fun toggleVisualMode() {
-        _uiState.update { state ->
-            val next = when (state.visualMode) {
-                PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
-                PlayerVisualMode.WAVEFORM -> PlayerVisualMode.ARTWORK
-            }
-            state.copy(visualMode = next)
-        }
-    }
-
-    fun onSearchQueryChanged(query: String) = libraryEngine.updateSearchQuery(query)
-    fun clearSearch() = libraryEngine.clearSearch()
-    fun updateStatsFilter(newFilter: String) = statsEngine.updateStatsFilter(newFilter)
-
-    // --- AUDIO FIDELITY & EQ DELEGATION ---
-
-    // 🔥 NEW: Routes UI toggles to the EqEngine which instructs the MediaController
-    fun toggleBitPerfect() = eqEngine.toggleBitPerfect()
-
-    // 🔥 NEW: Loads a specific AutoEq parametric profile
-    fun loadEqProfile(profile: PeqProfile) = eqEngine.loadProfile(profile)
-
-    // --- PLAYBACK DELEGATION ---
-
-    fun playTrack(track: AudioTrack) = playbackEngine.playTrack(track, _uiState.value.tracks)
-    fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int) = playbackEngine.setPlaylistAndPlay(tracks, startIndex)
-    fun togglePlayPause() = playbackEngine.togglePlayPause(_uiState.value.currentTrack, _uiState.value.isPlaying)
-    fun seekTo(position: Long) = playbackEngine.seekTo(position, _uiState.value.currentTrack)
-    fun toggleShuffle() = playbackEngine.toggleShuffle(_uiState.value.currentTrack)
-    fun toggleRepeat() = playbackEngine.toggleRepeat(_uiState.value.currentTrack)
-    fun skipToNext() = playbackEngine.skipToNext(_uiState.value.currentTrack)
-    fun skipToPrevious() = playbackEngine.skipToPrevious(_uiState.value.currentTrack)
-    fun addToQueue(track: AudioTrack) = playbackEngine.addToQueue(track)
-    fun addNextToQueue(track: AudioTrack) = playbackEngine.addToQueue(track)
-    fun removeFromQueue(track: AudioTrack) = playbackEngine.removeFromQueue(track)
-    fun moveQueueItem(fromIndex: Int, toIndex: Int) = playbackEngine.moveQueueItem(fromIndex, toIndex)
-
-    // --- METADATA DELEGATION ---
-
-    fun fetchArtistProfile(artistName: String) = viewModelScope.launch(Dispatchers.IO) { metadataEngine.fetchArtistProfile(artistName) }
-
-    // --- PLAYLIST & GRIMOIRE VAULTS DELEGATION ---
-
-    fun createPlaylist(name: String) = viewModelScope.launch { libraryEngine.createPlaylist(name) }
-    fun deletePlaylist(playlistId: Long) = viewModelScope.launch(Dispatchers.IO) { libraryEngine.deletePlaylist(playlistId) }
-    fun renamePlaylist(playlistId: Long, newName: String) = viewModelScope.launch(Dispatchers.IO) { libraryEngine.renamePlaylist(playlistId, newName) }
-    fun addTrackToPlaylist(playlistId: Long, track: AudioTrack) = viewModelScope.launch { libraryEngine.addTrackToPlaylist(playlistId, track.id) }
-    fun getPlaylistTracks(playlistId: Long): Flow<List<AudioTrack>> = libraryEngine.getPlaylistTracks(playlistId, _uiState.value.tracks)
-
-    fun removeTrackFromPlaylist(playlistId: Long, track: AudioTrack) = viewModelScope.launch(Dispatchers.IO) { libraryEngine.removeTrackFromPlaylist(playlistId, track.id) }
-    fun savePlaylistOrder(playlistId: Long, tracks: List<AudioTrack>) = viewModelScope.launch(Dispatchers.IO) { libraryEngine.savePlaylistOrder(playlistId, tracks) }
-    fun updatePlaylistImage(context: Context, playlistId: Long, uri: Uri) = viewModelScope.launch(Dispatchers.IO) { libraryEngine.updatePlaylistArtwork(context, playlistId, uri) }
-
-    fun toggleTrackLikeStatus(track: AudioTrack) = viewModelScope.launch {
-        val newState = libraryEngine.toggleTrackLikeStatus(track)
-        _uiState.update { it.withUpdatedLike(track.id, newState) }
-    }
-
-    private fun PlayerUiState.withUpdatedLike(trackId: String, liked: Boolean): PlayerUiState {
-        return copy(
-            tracks = tracks.map { if (it.id == trackId) it.copy(isLiked = liked) else it },
-            filteredTracks = filteredTracks.map { if (it.id == trackId) it.copy(isLiked = liked) else it },
-            queue = queue.map { if (it.id == trackId) it.copy(isLiked = liked) else it },
-            currentTrack = currentTrack?.let { if (it.id == trackId) it.copy(isLiked = liked) else it }
-        )
-    }
-
-    // --- NETWORK & SYNC ARCHIVES DELEGATION ---
-
-    fun syncNavidromeArchives() = viewModelScope.launch(Dispatchers.IO) { networkEngine.syncNavidromeArchives() }
-    fun connectToNavidrome(url: String, user: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+        // --- 1. MEDIA CONTROLLER STATE BINDINGS ---
         viewModelScope.launch {
-            networkEngine.connectToNavidrome(url, user, pass).onSuccess {
-                refreshLibrary()
-                onResult(true, null)
-            }.onFailure { error -> onResult(false, error.message ?: "The ritual was rejected by the server.") }
-        }
-    }
-    fun refreshLibrary() = viewModelScope.launch {
-        _uiState.update { it.copy(isLoading = true) }
-        networkEngine.getUnifiedLibraryFlow().catch { e -> _uiState.update { it.copy(isLoading = false, errorMessage = e.message) } }
-            .collect { unifiedTracks ->
-                val aggregation = libraryEngine.aggregateLibrary(unifiedTracks, _uiState.value.searchQuery)
-                _uiState.update { it.copy(tracks = aggregation.tracks, filteredTracks = aggregation.filteredTracks, artists = aggregation.artists, albums = aggregation.albums, isLoading = false) }
-            }
-    }
-    fun loadLocalAudio(forceRefresh: Boolean = false) = viewModelScope.launch {
-        networkEngine.getLocalAudioScanFlow(forceRefresh).onStart { _uiState.update { it.copy(isLoading = true, isScanning = true) } }
-            .catch { _uiState.update { it.copy(isScanning = false, isLoading = false) } }
-            .collect { status ->
-                when (status) {
-                    is LocalAudioDataSource.ScanStatus.Started -> _uiState.update { it.copy(isScanning = true, totalFilesToScan = status.total) }
-                    is LocalAudioDataSource.ScanStatus.InProgress -> _uiState.update { it.copy(isScanning = true, scanProgress = status.current, totalFilesToScan = status.total) }
-                    is LocalAudioDataSource.ScanStatus.Complete -> {
-                        val aggregation = libraryEngine.aggregateLibrary(status.tracks, _uiState.value.searchQuery)
-                        _uiState.update { it.copy(tracks = aggregation.tracks, filteredTracks = aggregation.filteredTracks, artists = aggregation.artists, albums = aggregation.albums, isScanning = false, isLoading = false) }
-                    }
-                }
-            }
-    }
-    fun onAuthSuccess(newToken: String) = networkEngine.onAuthSuccess(newToken)
-
-    // --- ENGINE INITIALIZATION OBSERVERS ---
-
-    private fun performAutoRitual() {
-        viewModelScope.launch {
-            networkEngine.autoConnectEvent.collect { isConnected ->
-                if (isConnected) loadLocalAudio()
+            mediaControllerManager.isPlaying.collect { isPlaying ->
+                _uiState.update { it.copy(isPlaying = isPlaying) }
             }
         }
-    }
 
-    private fun observeLibrary() {
         viewModelScope.launch {
-            val unifiedFlow = networkEngine.getUnifiedLibraryFlow()
-            libraryEngine.getAggregatedLibraryFlow(unifiedFlow).collect { aggregation ->
-                _uiState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        tracks = aggregation.tracks,
-                        filteredTracks = aggregation.filteredTracks,
+            mediaControllerManager.currentPosition.collect { pos ->
+                _uiState.update { it.copy(currentPosition = pos) }
+            }
+        }
+
+        viewModelScope.launch {
+            mediaControllerManager.shuffleModeEnabled.collect { shuffle ->
+                _uiState.update { it.copy(isShuffleEnabled = shuffle) }
+            }
+        }
+
+        viewModelScope.launch {
+            mediaControllerManager.repeatMode.collect { repeat ->
+                _uiState.update { it.copy(repeatMode = repeat) }
+            }
+        }
+
+        // --- 2. LIBRARY SYNCHRONIZATION ---
+        viewModelScope.launch {
+            libraryEngine.getAggregatedLibraryFlow(unifiedTracksFlow).collect { aggregation ->
+                _uiState.update {
+                    it.copy(
+                        tracks = aggregation.filteredTracks,
                         artists = aggregation.artists,
-                        albums = aggregation.albums,
-                        searchQuery = libraryEngine.searchQuery.value
+                        albums = aggregation.albums
                     )
                 }
-                metadataEngine.preSeedArtistCache(aggregation.tracks)
             }
         }
-    }
 
-    private fun observeHistory() {
+        // --- 3. QUEUE SYNCHRONIZATION ---
         viewModelScope.launch {
-            libraryEngine.getHomeUiStateFlow(_uiState.map { it.tracks }).collect { state -> _homeUiState.value = state }
-        }
-    }
-
-    private fun observePlaybackEngine() {
-        viewModelScope.launch { playbackEngine.isPlaying.collect { isPlaying -> _uiState.update { it.copy(isPlaying = isPlaying) } } }
-
-        viewModelScope.launch {
-            var lastRecordedMediaId: String? = null
-            playbackEngine.currentPosition.collect { currentPos ->
-                _uiState.update { it.copy(currentPosition = currentPos) }
-                val currentTrack = _uiState.value.currentTrack
-                if (currentTrack != null && currentTrack.id != lastRecordedMediaId && currentPos > 10000) {
-                    statsEngine.recordPlaybackHistory(currentTrack)
-                    lastRecordedMediaId = currentTrack.id
+            _uiState.map { it.tracks }.distinctUntilChanged().collectLatest { tracks ->
+                if (tracks.isNotEmpty()) {
+                    playbackEngine.getQueueFlow(tracks).collect { resolvedQueue ->
+                        _uiState.update { it.copy(queue = resolvedQueue) }
+                    }
                 }
             }
         }
 
+        // --- 4. METADATA BINDINGS ---
         viewModelScope.launch {
-            playbackEngine.currentMediaId.collect { mediaId ->
-                val track = _uiState.value.tracks.find { it.id == mediaId }
+            metadataEngine.currentLyrics.collect { lyrics ->
+                _uiState.update { it.copy(currentLyrics = lyrics) }
+            }
+        }
+
+        viewModelScope.launch {
+            metadataEngine.currentArtistImageUrl.collect { url ->
+                _uiState.update { it.copy(artistImageUrl = url) }
+            }
+        }
+
+        // --- 5. THE TRACK TRANSITION RITUAL ---
+        viewModelScope.launch {
+            mediaControllerManager.currentMediaId.collectLatest { mediaId ->
+                val allTracks = _uiState.value.tracks
+                val track = allTracks.find { it.id == mediaId }
+
                 if (track != null && _uiState.value.currentTrack?.id != track.id) {
-                    _uiState.update { it.copy(currentTrack = track, currentLyrics = null, artistImageUrl = null) }
+
+                    _uiState.update {
+                        it.copy(
+                            currentTrack = track,
+                            currentLyrics = null,
+                            artistImageUrl = null,
+                            currentWaveform = emptyList()
+                        )
+                    }
+
                     metadataEngine.clearTrackMetadata()
                     metadataEngine.fetchTrackMetadata(track)
-                }
-            }
-        }
-        viewModelScope.launch { playbackEngine.getQueueFlow(_uiState.value.tracks).collect { resolvedQueue -> _uiState.update { it.copy(queue = resolvedQueue) } } }
-        viewModelScope.launch { playbackEngine.shuffleModeEnabled.collect { isShuffle -> _uiState.update { it.copy(isShuffleEnabled = isShuffle) } } }
-        viewModelScope.launch { playbackEngine.repeatMode.collect { mode -> _uiState.update { it.copy(repeatMode = mode) } } }
-        viewModelScope.launch {
-            playbackEngine.spotifyRemoteTrack.filterNotNull().collect { tempTrack ->
-                _uiState.update { it.copy(isPlaying = true, currentTrack = tempTrack, currentLyrics = null) }
-                viewModelScope.launch(Dispatchers.IO) {
-                    val uri = metadataEngine.fetchSpotifyHighResArt(tempTrack.title, tempTrack.artist)
-                    if (uri != null) {
-                        _uiState.update { state ->
-                            val current = state.currentTrack
-                            if (current?.id == "spotify:remote" && current.title == tempTrack.title) {
-                                state.copy(currentTrack = current.copy(artworkUri = uri))
-                            } else state
-                        }
+                    statsEngine.recordPlaybackHistory(track)
+
+                    viewModelScope.launch(Dispatchers.IO) {
+                        val realWaveform = waveformEngine.getWaveform(track)
+                        _uiState.update { it.copy(currentWaveform = realWaveform) }
                     }
                 }
             }
         }
     }
 
-    private fun observeMetadataEngine() {
-        viewModelScope.launch { metadataEngine.currentLyrics.collect { lyrics -> _uiState.update { it.copy(currentLyrics = lyrics) } } }
-        viewModelScope.launch { metadataEngine.currentArtistImageUrl.collect { imageUrl -> _uiState.update { it.copy(artistImageUrl = imageUrl) } } }
+    fun updateTrackColor(color: Color) {
+        _trackColor.value = color
+    }
+
+    // ==========================================
+    // --- PLAYBACK CONTROLS (DELEGATED TO ENGINE) ---
+    // ==========================================
+
+    fun togglePlayPause() {
+        playbackEngine.togglePlayPause(_uiState.value.currentTrack, _uiState.value.isPlaying)
+    }
+
+    fun playTrack(track: AudioTrack) {
+        playbackEngine.playTrack(track, _uiState.value.tracks)
+    }
+
+    fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int) {
+        playbackEngine.setPlaylistAndPlay(tracks, startIndex)
+    }
+
+    fun skipToNext() {
+        playbackEngine.skipToNext(_uiState.value.currentTrack)
+    }
+
+    fun skipToPrevious() {
+        playbackEngine.skipToPrevious(_uiState.value.currentTrack)
+    }
+
+    fun seekTo(positionMs: Long) {
+        playbackEngine.seekTo(positionMs, _uiState.value.currentTrack)
+    }
+
+    fun toggleShuffle() {
+        playbackEngine.toggleShuffle(_uiState.value.currentTrack)
+    }
+
+    fun toggleRepeat() {
+        playbackEngine.toggleRepeat(_uiState.value.currentTrack)
+    }
+
+    // ==========================================
+    // --- QUEUE MANAGEMENT (DELEGATED TO ENGINE) ---
+    // ==========================================
+
+    fun addToQueue(track: AudioTrack) {
+        playbackEngine.addToQueue(track)
+    }
+
+
+    fun addNextToQueue(track: AudioTrack) {
+        playbackEngine.addToQueue(track) // Handled natively by PlaybackEngine
+    }
+
+
+    fun removeFromQueue(track: AudioTrack) {
+        playbackEngine.removeFromQueue(track)
+    }
+
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        playbackEngine.moveQueueItem(fromIndex, toIndex)
+    }
+
+    // ==========================================
+    // --- PLAYLIST OPERATIONS ---
+    // ==========================================
+
+    fun getPlaylistTracks(playlistId: Long): Flow<List<AudioTrack>> {
+        return libraryEngine.getPlaylistTracks(playlistId, _uiState.value.tracks)
+    }
+
+    fun addTrackToPlaylist(playlistId: Long, track: AudioTrack) {
+        viewModelScope.launch {
+            libraryEngine.addTrackToPlaylist(playlistId, track.id)
+        }
+    }
+
+    fun removeTrackFromPlaylist(playlistId: Long, track: AudioTrack) {
+        viewModelScope.launch {
+            libraryEngine.removeTrackFromPlaylist(playlistId, track.id)
+        }
+    }
+
+    fun savePlaylistOrder(playlistId: Long, tracks: List<AudioTrack>) {
+        viewModelScope.launch {
+            libraryEngine.savePlaylistOrder(playlistId, tracks)
+        }
+    }
+
+    fun updatePlaylistImage(context: Context, playlistId: Long, uri: Uri) {
+        viewModelScope.launch {
+            libraryEngine.updatePlaylistArtwork(context, playlistId, uri)
+        }
+    }
+
+    // ==========================================
+    // --- LIBRARY & STATE OPERATIONS ---
+    // ==========================================
+
+
+    fun loadLocalAudio(forceRefresh: Boolean = false) {
+        if (_uiState.value.isScanning && !forceRefresh) return
+
+        scanJob?.cancel()
+        scanJob = viewModelScope.launch {
+            libraryEngine.getLocalAudioScanFlow(forceRefresh).collect { status ->
+                when (status) {
+                    is LocalAudioDataSource.ScanStatus.Started -> {
+                        _uiState.update {
+                            it.copy(
+                                isScanning = true,
+                                totalFilesToScan = status.total,
+                                scanProgress = 0
+                            )
+                        }
+                    }
+                    is LocalAudioDataSource.ScanStatus.InProgress -> {
+                        _uiState.update {
+                            it.copy(
+                                isScanning = true,
+                                scanProgress = status.current,
+                                totalFilesToScan = status.total
+                            )
+                        }
+                    }
+                    is LocalAudioDataSource.ScanStatus.Complete -> {
+                        _uiState.update { it.copy(isScanning = false) }
+
+                        // 🔥 THE FIX: Tell the Unified Flow to fetch the newly populated database!
+                        libraryRefreshTrigger.value += 1
+                    }
+                }
+            }
+        }
+    }
+
+    fun toggleTrackLikeStatus(track: AudioTrack) {
+        viewModelScope.launch {
+            val isLiked = libraryEngine.toggleTrackLikeStatus(track)
+            val updatedTrack = track.copy(isLiked = isLiked)
+
+            if (_uiState.value.currentTrack?.id == track.id) {
+                _uiState.update { it.copy(currentTrack = updatedTrack) }
+            }
+        }
+    }
+
+    fun toggleVisualMode() {
+        val nextMode = if (_uiState.value.visualMode == PlayerVisualMode.ARTWORK) {
+            PlayerVisualMode.WAVEFORM
+        } else {
+            PlayerVisualMode.ARTWORK
+        }
+        _uiState.update { it.copy(visualMode = nextMode) }
+    }
+
+    fun onSearchQueryChanged(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        libraryEngine.updateSearchQuery(query)
+    }
+
+    fun clearSearch() {
+        _uiState.update { it.copy(searchQuery = "") }
+        libraryEngine.clearSearch()
+    }
+
+    fun updateStatsFilter(filter: String) {
+        statsEngine.updateStatsFilter(filter)
+    }
+
+    // ==========================================
+    // --- METADATA FETCHING ---
+    // ==========================================
+
+    fun fetchArtistProfile(artistName: String) {
+        viewModelScope.launch {
+            metadataEngine.fetchArtistProfile(artistName)
+        }
+    }
+
+    // ==========================================
+    // --- NETWORK & CLOUD OPERATIONS ---
+    // ==========================================
+
+    fun onAuthSuccess(token: String) {
+        networkEngine.onAuthSuccess(token)
+    }
+
+    suspend fun connectToNavidrome(url: String, user: String, pass: String): Result<Unit> {
+        return networkEngine.connectToNavidrome(url, user, pass)
     }
 }

@@ -1,5 +1,7 @@
 package com.example.tigerplayer.ui.components
 
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,14 +19,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
@@ -32,7 +32,6 @@ import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.*
 
 private val AardBlue = Color(0xFF007AFF)
-private val LosslessGold = Color(0xFFFFD700)
 
 
 // =====================================================
@@ -101,6 +100,7 @@ fun DiscoverCarousel(
 // RECENTLY PLAYED ROW (History Stream)
 // =====================================================
 
+@RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @Composable
 fun RecentlyPlayedRow(
     tracks: List<AudioTrack>,

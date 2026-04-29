@@ -1,5 +1,9 @@
+@file:Suppress("AssignedValueIsNeverRead")
+@file:SuppressLint("NewApi")
+
 package com.example.tigerplayer.ui.main
 
+import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -34,7 +38,6 @@ import com.example.tigerplayer.ui.theme.glassEffect
 // UI STATE MACHINE (CLEAN CONTROL)
 // ------------------------------
 private enum class PlayerSheetState {
-    COLLAPSED,
     MINI,
     EXPANDED
 }
@@ -54,7 +57,6 @@ fun MainScreen(
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
 
-    // THE FIX: Uses Lifecycle-Aware state collection to prevent background CPU drain
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
 
     var playerState by remember { mutableStateOf(PlayerSheetState.MINI) }
@@ -62,6 +64,7 @@ fun MainScreen(
     val hasTrack = uiState.currentTrack != null
 
     BackHandler(enabled = isExpanded) {
+        // 🔥 THE FIX: Properly reassign the state
         playerState = PlayerSheetState.MINI
     }
 
@@ -88,7 +91,6 @@ fun MainScreen(
         BottomNavTab.Cloud
     )
 
-    // A Black root background so when the app scales down, it fades into darkness
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
 
         // ==============================
@@ -103,14 +105,13 @@ fun MainScreen(
                     scaleY = appScale
                     alpha = appAlpha
                 }
-                .clip(RoundedCornerShape(appCornerRadius)),
+                .clip(RoundedCornerShape(appCornerRadius.coerceAtLeast(0.dp))),
             bottomBar = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 ) {
-                    // MINI PLAYER (Spotify-style persistent dock)
                     AnimatedVisibility(
                         visible = hasTrack && !isExpanded,
                         enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
@@ -121,6 +122,7 @@ fun MainScreen(
                                 viewModel = playerViewModel,
                                 onExpandClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    // 🔥 THE FIX: Properly reassign the state
                                     playerState = PlayerSheetState.EXPANDED
                                 }
                             )
@@ -192,28 +194,24 @@ fun MainScreen(
                 NavHost(
                     navController = tabNavController,
                     startDestination = BottomNavTab.Home.route,
-                    // Silky Smooth Navigation Transitions
                     enterTransition = {
                         slideInHorizontally(
-                            initialOffsetX = { fullWidth -> fullWidth }, // from right edge
+                            initialOffsetX = { fullWidth -> fullWidth },
                             animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeIn(animationSpec = tween(300))
                     },
-
                     exitTransition = {
                         slideOutHorizontally(
                             targetOffsetX = { fullWidth -> -fullWidth / 4 },
                             animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeOut(animationSpec = tween(300))
                     },
-
                     popEnterTransition = {
                         slideInHorizontally(
                             initialOffsetX = { fullWidth -> -fullWidth / 4 },
                             animationSpec = tween(300, easing = FastOutSlowInEasing)
                         ) + fadeIn(animationSpec = tween(300))
                     },
-
                     popExitTransition = {
                         slideOutHorizontally(
                             targetOffsetX = { fullWidth -> fullWidth },
@@ -280,11 +278,14 @@ fun MainScreen(
                 viewModel = playerViewModel,
                 onCollapse = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    // 🔥 THE FIX: Properly reassign the state
                     playerState = PlayerSheetState.MINI
                 },
                 onNavigateToAlbum = {
+                    // 🔥 THE FIX: Properly reassign the state
                     playerState = PlayerSheetState.MINI
                     onNavigateToAlbum(it)
+
                 }
             )
         }

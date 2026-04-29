@@ -3,7 +3,9 @@ package com.example.tigerplayer.engine
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresExtension
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
@@ -46,12 +48,10 @@ class LibraryEngine @Inject constructor(
         val albums: List<String>
     )
 
+    // 🔥 THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
     @OptIn(FlowPreview::class)
     fun getAggregatedLibraryFlow(unifiedTracksFlow: Flow<List<AudioTrack>>): Flow<LibraryAggregation> {
-        return combine(
-            unifiedTracksFlow,
-            _searchQuery.debounce(250) // <--- Prevents keyboard stutter when typing fast
-        ) { tracks, query ->
+        return combine(unifiedTracksFlow, _searchQuery.debounce(250)) { tracks, query ->
             aggregateLibrary(tracks, query)
         }
     }
@@ -157,6 +157,7 @@ class LibraryEngine @Inject constructor(
         audioRepository.addTrackToPlaylist(playlistId, trackId)
     }
 
+
     fun getPlaylistTracks(playlistId: Long, currentLibrary: List<AudioTrack>): Flow<List<AudioTrack>> {
         return when (playlistId) {
             RECENTLY_ADDED_ID -> flowOf(currentLibrary.reversed().take(20))
@@ -202,15 +203,13 @@ class LibraryEngine @Inject constructor(
         return newState
     }
 
-    suspend fun addTrackToLikedSongs(trackId: String) {
-        ensureLikedPlaylistExists()
-        audioRepository.addTrackToPlaylist(LIKED_SONGS_ID, trackId)
-        audioRepository.updateTrackLikeStatus(trackId, true)
-    }
+    /**
+     * LOCAL AUDIO SCANNING
+     * Passes through the scan status flow so the ViewModel can update UI progress bars.
+     */
 
-    suspend fun removeTrackFromLikedSongs(trackId: String) {
-        audioRepository.removeTrackFromPlaylist(LIKED_SONGS_ID, trackId)
-        audioRepository.updateTrackLikeStatus(trackId, false)
+    fun getLocalAudioScanFlow(forceRefresh: Boolean = false): Flow<com.example.tigerplayer.data.source.LocalAudioDataSource.ScanStatus> {
+        return audioRepository.getLocalTracksWithProgress(forceRefresh)
     }
 
     private suspend fun ensureLikedPlaylistExists() {

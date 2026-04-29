@@ -1,6 +1,5 @@
 package com.example.tigerplayer.engine
 
-
 import android.net.Uri
 import android.util.Log
 import com.example.tigerplayer.data.model.AudioTrack
@@ -10,6 +9,7 @@ import com.example.tigerplayer.data.repository.MediaDataRepository
 import com.example.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
+import androidx.core.net.toUri
 
 class MetadataEngine @Inject constructor(
     private val mediaDataRepository: MediaDataRepository,
@@ -58,20 +58,42 @@ class MetadataEngine @Inject constructor(
     }
 
     suspend fun fetchSpotifyHighResArt(title: String, artist: String): Uri? {
-        val highResUrl = mediaDataRepository.getHighResAlbumArt(title, artist).firstOrNull()
-        return highResUrl?.let { Uri.parse(it) }
+        var highResUrl: String? = null
+        try {
+            // 🔥 THE FIX: We use collect instead of firstOrNull() to prevent the Coroutine system
+            // from throwing an AbortFlowException and crashing the Repository's try/catch block.
+            mediaDataRepository.getHighResAlbumArt(title, artist).collect { url ->
+                if (highResUrl == null) highResUrl = url
+            }
+        } catch (e: Exception) {
+            Log.e("MetadataEngine", "Artwork fetch failed: ${e.message}")
+        }
+        return highResUrl?.toUri()
     }
 
+    @Suppress("unused")
     suspend fun preSeedArtistCache(tracks: List<AudioTrack>) {
         if (tracks.isEmpty()) return
-        val uniqueArtists = tracks.map { ArtistUtils.getBaseArtist(it.artist) }.distinct()
+        val uniqueArtists = tracks.map { ArtistUtils.getBaseArtist(it.artist).trim() }.distinct()
+
         uniqueArtists.forEach { name ->
-            val details = mediaDataRepository.getArtistDetails(name).firstOrNull()
-            if (details?.imageUrl != null) {
-                _artistDetails.update { it + (name to details) }
+            val cacheKey = name.lowercase()
+
+            if (!_artistDetails.value.containsKey(cacheKey)) {
+                try {
+                    // 🔥 THE FIX: Safe collection to prevent AbortFlowException crashes
+                    var fetchedDetails: ArtistDetails? = null
+                    mediaDataRepository.getArtistDetails(name).collect { d ->
+                        if (fetchedDetails == null) fetchedDetails = d
+                    }
+
+                    if (fetchedDetails?.imageUrl != null) {
+                        _artistDetails.update { it + (cacheKey to fetchedDetails!!) }
+                    }
+                } catch (e: Exception) {
+                    Log.w("MetadataEngine", "Pre-seed failed for $name: ${e.message}")
+                }
             }
         }
     }
-
-
 }

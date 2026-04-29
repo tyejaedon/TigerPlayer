@@ -110,9 +110,12 @@ fun SpotifyAlbumDetailScreen(
                             Icon(WitcherIcons.Back, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                        scrolledContainerColor = Color.Unspecified,
+                        navigationIconContentColor = Color.Unspecified,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = Color.Unspecified
                     )
                 )
             }

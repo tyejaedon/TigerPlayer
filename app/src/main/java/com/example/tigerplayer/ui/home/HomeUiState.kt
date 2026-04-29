@@ -1,6 +1,7 @@
 package com.example.tigerplayer.ui.home
 
 import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.ui.player.StatItem
 
 /**
  * THE VANGUARD STATS
@@ -15,7 +16,10 @@ data class UserStatistics(
     // This represents the total number of "Grimoires" (Tracks) in the local library.
     val totalTracksCount: Int = 0,
 
-    val totalListeningTimeHours: Int = 0
+    val totalListeningTimeHours: Int = 0,
+
+    // 🔥 NEW: Top Artists mapped directly into the home state for the Constellation & Analytics
+    val topArtists: List<StatItem> = emptyList()
 )
 
 /**

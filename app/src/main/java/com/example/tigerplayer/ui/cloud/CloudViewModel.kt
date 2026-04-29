@@ -26,6 +26,7 @@ class CloudViewModel @Inject constructor(
     private val _currentPlaylistTracks = MutableStateFlow<List<SpotifyTrack>>(emptyList())
     val currentPlaylistTracks = _currentPlaylistTracks.asStateFlow()
 
+    // --- BULLETPROOFING UI STATE ---
     private val _isLoadingTracks = MutableStateFlow(false)
     val isLoadingTracks = _isLoadingTracks.asStateFlow()
 
@@ -35,10 +36,16 @@ class CloudViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
+    private val _uiError = MutableStateFlow<String?>(null)
+    val uiError = _uiError.asStateFlow()
+
+    // Guards against infinite reload loops when OAuth token refreshes
+    private var initialSyncComplete = false
+
     // --- THE REACTIVE FILTERS (With Debounce) ---
     @OptIn(FlowPreview::class)
     val filteredPlaylists = _searchQuery
-        .debounce(300) // Wait for the user to stop typing
+        .debounce(300)
         .distinctUntilChanged()
         .combine(userPlaylists) { query, playlists ->
             if (query.isBlank()) playlists
@@ -58,13 +65,13 @@ class CloudViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
-        // CONTINUOUS MONITORING: Automatically sync when the token is forged
+        // CONTINUOUS MONITORING
         viewModelScope.launch {
             authManager.token.collectLatest { currentToken ->
-                if (currentToken.isNotEmpty()) {
-                    Log.d("CloudVM", "Token detected! Initiating cloud sync...")
-                    fetchSavedAlbums()
-                    fetchUserPlaylists()
+                if (currentToken.isNotEmpty() && !initialSyncComplete) {
+                    initialSyncComplete = true
+                    Log.d("CloudVM", "Initial token detected! Initiating cloud sync...")
+                    forceRefreshArchives()
                 }
             }
         }
@@ -73,10 +80,22 @@ class CloudViewModel @Inject constructor(
     private suspend fun ensureValidToken(): String? {
         val token = authManager.getValidToken()
         if (token.isEmpty()) {
-            Log.w("CloudVM", "Ritual aborted: No valid token available.")
+            _uiError.value = "The oracle requires authentication."
             return null
         }
         return token
+    }
+
+    /**
+     * Called by UI to force a refresh (e.g. Pull-to-refresh or Button click)
+     */
+    fun forceRefreshArchives() {
+        fetchSavedAlbums()
+        fetchUserPlaylists()
+    }
+
+    fun clearError() {
+        _uiError.value = null
     }
 
     /**
@@ -85,83 +104,63 @@ class CloudViewModel @Inject constructor(
     fun fetchTracksForPlaylist(playlistId: String) {
         viewModelScope.launch {
             val token = ensureValidToken() ?: return@launch
-
-            clearCurrentTracks() // Banish previous results
-            _isLoadingTracks.value = true
-
-            try {
-                val tracks = spotifyRepository.fetchPlaylistTracks(token, playlistId)
-                _currentPlaylistTracks.value = tracks
-            } catch (e: Exception) {
-                Log.e("CloudVM", "Playlist fetch failed: ${e.message}")
-            } finally {
-                _isLoadingTracks.value = false
-            }
-        }
-    }
-
-    /**
-     * Manifests tracks for a specific album.
-     */
-    fun fetchTracksForAlbum(albumId: String) {
-        viewModelScope.launch {
-            val token = ensureValidToken() ?: return@launch
-
             clearCurrentTracks()
             _isLoadingTracks.value = true
 
             try {
-                val tracks = spotifyRepository.fetchAlbumTracks(token, albumId)
-                _currentPlaylistTracks.value = tracks
-            } catch (e: Exception) {
-                Log.e("CloudVM", "Album fetch failed: ${e.message}")
+                _currentPlaylistTracks.value = spotifyRepository.fetchPlaylistTracks(token, playlistId)
+            } catch (_: Exception) {
+                _uiError.value = "Failed to manifest tracks."
             } finally {
                 _isLoadingTracks.value = false
             }
         }
     }
 
-    fun fetchSavedAlbums() {
+    fun fetchTracksForAlbum(albumId: String) {
+        viewModelScope.launch {
+            val token = ensureValidToken() ?: return@launch
+            clearCurrentTracks()
+            _isLoadingTracks.value = true
+
+            try {
+                _currentPlaylistTracks.value = spotifyRepository.fetchAlbumTracks(token, albumId)
+            } catch (_: Exception) {
+                _uiError.value = "Failed to manifest album."
+            } finally {
+                _isLoadingTracks.value = false
+            }
+        }
+    }
+
+    private fun fetchSavedAlbums() {
         viewModelScope.launch {
             val token = ensureValidToken() ?: return@launch
             _isLoadingAlbums.value = true
-
             try {
                 spotifyRepository.fetchUserSavedAlbums(token)
-            } catch (e: Exception) {
-                Log.e("CloudVM", "Album ledger fetch failed: ${e.message}")
+            } catch (_: Exception) {
+                _uiError.value = "Failed to retrieve your album grimoires."
             } finally {
-                // Guaranteed to stop the spinner, even if the network fails
                 _isLoadingAlbums.value = false
             }
         }
     }
 
-    fun fetchUserPlaylists() {
+    private fun fetchUserPlaylists() {
         viewModelScope.launch {
             val token = ensureValidToken() ?: return@launch
-
-            // Note: You originally used _isLoadingTracks here. I kept it to prevent
-            // breaking your UI state, but functionally it triggers the unified loader perfectly.
             _isLoadingTracks.value = true
-
             try {
                 spotifyRepository.fetchUserPlaylists(token)
-            } catch (e: Exception) {
-                Log.e("CloudVM", "Playlist ledger fetch failed: ${e.message}")
+            } catch (_: Exception) {
+                _uiError.value = "Failed to retrieve your playlist grimoires."
             } finally {
-                // The Safeguard
                 _isLoadingTracks.value = false
             }
         }
     }
 
-
-
-
-    /**
-     * Commands the Spotify App Remote.
-     */
     fun playSpotifyUri(uri: String) {
         viewModelScope.launch {
             if (!isSpotifyConnected.value) {

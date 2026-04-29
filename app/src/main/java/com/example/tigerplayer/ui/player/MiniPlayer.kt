@@ -1,11 +1,11 @@
 package com.example.tigerplayer.ui.player
 
-import android.net.Uri
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.compose.animation.*
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -69,12 +68,12 @@ fun MiniPlayer(
         modifier = Modifier
             .fillMaxWidth()
             .height(72.dp) // Fixed height for a consistent "Anchor" at the bottom
-            .clickable { onExpandClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp), // Floating pill effect
+            .padding(horizontal = 8.dp, vertical = 4.dp) // Floating pill effect
+            .clickable { onExpandClick() },
         shape = RoundedCornerShape(20.dp), // Matches Flip 5 outer display aesthetic
         color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.9f),
-        tonalElevation = 8.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)) // Specular rim
+        tonalElevation = 8.dp
+        // 🔥 THE CRASH FIX: Removed border = BorderStroke() to prevent Negative bounds crashes during AnimatedVisibility
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
 
@@ -115,7 +114,7 @@ fun MiniPlayer(
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                 ) {
                     AsyncImage(
-                        model = track.artworkUri.takeIf { it != Uri.EMPTY },
+                        model = track.artworkUri.toString().takeIf { it.isNotBlank() },
                         contentDescription = null,
                         fallback = painterResource(R.drawable.ic_tiger_logo),
                         error = painterResource(R.drawable.ic_tiger_logo),
@@ -192,7 +191,8 @@ fun MiniPlayer(
                             modifier = Modifier.size(24.dp)
                         )
                     }
-                }            }
+                }
+            }
         }
     }
 }

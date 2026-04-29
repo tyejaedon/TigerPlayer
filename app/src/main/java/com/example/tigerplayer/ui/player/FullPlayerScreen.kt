@@ -1,9 +1,10 @@
+@file:SuppressLint("NewApi")
 package com.example.tigerplayer.ui.player
 
+import android.annotation.SuppressLint
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -31,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
@@ -58,19 +61,15 @@ import com.example.tigerplayer.ui.library.SongOptionsSheet
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Random
 import java.util.concurrent.TimeUnit
-import kotlin.math.abs
+import kotlin.math.PI
 import kotlin.math.sin
 
-// --- Thematic Witcher Colors ---
 private val IgniRed = Color(0xFFF11F1A)
-private val AardBlue = Color(0xFF4FC3F7)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -79,19 +78,26 @@ fun FullPlayerScreen(
     onCollapse: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
 ) {
-    // --- 1. SINGLE SOURCE OF TRUTH ---
-    val uiState by viewModel.uiState.collectAsState()
-    val track = uiState.currentTrack ?: return
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val currentTrack = uiState.currentTrack
+    var lastKnownTrack by remember { mutableStateOf<AudioTrack?>(null) }
+
+    LaunchedEffect(currentTrack) {
+        if (currentTrack != null) {
+            lastKnownTrack = currentTrack
+        }
+    }
+
+    val track = currentTrack ?: lastKnownTrack ?: return
     val context = LocalContext.current
 
-    // --- 2. THE MOTION THROTTLE ---
     val motionThrottle by animateFloatAsState(
         targetValue = if (uiState.isPlaying) 1f else 0f,
         animationSpec = tween(1000, easing = FastOutSlowInEasing),
         label = "MotionThrottle"
     )
 
-    // --- 3. UI STATE ---
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
@@ -107,7 +113,6 @@ fun FullPlayerScreen(
     val offsetXAnimate = remember { Animatable(0f) }
     val dragThreshold = 150f
 
-    // --- 4. COLOR EXTRACTION ---
     val imageUrl = if (showLyrics) uiState.artistImageUrl ?: track.artworkUri else track.artworkUri
     val imageRequest = remember(imageUrl) {
         ImageRequest.Builder(context)
@@ -118,8 +123,11 @@ fun FullPlayerScreen(
                 val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                 bitmap?.let { b ->
                     Palette.from(b).generate { palette ->
-                        dominantBgColor = palette?.dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
-                        val luminance = ColorUtils.calculateLuminance(dominantBgColor.toArgb())
+                        val extractedColor = palette?.dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
+                        dominantBgColor = extractedColor
+                        viewModel.updateTrackColor(extractedColor)
+
+                        val luminance = ColorUtils.calculateLuminance(extractedColor.toArgb())
                         dynamicTextColor = if (luminance > 0.4) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
                         dynamicSecondaryTextColor = dynamicTextColor.copy(alpha = 0.7f)
                     }
@@ -128,7 +136,6 @@ fun FullPlayerScreen(
             .build()
     }
 
-    // --- 5. DRIFT ENGINE ---
     val infiniteTransition = rememberInfiniteTransition(label = "ArtworkDrift")
     val driftScale by infiniteTransition.animateFloat(
         initialValue = 1.0f, targetValue = 1.12f,
@@ -150,7 +157,6 @@ fun FullPlayerScreen(
                 }
             }
     ) {
-        // LAYER 1: BACKDROP
         AsyncImage(
             model = imageRequest,
             contentDescription = null,
@@ -166,7 +172,6 @@ fun FullPlayerScreen(
                 }
         )
 
-        // LAYER 2: SCRIM
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -179,7 +184,6 @@ fun FullPlayerScreen(
                 )
         )
 
-        // LAYER 3: FOREGROUND
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -196,7 +200,7 @@ fun FullPlayerScreen(
                 showQueue = showQueue,
                 onToggleQueue = { showQueue = it; showLyrics = false },
                 onShowOptions = { showOptionsSheet = true },
-                uiState = uiState
+                track = track
             )
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -223,7 +227,6 @@ fun FullPlayerScreen(
                             textColor = dynamicTextColor
                         )
                         "artwork" -> {
-                            // --- 🔥 THE DUAL MODE PLAYER VISUALS ---
                             Crossfade(
                                 targetState = uiState.visualMode,
                                 animationSpec = tween(600, easing = FastOutSlowInEasing),
@@ -271,18 +274,19 @@ fun FullPlayerScreen(
                                             )
                                         }
                                         PlayerVisualMode.WAVEFORM -> {
-                                            val waveform by remember(track.id) {
-                                                mutableStateOf(generateFakeWaveform(track.id, 45))
-                                            }
+                                            val isWaveformLoading = uiState.currentWaveform.isEmpty()
+                                            val waveform = uiState.currentWaveform.ifEmpty { List(80) { 0.15f } }
+
                                             val progress = if (track.durationMs > 0L) {
                                                 uiState.currentPosition.toFloat() / track.durationMs.toFloat()
                                             } else 0f
 
-                                            WaveformSeekBar(
+                                            FullWaveformSeekBar(
                                                 amplitudes = waveform,
                                                 progress = progress,
                                                 isPlaying = uiState.isPlaying,
-                                                color = dynamicTextColor
+                                                color = dynamicTextColor,
+                                                isLoading = isWaveformLoading
                                             )
                                         }
                                     }
@@ -293,7 +297,6 @@ fun FullPlayerScreen(
                 }
             }
 
-            // --- THE GLASS DECK ---
             AnimatedVisibility(
                 visible = !showLyrics && !showQueue,
                 enter = fadeIn(tween(600)) + slideInVertically(initialOffsetY = { it / 3 }, animationSpec = spring(stiffness = Spring.StiffnessLow)),
@@ -305,7 +308,7 @@ fun FullPlayerScreen(
                         .padding(bottom = 24.dp)
                         .shadow(elevation = 24.dp * motionThrottle, shape = RoundedCornerShape(32.dp), spotColor = dominantBgColor.copy(alpha = 0.5f))
                         .clip(RoundedCornerShape(32.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(32.dp))
+                        .background(Color.Transparent)
                         .padding(vertical = 20.dp, horizontal = 12.dp)
                 ) {
                     TrackInfoCard(
@@ -317,7 +320,7 @@ fun FullPlayerScreen(
                         onToggleLike = { viewModel.toggleTrackLikeStatus(track) }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    FieryWavySeeker(uiState = uiState, viewModel = viewModel, textColor = dynamicTextColor)
+                    FieryWavySeeker(uiState = uiState, track = track, viewModel = viewModel, textColor = dynamicTextColor)
                     Spacer(modifier = Modifier.height(16.dp))
                     PlaybackControls(uiState = uiState, viewModel = viewModel, textColor = dynamicTextColor)
                 }
@@ -342,16 +345,25 @@ fun FullPlayerScreen(
 }
 
 // ==========================================
-// --- THE WAVEFORM ENGINE ---
+// --- THE LIVE WAVEFORM ENGINE ---
 // ==========================================
 
 @Composable
-fun WaveformSeekBar(
+fun FullWaveformSeekBar(
     amplitudes: List<Float>,
     progress: Float,
     isPlaying: Boolean,
-    color: Color
+    color: Color,
+    isLoading: Boolean = false
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "LiveWaveform")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing)),
+        label = "Phase"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth(0.85f)
@@ -359,18 +371,40 @@ fun WaveformSeekBar(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        amplitudes.forEachIndexed { index, amp ->
-            val isPlayed = index < (amplitudes.size * progress)
-            val targetHeight = if (isPlaying) amp else 0.15f
+        amplitudes.forEachIndexed { index, baseAmp ->
+            val barProgress = index.toFloat() / amplitudes.size
+            val isPlayed = barProgress <= progress
+
+            // --- 1. DYNAMIC AMPLITUDE BOOST ---
+            // If the waveform is loading, animate a cool sine-wave. If real, boost the height.
+            val actualAmp = if (isLoading) {
+                0.15f + 0.1f * sin(phase * 2 + index * 0.2f)
+            } else {
+                (baseAmp * 1.8f).coerceIn(0.05f, 1f) // 🔥 FIX 1: Multiply amplitude so it looks massive
+            }
+
+            // --- 2. THE RIPPLE PHYSICS ---
+            val liveRipple = if (isPlaying && !isLoading) {
+                val rippleSpeed = phase * if (isPlayed) 1f else 1.5f
+                val rippleDensity = if (isPlayed) 0.5f else 0.2f
+                0.85f + 0.15f * sin(rippleSpeed + index * rippleDensity)
+            } else {
+                1f // If paused, NO ripple.
+            }
+
+            // --- 3. THE PAUSE TRAP FIX ---
+            // We multiply the amp by the ripple. If it's paused, liveRipple is 1f, meaning it
+            // completely retains its physical shape instead of flattening out!
+            val targetHeight = (actualAmp * liveRipple).coerceIn(0.05f, 1f)
 
             val animatedHeight by animateFloatAsState(
                 targetValue = targetHeight,
-                animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+                animationSpec = spring(dampingRatio = 0.7f, stiffness = 400f),
                 label = "waveHeight"
             )
 
             val animatedColor by animateColorAsState(
-                targetValue = if (isPlayed) color else color.copy(alpha = 0.15f),
+                targetValue = if (isPlayed) color else color.copy(alpha = 0.2f),
                 animationSpec = tween(200),
                 label = "waveColor"
             )
@@ -386,16 +420,6 @@ fun WaveformSeekBar(
     }
 }
 
-fun generateFakeWaveform(seed: String, bars: Int): List<Float> {
-    val random = Random(seed.hashCode().toLong())
-    val amplitudes = mutableListOf<Float>()
-    for (i in 0 until bars) {
-        val value = 0.15f + random.nextFloat() * 0.85f
-        amplitudes.add(value)
-    }
-    return amplitudes
-}
-
 @Composable
 fun HeaderRitual(
     dynamicTextColor: Color,
@@ -405,10 +429,8 @@ fun HeaderRitual(
     showQueue: Boolean,
     onToggleQueue: (Boolean) -> Unit,
     onShowOptions: () -> Unit,
-    uiState: PlayerUiState
+    track: AudioTrack
 ) {
-    val track = uiState.currentTrack ?: return
-
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -487,7 +509,7 @@ fun TrackInfoCard(
             },
             title = {
                 Text(
-                    text = "TECHNICAL SPECIFICATIONS",
+                    "TECHNICAL SPECIFICATIONS",
                     style = MaterialTheme.typography.labelLarge,
                     color = textColor,
                     fontWeight = FontWeight.Black
@@ -507,49 +529,108 @@ fun TrackInfoCard(
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        horizontalAlignment = Alignment.Start
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .shadow(
+                16.dp,
+                RoundedCornerShape(24.dp),
+                ambientColor = Color.Transparent,
+                spotColor = Color.Black.copy(alpha = 0.5f)
+            )
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        Color.Black.copy(alpha = 0.4f),
+                        Color.Black.copy(alpha = 0.2f)
+                    )
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+            .padding(16.dp)
     ) {
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+
             Column(modifier = Modifier.weight(1f)) {
+
                 Text(
-                    text = track.title,
+                    track.title,
                     style = MaterialTheme.typography.headlineLarge,
                     color = textColor,
                     fontWeight = FontWeight.Black,
                     maxLines = 1,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, velocity = 40.dp)
+                    modifier = Modifier.basicMarquee(
+                        iterations = Int.MAX_VALUE,
+                        velocity = 40.dp
+                    )
                 )
 
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
-                    text = track.artist,
+                    track.artist,
                     style = MaterialTheme.typography.titleMedium,
                     color = secondaryTextColor,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                    modifier = Modifier.basicMarquee()
                 )
             }
 
-            Icon(
-                imageVector = if (track.isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                contentDescription = "Like Song",
-                tint = if (track.isLiked) MaterialTheme.igniRed else textColor.copy(alpha = 0.7f),
+            val scale by animateFloatAsState(
+                targetValue = if (track.isLiked) 1.15f else 1f,
+                animationSpec = spring(
+                    dampingRatio = 0.5f,
+                    stiffness = 400f
+                ),
+                label = "likeScale"
+            )
+
+            val tint by animateColorAsState(
+                targetValue = if (track.isLiked)
+                    MaterialTheme.igniRed
+                else
+                    textColor.copy(alpha = 0.7f),
+                label = "likeColor"
+            )
+
+            IconButton(
+                onClick = onToggleLike,
                 modifier = Modifier
                     .padding(start = 16.dp)
-                    .size(38.dp)
-                    .bounceClick { onToggleLike() }
-            )
+                    .size(48.dp)
+            ) {
+                Icon(
+                    imageVector = if (track.isLiked)
+                        Icons.Rounded.Favorite
+                    else
+                        Icons.Rounded.FavoriteBorder,
+
+                    contentDescription = if (track.isLiked)
+                        "Unlike song"
+                    else
+                        "Like song",
+
+                    tint = tint,
+
+                    modifier = Modifier.scale(scale)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val format = track.mimeType.split("/").lastOrNull()?.uppercase() ?: "AUDIO"
+
+            val format = track.mimeType
+                .substringAfter("/")
+                .uppercase()
 
             MetadataBadge(
                 text = if (track.mimeType.contains("flac")) "HI-RES" else format,
@@ -597,7 +678,6 @@ private fun MetadataBadge(
         color = if (isHighlight) IgniRed.copy(alpha = 0.2f) else textColor.copy(alpha = 0.1f),
         shape = CircleShape,
         modifier = Modifier.combinedClickable(onClick = { }, onLongClick = onLongClick),
-        border = if (isHighlight) BorderStroke(1.dp, IgniRed.copy(alpha = 0.5f)) else BorderStroke(1.dp, textColor.copy(alpha = 0.2f))
     ) {
         Text(
             text = text,
@@ -614,17 +694,18 @@ private fun MetadataBadge(
 // --- CONTROLS & SEEKER ---
 // ==========================================
 
+@SuppressLint("AutoboxingStateCreation")
 @Composable
 fun FieryWavySeeker(
     uiState: PlayerUiState,
+    track: AudioTrack,
     viewModel: PlayerViewModel,
     textColor: Color
 ) {
-    val track = uiState.currentTrack ?: return
     val accentColor = if (uiState.isPlaying) MaterialTheme.igniRed else MaterialTheme.aardBlue
 
     var isDragging by remember { mutableStateOf(false) }
-    var dragProgress by remember { mutableStateOf(0f) }
+    var dragProgress by remember { mutableFloatStateOf(0f) }
 
     val duration = track.durationMs.coerceAtLeast(1L)
     val progressValue = uiState.currentPosition.toFloat() / duration
@@ -750,7 +831,6 @@ fun PlaybackControls(
                 .shadow(elevation = (12.dp * pulseScale), shape = CircleShape, spotColor = coreColor.copy(alpha = 0.6f), ambientColor = Color.Transparent)
                 .clip(CircleShape)
                 .background(Brush.radialGradient(listOf(coreColor.copy(alpha = 0.25f), coreColor.copy(alpha = 0.05f))))
-                .border(1.5.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = 0.4f), coreColor.copy(alpha = 0.1f))), CircleShape)
                 .bounceClick { viewModel.togglePlayPause() },
             contentAlignment = Alignment.Center
         ) {
@@ -797,9 +877,14 @@ fun QueueDisplay(
         return
     }
 
+    var localQueue by remember(queue) { mutableStateOf(queue) }
     val listState = rememberLazyListState()
-    val draggingId = remember { mutableStateOf<String?>(null) }
-    val currentIndex = remember(queue, currentTrackId) { queue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0) }
+
+    var dragStartIndex by remember { mutableIntStateOf(-1) }
+    var dragCurrentIndex by remember { mutableIntStateOf(-1) }
+    var draggedDistance by remember { mutableFloatStateOf(0f) }
+
+    val currentIndex = remember(localQueue, currentTrackId) { localQueue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0) }
 
     LaunchedEffect(currentTrackId) {
         if (currentIndex >= 0) listState.animateScrollToItem(currentIndex, scrollOffset = -200)
@@ -818,36 +903,62 @@ fun QueueDisplay(
         }
 
         LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(top = 8.dp, bottom = 150.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            itemsIndexed(items = queue, key = { _, track -> track.id }) { index, track ->
+            itemsIndexed(items = localQueue, key = { index, track -> "${track.id}_$index" }) { index, track ->
                 val isActive = track.id == currentTrackId
-                val isDragging = draggingId.value == track.id
+                val isDragging = dragCurrentIndex == index && dragStartIndex != -1
 
                 Surface(
-                    modifier = Modifier.fillMaxWidth().animateItem()
-                        .pointerInput(queue) {
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateItem()
+                        .pointerInput(localQueue) {
                             detectDragGesturesAfterLongPress(
-                                onDragStart = { draggingId.value = track.id },
-                                onDragEnd = { draggingId.value = null },
-                                onDragCancel = { draggingId.value = null },
+                                onDragStart = {
+                                    dragStartIndex = index
+                                    dragCurrentIndex = index
+                                    draggedDistance = 0f
+                                },
+                                onDragEnd = {
+                                    if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
+                                        onMoveItem(dragStartIndex, dragCurrentIndex)
+                                    }
+                                    dragStartIndex = -1
+                                    dragCurrentIndex = -1
+                                    draggedDistance = 0f
+                                },
+                                onDragCancel = {
+                                    localQueue = queue
+                                    dragStartIndex = -1
+                                    dragCurrentIndex = -1
+                                    draggedDistance = 0f
+                                },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
-                                    val draggedId = draggingId.value ?: return@detectDragGesturesAfterLongPress
-                                    val fromIndex = queue.indexOfFirst { it.id == draggedId }
-                                    if (fromIndex == -1) return@detectDragGesturesAfterLongPress
-                                    val offset = (dragAmount.y / 60f).toInt()
-                                    val targetIndex = (fromIndex + offset).coerceIn(0, queue.lastIndex)
-                                    if (targetIndex != fromIndex) onMoveItem(fromIndex, targetIndex)
+                                    draggedDistance += dragAmount.y
+                                    val itemHeight = 72.dp.toPx()
+                                    val offsetInt = (draggedDistance / itemHeight).toInt()
+
+                                    if (offsetInt != 0) {
+                                        val newIndex = (dragCurrentIndex + offsetInt).coerceIn(0, localQueue.lastIndex)
+                                        if (newIndex != dragCurrentIndex) {
+                                            val mutable = localQueue.toMutableList()
+                                            val item = mutable.removeAt(dragCurrentIndex)
+                                            mutable.add(newIndex, item)
+                                            localQueue = mutable
+                                            dragCurrentIndex = newIndex
+                                            draggedDistance -= (offsetInt * itemHeight)
+                                        }
+                                    }
                                 }
                             )
                         }
                         .bounceClick { onTrackClick(track) },
-                    color = if (isActive) dynamicTextColor.copy(alpha = 0.12f) else Color.Transparent,
-                    shape = RoundedCornerShape(16.dp),
-                    border = if (isActive) BorderStroke(1.dp, dynamicTextColor.copy(alpha = 0.3f)) else null
+                    color = if (isActive) dynamicTextColor.copy(alpha = 0.12f) else if (isDragging) dynamicTextColor.copy(alpha = 0.05f) else Color.Transparent,
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(48.dp)) {
-                            AsyncImage(model = track.artworkUri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).border(0.5.dp, dynamicTextColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp)))
+                            AsyncImage(model = track.artworkUri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)))
                             if (isActive && isPlaying) {
                                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.4f)), contentAlignment = Alignment.Center) {
                                     Icon(WitcherIcons.VolumeUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
@@ -875,7 +986,7 @@ data class LyricLine(val timeMs: Long, val text: String)
 
 private fun parseLrc(lrc: String?): List<LyricLine> {
     if (lrc.isNullOrBlank()) return emptyList()
-    val regex = Regex("""\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\](.*)""")
+    val regex = Regex("""\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?](.*)""")
     return lrc.lines().mapNotNull { line ->
         val match = regex.find(line)
         if (match != null) {
@@ -899,7 +1010,9 @@ private fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Col
             itemsIndexed(items = parsed, key = { index, line -> "lyric_${line.timeMs}_$index" }) { index, line ->
                 val isActive = index == activeIndex
                 Text(
-                    text = line.text.ifBlank { "•••" }, color = if (isActive) MaterialTheme.igniRed else textColor.copy(if (isActive) 1f else 0.3f),
+                    text = line.text.ifBlank { "•••" }, color = if (isActive) MaterialTheme.igniRed else textColor.copy(
+                        0.3f
+                    ),
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black, fontSize = if (isActive) 24.sp else 20.sp),
                     textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp).graphicsLayer { val s = if (isActive) 1.1f else 1f; scaleX = s; scaleY = s }
                 )
@@ -908,6 +1021,7 @@ private fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Col
     }
 }
 
+@SuppressLint("DefaultLocale")
 private fun formatDuration(ms: Long): String {
     val minutes = TimeUnit.MILLISECONDS.toMinutes(ms)
     val seconds = TimeUnit.MILLISECONDS.toSeconds(ms) % 60

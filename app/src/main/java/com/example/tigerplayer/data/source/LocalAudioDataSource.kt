@@ -4,7 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
-import android.util.Log
+import androidx.annotation.RequiresExtension
 import com.example.tigerplayer.data.model.AudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -37,10 +37,8 @@ class LocalAudioDataSource @Inject constructor(
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.YEAR
         ).apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                add(MediaStore.Audio.Media.BITRATE)
-                add(MediaStore.Audio.Media.SAMPLERATE)
-            }
+            add(MediaStore.Audio.Media.BITRATE)
+            add(MediaStore.Audio.Media.SAMPLERATE)
         }.toTypedArray()
 
         val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.MIME_TYPE} LIKE '%flac%') " +
@@ -91,8 +89,8 @@ class LocalAudioDataSource @Inject constructor(
                     trackNumber = cleanTrackNum,
                     path = cursor.getString(dataCol),
                     year = if (year != 0) year.toString() else null,
-                    bitrate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE).coerceAtLeast(0)) else 0,
-                    sampleRate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.SAMPLERATE).coerceAtLeast(0)) else 0,
+                    bitrate = cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE).coerceAtLeast(0)),
+                    sampleRate = cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.SAMPLERATE).coerceAtLeast(0)),
                     serverPath = null
                 ))
 
@@ -101,8 +99,9 @@ class LocalAudioDataSource @Inject constructor(
                     emit(ScanStatus.InProgress(tracks.size, total))
                 }
             }
-            emit(ScanStatus.Complete(tracks))
         }
+        // Ensure we always emit Complete, even if the cursor was null or empty
+        emit(ScanStatus.Complete(tracks))
     }.flowOn(Dispatchers.IO)
 
     sealed class ScanStatus {

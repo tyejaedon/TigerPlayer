@@ -1,18 +1,17 @@
 package com.example.tigerplayer.data.repository
 
-import android.content.Context
 import android.util.Log
+import com.example.tigerplayer.data.local.dao.TigerDao
+import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.remote.api.LrclibApi
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
 
 @Singleton
 class LyricsRepository @Inject constructor(
@@ -35,7 +34,9 @@ class LyricsRepository @Inject constructor(
 
         // 2. CACHE MISS: CONSULT LRCLIB
         Log.d("LyricsRepo", "Cache miss. Hunting LRCLIB for ${track.title}...")
-        try {
+
+        // 🔥 THE FIX: Isolate the try-catch block from the emit function to prevent Flow crashes
+        val fetchedLyrics = try {
             val response = lrclibApi.getLyrics(
                 trackName = track.title,
                 artistName = track.artist,
@@ -60,21 +61,27 @@ class LyricsRepository @Inject constructor(
                     // 4. ENFORCE THE 10MB LIMIT (The Janitor)
                     tigerDao.enforceLyricsCacheLimit()
 
-                    emit(synced ?: plain)
+                    synced ?: plain
                 } else {
-                    emit(null) // No lyrics exist on LRCLIB
+                    null // No lyrics exist on LRCLIB
                 }
             } else {
-                emit(null)
+                null
             }
         } catch (e: Exception) {
+            // 🔥 THE FIX: Allow coroutine cancellations to pass through silently
+            if (e is CancellationException) throw e
+
             Log.e("LyricsRepo", "Failed to fetch lyrics: ${e.message}")
-            emit(null)
+            null
         }
+
+        // 🔥 THE FIX: Safely emit only after all try/catch blocks are resolved
+        emit(fetchedLyrics)
+
     }.flowOn(Dispatchers.IO)
 
     suspend fun clearLyricsCache() {
         tigerDao.clearAllLyrics()
     }
-
 }

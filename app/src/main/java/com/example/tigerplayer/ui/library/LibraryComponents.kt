@@ -1,61 +1,34 @@
 package com.example.tigerplayer.ui.library
 
-import androidx.compose.animation.*
+import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
 import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.model.Playlist
-import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import java.util.concurrent.TimeUnit
 
-import androidx.compose.foundation.border
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.toArgb
-import androidx.core.graphics.ColorUtils
 import com.example.tigerplayer.ui.theme.aardBlue
-import kotlin.random.Random
 
 // --- THE VANGUARD PALETTE (High Visibility) ---
 val AardBlue = Color(0xFF4FC3F7) // Brighter blue for better dark-mode contrast
@@ -64,8 +37,8 @@ val IgniRed = Color(0xFFFF5252)  // Brighter red for visibility
 
 @Composable
 fun ScanningOverlay(progress: Int, total: Int) {
-    val GlassWhite = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
-    val SecondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val glassWhite = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+    val secondaryText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 
     Box(
         modifier = Modifier
@@ -82,7 +55,7 @@ fun ScanningOverlay(progress: Int, total: Int) {
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp) // S22: Reasonable outer bounds
                 .glassEffect(MaterialTheme.shapes.extraLarge)
-                .background(GlassWhite, MaterialTheme.shapes.extraLarge)
+                .background(glassWhite, MaterialTheme.shapes.extraLarge)
                 .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), MaterialTheme.shapes.extraLarge)
                 .padding(horizontal = 24.dp, vertical = 32.dp), // S22: Tightened inner padding
             horizontalAlignment = Alignment.CenterHorizontally
@@ -132,7 +105,7 @@ fun ScanningOverlay(progress: Int, total: Int) {
                 text = "Manifesting track $progress of $total...",
                 modifier = Modifier.padding(top = 16.dp),
                 style = MaterialTheme.typography.labelMedium, // Kept small to prevent wrapping
-                color = SecondaryText
+                color = secondaryText
             )
         }
     }
@@ -239,6 +212,7 @@ fun ChapterSongRow(
     }
 }
 
+@SuppressLint("DefaultLocale")
 private fun formatDuration(durationMs: Long): String {
     val minutes = TimeUnit.MILLISECONDS.toMinutes(durationMs)
     val seconds = TimeUnit.MILLISECONDS.toSeconds(durationMs) - TimeUnit.MINUTES.toSeconds(minutes)

@@ -1,6 +1,8 @@
 package com.example.tigerplayer.ui.library
 
 import android.graphics.drawable.BitmapDrawable
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -9,13 +11,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -33,7 +32,6 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.ui.home.SectionTitle
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
@@ -41,6 +39,7 @@ import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.utils.ArtistUtils
 
+@RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ArtistDetailsScreen(
@@ -79,7 +78,7 @@ fun ArtistDetailsScreen(
     val fallbackColor = MaterialTheme.colorScheme.background
 
     // THE FIX: Keying 'remember' to artistName ensures the color resets
-    // to fallback the moment you switch artists.
+    // to fall back the moment you switch artists.
     var dominantColor by remember(artistName) { mutableStateOf(fallbackColor) }
 
     val animatedDominantColor by animateColorAsState(
@@ -111,7 +110,7 @@ fun ArtistDetailsScreen(
                             ?: palette?.dominantSwatch?.rgb
                             ?: palette?.mutedSwatch?.rgb
 
-                        colorInt?.let { dominantColor = Color(it) }
+                        colorInt?.let { Color(it) }
                     }
                 }
             })
@@ -159,8 +158,12 @@ fun ArtistDetailsScreen(
                             Icon(WitcherIcons.Back, contentDescription = "Back")
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Unspecified,
+                        navigationIconContentColor = Color.Unspecified,
+                        titleContentColor = Color.Unspecified,
+                        actionIconContentColor = Color.Unspecified
                     ),
                     modifier = Modifier.glassEffect(RectangleShape)
                 )

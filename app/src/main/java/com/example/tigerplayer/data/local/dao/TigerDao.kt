@@ -6,6 +6,7 @@ import com.example.tigerplayer.data.local.entity.CachedTrackEntity
 import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
 import kotlinx.coroutines.flow.Flow
 
 data class ArtistStats(
@@ -110,6 +111,10 @@ abstract class TigerDao {
     @Query("UPDATE cached_tracks SET isLiked = :isLiked WHERE id = :trackId")
     abstract suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean): Int
 
+    // 🔥 NEW: Save High-Res Artwork Permanently
+    @Query("UPDATE cached_tracks SET artworkUriString = :newUri WHERE id = :trackId")
+    abstract suspend fun updateTrackArtworkUri(trackId: String, newUri: String): Int
+
     // --- 4. THE LYRIC ARCHIVE ---
 
     @Query("SELECT * FROM lyrics_cache WHERE trackId = :trackId")
@@ -129,6 +134,14 @@ abstract class TigerDao {
 
     @Query("DELETE FROM lyrics_cache")
     abstract suspend fun clearAllLyrics(): Int
+
+    // --- THE WAVEFORM CACHE ---
+
+    @Query("SELECT * FROM waveform_cache WHERE trackId = :trackId LIMIT 1")
+    abstract suspend fun getWaveformCache(trackId: String): WaveformCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun insertWaveformCache(waveform: WaveformCacheEntity)
 
     // --- 5. THE TEMPORAL DATA (Minutes & Play Counts) ---
 

@@ -1,9 +1,6 @@
 package com.example.tigerplayer.di
 
 import com.example.tigerplayer.data.remote.api.*
-import com.example.tigerplayer.data.repository.WeatherRepository
-import com.example.tigerplayer.data.repository.WeatherRepositoryImpl
-import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -207,13 +204,3 @@ object NetworkModule {
     }
 }
 
-@Module
-@InstallIn(SingletonComponent::class)
-abstract class RepositoryModule {
-
-    @Binds
-    @Singleton
-    abstract fun bindWeatherRepository(
-        weatherRepositoryImpl: WeatherRepositoryImpl
-    ): WeatherRepository
-}

@@ -1,19 +1,15 @@
 package com.example.tigerplayer.ui.library
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -27,8 +23,6 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.tigerGlow
 import java.util.concurrent.TimeUnit
 
 
@@ -194,6 +188,7 @@ fun ArchiveSongRow(
 // --- 4. UTILITIES & ANIMATIONS ---
 // ==========================================
 
+@SuppressLint("DefaultLocale")
 private fun formatDuration(durationMs: Long): String {
     val minutes = TimeUnit.MILLISECONDS.toMinutes(durationMs)
     val seconds = TimeUnit.MILLISECONDS.toSeconds(durationMs) - TimeUnit.MINUTES.toSeconds(minutes)

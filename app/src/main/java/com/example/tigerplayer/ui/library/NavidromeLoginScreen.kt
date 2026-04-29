@@ -1,5 +1,7 @@
 package com.example.tigerplayer.ui.library
 
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -7,17 +9,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
+@RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @Composable
 fun NavidromeLoginScreen(
     viewModel: PlayerViewModel,
@@ -29,6 +32,7 @@ fun NavidromeLoginScreen(
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -97,9 +101,9 @@ fun NavidromeLoginScreen(
                 isPassword = true
             )
 
-            if (errorMessage != null) {
+            errorMessage?.let { message ->
                 Text(
-                    text = errorMessage!!,
+                    text = message,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 16.dp)
@@ -114,14 +118,16 @@ fun NavidromeLoginScreen(
                     isLoading = true
                     errorMessage = null
 
-                    viewModel.connectToNavidrome(serverUrl, username, password) { success, error ->
+                    scope.launch {
+                        viewModel.connectToNavidrome(serverUrl, username, password)
+                            .onSuccess {
+                                // The library is already refreshing in the background!
+                                onLoginSuccess()
+                            }
+                            .onFailure { error ->
+                                errorMessage = error.message ?: "Authentication failed"
+                            }
                         isLoading = false
-                        if (success) {
-                            // The library is already refreshing in the background!
-                            onLoginSuccess()
-                        } else {
-                            errorMessage = error
-                        }
                     }
                 },
                 enabled = !isLoading && serverUrl.isNotBlank() && username.isNotBlank(),

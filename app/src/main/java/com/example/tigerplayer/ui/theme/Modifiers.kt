@@ -1,13 +1,12 @@
 package com.example.tigerplayer.ui.theme
 
+import android.annotation.SuppressLint
 import android.graphics.BlurMaskFilter
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
@@ -16,17 +15,17 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 
 // ------------------------------
 // SAMSUNG-STYLE CLICK DEPTH
 // ------------------------------
 fun Modifier.bounceClick(onClick: () -> Unit) = composed {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
+    var isPressed by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
+        targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -39,11 +38,20 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
             scaleX = scale
             scaleY = scale
         }
-        .clickable(
-            interactionSource = interaction,
-            indication = null,
-            onClick = onClick
-        )
+        // 🔥 THE CRASH FIX: Bypasses the broken Foundation `clickable` node
+        // causing the "getPan" crash by using lower-level raw pointer inputs.
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onPress = {
+                    isPressed = true
+                    tryAwaitRelease()
+                    isPressed = false
+                },
+                onTap = {
+                    onClick()
+                }
+            )
+        }
 }
 
 // ------------------------------
@@ -51,31 +59,29 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
 // ------------------------------
 fun Modifier.glassEffect(shape: Shape) = composed {
     val dark = isSystemInDarkTheme()
-
     val base = if (dark) Color.White.copy(0.04f) else Color.Black.copy(0.03f)
 
     this
-        .clip(shape)
+        .graphicsLayer {
+            this.shape = shape
+            clip = true
+        }
         .background(base)
-        .blur(0.6.dp) // subtle Samsung blur feel
+        // 🔥 THE FIX: Removed .blur() which caused severe pixelation on text inside containers
         .background(
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = if (dark) 0.06f else 0.12f),
+                    Color.White.copy(alpha = if (dark) 0.08f else 0.15f),
                     Color.Transparent
                 )
             )
-        )
-        .border(
-            0.5.dp,
-            Color.White.copy(alpha = if (dark) 0.12f else 0.08f),
-            shape
         )
 }
 
 // ------------------------------
 // SAMSUNG "DEPTH GLOW"
 // ------------------------------
+@SuppressLint("UnnecessaryComposedModifier")
 @Composable
 fun Modifier.tigerGlow(
     color: Color = MaterialTheme.colorScheme.primary

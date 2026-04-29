@@ -35,16 +35,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
+import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.engine.LibraryEngine.Companion.LIKED_SONGS_ID
 import com.example.tigerplayer.ui.player.LibraryArtist
 import com.example.tigerplayer.ui.player.PlayerUiState
@@ -53,6 +61,7 @@ import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -66,6 +75,9 @@ fun LibraryScreen(
     onNavigateToPlaylist: (Long, String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // 🔥 NEW: Pull pre-seeded artist profiles from the VM vault
+    val artistDetails by viewModel.artistDetails.collectAsState()
+
     val tabs = listOf("Songs", "Albums", "Artists", "Playlists")
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
@@ -73,7 +85,6 @@ fun LibraryScreen(
     var isSearchActive by remember { mutableStateOf(false) }
     val query = uiState.searchQuery
 
-    // THE CACHE RITUAL: Hoist filtering for high-speed scrolling
     val matchedArtists = remember(query, uiState.artists) {
         if (query.isBlank()) emptyList()
         else uiState.artists.filter { it.name.contains(query, ignoreCase = true) }
@@ -91,7 +102,6 @@ fun LibraryScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // --- 1. VANGUARD HEADER ---
         AnimatedLibraryHeader(
             query = query,
             isSearchActive = isSearchActive,
@@ -102,27 +112,27 @@ fun LibraryScreen(
             onQueryChange = { viewModel.onSearchQueryChanged(it) }
         )
 
-        // --- 2. TAB RITUAL ---
         VanguardLibraryTabs(
             tabs = tabs,
             pagerState = pagerState,
             coroutineScope = scope
         )
 
-        // --- 3. THE VIEWPORT ---
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (query.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 120.dp)
                 ) {
+                    // Passed artistDetails downstream to render HD search results
                     renderSearchResults(
                         uiState = uiState,
                         viewModel = viewModel,
                         matchedArtists = matchedArtists,
                         matchedAlbums = matchedAlbums,
                         onNavigateToAlbum = onNavigateToAlbum,
-                        onNavigatetoArtist = onNavigateToArtist
+                        onNavigatetoArtist = onNavigateToArtist,
+                        artistDetails = artistDetails
                     )
                 }
             } else {
@@ -133,7 +143,7 @@ fun LibraryScreen(
                     when (page) {
                         0 -> SongsTab(viewModel, onNavigateToAlbum)
                         1 -> AlbumsTab(viewModel, onNavigateToAlbum)
-                        2 -> ArtistsTab(viewModel, onNavigateToArtist) // The newly forged tab!
+                        2 -> ArtistsTab(viewModel, onNavigateToArtist)
                         3 -> PlaylistsTab(viewModel, onNavigateToPlaylist)
                     }
                 }
@@ -162,7 +172,6 @@ fun AnimatedLibraryHeader(
             .height(56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Animated Title Collapse
         AnimatedVisibility(
             visible = !isSearchActive,
             enter = fadeIn() + expandHorizontally(),
@@ -179,7 +188,6 @@ fun AnimatedLibraryHeader(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Animated Search Bar Expansion
         AnimatedContent(
             targetState = isSearchActive,
             transitionSpec = {
@@ -299,70 +307,15 @@ fun VanguardLibraryTabs(
 // ==========================================
 
 @Composable
-fun AlbumsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
-    val uiState by viewModel.uiState.collectAsState()
-    val albums = uiState.albums
-    val gridState = rememberLazyGridState()
-    val hapticFeedback = LocalHapticFeedback.current
-
-    if (albums.isEmpty()) { ArchiveLoadingState("Forging Albums...") ; return }
-
-    val firstVisibleItem by remember { derivedStateOf { gridState.firstVisibleItemIndex } }
-    LaunchedEffect(firstVisibleItem) { hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-
-    LazyVerticalGrid(
-        state = gridState,
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 140.dp),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp)
-    ) {
-        items(items = albums, key = { albumName -> "alb_${albumName.hashCode()}" }) { albumName ->
-            val albumTrack = remember(albumName, uiState.tracks) { uiState.tracks.find { it.album == albumName } }
-            val trackCount = remember(albumName, uiState.tracks) { uiState.tracks.count { it.album == albumName } }
-            var itemYOffset by remember { mutableStateOf(0f) }
-
-            // Integrate the fully styled AlbumGridCard with the 3D physics Modifier
-            AlbumGridCard(
-                title = albumName,
-                artist = albumTrack?.artist ?: "Unknown Artist",
-                artworkUri = albumTrack?.artworkUri,
-                trackCount = trackCount,
-                modifier = Modifier
-                    .onGloballyPositioned { coordinates ->
-                        itemYOffset = coordinates.positionInWindow().y + (coordinates.size.height / 2)
-                    }
-                    .graphicsLayer {
-                        val viewportCenter = size.height * 2.5f
-                        val distanceFromCenter = (itemYOffset - viewportCenter) / viewportCenter
-                        val coercedOffset = distanceFromCenter.coerceIn(-1f, 1f)
-
-                        rotationX = coercedOffset * -30f // Smoother rotation
-                        cameraDistance = 16f * density
-
-                        val scale = 1f - (abs(coercedOffset) * 0.1f)
-                        scaleX = scale
-                        scaleY = scale
-                        alpha = 1f - (abs(coercedOffset) * 0.3f)
-                    },
-                onClick = { onNavigateToAlbum(albumName) }
-            )
-        }
-    }
-}
-
-@Composable
 fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     val currentTrack = uiState.currentTrack
     val tracks = uiState.tracks
-    val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
-    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
 
     if (tracks.isEmpty()) { ArchiveLoadingState("Summoning Archives..."); return }
+
 
     val firstVisibleItem by remember { derivedStateOf { listState.firstVisibleItemIndex } }
     LaunchedEffect(firstVisibleItem) { hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
@@ -387,19 +340,76 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                             val itemCenter = itemInfo.offset + (itemInfo.size / 2f)
                             val fraction = ((itemCenter - viewportCenter) / viewportCenter).coerceIn(-1f, 1f)
 
-                            translationX = (fraction * fraction) * 100f
-                            rotationZ = fraction * 10f
+                            translationX = (fraction * fraction) * 80f
+                            rotationZ = fraction * 6f
                             val baseScale = 1f - (abs(fraction) * 0.1f)
                             scaleX = baseScale * activeScale
                             scaleY = baseScale * activeScale
-                            alpha = 1f - (abs(fraction) * 0.4f)
+                            alpha = 1f - (abs(fraction) * 0.5f)
                             rotationX = tiltX
-                            cameraDistance = 12 * density
+                            cameraDistance = 16 * density
                         }
                     }
             ) {
-                // SongItem(track = track, isActive = isActive, ...)
+                SongItem(
+                    track = track,
+                    isActive = isActive,
+                    onClick = { viewModel.playTrack(track) }
+                )
             }
+        }
+    }
+}
+
+@Composable
+fun AlbumsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
+    val uiState by viewModel.uiState.collectAsState()
+    val albums = uiState.albums
+    val gridState = rememberLazyGridState()
+    val hapticFeedback = LocalHapticFeedback.current
+
+    if (albums.isEmpty()) { ArchiveLoadingState("Forging Albums...") ; return }
+
+    val firstVisibleItem by remember { derivedStateOf { gridState.firstVisibleItemIndex } }
+    LaunchedEffect(firstVisibleItem) { hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 140.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp)
+    ) {
+        items(items = albums, key = { albumName -> "alb_${albumName.hashCode()}" }) { albumName ->
+            val albumTrack = remember(albumName, uiState.tracks) { uiState.tracks.find { it.album == albumName } }
+            val trackCount = remember(albumName, uiState.tracks) { uiState.tracks.count { it.album == albumName } }
+            var itemYOffset by remember { mutableStateOf(0f) }
+
+            AlbumGridCard(
+                title = albumName,
+                artist = albumTrack?.artist ?: "Unknown Artist",
+                artworkUri = albumTrack?.artworkUri,
+                trackCount = trackCount,
+                modifier = Modifier
+                    .onGloballyPositioned { coordinates ->
+                        itemYOffset = coordinates.positionInWindow().y + (coordinates.size.height / 2)
+                    }
+                    .graphicsLayer {
+                        val viewportCenter = size.height * 2.5f
+                        val distanceFromCenter = (itemYOffset - viewportCenter) / viewportCenter
+                        val coercedOffset = distanceFromCenter.coerceIn(-1f, 1f)
+
+                        rotationX = coercedOffset * -30f
+                        cameraDistance = 16f * density
+
+                        val scale = 1f - (abs(coercedOffset) * 0.1f)
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = 1f - (abs(coercedOffset) * 0.3f)
+                    },
+                onClick = { onNavigateToAlbum(albumName) }
+            )
         }
     }
 }
@@ -407,42 +417,75 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
 @Composable
 fun ArtistsTab(viewModel: PlayerViewModel, onNavigateToArtist: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
+    val artistDetailsMap by viewModel.artistDetails.collectAsState()
+
     val artists = uiState.artists
     val gridState = rememberLazyGridState()
+    val context = LocalContext.current
 
     if (artists.isEmpty()) { ArchiveLoadingState("Awakening Legends..."); return }
 
     LazyVerticalGrid(
         state = gridState,
-        columns = GridCells.Fixed(3), // 3 columns for circular medallions
+        columns = GridCells.Fixed(3),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 140.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         items(artists, key = { it.name }) { artist ->
+
+            val normalizedKey = remember(artist.name) {
+                ArtistUtils.getBaseArtist(artist.name).lowercase().trim()
+            }
+
+            val profile = artistDetailsMap[normalizedKey]
+
+            val artistCover = remember(profile?.imageUrl, artist.name, uiState.tracks) {
+                profile?.imageUrl?.takeIf { it.isNotBlank() }
+                    ?: uiState.tracks.firstOrNull { it.artist.equals(artist.name, ignoreCase = true) }?.artworkUri?.toString()
+            }
+
+            val imageRequest = remember(artistCover) {
+                ImageRequest.Builder(context)
+                    .data(artistCover)
+                    .crossfade(true)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .build()
+            }
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .bounceClick { onNavigateToArtist(artist.name) }
                     .animateItem()
             ) {
-                // The Medallion
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
+                        .shadow(8.dp, CircleShape, spotColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = WitcherIcons.Artist, // Fallback icon
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        modifier = Modifier.size(32.dp)
-                    )
+                    if (artistCover != null) {
+                        AsyncImage(
+                            model = imageRequest,
+                            contentDescription = artist.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            imageVector = WitcherIcons.Artist,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -467,9 +510,8 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)
+        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 140.dp)
     ) {
-        // --- 1. LIKED SONGS HERO ---
         item(key = "hero_liked") {
             PremiumLikedSongsCard(trackCount = likedPlaylist?.trackCount ?: 0) {
                 onNavigateToPlaylist(LIKED_SONGS_ID, "Liked Songs")
@@ -477,17 +519,15 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
             Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // --- 2. FORGE ACTION ---
         item(key = "action_forge") {
             PremiumActionRow(
                 icon = WitcherIcons.Add,
                 title = "Forge New Playlist",
-                onClick = { /* Show Create Dialog */ }
+                onClick = { /* Handle Create Flow */ }
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // --- 3. GRIMOIRES ---
         if (userPlaylists.isNotEmpty()) {
             item(key = "header_grimoires") {
                 Text(
@@ -500,7 +540,10 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                 )
             }
             items(userPlaylists, key = { it.id }) { playlist ->
-                // PlaylistRow(playlist = playlist, ...)
+                PlaylistRow(
+                    playlist = playlist,
+                    onClick = { onNavigateToPlaylist(playlist.id, playlist.name) }
+                )
             }
         }
     }
@@ -509,6 +552,94 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
 // ==========================================
 // --- PREMIUM SUB-COMPONENTS ---
 // ==========================================
+
+@Composable
+fun SongItem(track: AudioTrack, isActive: Boolean, onClick: () -> Unit) {
+    val titleColor = if (isActive) MaterialTheme.aardBlue else MaterialTheme.colorScheme.onSurface
+    val bgColor = if (isActive) MaterialTheme.aardBlue.copy(alpha = 0.08f) else Color.Transparent
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(bgColor)
+            .bounceClick { onClick() }
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = track.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            fallback = painterResource(R.drawable.ic_tiger_logo),
+            modifier = Modifier
+                .size(48.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
+                color = titleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = track.artist.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .bounceClick { onClick() }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = playlist.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = playlist.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "${playlist.trackCount} CHANTS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
+            )
+        }
+    }
+}
 
 @Composable
 fun PremiumLikedSongsCard(trackCount: Int, onClick: () -> Unit) {
@@ -522,13 +653,12 @@ fun PremiumLikedSongsCard(trackCount: Int, onClick: () -> Unit) {
                 Brush.linearGradient(
                     colors = listOf(
                         MaterialTheme.aardBlue,
-                        Color(0xFF4A00E0) // Deep magic purple
+                        Color(0xFF4A00E0)
                     )
                 )
             )
             .bounceClick { onClick() }
     ) {
-        // Aesthetic Glow Overlays
         Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.1f), Color.Transparent))))
 
         Row(
@@ -552,7 +682,6 @@ fun PremiumLikedSongsCard(trackCount: Int, onClick: () -> Unit) {
                 )
             }
 
-            // Floating Heart Icon
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -568,7 +697,6 @@ fun PremiumLikedSongsCard(trackCount: Int, onClick: () -> Unit) {
 
 @Composable
 fun PremiumActionRow(icon: ImageVector, title: String, onClick: () -> Unit) {
-    // Breathing animation for the Forge button
     val infiniteTransition = rememberInfiniteTransition(label = "breath")
     val alphaAnim by infiniteTransition.animateFloat(
         initialValue = 0.02f, targetValue = 0.08f,
@@ -618,7 +746,126 @@ fun ArchiveLoadingState(message: String) {
     }
 }
 
-// Stubs for Search Rendering to keep code compiling based on original snippet
-fun LazyListScope.renderSearchResults(uiState: PlayerUiState, viewModel: PlayerViewModel, matchedArtists: List<LibraryArtist>, matchedAlbums: List<AudioTrack>, onNavigateToAlbum: (String) -> Unit, onNavigatetoArtist: (String) -> Unit) {
-    // Implementation uses similar logic to the original, wrapped in the new premium aesthetics.
+// ==========================================
+// --- SEARCH RENDERER ---
+// ==========================================
+
+fun LazyListScope.renderSearchResults(
+    uiState: PlayerUiState,
+    viewModel: PlayerViewModel,
+    matchedArtists: List<LibraryArtist>,
+    matchedAlbums: List<AudioTrack>,
+    onNavigateToAlbum: (String) -> Unit,
+    onNavigatetoArtist: (String) -> Unit,
+    artistDetails: Map<String, ArtistDetails>
+) {
+    if (matchedArtists.isNotEmpty()) {
+        item {
+            Text(
+                text = "ARTISTS",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+            )
+        }
+        items(matchedArtists, key = { "artist_${it.name}" }) { artist ->
+
+            // 🔥 THE FIX: Extract HD images using the identical Lore logic
+            val normalizedKey = remember(artist.name) {
+                ArtistUtils.getBaseArtist(artist.name).lowercase().trim()
+            }
+            val profile = artistDetails[normalizedKey]
+            val artistCover = remember(profile?.imageUrl, artist.name, uiState.tracks) {
+                profile?.imageUrl?.takeIf { it.isNotBlank() }
+                    ?: uiState.tracks.firstOrNull { it.artist.equals(artist.name, ignoreCase = true) }?.artworkUri?.toString()
+            }
+            val context = LocalContext.current
+            val imageRequest = remember(artistCover) {
+                ImageRequest.Builder(context)
+                    .data(artistCover)
+                    .crossfade(true)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .build()
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .bounceClick { onNavigatetoArtist(artist.name) }
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (artistCover != null) {
+                        AsyncImage(model = imageRequest, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    } else {
+                        Icon(WitcherIcons.Artist, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                    }
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(artist.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                    Text("${artist.trackCount} CHANTS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    if (matchedAlbums.isNotEmpty()) {
+        item {
+            Text(
+                text = "ALBUMS",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+            )
+        }
+        items(matchedAlbums, key = { "album_${it.album}" }) { album ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .bounceClick { onNavigateToAlbum(album.album) }
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = album.artworkUri, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(album.album, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(album.artist.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    val matchedTracks = uiState.tracks.filter { it.title.contains(uiState.searchQuery, ignoreCase = true) }
+    if (matchedTracks.isNotEmpty()) {
+        item {
+            Text(
+                text = "CHANTS",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+            )
+        }
+        items(matchedTracks, key = { "track_${it.id}" }) { track ->
+            SongItem(
+                track = track,
+                isActive = uiState.currentTrack?.id == track.id,
+                onClick = { viewModel.playTrack(track) }
+            )
+        }
+    }
 }

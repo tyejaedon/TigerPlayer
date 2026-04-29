@@ -30,7 +30,6 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 
@@ -151,7 +150,7 @@ fun SongOptionsSheet(
 
     // --- 2. THE FLOATING GRIMOIRE (Playlist Selector) ---
     if (showPlaylistSelector) {
-        Dialog(onDismissRequest = { showPlaylistSelector = false }) {
+        Dialog(onDismissRequest = { }) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
@@ -180,7 +179,6 @@ fun SongOptionsSheet(
                             items(playlists, key = { it.id }) { playlist ->
                                 PlaylistSelectionRow(playlist) {
                                     onAddToPlaylist(playlist.id)
-                                    showPlaylistSelector = false
                                     onDismiss()
                                 }
                             }
@@ -194,7 +192,7 @@ fun SongOptionsSheet(
 
 @Composable
 private fun SheetActionRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     text: String,
     accentColor: Color,
     onClick: () -> Unit
@@ -248,103 +246,4 @@ private fun PlaylistSelectionRow(playlist: Playlist, onClick: () -> Unit) {
         )
     }
 }
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PlaylistOptionsSheet(
-    playlist: Playlist,
-    onDismiss: () -> Unit,
-    onRename: () -> Unit,
-    onDelete: () -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-        modifier = Modifier.glassEffect(MaterialTheme.shapes.extraLarge)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp)
-                .padding(bottom = 32.dp)
-        ) {
-            Text(
-                text = playlist.name.uppercase(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
-            )
-            Text(
-                text = "${playlist.trackCount} CHANTS STORED",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            OptionRow(
-                icon = WitcherIcons.Edit,
-                label = "Rename Grimoire",
-                onClick = onRename
-            )
-
-            OptionRow(
-                icon = WitcherIcons.Delete,
-                label = "Destroy Grimoire",
-                accentColor = MaterialTheme.igniRed,
-                onClick = onDelete
-            )
-        }
-    }
-}
-@Composable
-fun OptionRow(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    accentColor: Color = MaterialTheme.colorScheme.primary,
-    isSubOption: Boolean = false
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp) // Standardized height for thumb-friendly navigation
-            .clip(RoundedCornerShape(12.dp))
-            .bounceClick { onClick() }
-            .padding(start = if (isSubOption) 16.dp else 0.dp), // Indent sub-options
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // --- 1. THE ICON ORB ---
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .background(
-                    color = if (isSubOption) Color.Transparent else accentColor.copy(alpha = 0.1f),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isSubOption) accentColor.copy(alpha = 0.6f) else accentColor,
-                modifier = Modifier.size(if (isSubOption) 20.dp else 24.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        // --- 2. THE COMMAND TEXT ---
-        Text(
-            text = label.uppercase(),
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.5.sp
-            ),
-            color = if (isSubOption) {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            }
-        )
-    }
-}

@@ -1,5 +1,7 @@
 package com.example.tigerplayer.ui.home
 
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -11,7 +13,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,24 +29,26 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.ui.library.AardBlue
-import com.example.tigerplayer.ui.library.IgniRed
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.player.StatItem
 import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.igniRed
 
+// --- VANGUARD THEME CONSTANTS ---
+private val AardBlue = Color(0xFF4FC3F7)
+private val IgniRed = Color(0xFFFF5252)
+
+@RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpandedStatsScreen(
@@ -49,6 +58,10 @@ fun ExpandedStatsScreen(
     val statsState by viewModel.detailedStatsState.collectAsState()
     val filters = listOf("Today", "This Week", "This Month", "Lifetime")
     val haptic = LocalHapticFeedback.current
+
+    // --- SEARCH & SORT STATE ---
+    var searchQuery by remember { mutableStateOf("") }
+    var isAlphabeticalSort by remember { mutableStateOf(false) }
 
     // --- LIVE BACKGROUND ANIMATION (The Aard Mesh) ---
     val infiniteTransition = rememberInfiniteTransition(label = "MeshGradient")
@@ -61,6 +74,28 @@ fun ExpandedStatsScreen(
         ),
         label = "X"
     )
+
+    // --- FILTERING ENGINE ---
+    val processedArtists = remember(searchQuery, isAlphabeticalSort, statsState.topArtists) {
+        var list = statsState.topArtists
+        if (searchQuery.isNotBlank()) {
+            list = list.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+        if (isAlphabeticalSort) list.sortedBy { it.name } else list.sortedByDescending { it.playCount }
+    }
+
+    val processedTracks = remember(searchQuery, isAlphabeticalSort, statsState.topTracks) {
+        var list = statsState.topTracks
+        if (searchQuery.isNotBlank()) {
+            list = list.filter {
+                it.name.contains(searchQuery, ignoreCase = true) ||
+                        it.secondaryText.contains(searchQuery, ignoreCase = true)
+            }
+        }
+        if (isAlphabeticalSort) list.sortedBy { it.name } else list.sortedByDescending { it.playCount }
+    }
+
+    val isSearching = searchQuery.isNotEmpty()
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // 1. Live Animated Mesh Gradient
@@ -86,7 +121,7 @@ fun ExpandedStatsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 20.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
@@ -103,7 +138,8 @@ fun ExpandedStatsScreen(
                     text = "CHRONICLE INSIGHTS",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp
+                    letterSpacing = 2.sp,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -116,7 +152,6 @@ fun ExpandedStatsScreen(
                 items(filters) { filter ->
                     val isSelected = filter == statsState.selectedFilter
 
-                    // Animated Selection Color
                     val bgColor by animateColorAsState(
                         targetValue = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                         label = "FilterBg"
@@ -147,6 +182,17 @@ fun ExpandedStatsScreen(
                 }
             }
 
+            // --- SEARCH & SORT BAR ---
+            StatsSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                isAlphabeticalSort = isAlphabeticalSort,
+                onToggleSort = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    isAlphabeticalSort = !isAlphabeticalSort
+                }
+            )
+
             // --- CONTENT: THE SCROLL OF KNOWLEDGE ---
             Column(
                 modifier = Modifier
@@ -154,99 +200,90 @@ fun ExpandedStatsScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp)
             ) {
-                // ANIMATED COUNTERS
-                val animatedHours by animateIntAsState(
-                    targetValue = statsState.totalListeningHours,
-                    animationSpec = tween(1500, easing = FastOutSlowInEasing), label = "Hours"
-                )
-                val animatedMins by animateIntAsState(
-                    targetValue = statsState.totalListeningMinutes,
-                    animationSpec = tween(1500, easing = FastOutSlowInEasing), label = "Mins"
-                )
 
-                // HERO CARD: TOTAL RITUAL TIME
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(16.dp, MaterialTheme.shapes.extraLarge, spotColor = MaterialTheme.aardBlue.copy(alpha = 0.2f))
-                        .glassEffect(MaterialTheme.shapes.extraLarge)
-                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), MaterialTheme.shapes.extraLarge)
-                        .padding(24.dp)
+                // HERO CARD: TOTAL RITUAL TIME (Hides smoothly when searching)
+                AnimatedVisibility(
+                    visible = !isSearching,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
                 ) {
                     Column {
-                        Text(
-                            text = "TOTAL MANIFESTATION TIME",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.aardBlue,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.5.sp
-                        )
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            modifier = Modifier.padding(top = 8.dp)
+                        val animatedHours by animateIntAsState(targetValue = statsState.totalListeningHours, animationSpec = tween(1500, easing = FastOutSlowInEasing), label = "Hours")
+                        val animatedMins by animateIntAsState(targetValue = statsState.totalListeningMinutes, animationSpec = tween(1500, easing = FastOutSlowInEasing), label = "Mins")
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp)
+                                .shadow(8.dp, MaterialTheme.shapes.extraLarge, ambientColor = Color.Transparent, spotColor = AardBlue.copy(alpha = 0.2f))
+                                .clip(MaterialTheme.shapes.extraLarge)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), MaterialTheme.shapes.extraLarge)
+                                .padding(24.dp)
                         ) {
-                            Text(
-                                text = animatedHours.toString(),
-                                style = MaterialTheme.typography.displayLarge,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "H ",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                fontWeight = FontWeight.Black,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                            Text(
-                                text = animatedMins.toString(),
-                                style = MaterialTheme.typography.displayLarge,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "M",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                fontWeight = FontWeight.Black,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
+                            Column {
+                                Text(
+                                    text = "TOTAL MANIFESTATION TIME",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = AardBlue,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.5.sp
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                ) {
+                                    Text(text = animatedHours.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(text = "H ", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 12.dp))
+                                    Text(text = animatedMins.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(text = "M", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 12.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (processedArtists.isEmpty() && processedTracks.isEmpty() && isSearching) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
+                        Text("No archives match your query.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    }
+                }
+
+                // SECTION: TOP ARTISTS (THE VANGUARD)
+                if (processedArtists.isNotEmpty()) {
+                    DetailedSectionTitle(main = "THE VANGUARD", sub = if (isSearching) "Matching Artists" else "Most summoned artists")
+
+                    // Only show Hero #1 format if we aren't searching and we aren't alphabetical
+                    if (!isSearching && !isAlphabeticalSort) {
+                        TopArtistHeroCard(processedArtists.first())
+                        Spacer(modifier = Modifier.height(16.dp))
+                        processedArtists.drop(1).forEachIndexed { index, artist ->
+                            StatRow(rank = index + 2, item = artist)
+                        }
+                    } else {
+                        // Standard list for search/sort results
+                        processedArtists.forEachIndexed { index, artist ->
+                            StatRow(rank = index + 1, item = artist)
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(36.dp))
 
-                // SECTION: TOP ARTISTS (THE VANGUARD)
-                if (statsState.topArtists.isNotEmpty()) {
-                    DetailedSectionTitle(main = "THE VANGUARD", sub = "Most summoned artists")
-
-                    // #1 Artist gets the Magazine-Style Hero Treatment
-                    val topArtist = statsState.topArtists.first()
-                    TopArtistHeroCard(topArtist)
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Ranks 2-5
-                    statsState.topArtists.drop(1).forEachIndexed { index, artist ->
-                        StatRow(rank = index + 2, item = artist, isArtist = true)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(36.dp))
-
                 // SECTION: TOP TRACKS (THE CHANTS)
-                if (statsState.topTracks.isNotEmpty()) {
-                    DetailedSectionTitle(main = "THE CHANTS", sub = "Highest frequencies recorded")
+                if (processedTracks.isNotEmpty()) {
+                    DetailedSectionTitle(main = "THE CHANTS", sub = if (isSearching) "Matching Tracks" else "Highest frequencies recorded")
 
-                    // To build relative visual bars, we need the max play count
                     val maxTrackPlays = statsState.topTracks.maxOfOrNull { it.playCount } ?: 1
 
-                    statsState.topTracks.forEachIndexed { index, track ->
+                    processedTracks.forEachIndexed { index, track ->
                         RelativeTrackStatRow(
                             rank = index + 1,
                             item = track,
-                            maxPlays = maxTrackPlays
+                            maxPlays = maxTrackPlays,
+                            isSearching = isSearching
                         )
                     }
                 }
@@ -262,12 +299,80 @@ fun ExpandedStatsScreen(
 // ==========================================
 
 @Composable
+fun StatsSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    isAlphabeticalSort: Boolean,
+    onToggleSort: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Search Pill
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(AardBlue),
+            modifier = Modifier
+                .weight(1f)
+                .height(48.dp)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape),
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (query.isEmpty()) {
+                            Text("Filter archives...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), style = MaterialTheme.typography.bodyLarge)
+                        }
+                        innerTextField()
+                    }
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, "Clear", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        // Sort Button
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(if (isAlphabeticalSort) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                .bounceClick { onToggleSort() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.Sort,
+                contentDescription = "Sort",
+                tint = if (isAlphabeticalSort) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+
+@Composable
 private fun TopArtistHeroCard(artist: StatItem) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(240.dp)
-            .shadow(24.dp, RoundedCornerShape(24.dp), spotColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+            .shadow(16.dp, RoundedCornerShape(24.dp), ambientColor = Color.Transparent, spotColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
             .clip(RoundedCornerShape(24.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
@@ -310,7 +415,7 @@ private fun TopArtistHeroCard(artist: StatItem) {
             Text(
                 text = "TOP ARTIST",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.igniRed,
+                color = IgniRed,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp
             )
@@ -334,13 +439,12 @@ private fun TopArtistHeroCard(artist: StatItem) {
 }
 
 @Composable
-private fun RelativeTrackStatRow(rank: Int, item: StatItem, maxPlays: Int) {
+private fun RelativeTrackStatRow(rank: Int, item: StatItem, maxPlays: Int, isSearching: Boolean) {
     // Calculate the percentage of this track's plays relative to the #1 track
     val targetFraction = (item.playCount.toFloat() / maxPlays.coerceAtLeast(1).toFloat()).coerceIn(0.1f, 1f)
 
-    // Animate the bar filling up when the screen opens
     val animatedFraction by animateFloatAsState(
-        targetValue = targetFraction,
+        targetValue = if (isSearching) 0f else targetFraction, // Don't show bars when searching to keep UI clean
         animationSpec = tween(1500, delayMillis = rank * 100, easing = FastOutSlowInEasing),
         label = "BarFill"
     )
@@ -354,19 +458,21 @@ private fun RelativeTrackStatRow(rank: Int, item: StatItem, maxPlays: Int) {
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
     ) {
         // THE DATA BAR (Fills from the left)
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(animatedFraction)
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            MaterialTheme.aardBlue.copy(alpha = 0.2f),
-                            MaterialTheme.aardBlue.copy(alpha = 0.05f)
+        if (!isSearching) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedFraction)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                AardBlue.copy(alpha = 0.2f),
+                                AardBlue.copy(alpha = 0.05f)
+                            )
                         )
                     )
-                )
-        )
+            )
+        }
 
         // THE CONTENT
         Row(
@@ -380,7 +486,7 @@ private fun RelativeTrackStatRow(rank: Int, item: StatItem, maxPlays: Int) {
                 modifier = Modifier.width(36.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black,
-                color = if (rank == 1) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                color = if (rank == 1 && !isSearching) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
             )
 
             AsyncImage(
@@ -412,7 +518,6 @@ private fun RelativeTrackStatRow(rank: Int, item: StatItem, maxPlays: Int) {
                 )
             }
 
-            // The absolute play count aligned to the right
             Text(
                 text = item.playCount.toString(),
                 style = MaterialTheme.typography.titleMedium,
@@ -424,7 +529,7 @@ private fun RelativeTrackStatRow(rank: Int, item: StatItem, maxPlays: Int) {
 }
 
 @Composable
-private fun StatRow(rank: Int, item: StatItem, isArtist: Boolean) {
+private fun StatRow(rank: Int, item: StatItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -445,7 +550,7 @@ private fun StatRow(rank: Int, item: StatItem, isArtist: Boolean) {
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(56.dp)
-                .clip(if (isArtist) CircleShape else MaterialTheme.shapes.large)
+                .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
         )
 
@@ -471,7 +576,7 @@ private fun StatRow(rank: Int, item: StatItem, isArtist: Boolean) {
 
 @Composable
 private fun DetailedSectionTitle(main: String, sub: String) {
-    Column(modifier = Modifier.padding(bottom = 20.dp)) {
+    Column(modifier = Modifier.padding(bottom = 16.dp)) {
         Text(
             text = main,
             style = MaterialTheme.typography.titleMedium,

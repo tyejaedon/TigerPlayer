@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -30,7 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.example.tigerplayer.ui.equalizer.AudioFidelityScreen
+import com.example.tigerplayer.ui.equalizer.AuralNexusScreen
+import com.example.tigerplayer.ui.equalizer.AuralNexusViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.bounceClick
 
@@ -47,10 +47,9 @@ fun SettingsScreen(
 ) {
     val themeMode by viewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
     val cacheSize by viewModel.cacheSizeFormatted.collectAsState()
-    val eqState by viewModel.eqState.collectAsState()
 
     var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
-    var showAudioFidelityScreen by remember { mutableStateOf(false) }
+    var showAuralNexusScreen by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
 
@@ -96,9 +95,9 @@ fun SettingsScreen(
                     )
                 }
 
-                // --- SECTION: ACOUSTIC RESONANCE (NEW) ---
+                // --- SECTION: ACOUSTIC RESONANCE (UPGRADED) ---
                 SettingsSection(title = "ACOUSTIC RESONANCE", icon = Icons.Rounded.Audiotrack) {
-                    val isBp = eqState.isBitPerfect
+                    val isBp by viewModel.isBitPerfect.collectAsState()
                     val primaryColor = if (isBp) BitPerfectGold else AardBlue
 
                     // The Gateway Card
@@ -108,7 +107,6 @@ fun SettingsScreen(
                             .clip(MaterialTheme.shapes.large)
                             .background(Brush.linearGradient(listOf(primaryColor.copy(alpha = 0.1f), Color.Transparent)))
                             .border(1.dp, primaryColor.copy(alpha = 0.2f), MaterialTheme.shapes.large)
-                            .bounceClick { showAudioFidelityScreen = true }
                             .padding(20.dp)
                     ) {
                         Row(
@@ -126,21 +124,40 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = if (isBp) "Bit-Perfect Output Active\nBypassing Android Mixer"
-                                    else "AutoEq DSP Active\n${eqState.selectedProfile?.name ?: "Custom Profile"}",
+                                    else "Aural Nexus Active\nSpatial DSP Engine",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     lineHeight = 16.sp
                                 )
                             }
 
-                            // The Tune Button
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .background(primaryColor.copy(alpha = 0.15f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.Tune, contentDescription = "Tune", tint = primaryColor)
+                            // Dynamic UI Swap: Switch vs Switch + Tune Button
+                            Switch(
+                                checked = isBp,
+                                onCheckedChange = { viewModel.toggleBitPerfect() },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = BitPerfectGold,
+                                    uncheckedThumbColor = Color.White,
+                                    uncheckedTrackColor = Color.White.copy(alpha = 0.2f)
+                                )
+                            )
+
+                            // The Tune Button reveals itself smoothly when DSP is active
+                            AnimatedVisibility(visible = !isBp) {
+                                Row {
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape)
+                                            .background(primaryColor.copy(alpha = 0.15f))
+                                            .bounceClick { showAuralNexusScreen = true },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Rounded.Tune, contentDescription = "Tune", tint = primaryColor)
+                                    }
+                                }
                             }
                         }
                     }
@@ -184,18 +201,17 @@ fun SettingsScreen(
             }
         }
 
-        // --- FULL SCREEN OVERLAY: AUDIO FIDELITY ---
+        // --- FULL SCREEN OVERLAY: AURAL NEXUS ---
         AnimatedVisibility(
-            visible = showAudioFidelityScreen,
+            visible = showAuralNexusScreen,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier.fillMaxSize()
         ) {
-            AudioFidelityScreen(
-                eqState = eqState,
-                onToggleBitPerfect = { viewModel.toggleBitPerfect() },
-                onSelectProfile = { profile -> viewModel.loadEqProfile(profile) },
-                onClose = { showAudioFidelityScreen = false }
+            val auralNexusViewModel: AuralNexusViewModel = hiltViewModel()
+            AuralNexusScreen(
+                viewModel = auralNexusViewModel,
+                onClose = { showAuralNexusScreen = false }
             )
         }
     }

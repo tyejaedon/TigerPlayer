@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,7 +38,6 @@ import com.example.tigerplayer.ui.theme.bounceClick
 
 @Composable
 fun PermissionScreen(onPermissionGranted: () -> Unit) {
-    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
     // 1. THE PERMISSION ARRAY

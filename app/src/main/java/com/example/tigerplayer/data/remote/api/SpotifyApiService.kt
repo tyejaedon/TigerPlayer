@@ -32,12 +32,6 @@ interface SpotifyApiService {
         @Query("limit") limit: Int = 50
     ): Response<SpotifyPlaylistResponse> // Typealias for SpotifyPaging<SpotifyPlaylist>
 
-    @GET("v1/me/tracks")
-    suspend fun getLikedSongs(
-        @Header("Authorization") bearerToken: String,
-        @Query("limit") limit: Int = 50
-    ): Response<SpotifyPaging<PlaylistTrackItem>>
-
     @GET("v1/me/albums")
     suspend fun getUserSavedAlbums(
         @Header("Authorization") bearerToken: String,

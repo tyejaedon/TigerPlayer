@@ -1,7 +1,9 @@
 package com.example.tigerplayer.data.repository
 
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresExtension
 import androidx.core.net.toUri
 import com.example.tigerplayer.data.local.dao.PlaylistDao
 import com.example.tigerplayer.data.local.dao.TigerDao
@@ -99,8 +101,10 @@ class AudioRepository @Inject constructor(
         val cachedEntities = tigerDao.getCachedTracks()
         val cachedTracks = cachedEntities.map { it.toDomainModel() }
 
+        var emitted = false
         if (cachedTracks.isNotEmpty() && !forceRefresh) {
             emit(cachedTracks)
+            emitted = true
         }
 
         // 2. THE SILENT PATROL: Scan the device in the background
@@ -121,8 +125,15 @@ class AudioRepository @Inject constructor(
                     }
                     // Emit the freshly forged tracks so the UI updates seamlessly
                     emit(freshTracks)
+                    emitted = true
                 }
             }
+        }
+
+        // Safety emission: If we haven't emitted anything yet (e.g., no cache and no scan changes)
+        // ensure we at least emit an empty list before completing so .first() doesn't crash.
+        if (!emitted) {
+            emit(cachedTracks) // This will be emptyList() if cachedTracks was empty
         }
     }
 
@@ -162,16 +173,15 @@ class AudioRepository @Inject constructor(
     // ==========================================
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
-        // Uses the dynamic join query to get real-time track counts and custom covers
         return playlistDao.getPlaylistsWithCount()
     }
 
     suspend fun createPlaylist(name: String, id: Long? = null) {
         playlistDao.insertPlaylist(
             PlaylistEntity(
-                playlistId = id ?: 0L, // If null, Room auto-generates; if -1L, it uses the reserved Liked Songs ID
+                playlistId = id ?: 0L,
                 name = name,
-                artworkUri = null, // Default to null until the user sets a custom cover
+                artworkUri = null,
                 createdAt = System.currentTimeMillis()
             )
         )
@@ -181,13 +191,18 @@ class AudioRepository @Inject constructor(
         tigerDao.updateTrackLikeStatus(trackId, isLiked)
     }
 
+    // 🔥 NEW: Persist the HD Artwork
+    suspend fun updateTrackArtworkUri(trackId: String, newUri: String) {
+        tigerDao.updateTrackArtworkUri(trackId, newUri)
+    }
+
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
         playlistDao.insertTrackIntoPlaylist(
             PlaylistTrackCrossRef(
                 playlistId = playlistId,
                 trackId = trackId,
                 dateAdded = System.currentTimeMillis(),
-                position = 0 // Will fall back to dateAdded sorting initially
+                position = 0
             )
         )
     }
@@ -201,9 +216,6 @@ class AudioRepository @Inject constructor(
 
     fun getTracksForPlaylist(playlistId: Long): Flow<List<AudioTrack>> {
         return getLocalTracks().combine(playlistDao.getTrackIdsForPlaylist(playlistId)) { allTracks, trackIds ->
-            // THE CRITICAL FIX: Preserves the custom Drag-and-Drop order!
-            // Instead of filtering `allTracks`, we map over the sorted `trackIds`
-            // returned by the DB and find the matching track.
             trackIds.mapNotNull { id -> allTracks.find { it.id == id } }
         }
     }

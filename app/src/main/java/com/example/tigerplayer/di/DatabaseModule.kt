@@ -27,7 +27,7 @@ object DatabaseModule {
             "tiger_player_vault.db"
         )
             // THE FIX: Destructive migration is safest during your current "Forging" phase
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(true)
             .build()
     }
 

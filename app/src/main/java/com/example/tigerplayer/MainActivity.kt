@@ -1,5 +1,7 @@
 package com.example.tigerplayer
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -7,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
+import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -14,9 +18,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.compose.rememberNavController
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.navigation.TigerPlayerNavGraph
@@ -39,14 +43,29 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var authManager: SpotifyAuthManager
 
-    // THE FIX: Removed SpotifyRepository. The ViewModels will handle data fetching reactively.
-
     private val playerViewModel: PlayerViewModel by viewModels()
     private val homeViewModel : HomeViewModel by viewModels()
 
     private val redirectUri = "tigerplayer://callback"
 
-    // --- SPOTIFY AUTH RITUAL ---
+    // --- 1. THE PERMISSION RITUAL (THE SCAN FIX) ---
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val audioGranted =
+            permissions[Manifest.permission.READ_MEDIA_AUDIO] ?: false
+
+        if (audioGranted) {
+            Log.d("TigerPlayer", "Archive access granted. Initiating primary scan.")
+            // 🔥 THE FIX: Instantly trigger the scan the moment permissions are granted.
+            // This ensures the ScanningOverlay UI shows up and populates the zero-state.
+            playerViewModel.loadLocalAudio(forceRefresh = true)
+        } else {
+            Log.e("TigerPlayer", "Audio permissions denied. The local archive remains locked.")
+        }
+    }
+
+    // --- 2. SPOTIFY AUTH RITUAL ---
     private val spotifyAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -59,17 +78,10 @@ class MainActivity : ComponentActivity() {
 
                 lifecycleScope.launch {
                     try {
-                        // Swap the code for the actual token securely.
-                        // Note: Ensure this function saves the token internally so CloudViewModel detects it!
                         val token = authManager.exchangeCodeForToken(authCode, redirectUri)
-
                         if (token.isNotEmpty()) {
-                            // Tell the Oracle the connection is forged
                             playerViewModel.onAuthSuccess(token)
-
                             Log.d("SpotifyAuth", "Ritual complete. ViewModels will auto-sync.")
-                            // THE FIX: Removed the redundant repository fetch calls here.
-                            // CloudViewModel's init block will automatically handle the rest.
                         }
                     } catch (e: Exception) {
                         Log.e("SpotifyAuth", "Ritual failed during token exchange: ${e.message}")
@@ -85,12 +97,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- LIFECYCLE ---
+    // --- 3. LIFECYCLE ---
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Request necessary permissions immediately upon launch
+        requestSystemPermissions()
+
         setContent {
-            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val settingsViewModel: SettingsViewModel =
+                hiltViewModel(checkNotNull(LocalViewModelStoreOwner.current) {
+                    "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
+                }, null)
             val themeMode by settingsViewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
 
             val useDarkTheme = when (themeMode) {
@@ -100,7 +119,6 @@ class MainActivity : ComponentActivity() {
             }
 
             TigerPlayerTheme(darkTheme = useDarkTheme) {
-                // THE GLOBAL ANCHOR
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -116,13 +134,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Cast this sign from the UI via LocalContext.current as MainActivity
-     * to trigger the Spotify login flow.
-     */
+    private fun requestSystemPermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+
+        permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
+        permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS) // Highly recommended for Audio Services
+
+        permissionLauncher.launch(permissionsToRequest.toTypedArray())
+    }
+
     fun authenticateSpotify() {
         val clientId = BuildConfig.SPOTIFY_CLIENT_ID
-        // CRITICAL: Ensure this is character-perfect with the Spotify Dashboard
         val redirectUri = "tigerplayer://callback"
 
         val builder = AuthorizationRequest.Builder(
@@ -137,15 +159,11 @@ class MainActivity : ComponentActivity() {
                 "user-read-private",
                 "streaming"
             ))
-            // THE FIX: Forces the "Grant Access" screen.
-            // This clears stale SSO states that cause SERVICE_UNAVAILABLE.
             setShowDialog(true)
         }
 
         val request = builder.build()
-
-        // The SDK creates an intent that tries the Spotify App (SSO) first.
-        // If the Manifest <queries> below are wrong, this will fail.
         val intent = AuthorizationClient.createLoginActivityIntent(this, request)
         spotifyAuthLauncher.launch(intent)
-    }}
+    }
+}

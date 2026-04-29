@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -35,7 +36,13 @@ import androidx.compose.ui.unit.sp
 import com.example.tigerplayer.ui.home.WeatherUiState
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.util.Calendar
+import kotlin.math.PI
+import kotlin.math.absoluteValue
+import kotlin.math.sin
+import kotlin.random.Random
 
 data class WeatherState(
     val temperature: String,
@@ -52,9 +59,9 @@ private fun getWeatherIcon(condition: String, isDay: Boolean): ImageVector {
         "clear sky" -> if (isDay) Icons.Rounded.WbSunny else Icons.Rounded.NightsStay
         "few clouds", "scattered clouds", "broken clouds" -> Icons.Rounded.Cloud
         "shower rain", "rain", "drizzle", "light rain" -> Icons.Rounded.WaterDrop
-        "thunderstorm" -> Icons.Rounded.Thunderstorm
-        "snow" -> Icons.Rounded.AcUnit
-        "mist", "fog" -> Icons.Rounded.Dehaze
+        "thunderstorm", "storm" -> Icons.Rounded.Thunderstorm
+        "snow", "light snow", "heavy snow" -> Icons.Rounded.AcUnit
+        "mist", "fog", "haze" -> Icons.Rounded.Dehaze
         else -> if (isDay) Icons.Rounded.WbSunny else Icons.Rounded.NightsStay
     }
 }
@@ -122,9 +129,10 @@ fun NowBriefWidget(
             }
             .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow))
     ) {
-        // --- LAYER 1: ANIMATED SAMSUNG-STYLE SKY ---
+        // --- LAYER 1: THE DYNAMIC PARTICLE WEATHER SKY ---
         AnimatedWeatherBackground(
             isDay = weatherState.isDay,
+            condition = weatherState.condition,
             modifier = Modifier.matchParentSize()
         )
 
@@ -270,65 +278,166 @@ fun NowBriefWidget(
 }
 
 // ==========================================================
-// 🌌 THE ANIMATED SKY SYSTEM
+// 🌌 THE ADVANCED ANIMATED SKY SYSTEM
 // ==========================================================
 
 @Composable
 fun AnimatedWeatherBackground(
     isDay: Boolean,
+    condition: String,
     modifier: Modifier = Modifier
 ) {
+    val cond = condition.lowercase()
+    val isRain = cond.contains("rain") || cond.contains("drizzle")
+    val isStorm = cond.contains("thunderstorm") || cond.contains("storm")
+    val isSnow = cond.contains("snow")
+    val isFog = cond.contains("mist") || cond.contains("fog") || cond.contains("haze")
+    val isClear = cond.contains("clear")
+    val isCloudy = !isClear
+
     val transition = rememberInfiniteTransition(label = "sky")
 
-    // Slow drifting clouds mapped perfectly 0f to 1f for seamless wrapping
+    // --- INFINITE ANIMATORS ---
     val cloudFraction1 by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(45000, easing = LinearEasing), // LinearEasing guarantees no stutter
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "cloud1"
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(45000, easing = LinearEasing), RepeatMode.Restart), label = "cloud1"
     )
-
     val cloudFraction2 by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0f, // Opposite direction
-        animationSpec = infiniteRepeatable(
-            animation = tween(70000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "cloud2"
+        initialValue = 1f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(70000, easing = LinearEasing), RepeatMode.Restart), label = "cloud2"
     )
 
-    val skyTop = if (isDay) Color(0xFF64B5F6) else Color(0xFF071426)
-    val skyBottom = if (isDay) Color(0xFFE3F2FD) else Color(0xFF0B1D3A)
+    // Fast cycle for precipitation (rain/snow)
+    val precipitationFraction by transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(if (isSnow) 3000 else 1000, easing = LinearEasing), RepeatMode.Restart), label = "precip"
+    )
+
+    // Twinkling effect for stars
+    val twinklePhase by transition.animateFloat(
+        initialValue = 0f, targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(4000, easing = LinearEasing)), label = "twinkle"
+    )
+
+    // --- STORM LIGHTNING ENGINE ---
+    var lightningAlpha by remember { mutableFloatStateOf(0f) }
+    if (isStorm) {
+        LaunchedEffect(Unit) {
+            while (isActive) {
+                delay(Random.nextLong(2000, 7000))
+                lightningAlpha = 0.8f
+                delay(50)
+                lightningAlpha = 0.2f
+                delay(50)
+                lightningAlpha = 0.9f
+                delay(100)
+                lightningAlpha = 0f
+            }
+        }
+    }
+
+    // --- THEME COLORS ---
+    val skyTop = when {
+        isStorm -> Color(0xFF1E272E)
+        isDay -> Color(0xFF64B5F6)
+        else -> Color(0xFF071426)
+    }
+    val skyBottom = when {
+        isStorm -> Color(0xFF34495E)
+        isFog -> Color(0xFF95A5A6)
+        isDay -> Color(0xFFE3F2FD)
+        else -> Color(0xFF0B1D3A)
+    }
+
+    val baseCloudAlpha = if (isStorm) 0.8f else if (isDay) 0.4f else 0.2f
+    val cloudColor = if (isStorm) Color(0xFF2C3E50) else Color.White
+
+    // --- PRECOMPUTED PARTICLES ---
+    val rainDrops = remember { List(80) { Offset(Random.nextFloat(), Random.nextFloat()) to (Random.nextFloat() * 0.5f + 0.5f) } }
+    val snowflakes = remember { List(60) { Offset(Random.nextFloat(), Random.nextFloat()) to (Random.nextFloat() * 0.5f + 0.2f) } }
+    val stars = remember { List(50) { Offset(Random.nextFloat(), Random.nextFloat()) to (Random.nextFloat() * 2 * PI).toFloat() } }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(skyTop, skyBottom)
-                )
-            )
+            .background(Brush.verticalGradient(colors = listOf(skyTop, skyBottom)))
     ) {
 
-        // 🌤️ Cloud Layer 1 (far)
-        CloudLayer(
-            fraction = cloudFraction1,
-            alpha = if (isDay) 0.35f else 0.15f,
-            scale = 1.2f
-        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
 
-        // 🌥️ Cloud Layer 2 (mid)
-        CloudLayer(
-            fraction = cloudFraction2,
-            alpha = if (isDay) 0.45f else 0.25f,
-            scale = 1.6f
-        )
+            // 1. LIGHTNING FLASH
+            if (isStorm && lightningAlpha > 0f) {
+                drawRect(color = Color.White.copy(alpha = lightningAlpha))
+            }
 
-        // Subtle atmospheric haze
+            // 2. STARS (Only visible at night with clear skies)
+            if (!isDay && isClear) {
+                stars.forEach { (pos, phase) ->
+                    val alpha = 0.2f + 0.8f * sin(twinklePhase + phase).absoluteValue
+                    drawCircle(
+                        color = Color.White.copy(alpha = alpha),
+                        radius = 2.5f,
+                        center = Offset(pos.x * w, pos.y * h)
+                    )
+                }
+            }
+
+            // 3. CLOUDS
+            if (isCloudy) {
+                val layer1Alpha = baseCloudAlpha * 0.8f
+                translate(left = cloudFraction1 * w) { drawClouds(cloudColor.copy(alpha = layer1Alpha), 1.2f) }
+                translate(left = (cloudFraction1 * w) - w) { drawClouds(cloudColor.copy(alpha = layer1Alpha), 1.2f) }
+
+                translate(left = cloudFraction2 * w) { drawClouds(cloudColor.copy(alpha = baseCloudAlpha), 1.6f) }
+                translate(left = (cloudFraction2 * w) - w) { drawClouds(cloudColor.copy(alpha = baseCloudAlpha), 1.6f) }
+            }
+
+            // 4. RAIN OR THUNDERSTORM
+            if (isRain || isStorm) {
+                rainDrops.forEach { (pos, speedMultiplier) ->
+                    val x = pos.x * w
+                    // Modulo ensures they loop endlessly
+                    val y = ((pos.y + precipitationFraction * speedMultiplier) % 1f) * h
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.5f),
+                        start = Offset(x, y),
+                        end = Offset(x + 10f, y + 40f), // Slanted trajectory
+                        strokeWidth = 3f,
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            // 5. SNOW
+            if (isSnow) {
+                snowflakes.forEach { (pos, speedMultiplier) ->
+                    // Adds horizontal sway to the snowflakes using a sine wave
+                    val swayX = sin(precipitationFraction * PI * 4 + pos.y * 10).toFloat() * 25f
+                    val x = (pos.x * w) + swayX
+                    val y = ((pos.y + precipitationFraction * speedMultiplier) % 1f) * h
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.8f),
+                        radius = 4f + (speedMultiplier * 4f),
+                        center = Offset(x, y)
+                    )
+                }
+            }
+
+            // 6. FOG / MIST LAYER
+            if (isFog) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.5f)),
+                        startY = h * 0.3f,
+                        endY = h
+                    )
+                )
+            }
+        }
+
+        // Subtle atmospheric foreground haze
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -341,28 +450,6 @@ fun AnimatedWeatherBackground(
                     )
                 )
         )
-    }
-}
-
-@Composable
-private fun CloudLayer(
-    fraction: Float,
-    alpha: Float,
-    scale: Float
-) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val cloudColor = Color.White.copy(alpha = alpha)
-
-        val width = size.width
-        val shiftX = fraction * width
-
-        // Double-draw method for seamless infinite wrapping
-        translate(left = shiftX) {
-            drawClouds(cloudColor, scale)
-        }
-        translate(left = shiftX - width) {
-            drawClouds(cloudColor, scale)
-        }
     }
 }
 

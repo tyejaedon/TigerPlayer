@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.cloud
 
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -10,12 +11,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +32,7 @@ import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloudScreen(
     viewModel: CloudViewModel = hiltViewModel(),
@@ -44,7 +46,7 @@ fun CloudScreen(
     val albums by viewModel.filteredAlbums.collectAsState()
     val isConnected by viewModel.isSpotifyConnected.collectAsState()
 
-    // THE FIX: Unified connectivity state
+    val uiError by viewModel.uiError.collectAsState()
     val isLoadingTracks by viewModel.isLoadingTracks.collectAsState()
     val isLoadingAlbums by viewModel.isLoadingAlbums.collectAsState()
     val isSyncing = isLoadingTracks || isLoadingAlbums
@@ -52,10 +54,11 @@ fun CloudScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Playlists", "Albums")
 
-    LaunchedEffect(isConnected) {
-        if (isConnected) {
-            viewModel.fetchUserPlaylists()
-            viewModel.fetchSavedAlbums()
+    // --- ERROR PROPAGATION (TOAST) ---
+    LaunchedEffect(uiError) {
+        uiError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
         }
     }
 
@@ -76,19 +79,18 @@ fun CloudScreen(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 CloudHeader(
-                    title = "CLOUD ARCHIVES",
                     query = query,
-                    onQueryChange = { viewModel.onSearchQueryChange(it) }
+                    onQueryChange = { viewModel.onSearchQueryChange(it) },
+                    onRefresh = { viewModel.forceRefreshArchives() }
                 )
 
-                // THE FIX: Safe TabRow with correct position mapping
-                TabRow(
+                SecondaryTabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
                     divider = {},
-                    indicator = { tabPositions ->
+                    indicator = {
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            modifier = Modifier.tabIndicatorOffset(selectedTab),
                             height = 3.dp,
                             color = SpotifyGreen
                         )
@@ -119,14 +121,26 @@ fun CloudScreen(
                         )
                     } else {
                         when (selectedTab) {
-                            0 -> ArchiveGrid(
-                                items = playlists.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, "Playlist") },
-                                onClick = { id, name, img -> onNavigateToSpotifyPlaylist(id, name, img) }
-                            )
-                            1 -> ArchiveGrid(
-                                items = albums.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, it.artists.firstOrNull()?.name ?: "Unknown") },
-                                onClick = { id, name, img -> onNavigateToSpotifyAlbum(id, name, img) }
-                            )
+                            0 -> {
+                                if (playlists.isEmpty() && !isSyncing) {
+                                    CloudEmptyState(message = if (query.isEmpty()) "No Spotify Playlists Found." else "No Playlists Match Your Query.")
+                                } else {
+                                    ArchiveGrid(
+                                        items = playlists.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, "Playlist") },
+                                        onClick = { id, name, img -> onNavigateToSpotifyPlaylist(id, name, img) }
+                                    )
+                                }
+                            }
+                            1 -> {
+                                if (albums.isEmpty() && !isSyncing) {
+                                    CloudEmptyState(message = if (query.isEmpty()) "No Saved Albums Found." else "No Albums Match Your Query.")
+                                } else {
+                                    ArchiveGrid(
+                                        items = albums.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, it.artists.firstOrNull()?.name ?: "Unknown") },
+                                        onClick = { id, name, img -> onNavigateToSpotifyAlbum(id, name, img) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -137,15 +151,28 @@ fun CloudScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CloudHeader(title: String, query: String, onQueryChange: (String) -> Unit) {
-    // THE FIX: Added statusBarsPadding to push it safely below the camera cutout
+private fun CloudHeader(query: String, onQueryChange: (String) -> Unit, onRefresh: () -> Unit) {
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp).statusBarsPadding()) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "CLOUD ARCHIVES",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            IconButton(
+                onClick = onRefresh,
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
+            ) {
+                Icon(WitcherIcons.Refresh, "Refresh", tint = SpotifyGreen)
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -154,11 +181,10 @@ private fun CloudHeader(title: String, query: String, onQueryChange: (String) ->
             onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp) // Sleeker profile for S22
+                .height(48.dp)
                 .glassEffect(CircleShape),
             placeholder = { Text("Search the cloud...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
             leadingIcon = { Icon(WitcherIcons.Search, null, tint = SpotifyGreen, modifier = Modifier.size(20.dp)) },
-            // THE FIX: Quick Clear Ritual
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
@@ -177,6 +203,30 @@ private fun CloudHeader(title: String, query: String, onQueryChange: (String) ->
             ),
             shape = CircleShape,
             singleLine = true
+        )
+    }
+}
+
+@Composable
+fun CloudEmptyState(message: String) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(top = 60.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            WitcherIcons.Library,
+            null,
+            modifier = Modifier.size(56.dp).graphicsLayer { alpha = 0.15f },
+            tint = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = message.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -275,7 +325,6 @@ private fun ArchiveGrid(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        // THE FIX: Stutter Removal via Performance Keys
         items(
             items = items,
             key = { it.id }

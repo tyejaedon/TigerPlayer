@@ -23,14 +23,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
-
-// --- VANGUARD CONSTANTS ---
-
 
 // ==========================================
 // --- 1. THE MAIN GRID (Adaptive Layout) ---
@@ -188,16 +182,17 @@ fun Modifier.bounceClick(
                     isPressed = true
                     onPress?.invoke()
 
+                    // Will return false if the user scrolls, but execution continues.
                     tryAwaitRelease()
 
                     isPressed = false
                     onRelease?.invoke()
+                },
+                // 🔥 THE FIX: onClick is now handled strictly by the tap detector,
+                // which guarantees it will NEVER fire if the user was scrolling.
+                onTap = {
                     onClick()
                 }
             )
         }
 }
-
-
-
-

@@ -1,8 +1,5 @@
 package com.example.tigerplayer.data.remote.api
 
-import retrofit2.http.GET
-import retrofit2.http.Query
-
 // Wrapper for the iTunes JSON response
 data class ITunesSearchResponse(
     val results: List<ITunesResult>
@@ -18,19 +15,4 @@ data class ITunesResult(
 
 interface ITunesApi {
 
-    // 1. Search for the Artist (To get their profile picture)
-    @GET("search")
-    suspend fun searchArtist(
-        @Query("term") artistName: String,
-        @Query("entity") entity: String = "album",
-        @Query("limit") limit: Int = 1
-    ): ITunesSearchResponse
-
-    // 2. NEW: Search for the Album (To get High-Res Album Art)
-    @GET("search")
-    suspend fun searchAlbum(
-        @Query("term") albumNameAndArtist: String,
-        @Query("entity") entity: String = "album",
-        @Query("limit") limit: Int = 1
-    ): ITunesSearchResponse
 }

@@ -4,10 +4,8 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.location.Location
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tigerplayer.data.repository.WeatherRepository
-import com.example.tigerplayer.data.repository.WeatherInfo // We will create this next
 import com.example.tigerplayer.utils.Resource
 import com.google.android.gms.location.LocationServices
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -78,7 +76,7 @@ class HomeViewModel @Inject constructor(
                         }
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Handle total failure (e.g., Google Play Services missing)
                 _weatherUiState.value = WeatherUiState.Error("GPS Failure", "--", "Offline", "--", "--", true)
             }

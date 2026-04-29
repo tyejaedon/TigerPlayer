@@ -1,14 +1,13 @@
 package com.example.tigerplayer.ui.library
 
-import android.content.Intent
+import android.annotation.SuppressLint
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresExtension
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -23,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +36,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +51,7 @@ import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
+@RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun PlaylistDetailsScreen(
@@ -84,7 +84,6 @@ fun PlaylistDetailsScreen(
         fallbackColors[kotlin.math.abs(playlistName.hashCode()) % fallbackColors.size]
     }
 
-    val primaryFromTheme = MaterialTheme.colorScheme.primary
     var dominantColor by remember { mutableStateOf(nameHashColor) }
 
     // Determine the art to display. If the playlist has a custom image, use it.
@@ -145,7 +144,7 @@ fun PlaylistDetailsScreen(
             } else {
                 itemsIndexed(items = mutableTracks, key = { _, track -> track.id }) { index, track ->
                     val isCurrent = uiState.currentTrack?.id == track.id
-                    var offsetY by remember { mutableStateOf(0f) }
+                    var offsetY by remember { mutableFloatStateOf(0f) }
 
                     Box(
                         modifier = Modifier.fillMaxWidth().graphicsLayer { translationY = offsetY }
@@ -155,7 +154,7 @@ fun PlaylistDetailsScreen(
                             isPlaying = uiState.isPlaying, isEditMode = isEditMode,
                             onClick = { if (!isEditMode) viewModel.setPlaylistAndPlay(mutableTracks, index) },
                             onOptionsClick = { selectedTrackForOptions = track },
-                            dragModifier = if (isEditMode) Modifier.pointerInput(Unit) {
+                            modifier = if (isEditMode) Modifier.pointerInput(Unit) {
                                 detectDragGesturesAfterLongPress(
                                     onDrag = { change, dragAmount ->
                                         change.consume()
@@ -195,7 +194,11 @@ fun PlaylistDetailsScreen(
             ) {
                 Column(modifier = Modifier.padding(bottom = 24.dp)) {
                     Text(selectedTrackForOptions!!.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    HorizontalDivider(
+                        Modifier,
+                        DividerDefaults.Thickness,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                    )
                     ListItem(headlineContent = { Text("Play Next") }, modifier = Modifier.clickable { viewModel.addNextToQueue(selectedTrackForOptions!!); selectedTrackForOptions = null })
                     ListItem(headlineContent = { Text("Remove from Playlist", color = MaterialTheme.colorScheme.error) }, modifier = Modifier.clickable {
                         viewModel.removeTrackFromPlaylist(playlistId, selectedTrackForOptions!!)
@@ -225,6 +228,7 @@ fun PlaylistTopBar(name: String, scrollState: LazyListState, isEditMode: Boolean
     )
 }
 
+@SuppressLint("FrequentlyChangingValue")
 @Composable
 fun PlaylistParallaxHeader(
     scrollState: LazyListState, playlistId: Long, playlistName: String, trackCount: Int,
@@ -330,7 +334,7 @@ fun EmptyArchiveState(message: String) {
 @Composable
 fun ChapterSongRow(
     index: Int, track: AudioTrack, isCurrentTrack: Boolean, isPlaying: Boolean, isEditMode: Boolean,
-    onClick: () -> Unit, onOptionsClick: () -> Unit, dragModifier: Modifier = Modifier
+    onClick: () -> Unit, onOptionsClick: () -> Unit, modifier: Modifier = Modifier
 ) {
     Row(
         modifier = Modifier
@@ -341,7 +345,7 @@ fun ChapterSongRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         AnimatedVisibility(visible = isEditMode) {
-            Icon(Icons.Default.DragHandle, "Reorder", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = dragModifier.padding(end = 16.dp).size(28.dp))
+            Icon(Icons.Default.DragHandle, "Reorder", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = modifier.padding(end = 16.dp).size(28.dp))
         }
 
         Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {

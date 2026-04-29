@@ -6,20 +6,23 @@ import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.data.repository.HistoryRepository
 import com.example.tigerplayer.ui.player.DetailedStatsUiState
 import com.example.tigerplayer.ui.player.StatItem
+import com.example.tigerplayer.utils.ArtistUtils
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
+import java.util.Calendar
 import javax.inject.Inject
 
 class StatsEngine @Inject constructor(
     private val historyRepository: HistoryRepository
 ) {
     private val _statsFilter = MutableStateFlow("Today")
-    val statsFilter: StateFlow<String> = _statsFilter.asStateFlow()
 
     fun updateStatsFilter(newFilter: String) {
         _statsFilter.value = newFilter
     }
 
     // The complex derived flow for detailed UI stats
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun getDetailedStatsFlow(
         allTracksFlow: Flow<List<AudioTrack>>,
         artistDetailsMapFlow: Flow<Map<String, ArtistDetails>>
@@ -28,8 +31,9 @@ class StatsEngine @Inject constructor(
             val startTime = calculateStartTimeForFilter(filter)
             combine(
                 historyRepository.getTotalListeningTime(startTime),
-                historyRepository.getTopArtists(startTime, limit = 5),
-                historyRepository.getTopTracks(startTime, limit = 5),
+                // 🔥 FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
+                historyRepository.getTopArtists(startTime, limit = 50),
+                historyRepository.getTopTracks(startTime, limit = 50),
                 allTracksFlow,
                 artistDetailsMapFlow
             ) { totalTimeMs, topArtistsDb, topTracksDb, allTracks, artistDetailsMap ->
@@ -42,7 +46,13 @@ class StatsEngine @Inject constructor(
                     totalListeningHours = hours,
                     totalListeningMinutes = minutes,
                     topArtists = topArtistsDb.map { artist ->
-                        val cachedImg = artistDetailsMap[artist.artistName]?.imageUrl
+                        // 🔥 FIX 2: Normalize the key to safely extract the High-Res API image
+                        val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
+
+                        // Fallback: If API image is missing, grab the first local album cover for this artist
+                        val cachedImg = artistDetailsMap[normalizedKey]?.imageUrl
+                            ?: allTracks.firstOrNull { ArtistUtils.getBaseArtist(it.artist).equals(artist.artistName, ignoreCase = true) }?.artworkUri?.toString()
+
                         StatItem(
                             id = artist.artistName,
                             name = artist.artistName,
@@ -78,13 +88,30 @@ class StatsEngine @Inject constructor(
         )
     }
 
+    /**
+     * 🔥 UPGRADED TEMPORAL ENGINE
+     * Replaces rolling math (e.g. 24 hours ago) with absolute Calendar boundaries.
+     * "Today" now accurately begins at 12:00 AM.
+     */
     private fun calculateStartTimeForFilter(filter: String): Long {
-        val now = System.currentTimeMillis()
-        val dayMs = 86400000L
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
         return when (filter) {
-            "Today" -> now - dayMs
-            "This Week" -> now - (dayMs * 7)
-            "This Month" -> now - (dayMs * 30)
+            "Today" -> calendar.timeInMillis
+            "This Week" -> {
+                calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
+                calendar.timeInMillis
+            }
+            "This Month" -> {
+                calendar.set(Calendar.DAY_OF_MONTH, 1)
+                calendar.timeInMillis
+            }
+            "Lifetime" -> 0L // Captures everything
             else -> 0L
         }
     }

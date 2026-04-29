@@ -1,6 +1,8 @@
 package com.example.tigerplayer.engine
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresExtension
 import com.example.tigerplayer.data.local.NavidromePrefs
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.AudioRepository
@@ -21,7 +23,6 @@ class NetworkEngine @Inject constructor(
 ) {
     // Exposes remote tracks to be observed by the ViewModel
     private val _remoteTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
-    val remoteTracks: StateFlow<List<AudioTrack>> = _remoteTracks.asStateFlow()
 
     /**
      * 1. THE AUTO RITUAL
@@ -87,14 +88,6 @@ class NetworkEngine @Inject constructor(
         url?.let { hostManager.currentBaseUrl = it }
 
         return audioRepository.getUnifiedTracks(user, pass, url)
-    }
-
-    /**
-     * 5. LOAD LOCAL AUDIO
-     * Passes through the scan status flow so the ViewModel can update UI progress bars.
-     */
-    fun getLocalAudioScanFlow(forceRefresh: Boolean = false): Flow<LocalAudioDataSource.ScanStatus> {
-        return audioRepository.getLocalTracksWithProgress(forceRefresh)
     }
 
     /**
