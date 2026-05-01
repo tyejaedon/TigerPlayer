@@ -3,13 +3,13 @@ package com.example.tigerplayer.ui.player
 import android.content.Context
 import android.net.Uri
 import android.os.Build
-import androidx.annotation.RequiresExtension
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
+import com.example.tigerplayer.data.repository.AudioRepository
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.engine.*
 import com.example.tigerplayer.service.MediaControllerManager
@@ -68,7 +68,6 @@ data class PlayerUiState(
     val currentWaveform: List<Float> = emptyList()
 )
 
-@RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackEngine: PlaybackEngine,
@@ -77,7 +76,8 @@ class PlayerViewModel @Inject constructor(
     private val statsEngine: StatsEngine,
     private val libraryEngine: LibraryEngine,
     private val networkEngine: NetworkEngine,
-    private val waveformEngine: WaveformEngine
+    private val waveformEngine: WaveformEngine,
+    private val audioRepository: AudioRepository // 🔥 RESTORED
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -88,16 +88,12 @@ class PlayerViewModel @Inject constructor(
 
     private var scanJob: Job? = null
 
-    // 🔥 THE FIX: A trigger to force the library flow to re-fetch when scans complete
+    // A trigger to force the library flow to re-fetch when scans complete
     private val libraryRefreshTrigger = MutableStateFlow(0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-
     private val unifiedTracksFlow: SharedFlow<List<AudioTrack>> = libraryRefreshTrigger
-        .flatMapLatest {
-            // Re-runs the extraction every time the trigger increments
-            networkEngine.getUnifiedLibraryFlow()
-        }
+        .flatMapLatest { networkEngine.getUnifiedLibraryFlow() }
         .shareIn(viewModelScope, SharingStarted.Lazily, replay = 1)
 
     val homeUiState: StateFlow<HomeUiState> = libraryEngine.getHomeUiStateFlow(
@@ -150,6 +146,15 @@ class PlayerViewModel @Inject constructor(
                         albums = aggregation.albums
                     )
                 }
+
+                // 🔥 RESTORED: Artist Pre-Seeding
+                // Once the library is fully loaded and indexed, silently fetch Artist Metadata
+                // in the background so the UI doesn't hitch when scrolling the Artists tab.
+                if (aggregation.filteredTracks.isNotEmpty()) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        metadataEngine.preSeedArtistCache(aggregation.filteredTracks)
+                    }
+                }
             }
         }
 
@@ -197,6 +202,21 @@ class PlayerViewModel @Inject constructor(
                     metadataEngine.clearTrackMetadata()
                     metadataEngine.fetchTrackMetadata(track)
                     statsEngine.recordPlaybackHistory(track)
+
+                    // 🔥 RESTORED: The High-Res Artwork Upgrade
+                    if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist)
+                            if (highResUri != null) {
+                                audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
+                                _uiState.update { state ->
+                                    if (state.currentTrack?.id == track.id) {
+                                        state.copy(currentTrack = track.copy(artworkUri = highResUri))
+                                    } else state
+                                }
+                            }
+                        }
+                    }
 
                     viewModelScope.launch(Dispatchers.IO) {
                         val realWaveform = waveformEngine.getWaveform(track)
@@ -255,16 +275,13 @@ class PlayerViewModel @Inject constructor(
         playbackEngine.addToQueue(track)
     }
 
-
     fun addNextToQueue(track: AudioTrack) {
         playbackEngine.addToQueue(track) // Handled natively by PlaybackEngine
     }
 
-
     fun removeFromQueue(track: AudioTrack) {
         playbackEngine.removeFromQueue(track)
     }
-
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         playbackEngine.moveQueueItem(fromIndex, toIndex)
@@ -306,7 +323,6 @@ class PlayerViewModel @Inject constructor(
     // --- LIBRARY & STATE OPERATIONS ---
     // ==========================================
 
-
     fun loadLocalAudio(forceRefresh: Boolean = false) {
         if (_uiState.value.isScanning && !forceRefresh) return
 
@@ -335,7 +351,7 @@ class PlayerViewModel @Inject constructor(
                     is LocalAudioDataSource.ScanStatus.Complete -> {
                         _uiState.update { it.copy(isScanning = false) }
 
-                        // 🔥 THE FIX: Tell the Unified Flow to fetch the newly populated database!
+                        // Tell the Unified Flow to fetch the newly populated database!
                         libraryRefreshTrigger.value += 1
                     }
                 }

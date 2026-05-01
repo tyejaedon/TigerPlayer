@@ -33,6 +33,7 @@ animation = "1.11.0"
 roomVersion = "2.8.4"
 paletteKtx = "1.0.0"
 lifecycleViewmodelCompose = "2.10.0"
+uiGraphics = "1.11.0"
 
 [libraries]
 # Core & Lifecycle
@@ -89,6 +90,7 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 androidx-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
 androidx-palette-ktx = { group = "androidx.palette", name = "palette-ktx", version.ref = "paletteKtx" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
+androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "uiGraphics" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

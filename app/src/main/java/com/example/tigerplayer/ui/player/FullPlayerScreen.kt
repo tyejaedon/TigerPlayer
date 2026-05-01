@@ -31,6 +31,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -38,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -106,8 +109,10 @@ fun FullPlayerScreen(
     val themeSurface = MaterialTheme.colorScheme.surface
     val themeOnSurface = MaterialTheme.colorScheme.onSurface
     var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
-    var dynamicTextColor by remember(themeOnSurface) { mutableStateOf(themeOnSurface) }
-    var dynamicSecondaryTextColor by remember(themeOnSurface) { mutableStateOf(themeOnSurface.copy(alpha = 0.6f)) }
+
+    // For a glassy look, force brighter text to contrast against the frosted dark background
+    var dynamicTextColor by remember(themeOnSurface) { mutableStateOf(Color(0xFFF5F5F5)) }
+    var dynamicSecondaryTextColor by remember(themeOnSurface) { mutableStateOf(Color(0xFFF5F5F5).copy(alpha = 0.7f)) }
 
     val scope = rememberCoroutineScope()
     val offsetXAnimate = remember { Animatable(0f) }
@@ -128,7 +133,7 @@ fun FullPlayerScreen(
                         viewModel.updateTrackColor(extractedColor)
 
                         val luminance = ColorUtils.calculateLuminance(extractedColor.toArgb())
-                        dynamicTextColor = if (luminance > 0.4) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
+                        dynamicTextColor = if (luminance > 0.5) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
                         dynamicSecondaryTextColor = dynamicTextColor.copy(alpha = 0.7f)
                     }
                 }
@@ -138,12 +143,12 @@ fun FullPlayerScreen(
 
     val infiniteTransition = rememberInfiniteTransition(label = "ArtworkDrift")
     val driftScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f, targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(tween(25000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftScale"
+        initialValue = 1.0f, targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(tween(30000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftScale"
     )
     val driftPanX by infiniteTransition.animateFloat(
-        initialValue = -25f, targetValue = 25f,
-        animationSpec = infiniteRepeatable(tween(18000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftPanX"
+        initialValue = -30f, targetValue = 30f,
+        animationSpec = infiniteRepeatable(tween(22000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftPanX"
     )
 
     Box(
@@ -157,29 +162,32 @@ fun FullPlayerScreen(
                 }
             }
     ) {
+        // --- FROSTED GLASS BACKGROUND ---
         AsyncImage(
             model = imageRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
+                .blur(radius = 64.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded) // The core glassmorphism foundation
                 .graphicsLayer {
                     val scaleFactor = 1f + ((driftScale - 1f) * motionThrottle)
                     scaleX = scaleFactor
                     scaleY = scaleFactor
                     translationX = offsetXAnimate.value + (driftPanX * motionThrottle)
-                    alpha = 0.45f + (0.55f * motionThrottle)
+                    alpha = 0.6f + (0.4f * motionThrottle)
                 }
         )
 
+        // Dark gradient overlay to provide contrast for the bright glass reflections
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to Color.Black.copy(alpha = 0.3f),
-                        0.4f to dominantBgColor.copy(alpha = 0.5f * (0.8f + (0.2f * motionThrottle))),
-                        1.0f to dominantBgColor.copy(alpha = 0.98f)
+                        0.0f to Color.Black.copy(alpha = 0.4f),
+                        0.5f to dominantBgColor.copy(alpha = 0.3f),
+                        1.0f to Color.Black.copy(alpha = 0.85f) // Darker bottom to make the glass pop
                     )
                 )
         )
@@ -270,6 +278,11 @@ fun FullPlayerScreen(
                                                     .fillMaxWidth(0.85f)
                                                     .aspectRatio(1f)
                                                     .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = dominantBgColor)
+                                                    .border(
+                                                        1.5.dp,
+                                                        Brush.linearGradient(listOf(Color.White.copy(0.4f), Color.White.copy(0.0f))),
+                                                        RoundedCornerShape(32.dp)
+                                                    )
                                                     .clip(RoundedCornerShape(32.dp))
                                             )
                                         }
@@ -297,6 +310,7 @@ fun FullPlayerScreen(
                 }
             }
 
+            // --- THE GLASS DOCK ---
             AnimatedVisibility(
                 visible = !showLyrics && !showQueue,
                 enter = fadeIn(tween(600)) + slideInVertically(initialOffsetY = { it / 3 }, animationSpec = spring(stiffness = Spring.StiffnessLow)),
@@ -306,10 +320,34 @@ fun FullPlayerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 24.dp)
-                        .shadow(elevation = 24.dp * motionThrottle, shape = RoundedCornerShape(32.dp), spotColor = dominantBgColor.copy(alpha = 0.5f))
-                        .clip(RoundedCornerShape(32.dp))
-                        .background(Color.Transparent)
-                        .padding(vertical = 20.dp, horizontal = 12.dp)
+                        .shadow(elevation = 32.dp * motionThrottle, shape = RoundedCornerShape(36.dp), spotColor = Color.Black)
+                        .clip(RoundedCornerShape(36.dp))
+                        // The Translucent Glass Background
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.10f),
+                                    Color.White.copy(alpha = 0.03f)
+                                ),
+                                start = Offset.Zero,
+                                end = Offset.Infinite
+                            )
+                        )
+                        // The Specular Glass Highlight Edge
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.4f),
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.05f)
+                                ),
+                                start = Offset.Zero,
+                                end = Offset.Infinite
+                            ),
+                            shape = RoundedCornerShape(36.dp)
+                        )
+                        .padding(vertical = 24.dp, horizontal = 12.dp)
                 ) {
                     TrackInfoCard(
                         track = track,
@@ -319,9 +357,9 @@ fun FullPlayerScreen(
                         onToggleTechInfo = { showTechnicalInfo = it },
                         onToggleLike = { viewModel.toggleTrackLikeStatus(track) }
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     FieryWavySeeker(uiState = uiState, track = track, viewModel = viewModel, textColor = dynamicTextColor)
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     PlaybackControls(uiState = uiState, viewModel = viewModel, textColor = dynamicTextColor)
                 }
             }
@@ -367,7 +405,7 @@ fun FullWaveformSeekBar(
     Row(
         modifier = Modifier
             .fillMaxWidth(0.85f)
-            .height(180.dp), // Massive and prominent
+            .height(180.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -375,26 +413,20 @@ fun FullWaveformSeekBar(
             val barProgress = index.toFloat() / amplitudes.size
             val isPlayed = barProgress <= progress
 
-            // --- 1. DYNAMIC AMPLITUDE BOOST ---
-            // If the waveform is loading, animate a cool sine-wave. If real, boost the height.
             val actualAmp = if (isLoading) {
                 0.15f + 0.1f * sin(phase * 2 + index * 0.2f)
             } else {
-                (baseAmp * 1.8f).coerceIn(0.05f, 1f) // 🔥 FIX 1: Multiply amplitude so it looks massive
+                (baseAmp * 1.8f).coerceIn(0.05f, 1f)
             }
 
-            // --- 2. THE RIPPLE PHYSICS ---
             val liveRipple = if (isPlaying && !isLoading) {
                 val rippleSpeed = phase * if (isPlayed) 1f else 1.5f
                 val rippleDensity = if (isPlayed) 0.5f else 0.2f
                 0.85f + 0.15f * sin(rippleSpeed + index * rippleDensity)
             } else {
-                1f // If paused, NO ripple.
+                1f
             }
 
-            // --- 3. THE PAUSE TRAP FIX ---
-            // We multiply the amp by the ripple. If it's paused, liveRipple is 1f, meaning it
-            // completely retains its physical shape instead of flattening out!
             val targetHeight = (actualAmp * liveRipple).coerceIn(0.05f, 1f)
 
             val animatedHeight by animateFloatAsState(
@@ -440,20 +472,32 @@ fun HeaderRitual(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onCollapse, modifier = Modifier.background(dynamicTextColor.copy(alpha = 0.05f), CircleShape)) {
+            IconButton(
+                onClick = onCollapse,
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                    .border(0.5.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            ) {
                 Icon(WitcherIcons.Collapse, "Collapse", tint = dynamicTextColor)
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = { onToggleLyrics(!showLyrics) }) {
-                    Icon(Icons.AutoMirrored.Rounded.Subject, null, tint = if (showLyrics) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.5f))
+                IconButton(
+                    onClick = { onToggleLyrics(!showLyrics) },
+                    modifier = Modifier
+                        .background(if (showLyrics) MaterialTheme.aardBlue.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+                ) {
+                    Icon(Icons.AutoMirrored.Rounded.Subject, null, tint = if (showLyrics) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.8f))
                 }
-                IconButton(onClick = { onToggleQueue(!showQueue) }) {
-                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = if (showQueue) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.5f)
-                    )
+                IconButton(
+                    onClick = { onToggleQueue(!showQueue) },
+                    modifier = Modifier
+                        .background(if (showQueue) MaterialTheme.aardBlue.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+                ) {
+                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = if (showQueue) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.8f))
                 }
                 IconButton(onClick = onShowOptions) {
-                    Icon(WitcherIcons.Options, null, tint = dynamicTextColor.copy(alpha = 0.5f))
+                    Icon(WitcherIcons.Options, null, tint = dynamicTextColor.copy(alpha = 0.8f))
                 }
             }
         }
@@ -523,32 +567,16 @@ fun TrackInfoCard(
                     TechRow("Format", track.mimeType, textColor)
                 }
             },
-            containerColor = Color(0xFF121212),
-            shape = RoundedCornerShape(16.dp)
+            containerColor = Color(0xFF1A1A1A),
+            shape = RoundedCornerShape(24.dp)
         )
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-            .shadow(
-                16.dp,
-                RoundedCornerShape(24.dp),
-                ambientColor = Color.Transparent,
-                spotColor = Color.Black.copy(alpha = 0.5f)
-            )
-            .clip(RoundedCornerShape(24.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color.Black.copy(alpha = 0.4f),
-                        Color.Black.copy(alpha = 0.2f)
-                    )
-                )
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
-            .padding(16.dp)
+            .padding(horizontal = 8.dp)
+        // Stripped the bulky background to let the parent's glass shine through!
     ) {
 
         Row(
@@ -571,7 +599,7 @@ fun TrackInfoCard(
                     )
                 )
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     track.artist,
@@ -674,10 +702,31 @@ private fun MetadataBadge(
     textColor: Color,
     onLongClick: () -> Unit = {}
 ) {
+    // Glass Pill Badge
     Surface(
-        color = if (isHighlight) IgniRed.copy(alpha = 0.2f) else textColor.copy(alpha = 0.1f),
+        color = Color.Transparent,
         shape = CircleShape,
-        modifier = Modifier.combinedClickable(onClick = { }, onLongClick = onLongClick),
+        modifier = Modifier
+            .combinedClickable(onClick = { }, onLongClick = onLongClick)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        if (isHighlight) IgniRed.copy(0.25f) else Color.White.copy(0.15f),
+                        if (isHighlight) IgniRed.copy(0.1f) else Color.White.copy(0.05f)
+                    )
+                ),
+                CircleShape
+            )
+            .border(
+                0.5.dp,
+                Brush.linearGradient(
+                    listOf(
+                        if (isHighlight) IgniRed.copy(0.5f) else Color.White.copy(0.3f),
+                        Color.Transparent
+                    )
+                ),
+                CircleShape
+            ),
     ) {
         Text(
             text = text,
@@ -685,7 +734,7 @@ private fun MetadataBadge(
             color = if (isHighlight) IgniRed else textColor,
             fontWeight = FontWeight.Black,
             letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
         )
     }
 }
@@ -725,7 +774,7 @@ fun FieryWavySeeker(
         label = "Phase"
     )
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -754,8 +803,9 @@ fun FieryWavySeeker(
                 val centerY = size.height / 2
                 val progressX = size.width * animatedProgress
 
+                // The subtle glass background track
                 drawLine(
-                    color = textColor.copy(alpha = 0.2f),
+                    color = Color.White.copy(alpha = 0.15f),
                     start = Offset(0f, centerY),
                     end = Offset(size.width, centerY),
                     strokeWidth = 4.dp.toPx(),
@@ -807,7 +857,7 @@ fun PlaybackControls(
                 Icon(
                     imageVector = WitcherIcons.Shuffle,
                     contentDescription = "Shuffle",
-                    tint = if (uiState.isShuffleEnabled) aardBlue else textColor.copy(alpha = 0.5f),
+                    tint = if (uiState.isShuffleEnabled) aardBlue else textColor.copy(alpha = 0.6f),
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -825,12 +875,26 @@ fun PlaybackControls(
         )
         val coreColor by animateColorAsState(targetValue = if (isPlaying) igniRed else aardBlue, animationSpec = tween(600, easing = FastOutSlowInEasing), label = "CoreColor")
 
+        // Glass Orb Play Button
         Box(
             modifier = Modifier
                 .size(84.dp)
-                .shadow(elevation = (12.dp * pulseScale), shape = CircleShape, spotColor = coreColor.copy(alpha = 0.6f), ambientColor = Color.Transparent)
+                .shadow(elevation = (16.dp * pulseScale), shape = CircleShape, spotColor = coreColor.copy(alpha = 0.8f), ambientColor = Color.Transparent)
                 .clip(CircleShape)
-                .background(Brush.radialGradient(listOf(coreColor.copy(alpha = 0.25f), coreColor.copy(alpha = 0.05f))))
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.25f),
+                            coreColor.copy(alpha = 0.4f),
+                            Color.White.copy(alpha = 0.05f)
+                        )
+                    )
+                )
+                .border(
+                    1.dp,
+                    Brush.linearGradient(listOf(Color.White.copy(0.6f), Color.White.copy(0.1f))),
+                    CircleShape
+                )
                 .bounceClick { viewModel.togglePlayPause() },
             contentAlignment = Alignment.Center
         ) {
@@ -838,7 +902,7 @@ fun PlaybackControls(
                 Icon(
                     imageVector = if (playing) WitcherIcons.Pause else WitcherIcons.Play,
                     contentDescription = "Play/Pause",
-                    tint = if (playing) Color.White else coreColor,
+                    tint = Color.White,
                     modifier = Modifier.size(38.dp)
                 )
             }
@@ -852,7 +916,7 @@ fun PlaybackControls(
                 Icon(
                     imageVector = when (uiState.repeatMode) { Player.REPEAT_MODE_ONE -> WitcherIcons.RepeatOne else -> WitcherIcons.Repeat },
                     contentDescription = "Repeat",
-                    tint = if (uiState.repeatMode != Player.REPEAT_MODE_OFF) aardBlue else textColor.copy(alpha = 0.5f),
+                    tint = if (uiState.repeatMode != Player.REPEAT_MODE_OFF) aardBlue else textColor.copy(alpha = 0.6f),
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -892,13 +956,19 @@ fun QueueDisplay(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp).clip(CircleShape).background(dynamicTextColor.copy(alpha = 0.05f)).padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 12.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.1f))
+                .border(0.5.dp, Color.White.copy(0.2f), CircleShape)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(if (shuffleModeEnabled) "CHAOS SEQUENCE" else "ARCHIVE ORDER", style = MaterialTheme.typography.labelLarge, color = dynamicTextColor.copy(alpha = 0.6f), fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+            Text(if (shuffleModeEnabled) "CHAOS SEQUENCE" else "ARCHIVE ORDER", style = MaterialTheme.typography.labelLarge, color = dynamicTextColor.copy(alpha = 0.8f), fontWeight = FontWeight.Black, letterSpacing = 2.sp)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (shuffleModeEnabled) { Icon(WitcherIcons.Shuffle, null, tint = dynamicTextColor, modifier = Modifier.size(16.dp)); Spacer(modifier = Modifier.width(12.dp)) }
-                Icon(if (repeatMode == 1) WitcherIcons.RepeatOne else WitcherIcons.Repeat, null, tint = if (repeatMode != 0) dynamicTextColor else dynamicTextColor.copy(alpha = 0.2f), modifier = Modifier.size(16.dp))
+                Icon(if (repeatMode == 1) WitcherIcons.RepeatOne else WitcherIcons.Repeat, null, tint = if (repeatMode != 0) dynamicTextColor else dynamicTextColor.copy(alpha = 0.3f), modifier = Modifier.size(16.dp))
             }
         }
 
@@ -953,26 +1023,42 @@ fun QueueDisplay(
                             )
                         }
                         .bounceClick { onTrackClick(track) },
-                    color = if (isActive) dynamicTextColor.copy(alpha = 0.12f) else if (isDragging) dynamicTextColor.copy(alpha = 0.05f) else Color.Transparent,
+                    color = Color.Transparent,
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(48.dp)) {
-                            AsyncImage(model = track.artworkUri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)))
-                            if (isActive && isPlaying) {
-                                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.4f)), contentAlignment = Alignment.Center) {
-                                    Icon(WitcherIcons.VolumeUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    // Glass Card for active or dragging items
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isActive || isDragging)
+                                    Brush.linearGradient(listOf(Color.White.copy(0.15f), Color.White.copy(0.05f)))
+                                else SolidColor(Color.Transparent)
+                            )
+                            .border(
+                                width = if (isActive || isDragging) 1.dp else 0.dp,
+                                brush = Brush.linearGradient(listOf(Color.White.copy(0.4f), Color.Transparent)),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(48.dp)) {
+                                AsyncImage(model = track.artworkUri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)))
+                                if (isActive && isPlaying) {
+                                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.4f)), contentAlignment = Alignment.Center) {
+                                        Icon(WitcherIcons.VolumeUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                    }
                                 }
                             }
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold, color = dynamicTextColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(track.artist.uppercase(), style = MaterialTheme.typography.labelSmall, color = dynamicTextColor.copy(alpha = 0.6f), letterSpacing = 1.sp, maxLines = 1)
-                        }
-                        if (!isActive) {
-                            IconButton(onClick = { onRemoveFromQueue(track) }) {
-                                Icon(WitcherIcons.Close, contentDescription = null, tint = dynamicTextColor.copy(0.3f), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold, color = dynamicTextColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(track.artist.uppercase(), style = MaterialTheme.typography.labelSmall, color = dynamicTextColor.copy(alpha = 0.6f), letterSpacing = 1.sp, maxLines = 1)
+                            }
+                            if (!isActive) {
+                                IconButton(onClick = { onRemoveFromQueue(track) }) {
+                                    Icon(WitcherIcons.Close, contentDescription = null, tint = dynamicTextColor.copy(0.4f), modifier = Modifier.size(18.dp))
+                                }
                             }
                         }
                     }
@@ -1011,7 +1097,7 @@ private fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Col
                 val isActive = index == activeIndex
                 Text(
                     text = line.text.ifBlank { "•••" }, color = if (isActive) MaterialTheme.igniRed else textColor.copy(
-                        0.3f
+                        0.4f
                     ),
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black, fontSize = if (isActive) 24.sp else 20.sp),
                     textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp).graphicsLayer { val s = if (isActive) 1.1f else 1f; scaleX = s; scaleY = s }
