@@ -1,9 +1,7 @@
 package com.example.tigerplayer.engine
 
 import android.net.Uri
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresExtension
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.SpotifyRepository
 import com.example.tigerplayer.service.MediaControllerManager
@@ -18,32 +16,30 @@ class PlaybackEngine @Inject constructor(
 ) {
 
     val isPlaying: Flow<Boolean> = mediaControllerManager.isPlaying
-
     val currentPosition: Flow<Long> = mediaControllerManager.currentPosition
-
     val currentMediaId: Flow<String> = mediaControllerManager.currentMediaId
-
     val shuffleModeEnabled: Flow<Boolean> = mediaControllerManager.shuffleModeEnabled
-
     val repeatMode: Flow<Int> = mediaControllerManager.repeatMode
 
-    // Resolves the queue from the media controller
-
+    // Resolves the queue from the media controller with O(1) Time Complexity mappings
     fun getQueueFlow(libraryTracks: List<AudioTrack>): Flow<List<AudioTrack>> {
         return mediaControllerManager.mediaControllerState
             .onStart { emit(Unit) }
             .map {
+                val trackMap = withContext(Dispatchers.Default) {
+                    libraryTracks.associateBy { it.id }
+                }
+
                 withContext(Dispatchers.Main) {
                     val controller = mediaControllerManager.mediaController ?: return@withContext emptyList()
                     (0 until controller.mediaItemCount).mapNotNull { i ->
                         val mediaId = controller.getMediaItemAt(i).mediaId
-                        libraryTracks.find { it.id == mediaId }
+                        trackMap[mediaId]
                     }
                 }
             }
     }
 
-    // Listens for external Spotify playback to update UI with a remote track
     val spotifyRemoteTrack: Flow<AudioTrack?> = spotifyRepository.currentSpotifyTrack.map { spotifyInfo ->
         if (!spotifyInfo.isNullOrBlank() && spotifyInfo != "Not Playing" && spotifyInfo != "Paused / Stopped") {
             val parts = spotifyInfo.split(" • ")
@@ -79,9 +75,10 @@ class PlaybackEngine @Inject constructor(
             spotifyRepository.playUri(track.id)
         } else {
             spotifyRepository.pause()
+            val startIndex = libraryTracks.indexOf(track).coerceAtLeast(0)
             mediaControllerManager.setPlaylistAndPlay(
                 libraryTracks,
-                libraryTracks.indexOf(track)
+                startIndex
             )
         }
     }
@@ -95,12 +92,10 @@ class PlaybackEngine @Inject constructor(
         }
     }
 
-
     fun seekTo(position: Long, currentTrack: AudioTrack?) {
         val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
         if (isSpotify) spotifyRepository.seekTo(position) else mediaControllerManager.seekTo(position)
     }
-
 
     fun toggleShuffle(currentTrack: AudioTrack?) {
         val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
@@ -110,7 +105,6 @@ class PlaybackEngine @Inject constructor(
             mediaControllerManager.toggleShuffleMode()
         }
     }
-
 
     fun toggleRepeat(currentTrack: AudioTrack?) {
         val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
@@ -123,26 +117,21 @@ class PlaybackEngine @Inject constructor(
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
         val controller = mediaControllerManager.mediaController ?: return
-        // Assuming createMediaItem is exposed by your MediaControllerManager or mapped here
         val mediaItems = tracks.map { mediaControllerManager.createMediaItem(it) }
         controller.setMediaItems(mediaItems, startIndex, androidx.media3.common.C.TIME_UNSET)
         controller.prepare()
         controller.play()
     }
 
-
-
     fun skipToNext(currentTrack: AudioTrack?) {
         val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
         if (isSpotify) spotifyRepository.skipNext() else mediaControllerManager.skipToNext()
     }
 
-
     fun skipToPrevious(currentTrack: AudioTrack?) {
         val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
         if (isSpotify) spotifyRepository.skipPrevious() else mediaControllerManager.skipToPrevious()
     }
-
 
     fun addToQueue(track: AudioTrack) {
         val isSpotify = track.id.startsWith("spotify:")
@@ -153,11 +142,9 @@ class PlaybackEngine @Inject constructor(
         }
     }
 
-
     fun removeFromQueue(track: AudioTrack) {
         mediaControllerManager.removeFromQueue(track.id)
     }
-
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         mediaControllerManager.moveQueueItem(fromIndex, toIndex)

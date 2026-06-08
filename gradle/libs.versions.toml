@@ -1,5 +1,5 @@
 [versions]
-agp = "9.2.0"
+agp = "9.2.1"
 auth = "4.0.1"
 datastorePreferences = "1.2.1"
 gson = "2.14.0"
@@ -34,6 +34,7 @@ roomVersion = "2.8.4"
 paletteKtx = "1.0.0"
 lifecycleViewmodelCompose = "2.10.0"
 uiGraphics = "1.11.0"
+animationVersion = "1.11.2"
 
 [libraries]
 # Core & Lifecycle
@@ -91,6 +92,7 @@ androidx-animation = { group = "androidx.compose.animation", name = "animation",
 androidx-palette-ktx = { group = "androidx.palette", name = "palette-ktx", version.ref = "paletteKtx" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "uiGraphics" }
+animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animationVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -57,27 +57,18 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
 // ------------------------------
 // SAMSUNG GLASS (REALISTIC LAYERING)
 // ------------------------------
-fun Modifier.glassEffect(shape: Shape) = composed {
-    val dark = isSystemInDarkTheme()
-    val base = if (dark) Color.White.copy(0.04f) else Color.Black.copy(0.03f)
-
+fun Modifier.glassEffect(shape: Shape) = this.composed {
     this
-        .graphicsLayer {
-            this.shape = shape
-            clip = true
-        }
-        .background(base)
-        // 🔥 THE FIX: Removed .blur() which caused severe pixelation on text inside containers
+        .clip(shape)
         .background(
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = if (dark) 0.08f else 0.15f),
-                    Color.Transparent
+                    Color.White.copy(alpha = 0.08f),
+                    Color.White.copy(alpha = 0.02f)
                 )
             )
         )
 }
-
 // ------------------------------
 // SAMSUNG "DEPTH GLOW"
 // ------------------------------

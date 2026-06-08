@@ -125,6 +125,7 @@ dependencies {
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.palette.ktx)
     implementation(libs.androidx.ui.graphics)
+    implementation(libs.animation)
 
     // --- Networking & Storage ---
     implementation(libs.retrofit)

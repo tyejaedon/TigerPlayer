@@ -14,17 +14,20 @@ import androidx.core.view.WindowCompat
 private val DarkColorScheme = darkColorScheme(
     primary = TigerNeonOrange,
     secondary = TigerElectricAmber,
-    tertiary = TigerSpectralViolet,
 
+    // Use the updated, slightly lighter greys
     background = TigerBlack,
-    surface = TigerSurfaceCharcoal,
-    surfaceVariant = TigerSurfaceElevated,
+    surface = TigerDeepGrey,
+    surfaceVariant = TigerSurfaceCharcoal,
 
     onBackground = TigerTextHigh,
     onSurface = TigerTextHigh,
-    onSurfaceVariant = TigerTextMed,
 )
 
+// Extension for elevated surfaces in your Theme.kt
+val MaterialTheme.elevatedSurface: Color
+    @Composable
+    get() = if (isSystemInDarkTheme()) TigerSurfaceCharcoal else TigerMutedSilk
 private val LightColorScheme = lightColorScheme(
     primary = TigerNeonOrange,
     secondary = TigerElectricAmber,
@@ -78,6 +81,3 @@ val MaterialTheme.igniRed: Color
     @Composable
     get() = if (isSystemInDarkTheme()) IgniRedDark else IgniRedLight
 
-val MaterialTheme.elevatedSurface: Color
-    @Composable
-    get() = if (isSystemInDarkTheme()) TigerSurfaceElevated else TigerMutedSilk

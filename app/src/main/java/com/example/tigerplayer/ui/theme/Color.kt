@@ -6,12 +6,16 @@ import androidx.compose.ui.graphics.Color
 // ------------------------------
 // CORE AMOLED SURFACES
 // ------------------------------
-val TigerBlack = Color(0xFF050505)
-val TigerDeepGrey = Color(0xFF0D0D0D)
-val TigerSurfaceCharcoal = Color(0xFF151515)
-val TigerSurfaceElevated = Color(0xFF1C1C1C)
-val TigerSurfaceFloating = Color(0xFF242424)
+val TigerBlack = Color(0xFF101012)        // Softened background
+val TigerDeepGrey = Color(0xFF18181A)     // Cards / Containers
+val TigerSurfaceCharcoal = Color(0xFF202022) // Elevated sheets
+val TigerSurfaceElevated = Color(0xFF2C2C2E) // Modals / Inputs
+val TigerSurfaceFloating = Color(0xFF3A3A3C) // Active states
 
+// Brighten the text slightly so it's not harsh white on deep grey
+val TigerTextHigh = Color(0xFFEBEBF0)
+val TigerTextMed = Color(0xFFB8B8C0)
+val TigerTextLow = Color(0xFF767680)
 // ------------------------------
 // LIGHT MODE BASE
 // ------------------------------
@@ -31,9 +35,6 @@ val SpotifyGreen = Color(0xFF1DB954)
 // ------------------------------
 // TEXT TOKENS
 // ------------------------------
-val TigerTextHigh = Color(0xFFF5F5F5)
-val TigerTextMed = Color(0xFFB0B0B0)
-val TigerTextLow = Color(0xFF6A6A6A)
 
 val TigerTextInverse = Color(0xFF121212)
 

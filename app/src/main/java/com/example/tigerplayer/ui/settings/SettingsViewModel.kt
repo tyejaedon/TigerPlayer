@@ -1,10 +1,9 @@
 package com.example.tigerplayer.ui.settings
 
+
 import android.content.Context
-import android.os.Build
 import android.os.Bundle
 import androidx.annotation.OptIn
-import androidx.annotation.RequiresExtension
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -22,7 +21,6 @@ import com.example.tigerplayer.service.MediaControllerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,7 +42,7 @@ class SettingsViewModel @Inject constructor(
     private val spotifyAuthManager: SpotifyAuthManager,
     private val lyricsRepository: LyricsRepository,
     private val mediaDataRepository: MediaDataRepository,
-    private val mediaControllerManager: MediaControllerManager // 🔥 THE FIX: Direct bridge to ExoPlayer
+    private val mediaControllerManager: MediaControllerManager
 ) : ViewModel() {
 
     private val _cacheSizeFormatted = MutableStateFlow("Calculating...")
@@ -53,7 +51,11 @@ class SettingsViewModel @Inject constructor(
     // --- AUDIO FIDELITY STATE ---
     val isBitPerfect: StateFlow<Boolean> = dataStore.data
         .map { it[BIT_PERFECT_KEY] ?: true }
-        .stateIn(viewModelScope, SharingStarted.Lazily, true)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
 
     @OptIn(UnstableApi::class)
     fun toggleBitPerfect() {
@@ -61,11 +63,35 @@ class SettingsViewModel @Inject constructor(
             val current = isBitPerfect.value
             dataStore.edit { it[BIT_PERFECT_KEY] = !current }
 
-            // Dispatch the command instantly to the running Audio Service
+            // Dispatch command instantly to the player service
             mediaControllerManager.mediaController?.sendCustomCommand(
                 SessionCommand(AudioPlayerService.ACTION_TOGGLE_DSP, Bundle.EMPTY),
                 Bundle.EMPTY
             )
+        }
+    }
+
+    // --- APPEARANCE STATEFLOW (Optimized to avoid resource leak) ---
+    val themeMode: StateFlow<ThemeMode> = dataStore.data
+        .map { preferences ->
+            val modeName = preferences[THEME_MODE_KEY] ?: ThemeMode.SYSTEM.name
+            try {
+                ThemeMode.valueOf(modeName)
+            } catch (e: Exception) {
+                ThemeMode.SYSTEM
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ThemeMode.SYSTEM
+        )
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            dataStore.edit { preferences ->
+                preferences[THEME_MODE_KEY] = mode.name
+            }
         }
     }
 
@@ -101,31 +127,11 @@ class SettingsViewModel @Inject constructor(
         return size
     }
 
-    // --- APPEARANCE ---
-    val themeMode: Flow<ThemeMode> = dataStore.data
-        .map { preferences ->
-            val modeName = preferences[THEME_MODE_KEY] ?: ThemeMode.SYSTEM.name
-            try {
-                ThemeMode.valueOf(modeName)
-            } catch (e: Exception) {
-                ThemeMode.SYSTEM
-            }
-        }
-
-    fun setThemeMode(mode: ThemeMode) {
-        viewModelScope.launch {
-            dataStore.edit { preferences ->
-                preferences[THEME_MODE_KEY] = mode.name
-            }
-        }
-    }
-
     // --- PURGE ACTIONS ---
     fun clearTotalCache(onComplete: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             lyricsRepository.clearLyricsCache()
             mediaDataRepository.clearArtistCache()
-
             calculateTotalCache()
 
             launch(Dispatchers.Main) {

@@ -2,7 +2,6 @@ package com.example.tigerplayer.ui.player
 
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,9 +21,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class PlayerVisualMode { ARTWORK, WAVEFORM }
+enum class PlayerVisualMode { ARTWORK, WAVEFORM, VORTEX }
 
-// --- UI DATA MODELS ---
 data class LibraryArtist(
     val name: String,
     val trackCount: Int,
@@ -77,18 +75,16 @@ class PlayerViewModel @Inject constructor(
     private val libraryEngine: LibraryEngine,
     private val networkEngine: NetworkEngine,
     private val waveformEngine: WaveformEngine,
-    private val audioRepository: AudioRepository // 🔥 RESTORED
+    private val audioRepository: AudioRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
-    private val _trackColor = MutableStateFlow(Color(0xFF4FC3F7)) // Defaults to AardBlue
+    private val _trackColor = MutableStateFlow(Color(0xFF4FC3F7))
     val trackColor: StateFlow<Color> = _trackColor.asStateFlow()
 
     private var scanJob: Job? = null
-
-    // A trigger to force the library flow to re-fetch when scans complete
     private val libraryRefreshTrigger = MutableStateFlow(0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -147,9 +143,6 @@ class PlayerViewModel @Inject constructor(
                     )
                 }
 
-                // 🔥 RESTORED: Artist Pre-Seeding
-                // Once the library is fully loaded and indexed, silently fetch Artist Metadata
-                // in the background so the UI doesn't hitch when scrolling the Artists tab.
                 if (aggregation.filteredTracks.isNotEmpty()) {
                     viewModelScope.launch(Dispatchers.IO) {
                         metadataEngine.preSeedArtistCache(aggregation.filteredTracks)
@@ -189,7 +182,6 @@ class PlayerViewModel @Inject constructor(
                 val track = allTracks.find { it.id == mediaId }
 
                 if (track != null && _uiState.value.currentTrack?.id != track.id) {
-
                     _uiState.update {
                         it.copy(
                             currentTrack = track,
@@ -203,10 +195,9 @@ class PlayerViewModel @Inject constructor(
                     metadataEngine.fetchTrackMetadata(track)
                     statsEngine.recordPlaybackHistory(track)
 
-                    // 🔥 RESTORED: The High-Res Artwork Upgrade
                     if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
                         viewModelScope.launch(Dispatchers.IO) {
-                            val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist)
+                            val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist, track.album)
                             if (highResUri != null) {
                                 audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
                                 _uiState.update { state ->
@@ -232,7 +223,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ==========================================
-    // --- PLAYBACK CONTROLS (DELEGATED TO ENGINE) ---
+    // --- PLAYBACK CONTROLS ---
     // ==========================================
 
     fun togglePlayPause() {
@@ -268,7 +259,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ==========================================
-    // --- QUEUE MANAGEMENT (DELEGATED TO ENGINE) ---
+    // --- QUEUE MANAGEMENT ---
     // ==========================================
 
     fun addToQueue(track: AudioTrack) {
@@ -276,7 +267,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun addNextToQueue(track: AudioTrack) {
-        playbackEngine.addToQueue(track) // Handled natively by PlaybackEngine
+        playbackEngine.addToQueue(track)
     }
 
     fun removeFromQueue(track: AudioTrack) {
@@ -350,8 +341,6 @@ class PlayerViewModel @Inject constructor(
                     }
                     is LocalAudioDataSource.ScanStatus.Complete -> {
                         _uiState.update { it.copy(isScanning = false) }
-
-                        // Tell the Unified Flow to fetch the newly populated database!
                         libraryRefreshTrigger.value += 1
                     }
                 }
@@ -370,11 +359,12 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    // FIXED: Correctly cycle through all 3 PlayerVisualModes (ARTWORK -> WAVEFORM -> VORTEX)
     fun toggleVisualMode() {
-        val nextMode = if (_uiState.value.visualMode == PlayerVisualMode.ARTWORK) {
-            PlayerVisualMode.WAVEFORM
-        } else {
-            PlayerVisualMode.ARTWORK
+        val nextMode = when (_uiState.value.visualMode) {
+            PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
+            PlayerVisualMode.WAVEFORM -> PlayerVisualMode.VORTEX
+            PlayerVisualMode.VORTEX -> PlayerVisualMode.ARTWORK
         }
         _uiState.update { it.copy(visualMode = nextMode) }
     }
