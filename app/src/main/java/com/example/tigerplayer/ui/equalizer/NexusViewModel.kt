@@ -7,9 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.engine.dsp.AcousticNode
-import com.example.tigerplayer.engine.dsp.AdaptiveDspEngine
-import com.example.tigerplayer.engine.dsp.FilterType
+import com.example.tigerplayer.engine.AcousticNode
+import com.example.tigerplayer.engine.AdaptiveDspEngine
+import com.example.tigerplayer.engine.FilterType
 import com.example.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -24,52 +24,44 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-// --- UI STATE MODELS ---
-
 data class SpatialNode(
     val id: String,
     val label: String,
     val type: FilterType,
-    val baseFreq: Float, // The center frequency this node affects
-    var spatialPos: Offset, // Normalised X,Y (-1f to 1f) from center
+    val baseFreq: Float,
+    var spatialPos: Offset, // Normalized X,Y (-1f to 1f)
     val color: Color
 ) {
-    // Converts spatial canvas position into actual Audio Math
     fun toAcousticNode(): AcousticNode {
-        // Y-axis = Gain (-15dB to +15dB) -> Dragging UP (negative Y) boosts, Dragging DOWN (positive Y) cuts
         val gain = -(spatialPos.y * 15f)
-
-        // X-axis = Frequency Shift (Allows user to slide the bass node from 40Hz to 120Hz)
         val freqShift = 2.0.pow((spatialPos.x).toDouble()).toFloat()
         val dynamicFreq = (baseFreq * freqShift).coerceIn(20f, 20000f)
-
-        // Distance from center = Q Factor (Resonance/Width)
         val distance = sqrt(spatialPos.x.pow(2) + spatialPos.y.pow(2))
         val q = 0.5f + (distance * 2f).coerceIn(0.1f, 4f)
 
-        return AcousticNode(id, label, type, dynamicFreq, gain, q, color)
+        return AcousticNode(id, label, type, dynamicFreq, gain, q)
     }
 }
 
 data class AuralNexusState(
     val nodes: List<SpatialNode> = emptyList(),
     val currentMood: String = "Neural Adaptive",
-    val frequencyResponseCurve: List<Offset> = emptyList() // Rendered on GPU
+    val frequencyResponseCurve: List<Offset> = emptyList()
 )
 
 @HiltViewModel
 class AuralNexusViewModel @OptIn(UnstableApi::class)
 @Inject constructor(
-    private val adaptiveDspEngine: AdaptiveDspEngine // 🔥 INJECTING DIRECT HARDWARE DSP
+    private val adaptiveDspEngine: AdaptiveDspEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuralNexusState())
     val uiState: StateFlow<AuralNexusState> = _uiState.asStateFlow()
 
     private var dspUpdateJob: Job? = null
+    private var visualsUpdateJob: Job? = null // FIXED: Prevent visual computation thread leaks
 
     init {
-        // Initialize with default spatial traits
         val defaultNodes = listOf(
             SpatialNode("sub", "Sub-Bass", FilterType.LOW_SHELF, 60f, Offset(-0.6f, 0.2f), Color(0xFFFF5252)),
             SpatialNode("warmth", "Warmth", FilterType.PEAKING, 250f, Offset(-0.3f, -0.1f), Color(0xFFFFD700)),
@@ -81,16 +73,12 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
         updateDspAndVisuals()
     }
 
-    /**
-     * 🧠 AI COGNITIVE PROFILE
-     * Reads listening history to generate a starting sound signature.
-     */
     fun applyListeningHabitProfile(historyTracks: List<AudioTrack>) {
         val hasHeavyBassGenre = historyTracks.any { it.album.contains("Trap", true) || it.album.contains("EDM", true) }
 
         val newNodes = _uiState.value.nodes.map { node ->
             if (node.id == "sub" && hasHeavyBassGenre) {
-                node.copy(spatialPos = node.spatialPos.copy(y = -0.5f)) // Boost bass natively
+                node.copy(spatialPos = node.spatialPos.copy(y = -0.5f))
             } else node
         }
 
@@ -103,21 +91,21 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
         val updated = when (mood) {
             "Night Drive" -> nodes.map { n ->
                 when (n.id) {
-                    "sub" -> n.copy(spatialPos = Offset(-0.6f, -0.6f)) // Huge bass
-                    "air" -> n.copy(spatialPos = Offset(0.6f, -0.4f))  // Shimmering highs
-                    "warmth" -> n.copy(spatialPos = Offset(-0.3f, 0.2f)) // Scooped mud
+                    "sub" -> n.copy(spatialPos = Offset(-0.6f, -0.6f))
+                    "air" -> n.copy(spatialPos = Offset(0.6f, -0.4f))
+                    "warmth" -> n.copy(spatialPos = Offset(-0.3f, 0.2f))
                     else -> n
                 }
             }
             "Pure Vocal" -> nodes.map { n ->
                 when (n.id) {
-                    "vocal" -> n.copy(spatialPos = Offset(0.2f, -0.7f)) // Vocals pushed to the front
-                    "sub" -> n.copy(spatialPos = Offset(-0.6f, 0.3f))   // Bass controlled
+                    "vocal" -> n.copy(spatialPos = Offset(0.2f, -0.7f))
+                    "sub" -> n.copy(spatialPos = Offset(-0.6f, 0.3f))
                     else -> n
                 }
             }
             "Studio Flat" -> nodes.map { n ->
-                n.copy(spatialPos = Offset(n.spatialPos.x, 0f)) // UI automatically applies magnetic center snap
+                n.copy(spatialPos = Offset(n.spatialPos.x, 0f))
             }
             else -> nodes
         }
@@ -137,27 +125,29 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
     private fun updateDspAndVisuals() {
         val acousticNodes = _uiState.value.nodes.map { it.toAcousticNode() }
 
-        // 1. Visuals update instantly at 120fps for buttery smooth UI
+        // 1. Visuals update instantly but debounced safely on their own job
         updateFrequencyResponse(acousticNodes)
 
         // 2. Hardware DSP updates are debounced to protect the Audio Server
         dspUpdateJob?.cancel()
         dspUpdateJob = viewModelScope.launch(Dispatchers.Default) {
             delay(150)
-
-            // 🔥 DIRECT INJECTION: Passes mathematical instructions straight to the audio engine!
             adaptiveDspEngine.updateAcousticNodes(acousticNodes)
         }
     }
 
-    /**
-     * 🌌 REAL-TIME MATHEMATICAL VISUALIZER
-     */
     private fun updateFrequencyResponse(nodes: List<AcousticNode>) {
-        viewModelScope.launch(Dispatchers.Default) {
-
-            // Pre-calculate the heavy biquad coefficients once per frame.
-            val filterCoeffs = nodes.map { BiquadDesigner.design(it, 44100f) }
+        visualsUpdateJob?.cancel() // FIXED: Cancel previous running render jobs
+        visualsUpdateJob = viewModelScope.launch(Dispatchers.Default) {
+            val filterCoeffs = nodes.map { node ->
+                BiquadDesigner.design(
+                    type = node.filterType,
+                    freq = node.frequency,
+                    gainDb = node.gainDb,
+                    q = node.qFactor,
+                    sampleRate = 44100f
+                )
+            }
 
             val points = mutableListOf<Offset>()
             val numPoints = 120
@@ -174,7 +164,6 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
                     totalDbGain += BiquadDesigner.magnitudeAt(currentFreq, coeff, 44100f)
                 }
 
-                // Inverted the Y-axis calculation. A positive dB boost maps to negative Y (UP on screen)
                 val normalizedY = -(totalDbGain / 15f).coerceIn(-1f, 1f)
                 points.add(Offset(fraction, normalizedY))
             }

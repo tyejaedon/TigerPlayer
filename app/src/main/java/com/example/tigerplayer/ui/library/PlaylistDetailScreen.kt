@@ -9,7 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -199,8 +198,8 @@ fun PlaylistDetailsScreen(
                         DividerDefaults.Thickness,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                     )
-                    ListItem(headlineContent = { Text("Play Next") }, modifier = Modifier.clickable { viewModel.addNextToQueue(selectedTrackForOptions!!); selectedTrackForOptions = null })
-                    ListItem(headlineContent = { Text("Remove from Playlist", color = MaterialTheme.colorScheme.error) }, modifier = Modifier.clickable {
+                    ListItem(headlineContent = { Text("Play Next") }, modifier = Modifier.bounceClick { viewModel.addNextToQueue(selectedTrackForOptions!!); selectedTrackForOptions = null })
+                    ListItem(headlineContent = { Text("Remove from Playlist", color = MaterialTheme.colorScheme.error) }, modifier = Modifier.bounceClick {
                         viewModel.removeTrackFromPlaylist(playlistId, selectedTrackForOptions!!)
                         mutableTracks = mutableTracks.filter { it.id != selectedTrackForOptions!!.id }
                         selectedTrackForOptions = null
@@ -250,7 +249,7 @@ fun PlaylistParallaxHeader(
                     .size(140.dp)
                     .shadow(32.dp, RoundedCornerShape(24.dp), spotColor = accentColor)
                     .clip(RoundedCornerShape(24.dp))
-                    .clickable(enabled = isEditMode) { onChangeCoverClick() },
+                    .then(if (isEditMode) Modifier.bounceClick { onChangeCoverClick() } else Modifier),
                 contentAlignment = Alignment.Center
             ) {
                 if (artworkUri != null) {
@@ -339,7 +338,7 @@ fun ChapterSongRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .bounceClick { onClick() }
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .background(if (isCurrentTrack) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(12.dp)),
         verticalAlignment = Alignment.CenterVertically

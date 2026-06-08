@@ -1,96 +1,95 @@
 package com.example.tigerplayer.utils
 
-import com.example.tigerplayer.engine.dsp.AcousticNode
-import com.example.tigerplayer.engine.dsp.FilterType
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.log10
-import kotlin.math.pow
-import kotlin.math.sin
-import kotlin.math.sqrt
+import com.example.tigerplayer.engine.FilterType
+import kotlin.math.*
 
 /**
- * 🎧 REAL BIQUAD COEFFICIENT GENERATOR
+ * 📐 HIGH-PRECISION BIQUAD FILTER DESIGNER
+ * Implements Robert Bristow-Johnson's Audio EQ Cookbook equations with strict
+ * bounding guards to prevent NaN/Infinity leaks on both visualizer and DSP.
  */
-data class BiquadCoefficients(
-    val b0: Double,
-    val b1: Double,
-    val b2: Double,
-    val a0: Double,
-    val a1: Double,
-    val a2: Double
-)
-
 object BiquadDesigner {
 
-    fun design(node: AcousticNode, sampleRate: Float = 44100f): BiquadCoefficients {
-        val A = 10.0.pow(node.gainDb / 40.0)
-        val w0 = 2.0 * PI * node.frequency / sampleRate
-        val cosW0 = cos(w0)
-        val sinW0 = sin(w0)
-        val alpha = sinW0 / (2 * node.qFactor)
+    class Coefficients(
+        val b0: Double, val b1: Double, val b2: Double,
+        val a0: Double, val a1: Double, val a2: Double
+    )
 
-        // 🔥 THE FIX: Changed 'node.type' to 'node.filterType'
-        return when (node.filterType) {
+    fun design(
+        type: FilterType,
+        freq: Float,
+        gainDb: Float,
+        q: Float,
+        sampleRate: Float
+    ): Coefficients {
+        // Coerce inputs to safe mathematical bounds (avoiding Nyquist limit and negative parameters)
+        val f0 = freq.coerceIn(20f, (sampleRate / 2f) - 100f).toDouble()
+        val g = gainDb.coerceIn(-24f, 24f).toDouble()
+        val qVal = q.coerceIn(0.1f, 10f).toDouble()
+        val sr = sampleRate.toDouble()
 
-            FilterType.PEAKING -> {
-                val b0 = 1 + alpha * A
-                val b1 = -2 * cosW0
-                val b2 = 1 - alpha * A
-                val a0 = 1 + alpha / A
-                val a1 = -2 * cosW0
-                val a2 = 1 - alpha / A
-                BiquadCoefficients(b0, b1, b2, a0, a1, a2)
-            }
+        val omega = 2.0 * PI * f0 / sr
+        val cosOmega = cos(omega)
+        val sinOmega = sin(omega)
+        val alpha = sinOmega / (2.0 * qVal)
+        val a = 10.0.pow(g / 40.0)
 
+        return when (type) {
             FilterType.LOW_SHELF -> {
-                val sqrtA = sqrt(A)
-                val twoSqrtAAlpha = 2 * sqrtA * alpha
-
-                val b0 = A * ((A + 1) - (A - 1) * cosW0 + twoSqrtAAlpha)
-                val b1 = 2 * A * ((A - 1) - (A + 1) * cosW0)
-                val b2 = A * ((A + 1) - (A - 1) * cosW0 - twoSqrtAAlpha)
-                val a0 = (A + 1) + (A - 1) * cosW0 + twoSqrtAAlpha
-                val a1 = -2 * ((A - 1) + (A + 1) * cosW0)
-                val a2 = (A + 1) + (A - 1) * cosW0 - twoSqrtAAlpha
-
-                BiquadCoefficients(b0, b1, b2, a0, a1, a2)
+                val beta = sqrt(a) / qVal
+                val b0 = a * ((a + 1.0) - (a - 1.0) * cosOmega + beta * sinOmega)
+                val b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cosOmega)
+                val b2 = a * ((a + 1.0) - (a - 1.0) * cosOmega - beta * sinOmega)
+                val a0 = (a + 1.0) + (a - 1.0) * cosOmega + beta * sinOmega
+                val a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cosOmega)
+                val a2 = (a + 1.0) + (a - 1.0) * cosOmega - beta * sinOmega
+                Coefficients(b0, b1, b2, a0, a1, a2)
             }
-
             FilterType.HIGH_SHELF -> {
-                val sqrtA = sqrt(A)
-                val twoSqrtAAlpha = 2 * sqrtA * alpha
-
-                val b0 = A * ((A + 1) + (A - 1) * cosW0 + twoSqrtAAlpha)
-                val b1 = -2 * A * ((A - 1) + (A + 1) * cosW0)
-                val b2 = A * ((A + 1) + (A - 1) * cosW0 - twoSqrtAAlpha)
-                val a0 = (A + 1) - (A - 1) * cosW0 + twoSqrtAAlpha
-                val a1 = 2 * ((A - 1) - (A + 1) * cosW0)
-                val a2 = (A + 1) - (A - 1) * cosW0 - twoSqrtAAlpha
-
-                BiquadCoefficients(b0, b1, b2, a0, a1, a2)
+                val beta = sqrt(a) / qVal
+                val b0 = a * ((a + 1.0) + (a - 1.0) * cosOmega + beta * sinOmega)
+                val b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cosOmega)
+                val b2 = a * ((a + 1.0) + (a - 1.0) * cosOmega - beta * sinOmega)
+                val a0 = (a + 1.0) - (a - 1.0) * cosOmega + beta * sinOmega
+                val a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cosOmega)
+                val a2 = (a + 1.0) - (a - 1.0) * cosOmega - beta * sinOmega
+                Coefficients(b0, b1, b2, a0, a1, a2)
+            }
+            FilterType.PEAKING -> {
+                val b0 = 1.0 + alpha * a
+                val b1 = -2.0 * cosOmega
+                val b2 = 1.0 - alpha * a
+                val a0 = 1.0 + alpha / a
+                val a1 = -2.0 * cosOmega
+                val a2 = 1.0 - alpha / a
+                Coefficients(b0, b1, b2, a0, a1, a2)
             }
         }
     }
 
     /**
-     * 🎯 TRUE FREQUENCY RESPONSE (|H(e^jw)|)
+     * Computes the magnitude response (in dB) of a biquad filter at any given frequency.
      */
-    fun magnitudeAt(freq: Float, coeff: BiquadCoefficients, sampleRate: Float = 44100f): Float {
-        val w = 2 * PI * freq / sampleRate
-        val cosW = cos(w)
-        val sinW = sin(w)
+    fun magnitudeAt(freq: Float, coeffs: Coefficients, sampleRate: Float): Float {
+        val f = freq.coerceIn(20f, (sampleRate / 2f) - 100f).toDouble()
+        val phi = 2.0 * PI * f / sampleRate.toDouble()
+        val cos1 = cos(phi)
+        val cos2 = cos(2.0 * phi)
+        val sin1 = sin(phi)
+        val sin2 = sin(2.0 * phi)
 
-        val numeratorReal = coeff.b0 + coeff.b1 * cosW + coeff.b2 * cos(2 * w)
-        val numeratorImag = coeff.b1 * sinW + coeff.b2 * sin(2 * w)
+        val numReal = coeffs.b0 + coeffs.b1 * cos1 + coeffs.b2 * cos2
+        val numImag = -(coeffs.b1 * sin1 + coeffs.b2 * sin2)
+        val denReal = coeffs.a0 + coeffs.a1 * cos1 + coeffs.a2 * cos2
+        val denImag = -(coeffs.a1 * sin1 + coeffs.a2 * sin2)
 
-        val denominatorReal = coeff.a0 + coeff.a1 * cosW + coeff.a2 * cos(2 * w)
-        val denominatorImag = coeff.a1 * sinW + coeff.a2 * sin(2 * w)
+        val numMagSq = numReal * numReal + numImag * numImag
+        val denMagSq = denReal * denReal + denImag * denImag
 
-        val num = sqrt(numeratorReal.pow(2) + numeratorImag.pow(2))
-        val den = sqrt(denominatorReal.pow(2) + denominatorImag.pow(2))
+        if (denMagSq < 1e-15) return 0f // Protect from division by zero
 
-        val magnitude = num / den
-        return (20 * log10(magnitude)).toFloat()
+        val magnitude = sqrt(numMagSq / denMagSq)
+        val magnitudeDb = 20.0 * log10(magnitude.coerceAtLeast(1e-10))
+        return magnitudeDb.toFloat()
     }
 }

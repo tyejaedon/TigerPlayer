@@ -36,6 +36,8 @@ sealed class Screen(val route: String) {
         fun createRoute(id: Long, name: String) = "local_playlist/$id/${Uri.encode(name)}"
     }
 
+    object YouTubeSearch : Screen("youtube_search")
+
     object SpotifyPlaylist : Screen("spotify_playlist/{playlistId}/{playlistName}?imageUrl={imageUrl}") {
         fun createRoute(id: String, name: String, url: String?): String {
             val encodedName = Uri.encode(name)

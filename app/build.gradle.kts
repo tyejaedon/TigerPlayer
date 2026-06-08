@@ -19,6 +19,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
+    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
 }
 kotlin {
     jvmToolchain(17)
@@ -49,11 +50,13 @@ configure<ApplicationExtension> {
         val clientId = secrets.getProperty("SPOTIFY_CLIENT_ID") ?: "MISSING_ID"
         val lastfmApiKey = secrets.getProperty("LASTFM_API_KEY") ?: "MISSING_API_KEY"
         val clientSecret = secrets.getProperty("SPOTIFY_CLIENT_SECRET") ?: "MISSING_SECRET"
+        val youtubeApiKey = secrets.getProperty("YOUTUBE_API_KEY") ?: "MISSING_YOUTUBE_KEY"
 
         // BuildConfig Fields
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$clientId\"")
         buildConfigField("String", "SPOTIFY_CLIENT_SECRET", "\"$clientSecret\"")
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastfmApiKey\"")
+        buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
     }
 
     buildTypes {
@@ -110,6 +113,7 @@ dependencies {
 
     // Activity & Navigation
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.foundation.layout)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.glance)
@@ -125,6 +129,7 @@ dependencies {
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.palette.ktx)
     implementation(libs.androidx.ui.graphics)
+    implementation(libs.animation)
 
     // --- Networking & Storage ---
     implementation(libs.retrofit)
@@ -132,6 +137,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.gson)
 
+    implementation(libs.kotlin.youtubeextractor)
     // --- Room (The Vault) ---
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
@@ -144,6 +150,9 @@ dependencies {
 
     // --- Image Loading ---
     implementation(libs.coil.compose)
+
+    // --- YouTube Player ---
+    implementation(libs.youtubePlayer)
 
     // --- Spotify Integration ---
     implementation(libs.auth)

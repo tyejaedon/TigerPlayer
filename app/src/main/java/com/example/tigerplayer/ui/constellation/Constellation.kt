@@ -4,7 +4,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.tigerplayer.constellation.NodeType
 import com.example.tigerplayer.constellation.PositionedNode
+import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -278,7 +278,7 @@ fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () 
                 .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = node.color)
                 .clip(shape)
                 .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, node.color.copy(alpha = 0.8f), shape)
-                .clickable { onClick() }
+                .bounceClick { onClick() }
         )
 
         // Floating Data Badge (Planets/Albums)

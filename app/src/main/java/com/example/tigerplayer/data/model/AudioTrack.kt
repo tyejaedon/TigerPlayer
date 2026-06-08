@@ -18,6 +18,7 @@ data class AudioTrack(
     val trackNumber: Int = 0,
     val serverPath: String? = null,
     val year: String? = null,
+    val dateAdded: Long = 0L,
     var isLiked: Boolean = false,
 
     // --- THE MISSING LINK ---

@@ -23,7 +23,7 @@ import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
         CachedTrackEntity::class, // <-- Added
         LyricsCacheEntity::class // 2. Add it to the array
     ],
-    version = 9, // <-- Bumped to 5 for year addition
+    version = 10, // <-- Bumped to 5 for year addition
     exportSchema = false
 )
 @TypeConverters(Converters::class)

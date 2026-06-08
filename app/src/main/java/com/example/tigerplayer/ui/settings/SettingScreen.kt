@@ -3,7 +3,6 @@ package com.example.tigerplayer.ui.settings
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,12 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.tigerplayer.ui.equalizer.AuralNexusScreen
 import com.example.tigerplayer.ui.equalizer.AuralNexusViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.bounceClick
 
-// --- Thematic Colors ---
 private val IgniRed = Color(0xFFF11F1A)
 private val AardBlue = Color(0xFF4FC3F7)
 private val BitPerfectGold = Color(0xFFFFD700)
@@ -45,11 +44,14 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
     onBackClick: () -> Unit
 ) {
-    val themeMode by viewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
-    val cacheSize by viewModel.cacheSizeFormatted.collectAsState()
+    // Collect variables safely conforming to the lifecycles of background service environments
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val cacheSize by viewModel.cacheSizeFormatted.collectAsStateWithLifecycle()
+    val isBp by viewModel.isBitPerfect.collectAsStateWithLifecycle()
 
     var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
     var showAuralNexusScreen by remember { mutableStateOf(false) }
+    var showSpotifyLogoutConfirm by remember { mutableStateOf(false) } // Safety confirmation state
 
     val scrollState = rememberScrollState()
 
@@ -95,12 +97,10 @@ fun SettingsScreen(
                     )
                 }
 
-                // --- SECTION: ACOUSTIC RESONANCE (UPGRADED) ---
+                // --- SECTION: ACOUSTIC RESONANCE ---
                 SettingsSection(title = "ACOUSTIC RESONANCE", icon = Icons.Rounded.Audiotrack) {
-                    val isBp by viewModel.isBitPerfect.collectAsState()
                     val primaryColor = if (isBp) BitPerfectGold else AardBlue
 
-                    // The Gateway Card
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -111,8 +111,7 @@ fun SettingsScreen(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                                 Text(
@@ -131,7 +130,6 @@ fun SettingsScreen(
                                 )
                             }
 
-                            // Dynamic UI Swap: Switch vs Switch + Tune Button
                             Switch(
                                 checked = isBp,
                                 onCheckedChange = { viewModel.toggleBitPerfect() },
@@ -143,8 +141,12 @@ fun SettingsScreen(
                                 )
                             )
 
-                            // The Tune Button reveals itself smoothly when DSP is active
-                            AnimatedVisibility(visible = !isBp) {
+                            // FIXED: Added horizontal transitions to avoid Row layout shifts and height jumps
+                            AnimatedVisibility(
+                                visible = !isBp,
+                                enter = expandHorizontally() + fadeIn(),
+                                exit = shrinkHorizontally() + fadeOut()
+                            ) {
                                 Row {
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Box(
@@ -169,7 +171,7 @@ fun SettingsScreen(
                         title = "Spotify Connection",
                         subtitle = "Sever the link with the cloud oracle",
                         action = {
-                            TextButton(onClick = { viewModel.logoutSpotify() }) {
+                            TextButton(onClick = { showSpotifyLogoutConfirm = true }) {
                                 Text("LOGOUT", color = IgniRed, fontWeight = FontWeight.Black)
                             }
                         }
@@ -214,12 +216,34 @@ fun SettingsScreen(
                 onClose = { showAuralNexusScreen = false }
             )
         }
+
+        // --- SAFETY CONFIRMATION DIALOG ---
+        if (showSpotifyLogoutConfirm) {
+            AlertDialog(
+                onDismissRequest = { showSpotifyLogoutConfirm = false },
+                title = { Text("SEVER CONNECTION", fontWeight = FontWeight.Black, color = Color.White) },
+                text = { Text("Are you certain you wish to sever the link with the cloud oracle? This will sign you out of Spotify.", color = Color.White.copy(alpha = 0.7f)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.logoutSpotify()
+                            showSpotifyLogoutConfirm = false
+                        }
+                    ) {
+                        Text("SEVER", color = IgniRed, fontWeight = FontWeight.Black)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSpotifyLogoutConfirm = false }) {
+                        Text("CANCEL", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = Color(0xFF151515),
+                shape = MaterialTheme.shapes.large
+            )
+        }
     }
 }
-
-// ==========================================
-// --- REUSABLE COMPONENTS ---
-// ==========================================
 
 @Composable
 fun SettingsSection(title: String, icon: ImageVector, content: @Composable () -> Unit) {
@@ -322,16 +346,16 @@ fun AboutMeSection() {
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
         Spacer(modifier = Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-            SocialLink("GitHub") { uriHandler.openUri("https://github.com/tyejaedon") }
-            SocialLink("LinkedIn") { uriHandler.openUri("https://linkedin.com/in/tyejaedon") }
-            SocialLink("Instagram") { uriHandler.openUri("https://instagram.com/tyjaedon") }
+            SocialLink("GitHub") { uriHandler.openUri("[https://github.com/tyejaedon](https://github.com/tyejaedon)") }
+            SocialLink("LinkedIn") { uriHandler.openUri("[https://linkedin.com/in/tyejaedon](https://linkedin.com/in/tyejaedon)") }
+            SocialLink("Instagram") { uriHandler.openUri("[https://instagram.com/tyjaedon](https://instagram.com/tyjaedon)") }
         }
     }
 }
 
 @Composable
 fun SocialLink(label: String, onClick: () -> Unit) {
-    Surface(color = Color.Transparent, shape = CircleShape, modifier = Modifier.clickable { onClick() }) {
+    Surface(color = Color.Transparent, shape = CircleShape, modifier = Modifier.bounceClick { onClick() }) {
         Text(label.uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }

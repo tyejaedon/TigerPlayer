@@ -182,34 +182,73 @@ class MediaDataRepository @Inject constructor(
         tigerDao.clearArtistCache()
     }
 
-    fun getHighResAlbumArt(albumName: String, artistName: String): Flow<String?> = flow {
+    /**
+     * Utility helper to strip bracketed clutter and trailing text (like "- Live")
+     * while preserving the clean, exact core names for surgical search accuracy.
+     */
+    private fun cleanSearchTerm(term: String): String {
+        return term
+            .replace(Regex("\\s*[(\\[](Explicit|Remastered|Deluxe|Live|O.S.T.|Original Motion Picture Soundtrack|Bonus Track|Mono|Stereo|Re-Recorded)[^\\])]*[\\])]", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+-\\s+.*$"), "") // Removes trailing single separators like "- Single"
+            .trim()
+    }
+
+    fun getHighResAlbumArt(title: String, artist: String, album: String): Flow<String?> = flow {
         val token = authManager.getValidToken()
         if (token.isEmpty()) {
             emit(null)
             return@flow
         }
 
-        // 🔥 THE FIX: Isolate the try-catch block from the emit function
         val highResUrl = try {
-            val query = "album:\"$albumName\" artist:\"$artistName\""
-            val response = spotifyApiService.searchAlbum("Bearer $token", query)
+            val cleanTitle = cleanSearchTerm(title)
+            val cleanArtist = cleanSearchTerm(artist)
+            val cleanAlbum = cleanSearchTerm(album)
+
+            // 1. SURGICAL SEARCH QUERY: track:"Title" artist:"Artist" album:"Album"
+            // Double quotes inside the search query force Spotify to perform an EXACT match search.
+            val strictQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\" album:\"$cleanAlbum\""
+
+            // Note: Using a general track search is superior because Track items contain
+            // direct high-resolution links to their parent Album image arrays.
+            val response = spotifyApiService.searchTrack("Bearer $token", strictQuery)
 
             if (response.isSuccessful) {
-                response.body()?.albums?.items?.firstOrNull()?.images?.firstOrNull()?.url
+                val trackItem = response.body()?.tracks?.items?.firstOrNull()
+
+                // 2. THE SECURITY GUARD: Verify the search result against our clean criteria
+                // to eliminate false positives entirely.
+                val matchTitle = trackItem?.name?.equals(cleanTitle, ignoreCase = true) == true
+                val matchArtist = trackItem?.artists?.any { it.name.equals(cleanArtist, ignoreCase = true) } == true
+
+                if (matchTitle && matchArtist) {
+                    trackItem.album?.images?.firstOrNull()?.url
+                } else {
+                    // FALLBACK QUERY: If the exact album metadata is too noisy, search strictly by Track & Artist.
+                    val fallbackQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\""
+                    val fallbackResponse = spotifyApiService.searchTrack("Bearer $token", fallbackQuery)
+
+                    if (fallbackResponse.isSuccessful) {
+                        val fallbackTrack = fallbackResponse.body()?.tracks?.items?.firstOrNull()
+                        val fbMatchTitle = fallbackTrack?.name?.equals(cleanTitle, ignoreCase = true) == true
+                        val fbMatchArtist = fallbackTrack?.artists?.any { it.name.equals(cleanArtist, ignoreCase = true) } == true
+
+                        if (fbMatchTitle && fbMatchArtist) {
+                            fallbackTrack?.album?.images?.firstOrNull()?.url
+                        } else null
+                    } else null
+                }
             } else {
                 null
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            Log.e("MediaRepo", "Album Art Hunt failed: ${e.message}")
+            Log.e("MediaRepo", "Strict Album Art search failed: ${e.message}")
             null
         }
 
-        // Only emit once we are safely outside the exception hunting grounds
         emit(highResUrl)
-
     }.flowOn(Dispatchers.IO)
-
     // ==========================================
     // --- GRIMOIRE MANAGEMENT (Playlists) ---
     // ==========================================

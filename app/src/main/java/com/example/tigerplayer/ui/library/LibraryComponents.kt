@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -24,7 +24,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.ui.theme.TigerTextHigh
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import java.util.concurrent.TimeUnit
 
@@ -130,8 +132,7 @@ fun ChapterSongRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // THE FIX: Applying clickable to the Row but ensuring the IconButton is a separate 'island'
-            .clickable { onClick() }
+            .bounceClick { onClick() }
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .then(
                 if (isCurrentTrack) Modifier.background(
@@ -211,6 +212,7 @@ fun ChapterSongRow(
         }
     }
 }
+
 
 @SuppressLint("DefaultLocale")
 private fun formatDuration(durationMs: Long): String {

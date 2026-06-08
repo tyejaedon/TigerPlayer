@@ -50,7 +50,9 @@ import com.example.tigerplayer.ui.extras.NowBriefWidgetWrapper
 import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 import kotlin.math.absoluteValue
 
 // --- VANGUARD THEME CONSTANTS ---
@@ -228,6 +230,7 @@ fun ConstellationGatewayCard(onClick: () -> Unit) {
             .padding(horizontal = 24.dp, vertical = 8.dp)
             .shadow(16.dp, MaterialTheme.shapes.extraLarge, spotColor = NeuralPurple.copy(alpha = 0.3f))
             .clip(MaterialTheme.shapes.extraLarge)
+            .glassEffect(MaterialTheme.shapes.extraLarge)
             .background(Brush.linearGradient(listOf(Color(0xFF1E103C), Color(0xFF120B24))))
             .border(1.dp, NeuralPurple.copy(alpha = 0.2f), MaterialTheme.shapes.extraLarge)
             .bounceClick { onClick() }
@@ -427,6 +430,7 @@ fun StatGlassWidget(
         modifier = modifier
             .height(if (isFullWidth) 72.dp else 88.dp)
             .clip(MaterialTheme.shapes.large)
+            .glassEffect(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
             .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.shapes.large)
     ) {
@@ -497,84 +501,79 @@ fun HomeHeader(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        AnimatedVisibility(
-            visible = isSearchActive,
-            enter = fadeIn(tween(300)) + expandHorizontally(expandFrom = Alignment.End),
-            exit = fadeOut(tween(200)) + shrinkHorizontally(shrinkTowards = Alignment.End),
-            modifier = Modifier.weight(1f, fill = false)
-        ) {
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(AardBlue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    // Safe background structure to prevent "Negative bounds" crash
-                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                decorationBox = { innerTextField ->
-                    Row(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Search, null, tint = AardBlue, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (searchQuery.isEmpty()) {
-                                Text("Search archives...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyLarge)
-                            }
-                            innerTextField()
+        AnimatedContent(
+            targetState = isSearchActive,
+            transitionSpec = {
+                (fadeIn(tween(300)) + slideInHorizontally { it / 2 }).togetherWith(
+                    fadeOut(tween(200)) + slideOutHorizontally { it / 2 }
+                )
+            }
+
+        ) {searchactive->
+            if (searchactive) {
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    placeholder = {
+                        Text(
+                            "Search grimoires...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = CircleShape,
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.aardBlue,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            null,
+                            tint = MaterialTheme.aardBlue
+                        )
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSearchToggle() }) {
+                            Icon(
+                                Icons.Default.Close,
+                                "Close",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
-                }
-            )
-        }
+                )
+            } else{
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSearchToggle() },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                    ) {
+                        Icon(Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurface)
+                    }
 
-        AnimatedVisibility(
-            visible = isSearchActive,
-            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End),
-            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End)
-        ) {
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onSearchToggle()
-                },
-                modifier = Modifier.padding(start = 8.dp).size(48.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-            ) {
-                Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
-            }
-        }
+                    Spacer(modifier = Modifier.width(12.dp))
 
-        AnimatedVisibility(
-            visible = !isSearchActive,
-            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSearchToggle() },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                ) {
-                    Icon(Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurface)
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                IconButton(
-                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsClick() },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                ) {
-                    Icon(WitcherIcons.Settings, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), modifier = Modifier.size(22.dp))
+                    IconButton(
+                        onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsClick() },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    ) {
+                        Icon(WitcherIcons.Settings, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), modifier = Modifier.size(22.dp))
+                    }
                 }
             }
         }
+
+            }
     }
-}

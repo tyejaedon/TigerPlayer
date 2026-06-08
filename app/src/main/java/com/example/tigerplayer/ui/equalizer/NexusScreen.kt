@@ -32,7 +32,6 @@ import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import kotlin.math.*
 
-// Premium Theme Colors
 private val AardBlue = Color(0xFF4FC3F7)
 private val IgniRed = Color(0xFFFF5252)
 private val NeuralPurple = Color(0xFFB388FF)
@@ -49,7 +48,7 @@ fun AuralNexusScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF030406)) // Deep void background
+            .background(Color(0xFF030406))
     ) {
         NebulaBackground(uiState.frequencyResponseCurve)
 
@@ -137,7 +136,6 @@ fun NexusSpatialCanvas(
         Canvas(Modifier.fillMaxSize()) {
             val dashEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)
 
-            // Concentric Rings
             for (i in 1..4) {
                 drawCircle(
                     color = Color.White.copy(alpha = 0.04f / i),
@@ -147,24 +145,26 @@ fun NexusSpatialCanvas(
                 )
             }
 
-            // Crosshairs
             drawLine(Color.White.copy(0.06f), Offset(0f, cy), Offset(w, cy), strokeWidth = 2f)
             drawLine(Color.White.copy(0.06f), Offset(cx, 0f), Offset(cx, h), strokeWidth = 2f)
         }
 
         // --- CELESTIAL NODES ---
         nodes.forEach { node ->
+            // FIXED: Key local drag states to individual node IDs to avoid loop reuse bugs
+            var isDragging by remember(node.id) { mutableStateOf(false) }
+            var dragOffset by remember(node.id) { mutableStateOf(node.spatialPos) }
 
-            // 🔥 UX FIX: Maintain a local mutable state for ultra-fast UI rendering.
-            // This prevents the node from lagging behind the finger due to state cycle delays.
-            var isDragging by remember { mutableStateOf(false) }
-            var dragOffset by remember { mutableStateOf(node.spatialPos) }
+            // FIXED: Update dragOffset locally if ViewModel state changes from outside (Preset selections)
+            LaunchedEffect(node.spatialPos) {
+                if (!isDragging) {
+                    dragOffset = node.spatialPos
+                }
+            }
 
-            // Sync with ViewModel when NOT dragging
             val targetPos = if (isDragging) dragOffset else node.spatialPos
 
-            // 🔥 UX FIX: If dragging, use a snap() animation so it stays glued to your finger.
-            // Only apply the smooth spring animation when letting go or changing presets.
+            // Smoothed spring only fires on release or preset modification, not during dragging
             val animatedPos by animateOffsetAsState(
                 targetValue = targetPos,
                 animationSpec = if (isDragging) snap() else spring(dampingRatio = 0.65f, stiffness = 250f),
@@ -174,7 +174,6 @@ fun NexusSpatialCanvas(
             val px = cx + animatedPos.x * cx
             val py = cy + animatedPos.y * cy
 
-            // Calculate glowing intensity based on proximity to center (Y-axis Gain)
             val glowIntensity = (1f - (abs(animatedPos.y))).coerceIn(0.2f, 1f)
 
             Box(
@@ -192,8 +191,7 @@ fun NexusSpatialCanvas(
                             },
                             onDragEnd = {
                                 isDragging = false
-                                // 🔥 UX FIX: Axis-Independent Magnetic Snapping applied ONLY on release.
-                                // This prevents the "black hole" trap mid-drag.
+                                // Magnetic snapping on axis lines applied purely on end of drag
                                 val snapX = if (abs(dragOffset.x) < 0.08f) 0f else dragOffset.x
                                 val snapY = if (abs(dragOffset.y) < 0.08f) 0f else dragOffset.y
                                 onNodeDragged(node.id, Offset(snapX, snapY))
@@ -209,26 +207,21 @@ fun NexusSpatialCanvas(
                             val newY = (dragOffset.y + dragAmount.y / cy).coerceIn(-1f, 1f)
 
                             dragOffset = Offset(newX, newY)
-
-                            // Dispatch raw continuous updates to the ViewModel for live visual nebula feedback
                             onNodeDragged(node.id, dragOffset)
                         }
                     }
             ) {
                 Canvas(Modifier.fillMaxSize()) {
-                    // Outer Plasma Glow
                     drawCircle(
                         brush = Brush.radialGradient(
                             listOf(node.color.copy(alpha = glowIntensity * 0.6f), Color.Transparent)
                         ),
                         radius = size.width / 2f
                     )
-                    // Solid Core
                     drawCircle(
                         color = node.color,
                         radius = 12.dp.toPx()
                     )
-                    // Inner Cutout
                     drawCircle(
                         color = Color(0xFF030406),
                         radius = 6.dp.toPx()
@@ -334,7 +327,7 @@ fun NebulaBackground(points: List<Offset>) {
     Canvas(
         modifier = Modifier
             .fillMaxSize()
-            .blur(24.dp) // Heavy blur to make the hard math lines look like glowing gas
+            .blur(24.dp)
     ) {
         if (points.isEmpty()) return@Canvas
 
@@ -359,7 +352,6 @@ fun NebulaBackground(points: List<Offset>) {
             path.cubicTo(midX, py, midX, cy2, cx, cy2)
         }
 
-        // Giant Outer Glow
         drawPath(
             path = path,
             brush = Brush.horizontalGradient(listOf(IgniRed, BitPerfectGold, AardBlue, NeuralPurple)),
@@ -367,7 +359,6 @@ fun NebulaBackground(points: List<Offset>) {
             alpha = alphaAnim * 0.5f
         )
 
-        // Focused Inner Core
         drawPath(
             path = path,
             brush = Brush.horizontalGradient(listOf(IgniRed, BitPerfectGold, AardBlue, NeuralPurple)),
@@ -375,7 +366,6 @@ fun NebulaBackground(points: List<Offset>) {
             alpha = alphaAnim
         )
 
-        // Sharp Technical Line
         drawPath(
             path = path,
             color = Color.White.copy(alpha = 0.6f),
