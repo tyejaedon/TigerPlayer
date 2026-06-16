@@ -57,12 +57,12 @@ class MetadataEngine @Inject constructor(
         }
     }
 
-    suspend fun fetchSpotifyHighResArt(title: String, artist: String): Uri? {
+    suspend fun fetchSpotifyHighResArt(title: String, artist: String,album:String): Uri? {
         var highResUrl: String? = null
         try {
             // 🔥 THE FIX: We use collect instead of firstOrNull() to prevent the Coroutine system
             // from throwing an AbortFlowException and crashing the Repository's try/catch block.
-            mediaDataRepository.getHighResAlbumArt(title, artist).collect { url ->
+            mediaDataRepository.getHighResAlbumArt(title, artist,album).collect { url ->
                 if (highResUrl == null) highResUrl = url
             }
         } catch (e: Exception) {

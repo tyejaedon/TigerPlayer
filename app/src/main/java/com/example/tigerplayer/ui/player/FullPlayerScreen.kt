@@ -3,6 +3,8 @@ package com.example.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
 import android.graphics.drawable.BitmapDrawable
+import android.opengl.GLSurfaceView
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -10,12 +12,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -31,8 +31,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -48,11 +47,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
@@ -67,12 +68,15 @@ import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.igniRed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import kotlin.math.PI
 import kotlin.math.sin
 
 private val IgniRed = Color(0xFFF11F1A)
+
+enum class MainViewState {
+    ARTWORK, LYRICS, QUEUE
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -82,46 +86,22 @@ fun FullPlayerScreen(
     onNavigateToAlbum: (String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-    val currentTrack = uiState.currentTrack
-    var lastKnownTrack by remember { mutableStateOf<AudioTrack?>(null) }
-
-    LaunchedEffect(currentTrack) {
-        if (currentTrack != null) {
-            lastKnownTrack = currentTrack
-        }
-    }
-
-    val track = currentTrack ?: lastKnownTrack ?: return
+    val track = uiState.currentTrack ?: return
     val context = LocalContext.current
-
-    val motionThrottle by animateFloatAsState(
-        targetValue = if (uiState.isPlaying) 1f else 0f,
-        animationSpec = tween(1000, easing = FastOutSlowInEasing),
-        label = "MotionThrottle"
-    )
 
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
+    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
 
     val themeSurface = MaterialTheme.colorScheme.surface
-    val themeOnSurface = MaterialTheme.colorScheme.onSurface
     var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
+    var dynamicTextColor by remember { mutableStateOf(Color(0xFFF5F5F5)) }
 
-    // For a glassy look, force brighter text to contrast against the frosted dark background
-    var dynamicTextColor by remember(themeOnSurface) { mutableStateOf(Color(0xFFF5F5F5)) }
-    var dynamicSecondaryTextColor by remember(themeOnSurface) { mutableStateOf(Color(0xFFF5F5F5).copy(alpha = 0.7f)) }
-
-    val scope = rememberCoroutineScope()
-    val offsetXAnimate = remember { Animatable(0f) }
-    val dragThreshold = 150f
-
-    val imageUrl = if (showLyrics) uiState.artistImageUrl ?: track.artworkUri else track.artworkUri
-    val imageRequest = remember(imageUrl) {
+    val imageRequest = remember(track.artworkUri) {
         ImageRequest.Builder(context)
-            .data(imageUrl)
+            .data(track.artworkUri)
             .crossfade(true)
             .allowHardware(false)
             .listener(onSuccess = { _, result ->
@@ -131,175 +111,146 @@ fun FullPlayerScreen(
                         val extractedColor = palette?.dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
                         dominantBgColor = extractedColor
                         viewModel.updateTrackColor(extractedColor)
-
                         val luminance = ColorUtils.calculateLuminance(extractedColor.toArgb())
                         dynamicTextColor = if (luminance > 0.5) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
-                        dynamicSecondaryTextColor = dynamicTextColor.copy(alpha = 0.7f)
                     }
                 }
             })
             .build()
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "ArtworkDrift")
-    val driftScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f, targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(tween(30000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftScale"
-    )
-    val driftPanX by infiniteTransition.animateFloat(
-        initialValue = -30f, targetValue = 30f,
-        animationSpec = infiniteRepeatable(tween(22000, easing = LinearEasing), RepeatMode.Reverse), label = "DriftPanX"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    if (dragAmount.y > 20) onCollapse()
-                }
-            }
-    ) {
-        // --- FROSTED GLASS BACKGROUND ---
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        // --- 1. SHARP CINEMATIC BACKGROUND ---
         AsyncImage(
             model = imageRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(radius = 64.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded) // The core glassmorphism foundation
-                .graphicsLayer {
-                    val scaleFactor = 1f + ((driftScale - 1f) * motionThrottle)
-                    scaleX = scaleFactor
-                    scaleY = scaleFactor
-                    translationX = offsetXAnimate.value + (driftPanX * motionThrottle)
-                    alpha = 0.6f + (0.4f * motionThrottle)
-                }
+            modifier = Modifier.fillMaxSize().alpha(0.4f)
         )
 
-        // Dark gradient overlay to provide contrast for the bright glass reflections
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Black.copy(alpha = 0.4f),
-                        0.5f to dominantBgColor.copy(alpha = 0.3f),
-                        1.0f to Color.Black.copy(alpha = 0.85f) // Darker bottom to make the glass pop
-                    )
-                )
-        )
+        Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.9f)))))
 
+        // --- 2. FOREGROUND CORE CONTENT (Fixed Rendering Order) ---
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
                 .statusBarsPadding()
-                .navigationBarsPadding(),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .navigationBarsPadding()
         ) {
+            // FIXED: HeaderRitual sits at the top of the Column so it is visible and clickable in front of the blur layers
             HeaderRitual(
                 dynamicTextColor = dynamicTextColor,
                 onCollapse = onCollapse,
                 showLyrics = showLyrics,
-                onToggleLyrics = { showLyrics = it; showQueue = false },
+                onToggleLyrics = {
+                    showLyrics = it
+                    if (it) showQueue = false
+                },
                 showQueue = showQueue,
-                onToggleQueue = { showQueue = it; showLyrics = false },
-                onShowOptions = { showOptionsSheet = true },
+                onToggleQueue = {
+                    showQueue = it
+                    if (it) showLyrics = false
+                },
+                onShowOptions = {
+                    trackForOptions = track
+                    showOptionsSheet = true
+                },
                 track = track
             )
 
+            // --- MAIN VIEW AREA (Artwork, Lyrics, or Queue) ---
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+
+                val targetState = when {
+                    showQueue -> MainViewState.QUEUE
+                    showLyrics -> MainViewState.LYRICS
+                    else -> MainViewState.ARTWORK
+                }
+
                 AnimatedContent(
-                    targetState = if (showQueue) "queue" else if (showLyrics) "lyrics" else "artwork",
-                    transitionSpec = { fadeIn(tween(500)).togetherWith(fadeOut(tween(400))) },
-                    label = "ContentAnim"
-                ) { type ->
-                    when (type) {
-                        "queue" -> QueueDisplay(
-                            queue = uiState.queue,
-                            currentTrackId = track.id,
-                            isPlaying = uiState.isPlaying,
-                            dynamicTextColor = dynamicTextColor,
-                            onTrackClick = { viewModel.playTrack(it) },
-                            shuffleModeEnabled = uiState.isShuffleEnabled,
-                            repeatMode = uiState.repeatMode,
-                            onRemoveFromQueue = { viewModel.removeFromQueue(it) },
-                            onMoveItem = { from, to -> viewModel.moveQueueItem(from, to) }
+                    targetState = targetState,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(400)) + scaleIn(initialScale = 0.95f)).togetherWith(
+                            fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 1.05f)
                         )
-                        "lyrics" -> LyricsDisplay(
-                            lyrics = uiState.currentLyrics,
-                            currentPosition = uiState.currentPosition,
-                            textColor = dynamicTextColor
-                        )
-                        "artwork" -> {
-                            Crossfade(
-                                targetState = uiState.visualMode,
-                                animationSpec = tween(600, easing = FastOutSlowInEasing),
-                                label = "VisualModeCrossfade",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .pointerInput(Unit) {
-                                        detectHorizontalDragGestures(
-                                            onHorizontalDrag = { change, dragAmount ->
-                                                change.consume()
-                                                scope.launch { offsetXAnimate.snapTo(offsetXAnimate.value + (dragAmount * 0.5f)) }
-                                            },
-                                            onDragEnd = {
-                                                scope.launch {
-                                                    if (offsetXAnimate.value > dragThreshold) viewModel.skipToPrevious()
-                                                    else if (offsetXAnimate.value < -dragThreshold) viewModel.skipToNext()
-                                                    offsetXAnimate.animateTo(0f, spring(dampingRatio = Spring.DampingRatioLowBouncy))
-                                                }
-                                            }
-                                        )
-                                    }
-                            ) { mode ->
+                    },
+                    label = "MainViewSwitch"
+                ) { state ->
+                    when (state) {
+                        MainViewState.QUEUE -> {
+                            QueueDisplay(
+                                queue = uiState.queue,
+                                currentTrackId = track.id,
+                                isPlaying = uiState.isPlaying,
+                                shuffleModeEnabled = uiState.isShuffleEnabled,
+                                repeatMode = uiState.repeatMode,
+                                dynamicTextColor = dynamicTextColor,
+                                onTrackClick = { viewModel.playTrack(it) },
+                                onRemoveFromQueue = { viewModel.removeFromQueue(it) },
+                                onMoveItem = { from, to -> viewModel.moveQueueItem(from, to) }
+                            )
+                        }
+                        MainViewState.LYRICS -> {
+                            // FIXED: Connected to currentLyrics state dynamically instead of returning null
+                            LyricsDisplay(
+                                lyrics = uiState.currentLyrics,
+                                currentPosition = uiState.currentPosition,
+                                textColor = dynamicTextColor
+                            )
+                        }
+                        MainViewState.ARTWORK -> {
+                            // 3D Parallax Art logic (FIXED: Bracket alignment structure completely normalized)
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                val density = LocalDensity.current.density
+                                val tiltX by remember { mutableFloatStateOf(0f) }
+                                val tiltY by remember { mutableFloatStateOf(0f) }
+
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer { translationX = offsetXAnimate.value }
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                            onClick = { viewModel.toggleVisualMode() }
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    when (mode) {
-                                        PlayerVisualMode.ARTWORK -> {
-                                            AsyncImage(
-                                                model = track.artworkUri,
-                                                contentDescription = "Album Cover",
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .fillMaxWidth(0.85f)
-                                                    .aspectRatio(1f)
-                                                    .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = dominantBgColor)
-                                                    .border(
-                                                        1.5.dp,
-                                                        Brush.linearGradient(listOf(Color.White.copy(0.4f), Color.White.copy(0.0f))),
-                                                        RoundedCornerShape(32.dp)
-                                                    )
-                                                    .clip(RoundedCornerShape(32.dp))
-                                            )
+                                        .fillMaxWidth(0.85f)
+                                        .aspectRatio(1f)
+                                        .graphicsLayer {
+                                            rotationX = tiltX
+                                            rotationY = tiltY
+                                            cameraDistance = 16f * density
                                         }
-                                        PlayerVisualMode.WAVEFORM -> {
-                                            val isWaveformLoading = uiState.currentWaveform.isEmpty()
-                                            val waveform = uiState.currentWaveform.ifEmpty { List(80) { 0.15f } }
+                                        .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = dominantBgColor)
+                                        .clip(RoundedCornerShape(32.dp))
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(onTap = { viewModel.toggleVisualMode() })
+                                        }
+                                ) {
+                                    // 1. Base Cover Art
+                                    AsyncImage(
+                                        model = track.artworkUri,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
 
-                                            val progress = if (track.durationMs > 0L) {
-                                                uiState.currentPosition.toFloat() / track.durationMs.toFloat()
-                                            } else 0f
+                                    // 2. Vortex Overlay
+                                    androidx.compose.animation.AnimatedVisibility(visible = uiState.visualMode == PlayerVisualMode.VORTEX) {
+                                        FluidVortexRenderer(
+                                            isPlaying = uiState.isPlaying,
+                                            amplitudes = uiState.currentWaveform,
+                                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(32.dp))
+                                        )
+                                    }
 
-                                            FullWaveformSeekBar(
-                                                amplitudes = waveform,
-                                                progress = progress,
+                                    // 3. Waveform Overlay (FIXED: Brought back AnimatedVisibility wrapper)
+                                    androidx.compose.animation.AnimatedVisibility(visible = uiState.visualMode == PlayerVisualMode.WAVEFORM) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black.copy(0.6f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            SmoothWaveform(
+                                                amplitudes = uiState.currentWaveform,
+                                                progress = (uiState.currentPosition.toFloat() / track.durationMs.coerceAtLeast(1L)),
                                                 isPlaying = uiState.isPlaying,
-                                                color = dynamicTextColor,
-                                                isLoading = isWaveformLoading
+                                                color = dynamicTextColor
                                             )
                                         }
                                     }
@@ -310,143 +261,62 @@ fun FullPlayerScreen(
                 }
             }
 
-            // --- THE GLASS DOCK ---
-            AnimatedVisibility(
-                visible = !showLyrics && !showQueue,
-                enter = fadeIn(tween(600)) + slideInVertically(initialOffsetY = { it / 3 }, animationSpec = spring(stiffness = Spring.StiffnessLow)),
-                exit = fadeOut(tween(400)) + slideOutVertically(targetOffsetY = { it / 3 })
+            // --- DOCK GLASS (Info, Seeker, Controls) ---
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp)
+                    .clip(RoundedCornerShape(36.dp))
+                    .background(Color.White.copy(0.05f))
+                    .padding(24.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp)
-                        .shadow(elevation = 32.dp * motionThrottle, shape = RoundedCornerShape(36.dp), spotColor = Color.Black)
-                        .clip(RoundedCornerShape(36.dp))
-                        // The Translucent Glass Background
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.10f),
-                                    Color.White.copy(alpha = 0.03f)
-                                ),
-                                start = Offset.Zero,
-                                end = Offset.Infinite
-                            )
-                        )
-                        // The Specular Glass Highlight Edge
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.4f),
-                                    Color.Transparent,
-                                    Color.White.copy(alpha = 0.05f)
-                                ),
-                                start = Offset.Zero,
-                                end = Offset.Infinite
-                            ),
-                            shape = RoundedCornerShape(36.dp)
-                        )
-                        .padding(vertical = 24.dp, horizontal = 12.dp)
-                ) {
-                    TrackInfoCard(
-                        track = track,
-                        textColor = dynamicTextColor,
-                        secondaryTextColor = dynamicSecondaryTextColor,
-                        showTechnicalInfo = showTechnicalInfo,
-                        onToggleTechInfo = { showTechnicalInfo = it },
-                        onToggleLike = { viewModel.toggleTrackLikeStatus(track) }
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    FieryWavySeeker(uiState = uiState, track = track, viewModel = viewModel, textColor = dynamicTextColor)
-                    Spacer(modifier = Modifier.height(20.dp))
-                    PlaybackControls(uiState = uiState, viewModel = viewModel, textColor = dynamicTextColor)
-                }
+                TrackInfoCard(track, dynamicTextColor, dynamicTextColor.copy(0.7f), showTechnicalInfo, { showTechnicalInfo = it }, { viewModel.toggleTrackLikeStatus(track) })
+                Spacer(modifier = Modifier.height(20.dp))
+                FieryWavySeeker(uiState, track, viewModel, dynamicTextColor)
+                Spacer(modifier = Modifier.height(16.dp))
+                PlaybackControls(uiState, viewModel, dynamicTextColor)
             }
         }
 
+        // Modal Bottom Sheet Placeholder for Options
         if (showOptionsSheet) {
-            SongOptionsSheet(
-                track = track,
-                playlists = viewModel.customPlaylists.collectAsState(emptyList()).value,
-                onDismiss = { showOptionsSheet = false },
-                onPlayNext = { viewModel.addToQueue(track) },
-                onAddToPlaylist = { viewModel.addTrackToPlaylist(it, track) },
-                onGoToAlbum = { albumName ->
-                    showOptionsSheet = false
-                    onCollapse()
-                    onNavigateToAlbum(albumName)
-                }
-            )
+            trackForOptions?.let { selectedTrack ->
+                SongOptionsSheet(
+                    track = selectedTrack,
+                    playlists = uiState.customPlaylists,
+                    onDismiss = {
+                        trackForOptions = null
+                        showOptionsSheet = false // FIXED: Ensure both are reset upon sheet collapse
+                    },
+                    onPlayNext = {
+                        viewModel.addToQueue(selectedTrack)
+                    },
+                    onAddToPlaylist = { playlistId ->
+                        viewModel.addTrackToPlaylist(playlistId, selectedTrack)
+                    },
+                    onGoToAlbum = { albumName ->
+                        Toast.makeText(context, "Album: $albumName", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
         }
     }
 }
 
-// ==========================================
-// --- THE LIVE WAVEFORM ENGINE ---
-// ==========================================
-
 @Composable
-fun FullWaveformSeekBar(
-    amplitudes: List<Float>,
-    progress: Float,
-    isPlaying: Boolean,
-    color: Color,
-    isLoading: Boolean = false
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "LiveWaveform")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing)),
-        label = "Phase"
-    )
+fun SmoothWaveform(amplitudes: List<Float>, progress: Float, isPlaying: Boolean, color: Color) {
+    val animatedProgress = animateFloatAsState(progress, animationSpec = tween(500, easing = LinearEasing), label = "").value
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth(0.85f)
-            .height(180.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        amplitudes.forEachIndexed { index, baseAmp ->
-            val barProgress = index.toFloat() / amplitudes.size
-            val isPlayed = barProgress <= progress
-
-            val actualAmp = if (isLoading) {
-                0.15f + 0.1f * sin(phase * 2 + index * 0.2f)
-            } else {
-                (baseAmp * 1.8f).coerceIn(0.05f, 1f)
-            }
-
-            val liveRipple = if (isPlaying && !isLoading) {
-                val rippleSpeed = phase * if (isPlayed) 1f else 1.5f
-                val rippleDensity = if (isPlayed) 0.5f else 0.2f
-                0.85f + 0.15f * sin(rippleSpeed + index * rippleDensity)
-            } else {
-                1f
-            }
-
-            val targetHeight = (actualAmp * liveRipple).coerceIn(0.05f, 1f)
-
-            val animatedHeight by animateFloatAsState(
-                targetValue = targetHeight,
-                animationSpec = spring(dampingRatio = 0.7f, stiffness = 400f),
-                label = "waveHeight"
-            )
-
-            val animatedColor by animateColorAsState(
-                targetValue = if (isPlayed) color else color.copy(alpha = 0.2f),
-                animationSpec = tween(200),
-                label = "waveColor"
-            )
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(animatedHeight)
-                    .clip(RoundedCornerShape(50))
-                    .background(animatedColor)
+    Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 24.dp)) {
+        amplitudes.forEachIndexed { index, amp ->
+            val barHeight = amp * size.height
+            val x = index * (size.width / amplitudes.size)
+            drawLine(
+                color = if (index / amplitudes.size.toFloat() <= animatedProgress) color else color.copy(0.3f),
+                start = Offset(x, size.height / 2 - barHeight / 2),
+                end = Offset(x, size.height / 2 + barHeight / 2),
+                strokeWidth = 4f,
+                cap = StrokeCap.Round
             )
         }
     }
@@ -530,9 +400,6 @@ fun HeaderRitual(
     }
 }
 
-// ==========================================
-// --- TRACK INFO CARD ---
-// ==========================================
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackInfoCard(
@@ -576,17 +443,13 @@ fun TrackInfoCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
-        // Stripped the bulky background to let the parent's glass shine through!
     ) {
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-
             Column(modifier = Modifier.weight(1f)) {
-
                 Text(
                     track.title,
                     style = MaterialTheme.typography.headlineLarge,
@@ -598,9 +461,7 @@ fun TrackInfoCard(
                         velocity = 40.dp
                     )
                 )
-
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
                     track.artist,
                     style = MaterialTheme.typography.titleMedium,
@@ -621,32 +482,18 @@ fun TrackInfoCard(
             )
 
             val tint by animateColorAsState(
-                targetValue = if (track.isLiked)
-                    MaterialTheme.igniRed
-                else
-                    textColor.copy(alpha = 0.7f),
+                targetValue = if (track.isLiked) MaterialTheme.igniRed else textColor.copy(alpha = 0.7f),
                 label = "likeColor"
             )
 
             IconButton(
                 onClick = onToggleLike,
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .size(48.dp)
+                modifier = Modifier.padding(start = 16.dp).size(48.dp)
             ) {
                 Icon(
-                    imageVector = if (track.isLiked)
-                        Icons.Rounded.Favorite
-                    else
-                        Icons.Rounded.FavoriteBorder,
-
-                    contentDescription = if (track.isLiked)
-                        "Unlike song"
-                    else
-                        "Like song",
-
+                    imageVector = if (track.isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = if (track.isLiked) "Unlike song" else "Like song",
                     tint = tint,
-
                     modifier = Modifier.scale(scale)
                 )
             }
@@ -655,10 +502,7 @@ fun TrackInfoCard(
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-
-            val format = track.mimeType
-                .substringAfter("/")
-                .uppercase()
+            val format = track.mimeType.substringAfter("/").uppercase()
 
             MetadataBadge(
                 text = if (track.mimeType.contains("flac")) "HI-RES" else format,
@@ -702,7 +546,6 @@ private fun MetadataBadge(
     textColor: Color,
     onLongClick: () -> Unit = {}
 ) {
-    // Glass Pill Badge
     Surface(
         color = Color.Transparent,
         shape = CircleShape,
@@ -738,10 +581,6 @@ private fun MetadataBadge(
         )
     }
 }
-
-// ==========================================
-// --- CONTROLS & SEEKER ---
-// ==========================================
 
 @SuppressLint("AutoboxingStateCreation")
 @Composable
@@ -803,7 +642,6 @@ fun FieryWavySeeker(
                 val centerY = size.height / 2
                 val progressX = size.width * animatedProgress
 
-                // The subtle glass background track
                 drawLine(
                     color = Color.White.copy(alpha = 0.15f),
                     start = Offset(0f, centerY),
@@ -821,7 +659,10 @@ fun FieryWavySeeker(
                     path.lineTo(x.toFloat(), centerY + (amp * sin(x * 0.05f + phase)))
                 }
 
-                drawPath(path = path, color = accentColor, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
+                drawPath(path = path, color = accentColor, style = Stroke(
+                    width = 4.dp.toPx(),
+                    cap = StrokeCap.Round
+                ))
                 drawCircle(color = accentColor, radius = 6.dp.toPx(), center = Offset(progressX, centerY + (amp * sin(progressX * 0.05f + phase))))
             }
         }
@@ -875,7 +716,6 @@ fun PlaybackControls(
         )
         val coreColor by animateColorAsState(targetValue = if (isPlaying) igniRed else aardBlue, animationSpec = tween(600, easing = FastOutSlowInEasing), label = "CoreColor")
 
-        // Glass Orb Play Button
         Box(
             modifier = Modifier
                 .size(84.dp)
@@ -923,10 +763,6 @@ fun PlaybackControls(
         }
     }
 }
-
-// ==========================================
-// --- QUEUE & LYRICS ---
-// ==========================================
 
 @Composable
 fun QueueDisplay(
@@ -1026,7 +862,6 @@ fun QueueDisplay(
                     color = Color.Transparent,
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    // Glass Card for active or dragging items
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1084,7 +919,7 @@ private fun parseLrc(lrc: String?): List<LyricLine> {
 }
 
 @Composable
-private fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Color) {
+fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Color) {
     if (lyrics.isNullOrBlank()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) { Text("NO LYRICS FOUND", color = textColor.copy(0.4f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black) }
     } else {

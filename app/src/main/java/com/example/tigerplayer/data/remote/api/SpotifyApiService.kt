@@ -6,7 +6,13 @@ import retrofit2.http.*
 
 interface SpotifyApiService {
 
-    // --- SEARCH ARCHIVES ---
+    @GET("v1/search")
+    suspend fun searchTrack(
+        @Header("Authorization") token: String,
+        @Query("q") query: String,
+        @Query("type") type: String = "track",
+        @Query("limit") limit: Int = 5
+    ): Response<SpotifySearchResponse>
 
     @GET("v1/search")
     suspend fun searchArtist(
@@ -14,7 +20,7 @@ interface SpotifyApiService {
         @Query("q") query: String,
         @Query("type") type: String = "artist",
         @Query("limit") limit: Int = 1
-    ): Response<SpotifySearchResponse> // Now returns the unified search model
+    ): Response<SpotifySearchResponse>
 
     @GET("v1/search")
     suspend fun searchAlbum(
@@ -24,21 +30,17 @@ interface SpotifyApiService {
         @Query("limit") limit: Int = 1
     ): Response<SpotifySearchResponse>
 
-    // --- USER LIBRARY (The Grimoires) ---
-
     @GET("v1/me/playlists")
     suspend fun getUserPlaylists(
         @Header("Authorization") bearerToken: String,
         @Query("limit") limit: Int = 50
-    ): Response<SpotifyPlaylistResponse> // Typealias for SpotifyPaging<SpotifyPlaylist>
+    ): Response<SpotifyPlaylistResponse>
 
     @GET("v1/me/albums")
     suspend fun getUserSavedAlbums(
         @Header("Authorization") bearerToken: String,
         @Query("limit") limit: Int = 50
     ): Response<SpotifySavedAlbumResponse>
-
-    // --- TRACK DATA (The Chants) ---
 
     @GET("v1/playlists/{playlist_id}/tracks")
     suspend fun getPlaylistTracks(
@@ -54,8 +56,6 @@ interface SpotifyApiService {
         @Query("limit") limit: Int = 50
     ): Response<SpotifyPaging<SpotifyTrack>>
 }
-
-// --- AUTH API ---
 
 interface SpotifyAuthApi {
     @POST("api/token")
