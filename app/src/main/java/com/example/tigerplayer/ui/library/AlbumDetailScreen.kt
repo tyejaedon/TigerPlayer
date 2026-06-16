@@ -35,6 +35,7 @@ import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
@@ -255,7 +256,7 @@ fun AlbumDetailsScreen(
                     .fillMaxWidth(0.6f)
                     .height(64.dp)
                     .shadow(16.dp, CircleShape, spotColor = accentColor)
-                // THE FIX 3: Removed redundant .bounceClick
+                    .bounceClick { viewModel.setPlaylistAndPlay(albumTracks, 0) }
             ) {
                 Icon(WitcherIcons.Play, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.width(12.dp))

@@ -52,6 +52,7 @@ import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 import kotlin.math.absoluteValue
 
 // --- VANGUARD THEME CONSTANTS ---
@@ -229,6 +230,7 @@ fun ConstellationGatewayCard(onClick: () -> Unit) {
             .padding(horizontal = 24.dp, vertical = 8.dp)
             .shadow(16.dp, MaterialTheme.shapes.extraLarge, spotColor = NeuralPurple.copy(alpha = 0.3f))
             .clip(MaterialTheme.shapes.extraLarge)
+            .glassEffect(MaterialTheme.shapes.extraLarge)
             .background(Brush.linearGradient(listOf(Color(0xFF1E103C), Color(0xFF120B24))))
             .border(1.dp, NeuralPurple.copy(alpha = 0.2f), MaterialTheme.shapes.extraLarge)
             .bounceClick { onClick() }
@@ -428,6 +430,7 @@ fun StatGlassWidget(
         modifier = modifier
             .height(if (isFullWidth) 72.dp else 88.dp)
             .clip(MaterialTheme.shapes.large)
+            .glassEffect(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
             .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.shapes.large)
     ) {

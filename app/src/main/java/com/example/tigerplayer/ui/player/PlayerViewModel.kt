@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
+import com.example.tigerplayer.data.remote.api.YouTubeRepository
 import com.example.tigerplayer.data.repository.AudioRepository
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.engine.*
@@ -56,8 +57,11 @@ data class PlayerUiState(
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val tracks: List<AudioTrack> = emptyList(),
     val artists: List<LibraryArtist> = emptyList(),
-    val albums: List<String> = emptyList(),
+    val albums: List<LibraryEngine.LibraryAlbum> = emptyList(),
     val customPlaylists: List<Playlist> = emptyList(),
+    val trackSortOrder: LibraryEngine.SortOrder = LibraryEngine.SortOrder.TITLE,
+    val albumSortOrder: LibraryEngine.SortOrder = LibraryEngine.SortOrder.TITLE,
+    val playlistSortOrder: LibraryEngine.SortOrder = LibraryEngine.SortOrder.DATE_ADDED,
     val isScanning: Boolean = false,
     val scanProgress: Int = 0,
     val totalFilesToScan: Int = 0,
@@ -69,13 +73,14 @@ data class PlayerUiState(
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackEngine: PlaybackEngine,
-    private val mediaControllerManager: MediaControllerManager,
+    val mediaControllerManager: MediaControllerManager,
     private val metadataEngine: MetadataEngine,
     private val statsEngine: StatsEngine,
     private val libraryEngine: LibraryEngine,
     private val networkEngine: NetworkEngine,
     private val waveformEngine: WaveformEngine,
-    private val audioRepository: AudioRepository
+    private val audioRepository: AudioRepository,
+    val youtubeRepository: YouTubeRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -86,6 +91,10 @@ class PlayerViewModel @Inject constructor(
 
     private var scanJob: Job? = null
     private val libraryRefreshTrigger = MutableStateFlow(0)
+
+    private val _trackSortOrder = MutableStateFlow(LibraryEngine.SortOrder.TITLE)
+    private val _albumSortOrder = MutableStateFlow(LibraryEngine.SortOrder.TITLE)
+    private val _playlistSortOrder = MutableStateFlow(LibraryEngine.SortOrder.DATE_ADDED)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val unifiedTracksFlow: SharedFlow<List<AudioTrack>> = libraryRefreshTrigger
@@ -101,8 +110,16 @@ class PlayerViewModel @Inject constructor(
         metadataEngine.artistDetails
     ).stateIn(viewModelScope, SharingStarted.Lazily, DetailedStatsUiState())
 
-    val customPlaylists: StateFlow<List<Playlist>> = libraryEngine.getCustomPlaylists()
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val customPlaylists: StateFlow<List<Playlist>> = combine(
+        libraryEngine.getCustomPlaylists(),
+        _playlistSortOrder
+    ) { playlists, sortOrder ->
+        when (sortOrder) {
+            LibraryEngine.SortOrder.TITLE -> playlists.sortedBy { it.name.lowercase() }
+            LibraryEngine.SortOrder.DATE_ADDED -> playlists.sortedByDescending { it.createdAt }
+            else -> playlists
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val artistDetails = metadataEngine.artistDetails
 
@@ -134,7 +151,11 @@ class PlayerViewModel @Inject constructor(
 
         // --- 2. LIBRARY SYNCHRONIZATION ---
         viewModelScope.launch {
-            libraryEngine.getAggregatedLibraryFlow(unifiedTracksFlow).collect { aggregation ->
+            libraryEngine.getAggregatedLibraryFlow(
+                unifiedTracksFlow,
+                _trackSortOrder,
+                _albumSortOrder
+            ).collect { aggregation ->
                 _uiState.update {
                     it.copy(
                         tracks = aggregation.filteredTracks,
@@ -149,6 +170,17 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
             }
+        }
+
+        // --- 2b. SORT ORDER SYNC ---
+        viewModelScope.launch {
+            _trackSortOrder.collect { order -> _uiState.update { it.copy(trackSortOrder = order) } }
+        }
+        viewModelScope.launch {
+            _albumSortOrder.collect { order -> _uiState.update { it.copy(albumSortOrder = order) } }
+        }
+        viewModelScope.launch {
+            _playlistSortOrder.collect { order -> _uiState.update { it.copy(playlistSortOrder = order) } }
         }
 
         // --- 3. QUEUE SYNCHRONIZATION ---
@@ -381,6 +413,18 @@ class PlayerViewModel @Inject constructor(
 
     fun updateStatsFilter(filter: String) {
         statsEngine.updateStatsFilter(filter)
+    }
+
+    fun setTrackSortOrder(order: LibraryEngine.SortOrder) {
+        _trackSortOrder.value = order
+    }
+
+    fun setAlbumSortOrder(order: LibraryEngine.SortOrder) {
+        _albumSortOrder.value = order
+    }
+
+    fun setPlaylistSortOrder(order: LibraryEngine.SortOrder) {
+        _playlistSortOrder.value = order
     }
 
     // ==========================================

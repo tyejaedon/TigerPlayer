@@ -237,6 +237,7 @@ class AudioRepository @Inject constructor(
         trackNumber = trackNumber,
         path = path,
         year = year,
+        dateAdded = dateAdded,
         isLiked = isLiked
     )
 
@@ -254,6 +255,7 @@ class AudioRepository @Inject constructor(
         trackNumber = trackNumber,
         path = path,
         year = year,
+        dateAdded = dateAdded,
         isLiked = isLiked
     )
 }

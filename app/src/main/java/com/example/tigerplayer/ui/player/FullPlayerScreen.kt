@@ -3,7 +3,6 @@ package com.example.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
 import android.graphics.drawable.BitmapDrawable
-import android.opengl.GLSurfaceView
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -17,6 +16,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -53,7 +53,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
@@ -65,17 +64,17 @@ import com.example.tigerplayer.ui.library.SongOptionsSheet
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.concurrent.TimeUnit
-import kotlin.math.PI
 import kotlin.math.sin
 
 private val IgniRed = Color(0xFFF11F1A)
 
 enum class MainViewState {
-    ARTWORK, LYRICS, QUEUE
+    ARTWORK, LYRICS, QUEUE, YOUTUBE_VIEWPORT
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -93,6 +92,7 @@ fun FullPlayerScreen(
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
+    var showYouTube by remember { mutableStateOf(false) }
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
 
     val themeSurface = MaterialTheme.colorScheme.surface
@@ -145,12 +145,17 @@ fun FullPlayerScreen(
                 showLyrics = showLyrics,
                 onToggleLyrics = {
                     showLyrics = it
-                    if (it) showQueue = false
+                    if (it) { showQueue = false; showYouTube = false }
                 },
                 showQueue = showQueue,
                 onToggleQueue = {
                     showQueue = it
-                    if (it) showLyrics = false
+                    if (it) { showLyrics = false; showYouTube = false }
+                },
+                showYouTube = showYouTube,
+                onToggleYouTube = {
+                    showYouTube = it
+                    if (it) { showLyrics = false; showQueue = false }
                 },
                 onShowOptions = {
                     trackForOptions = track
@@ -163,6 +168,7 @@ fun FullPlayerScreen(
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
 
                 val targetState = when {
+                    showYouTube -> MainViewState.YOUTUBE_VIEWPORT
                     showQueue -> MainViewState.QUEUE
                     showLyrics -> MainViewState.LYRICS
                     else -> MainViewState.ARTWORK
@@ -189,6 +195,12 @@ fun FullPlayerScreen(
                                 onTrackClick = { viewModel.playTrack(it) },
                                 onRemoveFromQueue = { viewModel.removeFromQueue(it) },
                                 onMoveItem = { from, to -> viewModel.moveQueueItem(from, to) }
+                            )
+                        }
+                        MainViewState.YOUTUBE_VIEWPORT -> {
+                            com.example.tigerplayer.ui.youtube.YouTubeSearchScreen(
+                                isEmbedded = true,
+                                onBackClick = { showYouTube = false }
                             )
                         }
                         MainViewState.LYRICS -> {
@@ -267,6 +279,7 @@ fun FullPlayerScreen(
                     .fillMaxWidth()
                     .padding(bottom = 24.dp)
                     .clip(RoundedCornerShape(36.dp))
+                    .glassEffect(RoundedCornerShape(36.dp))
                     .background(Color.White.copy(0.05f))
                     .padding(24.dp)
             ) {
@@ -330,6 +343,8 @@ fun HeaderRitual(
     onToggleLyrics: (Boolean) -> Unit,
     showQueue: Boolean,
     onToggleQueue: (Boolean) -> Unit,
+    showYouTube: Boolean = false,
+    onToggleYouTube: (Boolean) -> Unit = {},
     onShowOptions: () -> Unit,
     track: AudioTrack
 ) {
@@ -345,6 +360,7 @@ fun HeaderRitual(
             IconButton(
                 onClick = onCollapse,
                 modifier = Modifier
+                    .bounceClick { onCollapse() }
                     .background(Color.White.copy(alpha = 0.1f), CircleShape)
                     .border(0.5.dp, Color.White.copy(alpha = 0.2f), CircleShape)
             ) {
@@ -352,6 +368,13 @@ fun HeaderRitual(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(
+                    onClick = { onToggleYouTube(!showYouTube) },
+                    modifier = Modifier
+                        .background(if (showYouTube) MaterialTheme.aardBlue.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+                ) {
+                    Icon(WitcherIcons.Cloud, null, tint = if (showYouTube) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.8f))
+                }
                 IconButton(
                     onClick = { onToggleLyrics(!showLyrics) },
                     modifier = Modifier

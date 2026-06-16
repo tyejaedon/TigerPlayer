@@ -35,7 +35,8 @@ class LocalAudioDataSource @Inject constructor(
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.YEAR
+            MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.DATE_ADDED
         ).apply {
             add(MediaStore.Audio.Media.BITRATE)
             add(MediaStore.Audio.Media.SAMPLERATE)
@@ -65,12 +66,14 @@ class LocalAudioDataSource @Inject constructor(
             val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
             val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
             val yearCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+            val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 val albumId = cursor.getLong(albumIdCol)
                 val rawTrack = cursor.getInt(trackCol)
                 val year = cursor.getInt(yearCol)
+                val dateAdded = cursor.getLong(dateAddedCol)
 
                 // Track number normalization (e.g. 1004 -> 4)
                 val cleanTrackNum = if (rawTrack >= 1000) rawTrack % 1000 else rawTrack
@@ -89,6 +92,7 @@ class LocalAudioDataSource @Inject constructor(
                     trackNumber = cleanTrackNum,
                     path = cursor.getString(dataCol),
                     year = if (year != 0) year.toString() else null,
+                    dateAdded = dateAdded,
                     bitrate = cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE).coerceAtLeast(0)),
                     sampleRate = cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.SAMPLERATE).coerceAtLeast(0)),
                     serverPath = null

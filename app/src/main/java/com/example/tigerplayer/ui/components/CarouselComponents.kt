@@ -163,7 +163,7 @@ private fun HeroAlbumCard(
                         Color.White.copy(alpha = 0.08f),
                         RoundedCornerShape(28.dp)
                     )
-                    .shadow(20.dp, RoundedCornerShape(28.dp))
+
             )
 
             // cinematic gradient overlay

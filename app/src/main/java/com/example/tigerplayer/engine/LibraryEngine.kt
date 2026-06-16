@@ -29,6 +29,10 @@ class LibraryEngine @Inject constructor(
     private val mediaDataRepository: MediaDataRepository
 ) {
 
+    enum class SortOrder {
+        TITLE, ARTIST, DATE_ADDED, RELEASE_DATE
+    }
+
     companion object {
         const val LIKED_SONGS_ID = -1L
         const val RECENTLY_ADDED_ID = -2L
@@ -45,23 +49,48 @@ class LibraryEngine @Inject constructor(
         val tracks: List<AudioTrack>,
         val filteredTracks: List<AudioTrack>,
         val artists: List<LibraryArtist>,
-        val albums: List<String>
+        val albums: List<LibraryAlbum>
+    )
+
+    data class LibraryAlbum(
+        val name: String,
+        val artist: String,
+        val trackCount: Int,
+        val year: String?,
+        val dateAdded: Long,
+        val artworkUri: Uri?
     )
 
     // 🔥 THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
     @OptIn(FlowPreview::class)
-    fun getAggregatedLibraryFlow(unifiedTracksFlow: Flow<List<AudioTrack>>): Flow<LibraryAggregation> {
-        return combine(unifiedTracksFlow, _searchQuery.debounce(250)) { tracks, query ->
-            aggregateLibrary(tracks, query)
+    fun getAggregatedLibraryFlow(
+        unifiedTracksFlow: Flow<List<AudioTrack>>,
+        trackSortOrder: Flow<SortOrder> = flowOf(SortOrder.TITLE),
+        albumSortOrder: Flow<SortOrder> = flowOf(SortOrder.TITLE)
+    ): Flow<LibraryAggregation> {
+        return combine(unifiedTracksFlow, _searchQuery.debounce(250), trackSortOrder, albumSortOrder) { tracks, query, tSort, aSort ->
+            aggregateLibrary(tracks, query, tSort, aSort)
         }
     }
 
-    fun aggregateLibrary(tracks: List<AudioTrack>, query: String = ""): LibraryAggregation {
+    fun aggregateLibrary(
+        tracks: List<AudioTrack>,
+        query: String = "",
+        trackSort: SortOrder = SortOrder.TITLE,
+        albumSort: SortOrder = SortOrder.TITLE
+    ): LibraryAggregation {
         val uniqueSource = tracks.distinctBy { it.id }
         val filtered = if (query.isEmpty()) uniqueSource else uniqueSource.filter {
             it.title.contains(query, ignoreCase = true) ||
                     it.artist.contains(query, ignoreCase = true) ||
                     it.album.contains(query, ignoreCase = true)
+        }
+
+        val sortedTracks = when (trackSort) {
+            SortOrder.TITLE -> filtered.sortedBy { it.title.lowercase() }
+            SortOrder.ARTIST -> filtered.sortedBy { it.artist.lowercase() }
+            SortOrder.DATE_ADDED -> filtered.sortedByDescending { it.dateAdded }
+            SortOrder.RELEASE_DATE -> filtered.sortedByDescending { it.year ?: "" }
         }
 
         val aggregatedArtists = filtered
@@ -75,11 +104,32 @@ class LibraryEngine @Inject constructor(
                 )
             }.sortedBy { it.name }
 
+        val aggregatedAlbums = filtered
+            .groupBy { it.album.trim().lowercase() }
+            .map { (_, albumTracks) ->
+                val first = albumTracks.first()
+                LibraryAlbum(
+                    name = first.album,
+                    artist = first.artist,
+                    trackCount = albumTracks.size,
+                    year = albumTracks.mapNotNull { it.year }.firstOrNull(),
+                    dateAdded = albumTracks.maxOf { it.dateAdded },
+                    artworkUri = first.artworkUri
+                )
+            }.let { albums ->
+                when (albumSort) {
+                    SortOrder.TITLE -> albums.sortedBy { it.name.lowercase() }
+                    SortOrder.ARTIST -> albums.sortedBy { it.artist.lowercase() }
+                    SortOrder.DATE_ADDED -> albums.sortedByDescending { it.dateAdded }
+                    SortOrder.RELEASE_DATE -> albums.sortedByDescending { it.year ?: "" }
+                }
+            }
+
         return LibraryAggregation(
             tracks = uniqueSource,
-            filteredTracks = filtered,
+            filteredTracks = sortedTracks,
             artists = aggregatedArtists,
-            albums = filtered.map { it.album.trim() }.distinct().sorted()
+            albums = aggregatedAlbums
         )
     }
 

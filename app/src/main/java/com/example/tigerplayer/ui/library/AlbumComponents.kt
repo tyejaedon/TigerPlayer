@@ -1,9 +1,7 @@
 package com.example.tigerplayer.ui.library
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -11,13 +9,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +20,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
+import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 
 // ==========================================
 // --- 1. THE MAIN GRID (Adaptive Layout) ---
@@ -40,20 +37,10 @@ fun AlbumGridCard(
     isActive: Boolean = false, // 🔥 NEW: highlight state
     onClick: () -> Unit
 ) {
-    var pressed by remember { mutableStateOf(false) }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = if (pressed) 0.96f else 1f
-                scaleY = if (pressed) 0.96f else 1f
-            }
-            .bounceClick(
-                onClick = onClick,
-                onPress = { pressed = true },
-                onRelease = { pressed = false }
-            ),
+            .bounceClick(onClick = onClick),
         horizontalAlignment = Alignment.Start
     ) {
 
@@ -72,6 +59,7 @@ fun AlbumGridCard(
                     else Color.Black.copy(alpha = 0.4f)
                 )
                 .clip(RoundedCornerShape(26.dp))
+                .glassEffect(RoundedCornerShape(26.dp))
         ) {
 
             // --- ARTWORK ---
@@ -155,44 +143,4 @@ fun AlbumGridCard(
             overflow = TextOverflow.Ellipsis
         )
     }
-}
-
-
-fun Modifier.bounceClick(
-    onClick: () -> Unit,
-    onPress: (() -> Unit)? = null,
-    onRelease: (() -> Unit)? = null
-): Modifier = composed {
-
-    var isPressed by remember { mutableStateOf(false) }
-
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        label = "bounceScale"
-    )
-
-    this
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-        .pointerInput(Unit) {
-            detectTapGestures(
-                onPress = {
-                    isPressed = true
-                    onPress?.invoke()
-
-                    // Will return false if the user scrolls, but execution continues.
-                    tryAwaitRelease()
-
-                    isPressed = false
-                    onRelease?.invoke()
-                },
-                // 🔥 THE FIX: onClick is now handled strictly by the tap detector,
-                // which guarantees it will NEVER fire if the user was scrolling.
-                onTap = {
-                    onClick()
-                }
-            )
-        }
 }

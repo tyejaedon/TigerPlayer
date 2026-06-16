@@ -38,7 +38,8 @@ fun CloudScreen(
     viewModel: CloudViewModel = hiltViewModel(),
     onNavigateToSpotifyPlaylist: (String, String, String?) -> Unit,
     onNavigateToSpotifyAlbum: (String, String, String?) -> Unit,
-    onNavigateToNavidromeLogin: () -> Unit
+    onNavigateToNavidromeLogin: () -> Unit,
+    onNavigateToYouTubeSearch: () -> Unit
 ) {
     val context = LocalContext.current
     val query by viewModel.searchQuery.collectAsState()
@@ -81,7 +82,8 @@ fun CloudScreen(
                 CloudHeader(
                     query = query,
                     onQueryChange = { viewModel.onSearchQueryChange(it) },
-                    onRefresh = { viewModel.forceRefreshArchives() }
+                    onRefresh = { viewModel.forceRefreshArchives() },
+                    onYouTubeSearchClick = onNavigateToYouTubeSearch
                 )
 
                 SecondaryTabRow(
@@ -151,7 +153,12 @@ fun CloudScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CloudHeader(query: String, onQueryChange: (String) -> Unit, onRefresh: () -> Unit) {
+private fun CloudHeader(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onYouTubeSearchClick: () -> Unit
+) {
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp).statusBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -164,13 +171,27 @@ private fun CloudHeader(query: String, onQueryChange: (String) -> Unit, onRefres
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            IconButton(
-                onClick = onRefresh,
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
-            ) {
-                Icon(WitcherIcons.Refresh, "Refresh", tint = SpotifyGreen)
+
+            Row {
+                IconButton(
+                    onClick = onYouTubeSearchClick,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
+                ) {
+                    Icon(WitcherIcons.Search, "YouTube Search", tint = MaterialTheme.colorScheme.primary)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
+                ) {
+                    Icon(WitcherIcons.Refresh, "Refresh", tint = SpotifyGreen)
+                }
             }
         }
 

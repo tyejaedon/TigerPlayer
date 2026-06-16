@@ -42,6 +42,7 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -118,6 +119,7 @@ fun MiniPlayer(
                     .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                     .shadow(24.dp, RoundedCornerShape(24.dp), spotColor = actionColor.copy(alpha = 0.3f))
                     .clip(RoundedCornerShape(24.dp))
+                    .glassEffect(RoundedCornerShape(24.dp))
                     .background(glassBg)
                     .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
                     .pointerInput(track.id) {

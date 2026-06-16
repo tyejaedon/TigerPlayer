@@ -23,6 +23,7 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
 import java.util.concurrent.TimeUnit
 
 
@@ -58,6 +59,7 @@ fun ArchiveSongRow(
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 5.dp)
             .bounceClick { onClick() }
+            .glassEffect(MaterialTheme.shapes.large)
             .graphicsLayer {
                 scaleX = 1f + (activeProgress * 0.01f)
                 scaleY = 1f + (activeProgress * 0.01f)

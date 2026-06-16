@@ -25,6 +25,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.example.tigerplayer.navigation.BottomNavTab
 import com.example.tigerplayer.ui.cloud.CloudScreen
+import com.example.tigerplayer.ui.youtube.YouTubeSearchScreen
 import com.example.tigerplayer.ui.home.HomeScreen
 import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.library.LibraryScreen
@@ -242,7 +243,18 @@ fun MainScreen(
                         CloudScreen(
                             onNavigateToSpotifyPlaylist = onNavigateToSpotifyPlaylist,
                             onNavigateToSpotifyAlbum = onNavigateToSpotifyAlbum,
-                            onNavigateToNavidromeLogin = onNavigateToNavidromeLogin
+                            onNavigateToNavidromeLogin = onNavigateToNavidromeLogin,
+                            onNavigateToYouTubeSearch = {
+                                tabNavController.navigate(com.example.tigerplayer.navigation.Screen.YouTubeSearch.route)
+                            }
+                        )
+                    }
+
+                    composable(com.example.tigerplayer.navigation.Screen.YouTubeSearch.route) {
+                        YouTubeSearchScreen(
+                            onBackClick = {
+                                tabNavController.popBackStack()
+                            },
                         )
                     }
                 }

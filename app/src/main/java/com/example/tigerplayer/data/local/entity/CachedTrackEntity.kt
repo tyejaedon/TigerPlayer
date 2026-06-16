@@ -22,6 +22,7 @@ data class CachedTrackEntity(
     val sampleRate: Int,
     val trackNumber: Int,
     val year: String? = null,
+    val dateAdded: Long = 0L,
     val isLiked: Boolean,
 
     // --- THE FIX: The Absolute Path ---

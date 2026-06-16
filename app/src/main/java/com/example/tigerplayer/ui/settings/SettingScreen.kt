@@ -3,7 +3,6 @@ package com.example.tigerplayer.ui.settings
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -356,7 +355,7 @@ fun AboutMeSection() {
 
 @Composable
 fun SocialLink(label: String, onClick: () -> Unit) {
-    Surface(color = Color.Transparent, shape = CircleShape, modifier = Modifier.clickable { onClick() }) {
+    Surface(color = Color.Transparent, shape = CircleShape, modifier = Modifier.bounceClick { onClick() }) {
         Text(label.uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }
