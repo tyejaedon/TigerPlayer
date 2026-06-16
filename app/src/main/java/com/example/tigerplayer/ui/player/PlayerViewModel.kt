@@ -318,6 +318,12 @@ class PlayerViewModel @Inject constructor(
         return libraryEngine.getPlaylistTracks(playlistId, _uiState.value.tracks)
     }
 
+    fun createPlaylist(name: String) {
+        viewModelScope.launch {
+            libraryEngine.createPlaylist(name)
+        }
+    }
+
     fun addTrackToPlaylist(playlistId: Long, track: AudioTrack) {
         viewModelScope.launch {
             libraryEngine.addTrackToPlaylist(playlistId, track.id)

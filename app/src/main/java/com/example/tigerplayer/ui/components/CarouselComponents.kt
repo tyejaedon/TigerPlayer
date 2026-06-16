@@ -167,18 +167,7 @@ private fun HeroAlbumCard(
             )
 
             // cinematic gradient overlay
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.6f)
-                            )
-                        )
-                    )
-            )
+
 
             if (track.mimeType.contains("flac", true)) {
                 LosslessBadge(

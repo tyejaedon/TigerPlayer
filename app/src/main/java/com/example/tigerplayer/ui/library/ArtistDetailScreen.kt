@@ -13,9 +13,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
@@ -37,6 +40,7 @@ import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.utils.ArtistUtils
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
@@ -68,10 +72,13 @@ fun ArtistDetailsScreen(
         }
     }
 
-    val artistAlbums = remember(artistTracks) {
+    val artistAlbumsWithCounts = remember(artistTracks) {
         artistTracks
-            .distinctBy { it.album.lowercase().trim() }
-            .sortedByDescending { it.year ?: "" }
+            .groupBy { it.album.lowercase().trim() }
+            .map { (name, tracks) ->
+                tracks.first() to tracks.size
+            }
+            .sortedByDescending { it.first.year ?: "" }
     }
 
     // --- 2. THE DYNAMIC PALETTE RITUAL (Fixed & Keyed) ---
@@ -177,7 +184,7 @@ fun ArtistDetailsScreen(
 
                 item { ArtistVanguardStats(profile, animatedDominantColor) }
 
-                if (artistAlbums.isNotEmpty()) {
+                if (artistAlbumsWithCounts.isNotEmpty()) {
                     item {
                         SectionTitle(title = "DISCOGRAPHY")
                         LazyRow(
@@ -185,9 +192,10 @@ fun ArtistDetailsScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
                         ) {
-                            items(artistAlbums) { albumTrack ->
+                            items(artistAlbumsWithCounts) { (albumTrack, count) ->
                                 ArtistAlbumCard(
                                     track = albumTrack,
+                                    trackCount = count,
                                     onClick = { onAlbumClick(albumTrack.album) }
                                 )
                             }
@@ -245,35 +253,56 @@ fun ArtistDetailsScreen(
 @Composable
 fun ArtistAlbumCard(
     track: AudioTrack,
+    trackCount: Int,
     onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
-            .width(150.dp) // Standardized width for the Horizontal Discography Row
+            .width(160.dp)
             .bounceClick { onClick() }
     ) {
-        // --- THE VOLUME COVER: Armor Plated ---
-        AsyncImage(
-            model = track.artworkUri,
-            contentDescription = "Cover for ${track.album}",
-            contentScale = ContentScale.Crop,
-            fallback = painterResource(R.drawable.ic_tiger_logo),
-            error = painterResource(R.drawable.ic_tiger_logo),
+        Box(
             modifier = Modifier
-                .size(150.dp)
+                .size(160.dp)
+                .shadow(16.dp, MaterialTheme.shapes.large, spotColor = MaterialTheme.aardBlue.copy(0.2f))
                 .clip(MaterialTheme.shapes.large)
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-                // THE ARMOR BORDER: Critical for defining edges in Dark Mode
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .border(
                     width = 1.dp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
                     shape = MaterialTheme.shapes.large
                 )
-        )
+        ) {
+            AsyncImage(
+                model = track.artworkUri,
+                contentDescription = "Cover for ${track.album}",
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.ic_tiger_logo),
+                error = painterResource(R.drawable.ic_tiger_logo),
+                modifier = Modifier.fillMaxSize()
+            )
+            
+            // --- TRACK COUNT BADGE ---
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "$trackCount",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 10.sp
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // --- THE VOLUME NAME: Primary Hierarchy ---
         Text(
             text = track.album,
             style = MaterialTheme.typography.titleSmall,
@@ -283,14 +312,19 @@ fun ArtistAlbumCard(
             overflow = TextOverflow.Ellipsis
         )
 
-        // --- THE ERA: Secondary Hierarchy (Aard Blue) ---
-        Text(
-            text = track.year?.uppercase() ?: "RECORDED",
-            style = MaterialTheme.typography.labelSmall,
-            color = AardBlue, // High-visibility blue constant
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.sp
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = track.year ?: "RECORDED",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.aardBlue,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
+            )
+        }
     }
 }
 

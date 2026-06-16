@@ -1,6 +1,7 @@
 package com.example.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -404,6 +405,10 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
     val density = LocalDensity.current.density
+    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+    val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
+
+
 
     if (tracks.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -485,8 +490,27 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                         track = track,
                         isActive = isActive,
                         isPlaying = uiState.isPlaying && isActive,
-                        onClick = { viewModel.playTrack(track) }
+                        onClick = { viewModel.playTrack(track) },
+                        onOptionsClick = { trackForOptions = track }
+                        
                     )
+                    trackForOptions?.let { selectedTrack ->
+                        SongOptionsSheet(
+                            track = selectedTrack,
+                            playlists = playlists,
+                            onDismiss = { trackForOptions = null },
+                            onPlayNext = {
+                                viewModel.addToQueue(selectedTrack)
+                            },
+                            onAddToPlaylist = { playlistId ->
+                                viewModel.addTrackToPlaylist(playlistId, selectedTrack)
+                            },
+                            onGoToAlbum = { albumName ->
+                                onNavigateToAlbum(albumName)
+                            }
+                        )
+                    }
+
                 }
             }
         }
@@ -534,6 +558,7 @@ fun AlbumsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                     artist = album.artist,
                     artworkUri = album.artworkUri,
                     trackCount = album.trackCount,
+                    year = album.year,
                     modifier = Modifier
                         .onGloballyPositioned { coordinates ->
                             itemYOffset = coordinates.positionInWindow().y + (coordinates.size.height / 2)
@@ -653,6 +678,50 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
     val likedPlaylist = remember(playlists) { playlists.find { it.id == LIKED_SONGS_ID } }
     val userPlaylists = remember(playlists) { playlists.filterNot { it.id == LIKED_SONGS_ID } }
 
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newPlaylistName by remember { mutableStateOf("") }
+
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("FORGE NEW GRIMOIRE", fontWeight = FontWeight.Black) },
+            text = {
+                OutlinedTextField(
+                    value = newPlaylistName,
+                    onValueChange = { newPlaylistName = it },
+                    label = { Text("Playlist Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.aardBlue,
+                        cursorColor = MaterialTheme.aardBlue
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newPlaylistName.isNotBlank()) {
+                            viewModel.createPlaylist(newPlaylistName)
+                            newPlaylistName = ""
+                            showCreateDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.aardBlue)
+                ) {
+                    Text("FORGE", fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text("CANCEL", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         SortRow(
             currentOrder = uiState.playlistSortOrder,
@@ -678,7 +747,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                 PremiumActionRow(
                     icon = WitcherIcons.Add,
                     title = "Forge New Playlist",
-                    onClick = { /* Handle Create Flow */ }
+                    onClick = { showCreateDialog = true }
                 )
                 Spacer(modifier = Modifier.height(32.dp))
             }
@@ -836,7 +905,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
             // --- OPTIONS DOTS TRIGGER ---
             if (onOptionsClick != null) {
                 IconButton(
-                    onClick = onOptionsClick,
+                    onClick = { onOptionsClick() },
                     modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
@@ -927,37 +996,72 @@ fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
             .bounceClick { onClick() }
-            .padding(vertical = 8.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = playlist.artworkUri,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
+        Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(64.dp)
+                .shadow(8.dp, RoundedCornerShape(12.dp))
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-        )
+        ) {
+            if (playlist.artworkUri != null) {
+                AsyncImage(
+                    model = playlist.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.aardBlue,
+                                    MaterialTheme.aardBlue.copy(alpha = 0.6f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(WitcherIcons.Playlist, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(28.dp))
+                }
+            }
+        }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = playlist.name,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "${playlist.trackCount} CHANTS",
+                text = "${playlist.trackCount} CHANTS COLLECTED",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
             )
         }
+        Icon(
+            WitcherIcons.Next,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            modifier = Modifier.size(16.dp)
+        )
     }
+    Spacer(modifier = Modifier.height(12.dp))
 }
 
 @Composable

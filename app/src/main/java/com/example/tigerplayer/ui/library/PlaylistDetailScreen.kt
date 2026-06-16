@@ -237,18 +237,18 @@ fun PlaylistParallaxHeader(
     val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
 
     Box(
-        modifier = Modifier.fillMaxWidth().height(340.dp).padding(top = 40.dp)
-            .graphicsLayer { translationY = offset * 0.4f; alpha = (1f - (offset / 600f)).coerceIn(0f, 1f) },
+        modifier = Modifier.fillMaxWidth().height(480.dp).padding(top = 60.dp)
+            .graphicsLayer { translationY = offset * 0.45f; alpha = (1f - (offset / 800f)).coerceIn(0f, 1f) },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
-            // ARTWORK CONTAINER
+            // ARTWORK CONTAINER (ENLARGED)
             Box(
                 modifier = Modifier
-                    .size(140.dp)
-                    .shadow(32.dp, RoundedCornerShape(24.dp), spotColor = accentColor)
-                    .clip(RoundedCornerShape(24.dp))
+                    .size(240.dp)
+                    .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = accentColor)
+                    .clip(RoundedCornerShape(32.dp))
                     .then(if (isEditMode) Modifier.bounceClick { onChangeCoverClick() } else Modifier),
                 contentAlignment = Alignment.Center
             ) {
@@ -301,10 +301,10 @@ fun PlaylistParallaxHeader(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(text = playlistName.uppercase(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 24.dp))
-            Text(text = "$trackCount CHANTS COLLECTED", style = MaterialTheme.typography.labelMedium, color = accentColor, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(text = playlistName.uppercase(), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 24.dp))
+            Text(text = "$trackCount CHANTS COLLECTED", style = MaterialTheme.typography.labelMedium, color = accentColor, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
+            Spacer(modifier = Modifier.height(32.dp))
 
             val buttonTextColor = if (ColorUtils.calculateLuminance(accentColor.value.toLong().toInt()) > 0.5) Color.Black else Color.White
             AnimatedVisibility(visible = !isEditMode) {

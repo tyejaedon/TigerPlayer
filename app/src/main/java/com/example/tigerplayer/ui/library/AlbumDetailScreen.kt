@@ -193,14 +193,39 @@ fun AlbumDetailsScreen(
                             textAlign = TextAlign.Center,
                             letterSpacing = (-1).sp
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = firstTrack?.artist ?: "Unknown Artist",
-                            style = MaterialTheme.typography.titleLarge,
+                            text = firstTrack?.artist?.uppercase() ?: "UNKNOWN ARTIST",
+                            style = MaterialTheme.typography.labelLarge,
                             color = accentColor,
-                            fontWeight = FontWeight.ExtraBold, // Bumped to ExtraBold for better visibility
-
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 2.sp
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // --- NEW METADATA ROW ---
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            MetadataItem(
+                                label = "CHANTS",
+                                value = albumTracks.size.toString(),
+                                accentColor = accentColor
+                            )
+                            MetadataItem(
+                                label = "DURATION",
+                                value = formatTotalDuration(albumTracks.sumOf { it.durationMs }),
+                                accentColor = accentColor
+                            )
+                            firstTrack?.year?.let { year ->
+                                MetadataItem(
+                                    label = "RELEASED",
+                                    value = year,
+                                    accentColor = accentColor
+                                )
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -270,4 +295,29 @@ fun AlbumDetailsScreen(
             }
         }
     }
+}
+
+@Composable
+private fun MetadataItem(label: String, value: String, accentColor: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = accentColor,
+            fontWeight = FontWeight.Black
+        )
+    }
+}
+
+private fun formatTotalDuration(ms: Long): String {
+    val hours = java.util.concurrent.TimeUnit.MILLISECONDS.toHours(ms)
+    val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(ms) % 60
+    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }
