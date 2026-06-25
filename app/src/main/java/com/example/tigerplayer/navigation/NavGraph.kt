@@ -1,6 +1,7 @@
 package com.example.tigerplayer.navigation
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -19,15 +20,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.*
 import androidx.navigation.compose.*
 import com.example.tigerplayer.R
 import com.example.tigerplayer.ui.cloud.*
-import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.main.MainScreen
 import com.example.tigerplayer.ui.permissions.PermissionScreen
@@ -56,11 +57,12 @@ fun TigerBranding() {
 // 🔹 Navigation Graph
 // ----------------------------------
 
+@SuppressLint("NewApi")
 @Composable
 fun TigerPlayerNavGraph(
     navController: NavHostController,
-    playerViewModel: PlayerViewModel,
-    homeViewModel: HomeViewModel
+    // 🔥 THE FIX: HomeViewModel is gone! Only the global PlayerViewModel remains.
+    playerViewModel: PlayerViewModel
 ) {
     val context = LocalContext.current
 
@@ -144,8 +146,6 @@ fun TigerPlayerNavGraph(
         composable(Screen.MainApp.route) {
             MainScreen(
                 playerViewModel = playerViewModel,
-                homeViewModel = homeViewModel,
-
                 onNavigateToSpotifyPlaylist = { id, name, url ->
                     navController.navigate(Screen.SpotifyPlaylist.createRoute(id, name, url))
                 },
@@ -311,6 +311,7 @@ private fun SplashContent() {
             Text(
                 text = "TIGER PLAYER",
                 style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
                 letterSpacing = 4.sp,
                 color = MaterialTheme.colorScheme.onBackground
             )

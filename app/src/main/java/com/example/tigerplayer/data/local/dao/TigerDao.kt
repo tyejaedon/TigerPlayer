@@ -9,6 +9,9 @@ import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * 📊 ANALYTICAL DATA MODELS
+ */
 data class ArtistStats(
     val artistName: String,
     val playCount: Int,
@@ -23,99 +26,268 @@ data class TrackStats(
     val playCount: Int
 )
 
+/**
+ * 🐅 TIGER DAO: THE ARCHIVE ENGINE
+ * Optimized for high-frequency audio processing and real-time statistics.
+ */
 @Dao
 @JvmSuppressWildcards
 abstract class TigerDao {
 
+    // ==========================================
     // --- 1. THE CHRONICLES (Playback History) ---
+    // ==========================================
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertHistory(history: PlaybackHistoryEntity): Long
 
-    @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 50")
+    @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 60")
     abstract fun getRecentTracks(): Flow<List<PlaybackHistoryEntity>>
 
-    @Query("SELECT SUM(durationListenedMs) FROM playback_history")
-    abstract fun getTotalListeningTimeMs(): Flow<Long?>
+    @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history")
+    abstract fun getTotalListeningTimeMs(): Flow<Long>
 
-    @Query("SELECT SUM(durationListenedMs) FROM playback_history WHERE timestamp >= :startTime")
-    abstract fun getTotalListeningTimeMs(startTime: Long): Flow<Long?>
+    @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history WHERE timestamp >= :startTime")
+    abstract fun getTotalListeningTimeMs(startTime: Long): Flow<Long>
 
-    @Query("""
-        SELECT 
-            trim(CASE 
-                WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-                WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-                WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-                WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
-                ELSE artist 
-            END) as artistName
-        FROM playback_history 
+    /**
+     * IDENTIFY TOP ARTIST
+     * Performs a single-pass string cleaning to identify the most played artist.
+     * Upgraded with CTE for better performance on large histories.
+     */
+    @Query(
+        """
+        WITH CleanedHistory AS (
+            SELECT 
+                trim(CASE 
+                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
+                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
+                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
+                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    ELSE artist 
+                END) as artistName
+            FROM playback_history 
+            WHERE timestamp >= :startTime
+        )
+        SELECT artistName
+        FROM CleanedHistory
         GROUP BY artistName 
         ORDER BY COUNT(*) DESC 
         LIMIT 1
-    """)
-    abstract fun getTopArtist(): Flow<String?>
+    """
+    )
+    abstract fun getTopArtist(startTime: Long = 0L): Flow<String?>
 
-    @Query("""
-        SELECT 
-            trim(CASE 
-                WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-                WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-                WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-                WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
-                ELSE artist 
-            END) as artistName, 
-            COUNT(*) as playCount,
-            MAX(imageUrl) as imageUrl
-        FROM playback_history 
-        WHERE timestamp >= :startTime 
-        GROUP BY artistName 
+    /**
+     * TOP PERFORMERS (WITH CTE OPTIMIZATION)
+     * Cleans strings in a temporary view before grouping to save CPU cycles.
+     * Fuels the high-density Constellation Galaxy UI.
+     */
+    @Query(
+        """
+        WITH CleanedHistory AS (
+            SELECT 
+                trim(CASE 
+                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
+                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
+                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
+                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    ELSE artist 
+                END) as artistName
+            FROM playback_history
+            WHERE timestamp >= :startTime
+        )
+        SELECT h.artistName, COUNT(*) as playCount, ac.imageUrl as imageUrl
+        FROM CleanedHistory h
+        LEFT JOIN artist_cache ac ON ac.artistName = LOWER(h.artistName)
+        GROUP BY h.artistName
         ORDER BY playCount DESC 
         LIMIT :limit
-    """)
+    """
+    )
     abstract fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>>
 
-    @Query("""
-        SELECT trackId, title, artist, MAX(imageUrl) as imageUrl, COUNT(*) as playCount 
-        FROM playback_history 
-        WHERE timestamp >= :startTime 
-        GROUP BY trackId 
+    @Query(
+        """
+        SELECT h.trackId, h.title, h.artist, 
+               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl, 
+               COUNT(*) as playCount 
+        FROM playback_history h
+        LEFT JOIN cached_tracks ct ON ct.id = h.trackId
+        WHERE h.timestamp >= :startTime 
+        GROUP BY h.trackId
         ORDER BY playCount DESC 
         LIMIT :limit
-    """)
+    """
+    )
     abstract fun getTopTracks(startTime: Long, limit: Int): Flow<List<TrackStats>>
 
+    /**
+     * HEAVY ROTATION
+     * Identifies tracks with high play density in the recent window.
+     */
+    @Query(
+        """
+        SELECT h.trackId, h.title, h.artist, 
+               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl, 
+               COUNT(*) as playCount 
+        FROM playback_history h
+        LEFT JOIN cached_tracks ct ON ct.id = h.trackId
+        WHERE h.timestamp >= :since
+        GROUP BY h.trackId
+        HAVING playCount >= 2
+        ORDER BY playCount DESC 
+        LIMIT 12
+    """
+    )
+    abstract fun getHeavyRotation(since: Long): Flow<List<TrackStats>>
+
+    /**
+     * INDIVIDUAL ARTIST STATS
+     * Fetches play count and listening time for a specific artist.
+     */
+    @Query(
+        """
+        WITH CleanedHistory AS (
+            SELECT 
+                trim(CASE 
+                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
+                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
+                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
+                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    ELSE artist 
+                END) as artistName
+            FROM playback_history
+        )
+        SELECT COUNT(*) FROM CleanedHistory WHERE artistName = :artistName
+    """
+    )
+    abstract suspend fun getArtistPlayCount(artistName: String): Int
+
+    @Query(
+        """
+        WITH CleanedHistory AS (
+            SELECT 
+                trim(CASE 
+                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
+                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
+                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
+                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    ELSE artist 
+                END) as artistName,
+                durationListenedMs
+            FROM playback_history
+        )
+        SELECT CAST(COALESCE(SUM(durationListenedMs), 0) / 60000 AS INTEGER) 
+        FROM CleanedHistory 
+        WHERE artistName = :artistName
+    """
+    )
+    abstract suspend fun getArtistMinutesListened(artistName: String): Int
+
+    // ==========================================
     // --- 2. THE METADATA SIGN (Artist Cache) ---
+    // ==========================================
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertArtistCache(artist: ArtistCacheEntity): Long
 
+    @Query("SELECT * FROM artist_cache")
+    abstract fun getAllArtistCache(): Flow<List<ArtistCacheEntity>>
+
     @Query("SELECT * FROM artist_cache WHERE artistName = :name LIMIT 1")
-    abstract suspend fun getArtistCache(name: String): ArtistCacheEntity?
+    abstract fun getArtistCache(name: String): Flow<ArtistCacheEntity?>
+
+    @Query("SELECT * FROM artist_cache WHERE artistName = :name LIMIT 1")
+    abstract suspend fun getArtistCacheSync(name: String): ArtistCacheEntity?
 
     @Query("DELETE FROM artist_cache")
     abstract suspend fun clearArtistCache(): Int
 
-    // --- 3. THE VAULT (Local Track Caching) ---
+    // ==========================================
+    // --- 3. THE VAULT (Track Caching) ---
+    // ==========================================
 
-    @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
-    abstract suspend fun getCachedTracks(): List<CachedTrackEntity>
+
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
 
-    @Query("DELETE FROM cached_tracks")
-    abstract suspend fun clearTrackCache(): Int
-
     @Query("UPDATE cached_tracks SET isLiked = :isLiked WHERE id = :trackId")
     abstract suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean): Int
 
-    // 🔥 NEW: Save High-Res Artwork Permanently
     @Query("UPDATE cached_tracks SET artworkUriString = :newUri WHERE id = :trackId")
     abstract suspend fun updateTrackArtworkUri(trackId: String, newUri: String): Int
 
-    // --- 4. THE LYRIC ARCHIVE ---
+    @Query(
+        """
+        SELECT h.trackId, h.title, h.artist, 
+               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl, 
+               COUNT(*) as playCount 
+        FROM playback_history h
+        LEFT JOIN cached_tracks ct ON ct.id = h.trackId
+        GROUP BY h.trackId
+        ORDER BY playCount DESC 
+    """
+    )
+    abstract fun getAllTracksStats(): Flow<List<TrackStats>>
+
+
+    // ==========================================
+    // --- 3. THE VAULT (Track Caching) ---
+    // ==========================================
+
+    @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
+    abstract fun getCachedTracks(): Flow<List<CachedTrackEntity>>
+
+    @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
+    abstract suspend fun getCachedTracksSync(): List<CachedTrackEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun internalInsertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
+
+    @Query("DELETE FROM cached_tracks")
+    abstract suspend fun internalClearTrackCache(): Int
+
+    /**
+     * THE RECONCILIATION TRANSACTION
+     * Ensures the UI never sees an empty library during a refresh.
+     * This is the "Nuclear" fix for flickering screens.
+     */
+    @Transaction
+    open suspend fun insertCachedTracksTransaction(tracks: List<CachedTrackEntity>) {
+        internalClearTrackCache()
+        if (tracks.isNotEmpty()) {
+            internalInsertCachedTracks(tracks)
+        }
+    }
+
+    // ==========================================
+    // --- 5. GRIMOIRE MANAGEMENT (Playlists) ---
+    // ==========================================
+
+    /**
+     * 🔥 THE VISIBILITY FIX: The Missing Retrieval Query
+     * You need this in your main DAO to feed the Home/Library screens.
+     * Note the 'AS id' to match your Playlist data class.
+     */
+
+
+    @Transaction
+    open suspend fun savePlaylistOrder(playlistId: Long, trackIds: List<String>) {
+        // Prevent operations on the ghost -1 ID
+        if (playlistId <= 0) return
+
+        trackIds.forEachIndexed { index, trackId ->
+            updatePlaylistTrackPosition(playlistId, trackId, index)
+        }
+    }
+
+
+
+    // ==========================================
+    // --- 4. CONTENT CACHES (Lyrics & Waveforms) ---
+    // ==========================================
 
     @Query("SELECT * FROM lyrics_cache WHERE trackId = :trackId")
     abstract suspend fun getLyricsCache(trackId: String): LyricsCacheEntity?
@@ -123,58 +295,27 @@ abstract class TigerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertLyricsCache(lyrics: LyricsCacheEntity): Long
 
-    @Query("UPDATE lyrics_cache SET lastAccessed = :timestamp WHERE trackId = :trackId")
-    abstract suspend fun updateLyricsAccessTime(
-        trackId: String,
-        timestamp: Long = System.currentTimeMillis()
-    ): Int
-
-    @Query("DELETE FROM lyrics_cache WHERE trackId NOT IN (SELECT trackId FROM lyrics_cache ORDER BY lastAccessed DESC LIMIT 2000)")
-    abstract suspend fun enforceLyricsCacheLimit(): Int
-
-    @Query("DELETE FROM lyrics_cache")
-    abstract suspend fun clearAllLyrics(): Int
-
-    // --- THE WAVEFORM CACHE ---
-
     @Query("SELECT * FROM waveform_cache WHERE trackId = :trackId LIMIT 1")
     abstract suspend fun getWaveformCache(trackId: String): WaveformCacheEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertWaveformCache(waveform: WaveformCacheEntity)
 
-    // --- 5. THE TEMPORAL DATA (Minutes & Play Counts) ---
+    // --- THE VAULT (Track Caching) ---
 
-    @Query("""
-        SELECT COUNT(*) 
-        FROM playback_history 
-        WHERE trim(CASE 
-            WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-            WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-            WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-            WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
-            ELSE artist 
-        END) = :artistName
-    """)
-    abstract suspend fun getArtistPlayCount(artistName: String): Int
+    @Query("DELETE FROM cached_tracks")
+    abstract suspend fun clearTrackCache(): Int
 
-    @Query("""
-        SELECT COALESCE(SUM(durationListenedMs), 0) / 60000 
-        FROM playback_history 
-        WHERE trim(CASE 
-            WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-            WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-            WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-            WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
-            ELSE artist 
-        END) = :artistName
-    """)
-    abstract suspend fun getArtistMinutesListened(artistName: String): Int
+    // ==========================================
+    // --- 5. GRIMOIRE MANAGEMENT (Playlists) ---
+    // ==========================================
 
-    // --- 6. GRIMOIRE MANAGEMENT (Playlists) ---
+
+
 
     @Query("DELETE FROM playlists WHERE playlistId = :playlistId")
     abstract suspend fun deletePlaylist(playlistId: Long): Int
+
 
     @Query("UPDATE playlists SET name = :newName WHERE playlistId = :playlistId")
     abstract suspend fun renamePlaylist(playlistId: Long, newName: String): Int
@@ -189,19 +330,72 @@ abstract class TigerDao {
     abstract suspend fun insertPlaylistTrackCrossRefs(crossRefs: List<PlaylistTrackCrossRef>): List<Long>
 
     @Query("UPDATE playlist_track_cross_ref SET position = :position WHERE playlistId = :playlistId AND trackId = :trackId")
-    abstract suspend fun updatePlaylistTrackPosition(playlistId: Long, trackId: String, position: Int): Int
+    abstract suspend fun updatePlaylistTrackPosition(
+        playlistId: Long,
+        trackId: String,
+        position: Int
+    ): Int
 
-    // --- 7. GLOBAL PURGE ---
+    // ==========================================
+    // --- 6. SYSTEM MAINTENANCE ---
+    // ==========================================
+
+    /**
+     * PRUNING RITUAL
+     * Prevents the history table from bloating. Deletes everything outside the last 5,000 entries.
+     */
+    @Query(
+        """
+        DELETE FROM playback_history 
+        WHERE id NOT IN (
+            SELECT id FROM playback_history 
+            ORDER BY timestamp DESC 
+            LIMIT 5000
+        )
+    """
+    )
+    abstract suspend fun pruneExcessiveHistory(): Int
 
     @Query("DELETE FROM playback_history WHERE timestamp <= :cutoffTime")
-    abstract suspend fun purgeOldHistory(cutoffTime: Long): Int
+    abstract suspend fun purgeHistoryBefore(cutoffTime: Long): Int
 
-    @Query("""
+    @Query(
+        """
         SELECT artworkUriString FROM cached_tracks 
         WHERE artist = :artistName 
         AND artworkUriString IS NOT NULL 
         AND artworkUriString != '' 
         LIMIT 1
-    """)
+    """
+    )
     abstract suspend fun getLocalArtworkForArtist(artistName: String): String?
+
+
+    // ==========================================
+    // --- 4. CONTENT CACHES (Lyrics & Waveforms) ---
+    // ==========================================
+
+
+    // 🔥 THE FIX: Restoring the Lyric Maintenance Rituals
+    @Query("UPDATE lyrics_cache SET lastAccessed = :timestamp WHERE trackId = :trackId")
+    abstract suspend fun updateLyricsAccessTime(
+        trackId: String,
+        timestamp: Long = System.currentTimeMillis()
+    ): Int
+
+    @Query(
+        """
+        DELETE FROM lyrics_cache 
+        WHERE trackId NOT IN (
+            SELECT trackId FROM lyrics_cache 
+            ORDER BY lastAccessed DESC 
+            LIMIT 2000
+        )
+    """
+    )
+    abstract suspend fun enforceLyricsCacheLimit(): Int
+
+    @Query("DELETE FROM lyrics_cache")
+    abstract suspend fun clearAllLyrics(): Int
+
 }

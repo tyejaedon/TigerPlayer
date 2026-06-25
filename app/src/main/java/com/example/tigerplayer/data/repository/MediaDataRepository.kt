@@ -11,11 +11,10 @@ import com.example.tigerplayer.data.remote.model.SpotifyArtistDetail
 import com.example.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,126 +36,115 @@ class MediaDataRepository @Inject constructor(
     private val lastFmApi: LastFmApi
 ) {
 
-    fun getArtistDetails(artistName: String): Flow<ArtistDetails> = flow {
-        // 1. THE NORMALIZATION RITUAL
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun getArtistDetails(artistName: String): Flow<ArtistDetails> {
         val cleanArtist = ArtistUtils.getBaseArtist(artistName).trim()
         val cacheKey = cleanArtist.lowercase()
 
         if (cleanArtist.isBlank() || cleanArtist.equals("<unknown>", ignoreCase = true)) {
-            emit(ArtistDetails(cleanArtist, null, "Unknown entity."))
-            return@flow
+            return flowOf(ArtistDetails(cleanArtist, null, "Unknown entity."))
         }
 
-        // Gather temporal stats directly from the local records
-        val localCount = tigerDao.getArtistPlayCount(cleanArtist)
-        val localMinutes = tigerDao.getArtistMinutesListened(cleanArtist)
+        return tigerDao.getArtistCache(cacheKey).flatMapLatest { cachedData ->
+            flow {
+                // Gather temporal stats directly from the local records
+                val localCount = tigerDao.getArtistPlayCount(cleanArtist)
+                val localMinutes = tigerDao.getArtistMinutesListened(cleanArtist)
 
-        // 2. THE ARCHIVE CHECK
-        val cachedData = tigerDao.getArtistCache(cacheKey)
-
-        if (cachedData != null) {
-            emit(ArtistDetails(
-                name = cleanArtist,
-                imageUrl = cachedData.imageUrl,
-                bio = cachedData.bio,
-                genres = cachedData.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
-                localPlayCount = localCount,
-                minutesListened = localMinutes
-            ))
-            return@flow
-        }
-
-        // 3. THE RESTORED DUAL-ORACLE RITUAL
-        // 🔥 THE FIX: Compute the data first, handle exceptions, THEN emit outside the block.
-        val freshDetails = try {
-            coroutineScope {
-                val spotifyDeferred = async {
-                    val token = authManager.getValidToken()
-                    if (token.isNotEmpty()) {
-                        val response = spotifyApiService.searchArtist("Bearer $token", cleanArtist)
-                        if (response.isSuccessful) response.body()?.artists?.items?.firstOrNull() else null
-                    } else null
-                }
-
-                val lastFmDeferred = async {
-                    try {
-                        val response = lastFmApi.getArtistInfo(artistName = cleanArtist)
-                        if (response.isSuccessful) response.body()?.artist else null
-                    } catch (e: Exception) { null }
-                }
-
-                val spotifyDetail = spotifyDeferred.await()
-                val lastFmArtist = lastFmDeferred.await()
-
-                if (spotifyDetail != null || lastFmArtist != null) {
-                    var imageUrl = spotifyDetail?.images?.firstOrNull()?.url
-                    if (imageUrl.isNullOrBlank()) imageUrl = lastFmArtist?.image?.getBestImage()
-                    if (imageUrl.isNullOrBlank()) imageUrl = tigerDao.getLocalArtworkForArtist(cleanArtist)
-
-                    val genreList = spotifyDetail?.genres?.takeIf { it.isNotEmpty() }
-                        ?: lastFmArtist?.tags?.tag?.mapNotNull { it.name }
-                        ?: emptyList()
-
-                    val finalBio = lastFmArtist?.bio?.summary?.let {
-                        if (it.isNotBlank()) it.substringBefore("<a href").trim() else null
-                    } ?: spotifyDetail?.let { buildSyntheticBio(it) } ?: "No records found."
-
-                    val details = ArtistDetails(
-                        name = spotifyDetail?.name ?: lastFmArtist?.name ?: cleanArtist,
-                        imageUrl = imageUrl,
-                        bio = finalBio,
-                        genres = genreList,
-                        popularity = spotifyDetail?.popularity ?: 0,
-                        localPlayCount = localCount,
-                        minutesListened = localMinutes
-                    )
-
-                    tigerDao.insertArtistCache(
-                        ArtistCacheEntity(
-                            artistName = cacheKey,
-                            imageUrl = imageUrl,
-                            bio = finalBio,
-                            genres = genreList.joinToString(",")
-                        )
-                    )
-                    details
-                } else {
-                    val voidBio = "Lore not found in the grand archives."
-                    tigerDao.insertArtistCache(
-                        ArtistCacheEntity(
-                            artistName = cacheKey,
-                            imageUrl = null,
-                            bio = voidBio,
-                            genres = ""
-                        )
-                    )
-                    ArtistDetails(
+                if (cachedData != null) {
+                    emit(ArtistDetails(
                         name = cleanArtist,
-                        imageUrl = null,
-                        bio = voidBio,
+                        imageUrl = cachedData.imageUrl,
+                        bio = cachedData.bio,
+                        genres = cachedData.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
                         localPlayCount = localCount,
                         minutesListened = localMinutes
-                    )
+                    ))
+                }
+
+                // If no cache or we want to refresh, do the Dual-Oracle Ritual
+                // For simplicity, only fetch if no cache or image is missing
+                if (cachedData == null || cachedData.imageUrl == null) {
+                    val freshDetails = try {
+                        coroutineScope {
+                            val spotifyDeferred = async {
+                                val token = authManager.getValidToken()
+                                if (token.isNotEmpty()) {
+                                    val response = spotifyApiService.searchArtist("Bearer $token", cleanArtist)
+                                    if (response.isSuccessful) response.body()?.artists?.items?.firstOrNull() else null
+                                } else null
+                            }
+
+                            val lastFmDeferred = async {
+                                try {
+                                    val response = lastFmApi.getArtistInfo(artistName = cleanArtist)
+                                    if (response.isSuccessful) response.body()?.artist else null
+                                } catch (e: Exception) { null }
+                            }
+
+                            val spotifyDetail = spotifyDeferred.await()
+                            val lastFmArtist = lastFmDeferred.await()
+
+                            if (spotifyDetail != null || lastFmArtist != null) {
+                                var imageUrl = spotifyDetail?.images?.firstOrNull()?.url
+                                if (imageUrl.isNullOrBlank()) imageUrl = lastFmArtist?.image?.getBestImage()
+                                if (imageUrl.isNullOrBlank()) imageUrl = tigerDao.getLocalArtworkForArtist(cleanArtist)
+
+                                val genreList = spotifyDetail?.genres?.takeIf { it.isNotEmpty() }
+                                    ?: lastFmArtist?.tags?.tag?.mapNotNull { it.name }
+                                    ?: emptyList()
+
+                                val finalBio = lastFmArtist?.bio?.summary?.let {
+                                    if (it.isNotBlank()) it.substringBefore("<a href").trim() else null
+                                } ?: spotifyDetail?.let { buildSyntheticBio(it) } ?: "No records found."
+
+                                val details = ArtistDetails(
+                                    name = spotifyDetail?.name ?: lastFmArtist?.name ?: cleanArtist,
+                                    imageUrl = imageUrl,
+                                    bio = finalBio,
+                                    genres = genreList,
+                                    popularity = spotifyDetail?.popularity ?: 0,
+                                    localPlayCount = localCount,
+                                    minutesListened = localMinutes
+                                )
+
+                                tigerDao.insertArtistCache(
+                                    ArtistCacheEntity(
+                                        artistName = cacheKey,
+                                        imageUrl = imageUrl,
+                                        bio = finalBio,
+                                        genres = genreList.joinToString(",")
+                                    )
+                                )
+                                details
+                            } else if (cachedData == null) {
+                                val voidBio = "Lore not found in the grand archives."
+                                tigerDao.insertArtistCache(
+                                    ArtistCacheEntity(
+                                        artistName = cacheKey,
+                                        imageUrl = null,
+                                        bio = voidBio,
+                                        genres = ""
+                                    )
+                                )
+                                ArtistDetails(
+                                    name = cleanArtist,
+                                    imageUrl = null,
+                                    bio = voidBio,
+                                    localPlayCount = localCount,
+                                    minutesListened = localMinutes
+                                )
+                            } else null
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        null
+                    }
+                    freshDetails?.let { emit(it) }
                 }
             }
-        } catch (e: Exception) {
-            // Re-throw cancellations immediately so Coroutines can clean up memory safely
-            if (e is CancellationException) throw e
-
-            Log.e("MediaRepo", "Ritual failed: ${e.message}")
-            ArtistDetails(
-                name = cleanArtist,
-                imageUrl = null,
-                bio = "Connection to oracles lost.",
-                localPlayCount = localCount,
-                minutesListened = localMinutes
-            )
-        }
-
-        // 🔥 THE FIX: Safely emit only after all try/catch blocks are resolved
-        emit(freshDetails)
-
-    }.flowOn(Dispatchers.IO)
+        }.distinctUntilChanged().flowOn(Dispatchers.IO)
+    }
 
     private fun List<LastFmImage>.getBestImage(): String? {
         return this.filter { !it.url.orEmpty().contains("2a96cbd8b46e442fc41c2b86b821562f") }

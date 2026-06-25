@@ -6,6 +6,7 @@ import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,39 +15,38 @@ import javax.inject.Singleton
 class HistoryRepository @Inject constructor(
     private val tigerDao: TigerDao
 ) {
-    // --- 1. THE RECENT CHANTS ---
+    // Helper to get start of day without expensive Calendar objects
+    private fun getStartOfToday(): Long {
+        val now = System.currentTimeMillis()
+        return now - (now % 86400000L) // Simple math to snap to UTC midnight
+    }
+
+    // --- 1. RECENT CHANTS ---
     val recentTracks: Flow<List<PlaybackHistoryEntity>> = tigerDao.getRecentTracks()
 
-    // --- 2. LIFETIME POWER (Total Listening Time) ---
+    // --- 2. AGGREGATE POWER ---
     val totalListeningTime: Flow<Long?> = tigerDao.getTotalListeningTimeMs()
 
-    // --- 3. THE DAILY RITUAL (Listening Time Today) ---
-    // This calculates the start of the current day to filter the archives
-    val listeningTimeToday: Flow<Long?> = tigerDao.getTotalListeningTimeMs(
-        startTime = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-    )
+    // Today's stats refreshed automatically
+    val listeningTimeToday: Flow<Long?> = tigerDao.getTotalListeningTimeMs(getStartOfToday())
 
-    // --- 4. TOP PERFORMERS ---
-    val topArtist: Flow<String?> = tigerDao.getTopArtist()
+    // --- 3. ANALYTICAL QUERIES ---
 
-    // --- 5. CUSTOM QUERIES (For Weekly/Monthly Stats) ---
-    fun getTotalListeningTime(startTime: Long): Flow<Long?> =
-        tigerDao.getTotalListeningTimeMs(startTime)
+    // Top Artist for the current day/week/month
+    fun getTopArtist(startTime: Long = 0L): Flow<String?> = tigerDao.getTopArtist(startTime)
 
-    fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>> =
-        tigerDao.getTopArtists(startTime, limit)
 
     fun getTopTracks(startTime: Long, limit: Int): Flow<List<TrackStats>> =
         tigerDao.getTopTracks(startTime, limit)
+    fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>> =
+        tigerDao.getTopArtists(startTime, limit)
+
+    fun getAllTracksStats(): Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
+    val getAllTracks: Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
 
     /**
-     * ADDS A MANIFESTATION TO THE ARCHIVES
-     * Records the track, its source, and the time spent listening.
+     * Records a manifestation.
+     * Optimization: If duration is < 5s, we skip recording to avoid polluting stats with "skips".
      */
     suspend fun addTrackToHistory(
         trackId: String,
@@ -57,6 +57,8 @@ class HistoryRepository @Inject constructor(
         durationMs: Long,
         source: MediaSource
     ) {
+        if (durationMs < 5000) return // Ignore brief skips
+
         val historyEntry = PlaybackHistoryEntity(
             trackId = trackId,
             title = title,
@@ -65,9 +67,11 @@ class HistoryRepository @Inject constructor(
             imageUrl = imageUrl,
             durationListenedMs = durationMs,
             source = source,
-            // Timestamp is usually handled by the Entity's default value
             timestamp = System.currentTimeMillis()
         )
         tigerDao.insertHistory(historyEntry)
     }
+
+    fun getTotalListeningTime(startTime: Long): Flow<Long?> =
+        tigerDao.getTotalListeningTimeMs(startTime)
 }

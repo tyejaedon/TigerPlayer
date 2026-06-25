@@ -7,6 +7,7 @@ import com.example.tigerplayer.data.remote.model.SpotifyTrack
 import com.example.tigerplayer.data.repository.SpotifyRepository
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -39,9 +40,6 @@ class CloudViewModel @Inject constructor(
     private val _uiError = MutableStateFlow<String?>(null)
     val uiError = _uiError.asStateFlow()
 
-    // Guards against infinite reload loops when OAuth token refreshes
-    private var initialSyncComplete = false
-
     // --- THE REACTIVE FILTERS (With Debounce) ---
     @OptIn(FlowPreview::class)
     val filteredPlaylists = _searchQuery
@@ -66,14 +64,15 @@ class CloudViewModel @Inject constructor(
 
     init {
         // CONTINUOUS MONITORING
+        // 🔥 THE FIX: Replaced mutable boolean flag with elegant .take(1) stream operation
         viewModelScope.launch {
-            authManager.token.collectLatest { currentToken ->
-                if (currentToken.isNotEmpty() && !initialSyncComplete) {
-                    initialSyncComplete = true
+            authManager.token
+                .filter { it.isNotEmpty() }
+                .take(1) // Automatically cancels itself after the first valid emission
+                .collect {
                     Log.d("CloudVM", "Initial token detected! Initiating cloud sync...")
                     forceRefreshArchives()
                 }
-            }
         }
     }
 
@@ -109,7 +108,9 @@ class CloudViewModel @Inject constructor(
 
             try {
                 _currentPlaylistTracks.value = spotifyRepository.fetchPlaylistTracks(token, playlistId)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                // 🔥 THE FIX: Never swallow CancellationExceptions in Coroutines!
+                if (e is CancellationException) throw e
                 _uiError.value = "Failed to manifest tracks."
             } finally {
                 _isLoadingTracks.value = false
@@ -125,7 +126,8 @@ class CloudViewModel @Inject constructor(
 
             try {
                 _currentPlaylistTracks.value = spotifyRepository.fetchAlbumTracks(token, albumId)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _uiError.value = "Failed to manifest album."
             } finally {
                 _isLoadingTracks.value = false
@@ -139,7 +141,8 @@ class CloudViewModel @Inject constructor(
             _isLoadingAlbums.value = true
             try {
                 spotifyRepository.fetchUserSavedAlbums(token)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _uiError.value = "Failed to retrieve your album grimoires."
             } finally {
                 _isLoadingAlbums.value = false
@@ -153,7 +156,8 @@ class CloudViewModel @Inject constructor(
             _isLoadingTracks.value = true
             try {
                 spotifyRepository.fetchUserPlaylists(token)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _uiError.value = "Failed to retrieve your playlist grimoires."
             } finally {
                 _isLoadingTracks.value = false

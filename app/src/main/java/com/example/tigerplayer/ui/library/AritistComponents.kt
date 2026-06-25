@@ -85,7 +85,7 @@ fun ArtistVanguardStats(profile: ArtistDetails?, accentColor: Color) {
                 Text(
                     text = "VANGUARD DOSSIER",
                     style = MaterialTheme.typography.labelLarge,
-                    color = accentColor,
+                    color = MaterialTheme.colorScheme.surfaceBright,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 2.sp
                 )
@@ -206,8 +206,9 @@ fun GenrePill(name: String, accentColor: Color) {
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = accentColor,
-            letterSpacing = 1.sp
+            color = MaterialTheme.colorScheme.surfaceTint,
+            letterSpacing = 1.sp,
+
         )
     }
 }

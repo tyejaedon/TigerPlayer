@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.constellation
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tigerplayer.constellation.ConstellationDataEngine
@@ -9,56 +10,104 @@ import com.example.tigerplayer.constellation.OrbitalLayoutEngine
 import com.example.tigerplayer.constellation.PositionedNode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.*
 import javax.inject.Inject
+import kotlin.math.roundToInt
+
+/* -----------------------------------
+   🌌 UI STATE
+----------------------------------- */
 
 sealed class ConstellationState {
     object Loading : ConstellationState()
+
     data class Success(
         val nodes: Map<String, PositionedNode>,
         val edges: List<GraphEdge>,
-        val insightMessage: String
+        val density: Float,
+        val seed: Long,
+        val insightMessage: String,
     ) : ConstellationState()
+
     data class Error(val message: String) : ConstellationState()
 }
 
+/* -----------------------------------
+   🧠 VIEWMODEL
+----------------------------------- */
+
 @HiltViewModel
 class ConstellationViewModel @Inject constructor(
-    private val dataEngine: ConstellationDataEngine,
-    private val layoutEngine: OrbitalLayoutEngine
+    dataEngine: ConstellationDataEngine,
+    private val layoutEngine: OrbitalLayoutEngine,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<ConstellationState>(ConstellationState.Loading)
-    val uiState: StateFlow<ConstellationState> = _uiState.asStateFlow()
+    /**
+     * 🔥 THE SUPREME REACTIVE PIPELINE
+     * Converts the raw semantic graph into a physics-positioned UI state.
+     * flowOn ensures the heavy layout math happens on the Default dispatcher.
+     */
+    val uiState: StateFlow<ConstellationState> = dataEngine.getGraphFlow()
+        .map { graph ->
+            // 1. APPLY ORBITAL LAYOUT (Physics Layer)
+            val layoutNodes = layoutEngine.layout(graph)
+            val nodeMap = layoutNodes.associateBy { it.id }
 
-    init {
-        loadUniverse()
+            // 2. GENERATE INSIGHTS (Narration Layer)
+            val insight = generateGalaxyInsight(graph.density, layoutNodes)
+
+            // 3. EMIT SUCCESS
+            ConstellationState.Success(
+                nodes = nodeMap,
+                edges = graph.edges,
+                density = graph.density,
+                seed = graph.seed,
+                insightMessage = insight
+            ) as ConstellationState
+        }
+        .flowOn(Dispatchers.Default) // Perform physics calculations off the Main thread
+        .catch { e ->
+            Log.e("ConstellationVM", "Universe collapse detected", e)
+            emit(ConstellationState.Error("The constellation collapsed: ${e.localizedMessage ?: "Unknown error"}"))
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ConstellationState.Loading
+        )
+
+    /* -----------------------------------
+       🌌 INSIGHT ENGINE
+    ----------------------------------- */
+
+    private fun generateGalaxyInsight(density: Float, layoutNodes: List<PositionedNode>): String {
+        val dominantArtist = layoutNodes.asSequence()
+            .filter { it.type == NodeType.ARTIST }
+            .maxByOrNull { it.weight }
+
+        val clusterCount = layoutNodes.count { it.orbitRadius < 1000f }
+
+        return buildString {
+            append("🌌 Galaxy density: ${(density * 100).roundToInt()}%\n")
+            dominantArtist?.let {
+                append("🎵 Dominant gravitational source: ${it.label}\n")
+            }
+            append("🪐 Local orbital clusters detected: $clusterCount\n")
+            append(
+                if (clusterCount > 20)
+                    "The system is entering a high-turbulence resonance field."
+                else
+                    "Orbital stability is within harmonic equilibrium."
+            )
+        }
     }
 
-    private fun loadUniverse() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _uiState.value = ConstellationState.Loading
-            try {
-                val graph = dataEngine.buildGraph()
-                val layoutNodes = layoutEngine.layout(graph)
-
-                // The UI Canvas is optimized to read from a Map O(1) instead of searching Lists O(N)
-                val nodeMap = layoutNodes.associateBy { it.id }
-
-                val topStar = layoutNodes.firstOrNull { it.type == NodeType.ARTIST }?.label ?: "the unknown"
-                val insight = "Your neural mapping revolves heavily around the gravity of $topStar. A dense cluster of high-frequency individual chants floats directly south."
-
-                _uiState.value = ConstellationState.Success(
-                    nodes = nodeMap,
-                    edges = graph.edges,
-                    insightMessage = insight
-                )
-            } catch (e: Exception) {
-                _uiState.value = ConstellationState.Error("The telescope failed to align: ${e.message}")
-            }
-        }
+    /**
+     * Technically redundant in a reactive setup, but useful for 
+     * manual re-triggers if needed for animation seeds.
+     */
+    fun refreshUniverse() {
+        // In a reactive Flow-based architecture, this would typically 
+        // trigger a refresh in the DataRepository or DataEngine.
     }
 }

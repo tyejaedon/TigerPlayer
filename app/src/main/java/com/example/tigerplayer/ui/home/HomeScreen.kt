@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
@@ -61,6 +62,7 @@ private val IgniRed = Color(0xFFFF5252)
 private val SpotifyGreen = Color(0xFF1DB954)
 private val NeuralPurple = Color(0xFFB388FF) // 🔥 NEW CONSTANT
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -78,9 +80,13 @@ fun HomeScreen(
 
     var isStatsExpanded by remember { mutableStateOf(false) }
     var isSearchActive by remember { mutableStateOf(false) }
+    val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
+
 
     // 🔥 NEW: Constellation Integration State
     var showConstellation by remember { mutableStateOf(false) }
+    var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+
 
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
@@ -144,10 +150,14 @@ fun HomeScreen(
 
             if (localSearchQuery.isNotEmpty()) {
                 renderSearchResults(
-                    uiState = uiState, viewModel = viewModel,
-                    matchedArtists = matchedArtists, matchedAlbums = matchedAlbums,
-                    onNavigateToAlbum = onNavigateToAlbum, onNavigatetoArtist = onNavigatetoArtist,
-                    artistDetails = artistDetails
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    matchedArtists = matchedArtists,
+                    matchedAlbums = matchedAlbums,
+                    onNavigateToAlbum = onNavigateToAlbum,
+                    onNavigateToArtist = onNavigatetoArtist,
+                    artistDetails = artistDetails,
+                    onOptionsClick = { track -> searchTrackForOptions = track }
                 )
             } else {
 
@@ -214,6 +224,41 @@ fun HomeScreen(
                 onClose = { showConstellation = false }
             )
         }
+    }
+    // --- SEARCH RESULTS OPTIONS PORTAL ---
+    // ==========================================
+    // --- SEARCH RESULTS OPTIONS PORTAL ---
+    // ==========================================
+    searchTrackForOptions?.let { selectedTrack ->
+        SongOptionsSheet(
+            track = selectedTrack,
+            playlists = playlists,
+            onDismiss = {
+                // Clear state and perform subtle haptic feedback
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                searchTrackForOptions = null
+            },
+            onPlayNext = {
+                viewModel.addToQueue(selectedTrack)
+                searchTrackForOptions = null // Close after action
+            },
+            onAddToPlaylist = { playlistId ->
+                viewModel.addTrackToPlaylist(playlistId, selectedTrack)
+                // Keep open or close based on UX preference - usually close for clean flow
+                searchTrackForOptions = null
+            },
+            onGoToAlbum = { albumName ->
+                // Ensure search is deactivated when navigating deep into the library
+                isSearchActive = false
+                viewModel.clearSearch()
+                onNavigateToAlbum(albumName)
+                searchTrackForOptions = null
+            },
+            onCreatePlaylist = { name ->
+                // 🔥 Link the "Forge" ritual to the Master ViewModel
+                viewModel.createPlaylist(name)
+            }
+        )
     }
 }
 

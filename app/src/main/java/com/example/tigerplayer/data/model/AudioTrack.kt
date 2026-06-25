@@ -32,9 +32,9 @@ data class AudioTrack(
  * and added artworkUri to support custom covers set by the user.
  */
 data class Playlist(
-    val id: Long,
-    val name: String,
-    val trackCount: Int = 0,
-    val artworkUri: String? = null, // Added to support the new edit UI
-    val createdAt: Long = System.currentTimeMillis()
+    val id: Long,           // Maps to 'AS id'
+    val name: String,       // Maps to 'p.name'
+    val trackCount: Int,    // Maps to 'COUNT(...) AS trackCount'
+    val artworkUri: String?,// Maps to 'p.artworkUri'
+    val createdAt: Long     // Maps to 'p.createdAt'
 )

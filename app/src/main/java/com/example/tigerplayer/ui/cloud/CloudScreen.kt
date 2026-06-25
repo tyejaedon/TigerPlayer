@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +33,7 @@ import com.example.tigerplayer.ui.theme.SpotifyGreen
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,8 +55,17 @@ fun CloudScreen(
     val isLoadingAlbums by viewModel.isLoadingAlbums.collectAsState()
     val isSyncing = isLoadingTracks || isLoadingAlbums
 
-    var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Playlists", "Albums")
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val scope = rememberCoroutineScope()
+
+    // --- OPTIMIZED MAPPINGS ---
+    val playlistItems = remember(playlists) {
+        playlists.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, "Playlist") }
+    }
+    val albumItems = remember(albums) {
+        albums.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, it.artists.firstOrNull()?.name ?: "Unknown") }
+    }
 
     // --- ERROR PROPAGATION (TOAST) ---
     LaunchedEffect(uiError) {
@@ -87,12 +99,12 @@ fun CloudScreen(
                 )
 
                 SecondaryTabRow(
-                    selectedTabIndex = selectedTab,
+                    selectedTabIndex = pagerState.currentPage,
                     containerColor = Color.Transparent,
                     divider = {},
                     indicator = {
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(selectedTab),
+                            modifier = Modifier.tabIndicatorOffset(pagerState.currentPage),
                             height = 3.dp,
                             color = SpotifyGreen
                         )
@@ -100,15 +112,16 @@ fun CloudScreen(
                 ) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
-                            selected = selectedTab == index,
-                            onClick = { selectedTab = index },
+                            selected = pagerState.currentPage == index,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            selectedContentColor = SpotifyGreen,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             text = {
                                 Text(
                                     text = title.uppercase(),
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.sp,
-                                    color = if (selectedTab == index) SpotifyGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    letterSpacing = 1.sp
                                 )
                             }
                         )
@@ -122,25 +135,30 @@ fun CloudScreen(
                             color = SpotifyGreen
                         )
                     } else {
-                        when (selectedTab) {
-                            0 -> {
-                                if (playlists.isEmpty() && !isSyncing) {
-                                    CloudEmptyState(message = if (query.isEmpty()) "No Spotify Playlists Found." else "No Playlists Match Your Query.")
-                                } else {
-                                    ArchiveGrid(
-                                        items = playlists.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, "Playlist") },
-                                        onClick = { id, name, img -> onNavigateToSpotifyPlaylist(id, name, img) }
-                                    )
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            when (page) {
+                                0 -> {
+                                    if (playlistItems.isEmpty() && !isSyncing) {
+                                        CloudEmptyState(message = if (query.isEmpty()) "No Spotify Playlists Found." else "No Playlists Match Your Query.")
+                                    } else {
+                                        ArchiveGrid(
+                                            items = playlistItems,
+                                            onClick = { id, name, img -> onNavigateToSpotifyPlaylist(id, name, img) }
+                                        )
+                                    }
                                 }
-                            }
-                            1 -> {
-                                if (albums.isEmpty() && !isSyncing) {
-                                    CloudEmptyState(message = if (query.isEmpty()) "No Saved Albums Found." else "No Albums Match Your Query.")
-                                } else {
-                                    ArchiveGrid(
-                                        items = albums.map { ArchiveItem(it.id, it.name, it.images?.firstOrNull()?.url, it.artists.firstOrNull()?.name ?: "Unknown") },
-                                        onClick = { id, name, img -> onNavigateToSpotifyAlbum(id, name, img) }
-                                    )
+                                1 -> {
+                                    if (albumItems.isEmpty() && !isSyncing) {
+                                        CloudEmptyState(message = if (query.isEmpty()) "No Saved Albums Found." else "No Albums Match Your Query.")
+                                    } else {
+                                        ArchiveGrid(
+                                            items = albumItems,
+                                            onClick = { id, name, img -> onNavigateToSpotifyAlbum(id, name, img) }
+                                        )
+                                    }
                                 }
                             }
                         }

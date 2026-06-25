@@ -11,8 +11,7 @@ data class PlaylistEntity(
      * - Default (0): Triggers Room's Auto-Increment for standard user playlists.
      * - Manual (-1): Used for LIKED_SONGS_ID to create a singleton "Liked Songs" vault.
      */
-    @PrimaryKey(autoGenerate = true)
-    val playlistId: Long = 0,
+    @PrimaryKey(autoGenerate = true) val playlistId: Long = 0, // This is the source
 
     val name: String,
 

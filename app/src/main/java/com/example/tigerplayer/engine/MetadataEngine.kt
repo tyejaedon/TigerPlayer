@@ -7,6 +7,7 @@ import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.data.repository.LyricsRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
 import com.example.tigerplayer.utils.ArtistUtils
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import androidx.core.net.toUri
@@ -32,15 +33,21 @@ class MetadataEngine @Inject constructor(
     suspend fun fetchTrackMetadata(track: AudioTrack) {
         val normalizedKey = ArtistUtils.getBaseArtist(track.artist).lowercase().trim()
 
-        // Fetch Artist Info
-        mediaDataRepository.getArtistDetails(track.artist).collect { details ->
-            _artistDetails.update { it + (normalizedKey to details) }
-            _currentArtistImageUrl.value = details.imageUrl
-        }
+        kotlinx.coroutines.coroutineScope {
+            // Fetch Artist Info (Persistent collection for real-time DB updates)
+            launch {
+                mediaDataRepository.getArtistDetails(track.artist).collect { details ->
+                    _artistDetails.update { it + (normalizedKey to details) }
+                    _currentArtistImageUrl.value = details.imageUrl
+                }
+            }
 
-        // Fetch Lyrics
-        lyricsRepository.getLyrics(track).collect { lyrics ->
-            _currentLyrics.value = lyrics
+            // Fetch Lyrics (Persistent collection for real-time DB updates)
+            launch {
+                lyricsRepository.getLyrics(track).collect { lyrics ->
+                    _currentLyrics.value = lyrics
+                }
+            }
         }
     }
 
@@ -81,14 +88,11 @@ class MetadataEngine @Inject constructor(
 
             if (!_artistDetails.value.containsKey(cacheKey)) {
                 try {
-                    // 🔥 THE FIX: Safe collection to prevent AbortFlowException crashes
-                    var fetchedDetails: ArtistDetails? = null
-                    mediaDataRepository.getArtistDetails(name).collect { d ->
-                        if (fetchedDetails == null) fetchedDetails = d
-                    }
-
-                    if (fetchedDetails?.imageUrl != null) {
-                        _artistDetails.update { it + (cacheKey to fetchedDetails!!) }
+                    // We only take the first emission (cache or network) for pre-seeding
+                    mediaDataRepository.getArtistDetails(name).take(1).collect { d ->
+                        if (d.imageUrl != null) {
+                            _artistDetails.update { it + (cacheKey to d) }
+                        }
                     }
                 } catch (e: Exception) {
                     Log.w("MetadataEngine", "Pre-seed failed for $name: ${e.message}")

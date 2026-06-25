@@ -237,7 +237,8 @@ fun ArtistDetailsScreen(
                     onGoToAlbum = { albumName ->
                         trackForOptions = null
                         onAlbumClick(albumName)
-                    }
+                    },
+                    onCreatePlaylist ={name -> viewModel.createPlaylist(name)}
                 )
             }
         }

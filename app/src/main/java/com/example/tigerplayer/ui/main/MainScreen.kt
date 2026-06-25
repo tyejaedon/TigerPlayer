@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -45,6 +46,7 @@ private enum class PlayerSheetState {
 
 @Composable
 fun MainScreen(
+    // PlayerViewModel is passed from MainActivity because it dictates global UI (Mini/Full player)
     playerViewModel: PlayerViewModel,
     onNavigateToSpotifyPlaylist: (String, String, String?) -> Unit,
     onNavigateToSpotifyAlbum: (String, String, String?) -> Unit,
@@ -52,8 +54,7 @@ fun MainScreen(
     onNavigateToNavidromeLogin: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToPlaylist: (Long, String) -> Unit,
-    onNavigateToSettings: () -> Unit,
-    homeViewModel: HomeViewModel
+    onNavigateToSettings: () -> Unit
 ) {
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
@@ -64,8 +65,8 @@ fun MainScreen(
     val isExpanded = playerState == PlayerSheetState.EXPANDED
     val hasTrack = uiState.currentTrack != null
 
+    // Let the physical back button close the full-screen player
     BackHandler(enabled = isExpanded) {
-        // 🔥 THE FIX: Properly reassign the state
         playerState = PlayerSheetState.MINI
     }
 
@@ -111,6 +112,8 @@ fun MainScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // Ensure the bottom bar accounts for edge-to-edge navigation gestures
+                        .windowInsetsPadding(WindowInsets.navigationBars)
                         .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 ) {
                     AnimatedVisibility(
@@ -123,7 +126,6 @@ fun MainScreen(
                                 viewModel = playerViewModel,
                                 onExpandClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    // 🔥 THE FIX: Properly reassign the state
                                     playerState = PlayerSheetState.EXPANDED
                                 }
                             )
@@ -154,10 +156,15 @@ fun MainScreen(
                                     playerViewModel.clearSearch()
 
                                     tabNavController.navigate(tab.route) {
+                                        // Pop up to the start destination of the graph to
+                                        // avoid building up a large stack of destinations
                                         popUpTo(tabNavController.graph.findStartDestination().id) {
                                             saveState = true
                                         }
+                                        // Avoid multiple copies of the same destination when
+                                        // reselecting the same item
                                         launchSingleTop = true
+                                        // Restore state when reselecting a previously selected item
                                         restoreState = true
                                     }
                                 },
@@ -221,6 +228,10 @@ fun MainScreen(
                     }
                 ) {
                     composable(BottomNavTab.Home.route) {
+                        // 🔥 HILT INTEGRATION: The HomeViewModel is dynamically scoped right here!
+                        // It will live as long as the NavHost exists.
+                        val homeViewModel: HomeViewModel = hiltViewModel()
+
                         HomeScreen(
                             viewModel = playerViewModel,
                             homeViewModel = homeViewModel,
@@ -240,6 +251,7 @@ fun MainScreen(
                     }
 
                     composable(BottomNavTab.Cloud.route) {
+                        // CloudScreen inside inherently uses hiltViewModel() based on your earlier code
                         CloudScreen(
                             onNavigateToSpotifyPlaylist = onNavigateToSpotifyPlaylist,
                             onNavigateToSpotifyAlbum = onNavigateToSpotifyAlbum,
@@ -290,14 +302,11 @@ fun MainScreen(
                 viewModel = playerViewModel,
                 onCollapse = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    // 🔥 THE FIX: Properly reassign the state
                     playerState = PlayerSheetState.MINI
                 },
                 onNavigateToAlbum = {
-                    // 🔥 THE FIX: Properly reassign the state
                     playerState = PlayerSheetState.MINI
                     onNavigateToAlbum(it)
-
                 }
             )
         }
@@ -316,7 +325,7 @@ fun MainScreen(
         // INIT
         // ==============================
         LaunchedEffect(Unit) {
-            playerViewModel.loadLocalAudio(forceRefresh = false)
+            playerViewModel.loadLocalAudio(force = false)
         }
     }
 }

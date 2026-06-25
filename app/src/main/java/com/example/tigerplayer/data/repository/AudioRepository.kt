@@ -7,6 +7,7 @@ import androidx.annotation.RequiresExtension
 import androidx.core.net.toUri
 import com.example.tigerplayer.data.local.dao.PlaylistDao
 import com.example.tigerplayer.data.local.dao.TigerDao
+import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.CachedTrackEntity
 import com.example.tigerplayer.data.local.entity.PlaylistEntity
 import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
@@ -16,6 +17,7 @@ import com.example.tigerplayer.data.remote.api.RemoteTrack
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.utils.NavidromeSecurity
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,15 +49,18 @@ class AudioRepository @Inject constructor(
                 if (remoteCache.isEmpty() || forceRefresh) {
                     val remoteResult = navidromeRepository.getAllRemoteTracks(user, pass)
 
-                    // THE SAFEGUARD: Only overwrite the cache if the server actually responds
                     remoteResult.onSuccess { remoteTracks ->
-                        remoteCache = remoteTracks.map { it.toAudioTrack(baseUrl, user, pass) }
+                        // 🔥 PERFORMANCE FIX: Generate salt/token ONCE per sync, not per track
+                        val salt = UUID.randomUUID().toString().substring(0, 8)
+                        val token = NavidromeSecurity.generateToken(pass, salt)
+                        val authQuery = "u=$user&t=$token&s=$salt&v=1.16.1&c=TigerPlayer"
+
+                        remoteCache = remoteTracks.map { it.toAudioTrack(baseUrl, authQuery,pass) }
                     }.onFailure { error ->
-                        Log.e("AudioRepository", "Archive sync failed, relying on cache: ${error.message}")
-                        // We don't touch remoteCache here. It retains whatever it had before!
+                        Log.e("AudioRepository", "Archive sync failed: ${error.message}")
                     }
                 }
-                emit(remoteCache) // Emits either the new data, or the surviving cached data
+                emit(remoteCache)
             } else {
                 emit(emptyList())
             }
@@ -96,52 +101,34 @@ class AudioRepository @Inject constructor(
      * LOCAL CACHE LOGIC
      * retrieves bit-perfect local files from the internal vault.
      */
-    fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = flow {
-        // 1. THE FAST PATH: Instantly load the archive from Room
-        val cachedEntities = tigerDao.getCachedTracks()
-        val cachedTracks = cachedEntities.map { it.toDomainModel() }
-
-        var emitted = false
-        if (cachedTracks.isNotEmpty() && !forceRefresh) {
-            emit(cachedTracks)
-            emitted = true
-        }
-
-        // 2. THE SILENT PATROL: Scan the device in the background
-        localAudioDataSource.getLocalAudioFiles().collect { status ->
-            if (status is LocalAudioDataSource.ScanStatus.Complete) {
-                val freshTracks = status.tracks
-
-                // 3. THE RECONCILIATION: Check if the user downloaded or deleted music
-                val isArchiveOutdated = forceRefresh ||
-                        cachedTracks.size != freshTracks.size ||
-                        cachedTracks != freshTracks
-
-                if (isArchiveOutdated) {
-                    // Purge the stale ledger and secure the new loot
-                    tigerDao.clearTrackCache()
-                    if (freshTracks.isNotEmpty()) {
-                        tigerDao.insertCachedTracks(freshTracks.map { it.toEntity() })
-                    }
-                    // Emit the freshly forged tracks so the UI updates seamlessly
-                    emit(freshTracks)
-                    emitted = true
-                }
+    fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = channelFlow {
+        // Observe DB (Fast Path)
+        launch {
+            tigerDao.getCachedTracks().collect { entities ->
+                send(entities.map { it.toDomainModel() })
             }
         }
 
-        // Safety emission: If we haven't emitted anything yet (e.g., no cache and no scan changes)
-        // ensure we at least emit an empty list before completing so .first() doesn't crash.
-        if (!emitted) {
-            emit(cachedTracks) // This will be emptyList() if cachedTracks was empty
+        // Silent Patrol
+        launch {
+            localAudioDataSource.getLocalAudioFiles().collect { status ->
+                if (status is LocalAudioDataSource.ScanStatus.Complete) {
+                    val freshTracks = status.tracks
+                    val currentCacheCount = tigerDao.getCachedTracksSync().size
+
+                    // Only update DB if size differs or force requested to avoid UI flicker
+                    if (forceRefresh || currentCacheCount != freshTracks.size) {
+                        tigerDao.insertCachedTracks(freshTracks.map { it.toEntity() })
+                    }
+                }
+            }
         }
     }
-
     /**
      * Used specifically when the UI needs to display the ScanningOverlay.
      */
     fun getLocalTracksWithProgress(forceRefresh: Boolean = false): Flow<LocalAudioDataSource.ScanStatus> = flow {
-        val cachedEntities = tigerDao.getCachedTracks()
+        val cachedEntities = tigerDao.getCachedTracksSync()
         val cachedTracks = cachedEntities.map { it.toDomainModel() }
 
         if (cachedTracks.isNotEmpty() && !forceRefresh) {
@@ -174,8 +161,11 @@ class AudioRepository @Inject constructor(
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
         return playlistDao.getPlaylistsWithCount()
+            .onEach { list ->
+                Log.d("AudioRepository", "Archive Emission: Found ${list.size} playlists")
+                list.forEach { Log.d("AudioRepository", "Playlist: ${it.name} ID: ${it.id}") }
+            }
     }
-
     suspend fun createPlaylist(name: String, id: Long? = null) {
         playlistDao.insertPlaylist(
             PlaylistEntity(
@@ -197,27 +187,43 @@ class AudioRepository @Inject constructor(
     }
 
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
-        playlistDao.insertTrackIntoPlaylist(
-            PlaylistTrackCrossRef(
-                playlistId = playlistId,
-                trackId = trackId,
-                dateAdded = System.currentTimeMillis(),
-                position = 0
-            )
-        )
+        // AudioRepository.kt line 194
+        playlistDao.addTrackToPlaylist(playlistId, trackId)
     }
+     fun getAllTracksStats() = tigerDao.getAllTracksStats()
+
+    fun getHeavyRotation(since: Long): Flow<List<TrackStats>> {
+        return tigerDao.getHeavyRotation(since)
+        }
+
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
-        playlistDao.removeTrackFromPlaylist(
-            playlistId = playlistId,
-            trackId = trackId
-        )
+        // AudioRepository.kt line 211
+        playlistDao.removeTrackAndReorder(playlistId, trackId)
+
+
     }
 
     fun getTracksForPlaylist(playlistId: Long): Flow<List<AudioTrack>> {
         return getLocalTracks().combine(playlistDao.getTrackIdsForPlaylist(playlistId)) { allTracks, trackIds ->
             trackIds.mapNotNull { id -> allTracks.find { it.id == id } }
         }
+    }
+    fun getArtistCacheFlow(): Flow<Map<String, String?>> =
+        tigerDao.getAllArtistCache().map { entities ->
+            entities.associate { it.artistName to it.imageUrl }
+        }
+
+    // Inside LibraryEngine or AudioRepository
+    suspend fun savePlaylistOrder(playlistId: Long, tracks: List<AudioTrack>) {
+        // 🛡️ STOP THE GHOST: Don't allow operations on ID -1 or 0
+        if (playlistId <= 0) {
+            Log.e("LibraryEngine", "Abort! Attempted to reorder invalid playlist ID: $playlistId")
+            return
+        }
+
+        val trackIds = tracks.map { it.id }
+        tigerDao.savePlaylistOrder(playlistId, trackIds)
     }
 
     // --- MAPPING HELPERS ---
