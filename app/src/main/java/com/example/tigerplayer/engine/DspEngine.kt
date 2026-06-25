@@ -13,7 +13,19 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.*
+
+data class AudioReactiveFrame(
+    val bass: Float = 0f,
+    val mid: Float = 0f,
+    val treble: Float = 0f,
+    val energy: Float = 0f,
+    val centroid: Float = 0.5f,
+    val flux: Float = 0f
+)
 
 @UnstableApi
 @Singleton
@@ -44,6 +56,21 @@ class AdaptiveDspEngine @Inject constructor(
     private var agcReleaseCoef = 0.00005f
 
     @Volatile private var pendingNodes: List<AcousticNode> = emptyList()
+
+    private val _audioReactiveFrame = MutableStateFlow(AudioReactiveFrame())
+    val audioReactiveFrame: StateFlow<AudioReactiveFrame> = _audioReactiveFrame.asStateFlow()
+
+    // Lightweight real-time spectrum approximation for visualizers.
+    private var lpBass = 0f
+    private var lpMid = 0f
+    private var prevEnergy = 0f
+    private var analysisFrameCounter = 0
+    private var bassAccumulator = 0f
+    private var midAccumulator = 0f
+    private var trebleAccumulator = 0f
+    private var energyAccumulator = 0f
+
+    private fun clamp01(v: Float): Float = v.coerceIn(0f, 1f)
 
     init {
         detectAndApplyDeviceProfile()
@@ -138,6 +165,9 @@ class AdaptiveDspEngine @Inject constructor(
 
         val localDeviceFilters = deviceCompensationFilters
         val localActiveFilters = activeFilters
+        val sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
+        val bassCoef = (90f / sampleRate).coerceIn(0.002f, 0.25f)
+        val midCoef = (1200f / sampleRate).coerceIn(0.002f, 0.35f)
 
         for (frame in 0 until framesToProcess) {
             var sampleL = shortBuffer.get().toFloat() / PCM_FLOAT
@@ -180,6 +210,49 @@ class AdaptiveDspEngine @Inject constructor(
             val clampR = sampleR.coerceIn(-1.25f, 1.25f)
             sampleR = if (abs(clampR) > 1f) sign(clampR) else clampR - ((clampR * clampR * clampR) / 3f)
 
+            // --- Real-time band analysis used by waveform/vortex visualizers ---
+            val mono = (sampleL + sampleR) * 0.5f
+            lpBass += bassCoef * (mono - lpBass)
+            lpMid += midCoef * (mono - lpMid)
+            val bass = abs(lpBass)
+            val mid = abs(lpMid - lpBass)
+            val treble = abs(mono - lpMid)
+            val energy = abs(mono)
+
+            bassAccumulator += bass
+            midAccumulator += mid
+            trebleAccumulator += treble
+            energyAccumulator += energy
+            analysisFrameCounter += 1
+
+            if (analysisFrameCounter >= 1024) {
+                val inv = 1f / analysisFrameCounter.toFloat()
+                val bassAvg = (bassAccumulator * inv * 3.4f)
+                val midAvg = (midAccumulator * inv * 3.8f)
+                val trebleAvg = (trebleAccumulator * inv * 4.6f)
+                val energyAvg = (energyAccumulator * inv * 3.2f)
+
+                val total = bassAvg + midAvg + trebleAvg + 1e-5f
+                val centroid = ((bassAvg * 0.12f) + (midAvg * 0.45f) + (trebleAvg * 0.85f)) / total
+                val flux = max(0f, energyAvg - prevEnergy) * 2.2f
+                prevEnergy += (energyAvg - prevEnergy) * 0.2f
+
+                _audioReactiveFrame.value = AudioReactiveFrame(
+                    bass = clamp01(bassAvg),
+                    mid = clamp01(midAvg),
+                    treble = clamp01(trebleAvg),
+                    energy = clamp01(energyAvg),
+                    centroid = clamp01(centroid),
+                    flux = clamp01(flux)
+                )
+
+                analysisFrameCounter = 0
+                bassAccumulator = 0f
+                midAccumulator = 0f
+                trebleAccumulator = 0f
+                energyAccumulator = 0f
+            }
+
             outShortBuffer.put((sampleL * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
             if (channels == 2) {
                 outShortBuffer.put((sampleR * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
@@ -210,6 +283,15 @@ class AdaptiveDspEngine @Inject constructor(
         activeFilters.forEach { it.reset() }
         deviceCompensationFilters.forEach { it.reset() }
         agcEnvelope = 0f // FIXED: Clear AGC volume reduction upon seeking/re-buffering
+        lpBass = 0f
+        lpMid = 0f
+        prevEnergy = 0f
+        analysisFrameCounter = 0
+        bassAccumulator = 0f
+        midAccumulator = 0f
+        trebleAccumulator = 0f
+        energyAccumulator = 0f
+        _audioReactiveFrame.value = AudioReactiveFrame()
     }
 
     override fun reset() {

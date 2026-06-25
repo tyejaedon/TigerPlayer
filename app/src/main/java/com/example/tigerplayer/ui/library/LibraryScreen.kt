@@ -494,25 +494,26 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                         onOptionsClick = { trackForOptions = track }
                         
                     )
-                    trackForOptions?.let { selectedTrack ->
-                        SongOptionsSheet(
-                            track = selectedTrack,
-                            playlists = playlists,
-                            onDismiss = { trackForOptions = null },
-                            onPlayNext = {
-                                viewModel.addToQueue(selectedTrack)
-                            },
-                            onAddToPlaylist = { playlistId ->
-                                viewModel.addTrackToPlaylist(playlistId, selectedTrack)
-                            },
-                            onGoToAlbum = { albumName ->
-                                onNavigateToAlbum(albumName)
-                            }
-                        )
-                    }
+
 
                 }
             }
+        }
+        trackForOptions?.let { selectedTrack ->
+            SongOptionsSheet(
+                track = selectedTrack,
+                playlists = playlists,
+                onDismiss = { trackForOptions = null },
+                onPlayNext = {
+                    viewModel.addToQueue(selectedTrack)
+                },
+                onAddToPlaylist = { playlistId ->
+                    viewModel.addTrackToPlaylist(playlistId, selectedTrack)
+                },
+                onGoToAlbum = { albumName ->
+                    onNavigateToAlbum(albumName)
+                }
+            )
         }
     }
     }
