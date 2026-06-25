@@ -7,8 +7,8 @@ import android.opengl.GLSurfaceView
 import android.util.Log
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.tigerplayer.engine.AudioReactiveFrame
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -27,16 +27,21 @@ import javax.microedition.khronos.opengles.GL10
 fun FluidVortexRenderer(
     isPlaying: Boolean,
     amplitudes: List<Float>,
+    audioReactive: AudioReactiveFrame,
+    trackId: String,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-
     // Remember the renderer instance so we can update it without recreating it
     val renderer = remember { TigerVortexRenderer() }
 
-    // Calculate the average audio intensity from the waveform to pass to the shader
-    val currentIntensity = remember(amplitudes) {
-        if (amplitudes.isEmpty()) 0f else amplitudes.average().toFloat()
+    // Blend static waveform contour with live DSP features.
+    val currentIntensity = remember(amplitudes, audioReactive.energy, audioReactive.flux) {
+        val waveformAvg = if (amplitudes.isEmpty()) 0f else amplitudes.average().toFloat()
+        ((waveformAvg * 0.5f) + (audioReactive.energy * 0.35f) + (audioReactive.flux * 0.15f)).coerceIn(0f, 1f)
+    }
+
+    val trackSeed = remember(trackId) {
+        ((trackId.hashCode().toUInt().toLong() and 0xFFFFL).toFloat() / 65535f).coerceIn(0f, 1f)
     }
 
     // Pipe the intensity to the OpenGL thread
@@ -44,9 +49,13 @@ fun FluidVortexRenderer(
         renderer.setTargetAmplitude(currentIntensity)
     }
 
+    LaunchedEffect(audioReactive, trackSeed) {
+        renderer.setReactiveFrame(audioReactive, trackSeed)
+    }
+
     AndroidView(
-        factory = { ctx ->
-            GLSurfaceView(ctx).apply {
+        factory = { context ->
+            GLSurfaceView(context).apply {
                 setEGLContextClientVersion(3) // Ensure OpenGL ES 3.0
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
@@ -73,6 +82,10 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
     private var timeHandle = 0
     private var resolutionHandle = 0
     private var audioHandle = 0
+    private var bandsHandle = 0
+    private var energyHandle = 0
+    private var fluxHandle = 0
+    private var seedHandle = 0
 
     // State Variables
     private val startTime = System.nanoTime()
@@ -82,6 +95,12 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
     // Audio Smoothing parameters
     private var currentAmplitude = 0f
     private var targetAmplitude = 0f
+    @Volatile private var bass = 0f
+    @Volatile private var mid = 0f
+    @Volatile private var treble = 0f
+    @Volatile private var energy = 0f
+    @Volatile private var flux = 0f
+    @Volatile private var seed = 0.5f
 
     // A simple full-screen quad (two triangles)
     private val vertexData = floatArrayOf(
@@ -100,6 +119,15 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
 
     fun setTargetAmplitude(amplitude: Float) {
         this.targetAmplitude = amplitude * 3.0f // Scale up for visual impact
+    }
+
+    fun setReactiveFrame(frame: AudioReactiveFrame, trackSeed: Float) {
+        bass = frame.bass
+        mid = frame.mid
+        treble = frame.treble
+        energy = frame.energy
+        flux = frame.flux
+        seed = trackSeed
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -127,6 +155,10 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
         timeHandle = GLES30.glGetUniformLocation(program, "u_time")
         resolutionHandle = GLES30.glGetUniformLocation(program, "u_resolution")
         audioHandle = GLES30.glGetUniformLocation(program, "u_audioData")
+        bandsHandle = GLES30.glGetUniformLocation(program, "u_bands")
+        energyHandle = GLES30.glGetUniformLocation(program, "u_energy")
+        fluxHandle = GLES30.glGetUniformLocation(program, "u_flux")
+        seedHandle = GLES30.glGetUniformLocation(program, "u_seed")
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -149,6 +181,10 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
         GLES30.glUniform1f(timeHandle, time)
         GLES30.glUniform2f(resolutionHandle, width, height)
         GLES30.glUniform1f(audioHandle, currentAmplitude)
+        GLES30.glUniform3f(bandsHandle, bass, mid, treble)
+        GLES30.glUniform1f(energyHandle, energy)
+        GLES30.glUniform1f(fluxHandle, flux)
+        GLES30.glUniform1f(seedHandle, seed)
 
         // 4. Bind Attributes (Vertices)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo)
@@ -207,6 +243,10 @@ object VortexShaders {
         uniform float u_time;
         uniform vec2 u_resolution;
         uniform float u_audioData;
+        uniform vec3 u_bands;
+        uniform float u_energy;
+        uniform float u_flux;
+        uniform float u_seed;
         
         // Pseudo-random hash function
         float hash(vec2 p) {
@@ -242,41 +282,51 @@ object VortexShaders {
             // Normalize coordinates and fix aspect ratio
             vec2 p = (v_uv - 0.5) * 2.0;
             p.x *= u_resolution.x / u_resolution.y;
+
+            // Track-specific identity values derived from hash seed.
+            float seedA = 0.75 + fract(u_seed * 13.7) * 0.65;
+            float seedB = 0.55 + fract(u_seed * 29.3) * 0.70;
+            float seedC = 0.65 + fract(u_seed * 47.9) * 0.50;
             
             float dist = length(p);
             float angle = atan(p.y, p.x);
             
-            // Generate the swirling effect, heavily influenced by the music (audioData)
-            float audioDistort = u_audioData * 1.5;
-            float twirl = angle + u_time * 0.4 - dist * (3.0 + audioDistort);
+            // Multi-band reactivity: bass drives spin radius, mid drives turbulence, treble drives sparkle.
+            float bass = u_bands.x;
+            float mid = u_bands.y;
+            float treble = u_bands.z;
+            float audioDistort = u_audioData * 1.2 + bass * 1.6 + u_flux * 0.9;
+            float twirl = angle + u_time * (0.32 + bass * 0.55) - dist * (2.4 * seedA + audioDistort);
             vec2 twirlP = vec2(cos(twirl), sin(twirl)) * dist;
             
             // Domain warping using FBM
             vec2 q = vec2(0.0);
-            q.x = fbm(twirlP + 0.1 * u_time);
-            q.y = fbm(twirlP + vec2(1.0));
+            q.x = fbm(twirlP * (1.1 + mid * 0.8) + 0.1 * u_time * seedB);
+            q.y = fbm(twirlP + vec2(1.0 + u_seed));
             
             vec2 r = vec2(0.0);
-            r.x = fbm(twirlP + 1.0 * q + vec2(1.7, 9.2) + 0.15 * u_time);
-            r.y = fbm(twirlP + 1.0 * q + vec2(8.3, 2.8) + 0.126 * u_time);
+            r.x = fbm(twirlP + 1.0 * q + vec2(1.7 + 5.0 * u_seed, 9.2) + (0.10 + treble * 0.22) * u_time);
+            r.y = fbm(twirlP + 1.0 * q + vec2(8.3, 2.8 + 4.0 * u_seed) + (0.09 + mid * 0.18) * u_time);
             
             float f = fbm(twirlP + r);
             
             // Color Mapping (Igni Red & Dark Aard Blue mixed together)
             // Color base: Dark crimson to bright orange/red
-            vec3 color = mix(vec3(0.05, 0.0, 0.02), vec3(0.8, 0.1, 0.05), f);
-            color = mix(color, vec3(1.0, 0.5, 0.0), length(q));
+            vec3 baseA = mix(vec3(0.03, 0.01, 0.06), vec3(0.12, 0.02, 0.01), seedC);
+            vec3 baseB = mix(vec3(0.95, 0.22, 0.10), vec3(1.0, 0.55, 0.05), seedA);
+            vec3 color = mix(baseA, baseB, f + bass * 0.2);
+            color = mix(color, vec3(1.0, 0.55, 0.02), length(q) * (0.7 + mid * 0.8));
             
             // Flash white/blue based on audio intensity
-            color = mix(color, vec3(0.8, 0.9, 1.0), length(r) * (u_audioData * 0.8));
+            color = mix(color, vec3(0.8, 0.9, 1.0), length(r) * (u_audioData * 0.5 + treble * 0.7));
             
             // Fade out the edges softly
             float edgeMask = smoothstep(1.0, 0.3, dist);
             color *= edgeMask;
             
             // Glowing audio-reactive core
-            float core = smoothstep(0.4 + u_audioData * 0.3, 0.0, dist);
-            color += vec3(1.0, 0.2, 0.1) * core * (0.5 + u_audioData);
+            float core = smoothstep(0.45 + bass * 0.35 + u_energy * 0.25, 0.0, dist);
+            color += vec3(1.0, 0.2, 0.1) * core * (0.35 + u_energy + u_flux * 0.6);
             
             // Add a subtle vignette
             color *= 1.0 - 0.5 * pow(dist, 2.0);

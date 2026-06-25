@@ -60,6 +60,7 @@ import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.engine.AudioReactiveFrame
 import com.example.tigerplayer.ui.library.SongOptionsSheet
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
@@ -246,6 +247,8 @@ fun FullPlayerScreen(
                                         FluidVortexRenderer(
                                             isPlaying = uiState.isPlaying,
                                             amplitudes = uiState.currentWaveform,
+                                            audioReactive = uiState.audioReactiveFrame,
+                                            trackId = track.id,
                                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(32.dp))
                                         )
                                     }
@@ -262,6 +265,7 @@ fun FullPlayerScreen(
                                                 amplitudes = uiState.currentWaveform,
                                                 progress = (uiState.currentPosition.toFloat() / track.durationMs.coerceAtLeast(1L)),
                                                 isPlaying = uiState.isPlaying,
+                                                audioReactive = uiState.audioReactiveFrame,
                                                 color = dynamicTextColor
                                             )
                                         }
@@ -317,17 +321,76 @@ fun FullPlayerScreen(
 }
 
 @Composable
-fun SmoothWaveform(amplitudes: List<Float>, progress: Float, isPlaying: Boolean, color: Color) {
+fun SmoothWaveform(
+    amplitudes: List<Float>,
+    progress: Float,
+    isPlaying: Boolean,
+    audioReactive: AudioReactiveFrame,
+    color: Color
+) {
     val animatedProgress = animateFloatAsState(progress, animationSpec = tween(500, easing = LinearEasing), label = "").value
+    val reactiveEnergy = animateFloatAsState(
+        targetValue = if (isPlaying) audioReactive.energy else 0f,
+        animationSpec = tween(180),
+        label = "WaveEnergy"
+    ).value
+    val reactiveBass = animateFloatAsState(
+        targetValue = if (isPlaying) audioReactive.bass else 0f,
+        animationSpec = tween(180),
+        label = "WaveBass"
+    ).value
+    val reactiveTreble = animateFloatAsState(
+        targetValue = if (isPlaying) audioReactive.treble else 0f,
+        animationSpec = tween(180),
+        label = "WaveTreble"
+    ).value
+
+    val infiniteTransition = rememberInfiniteTransition(label = "WaveformMotion")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = if (isPlaying) 1300 else 3200,
+                easing = LinearEasing
+            )
+        ),
+        label = "WavePhase"
+    )
+
+    if (amplitudes.isEmpty()) {
+        Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+            Text("No waveform data", color = color.copy(alpha = 0.45f), style = MaterialTheme.typography.labelMedium)
+        }
+        return
+    }
 
     Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 24.dp)) {
+        val count = amplitudes.size.coerceAtLeast(1)
+        val centerY = size.height / 2f
+        val spacing = size.width / count.toFloat()
+        val baseStrength = (0.45f + reactiveEnergy * 1.15f + reactiveBass * 0.35f).coerceAtMost(1.65f)
+        val pulse = (0.6f + audioReactive.flux * 1.1f).coerceAtMost(1.8f)
+
         amplitudes.forEachIndexed { index, amp ->
-            val barHeight = amp * size.height
-            val x = index * (size.width / amplitudes.size)
+            val x = index * spacing
+            val travel = kotlin.math.sin(phase + index * (0.16f + reactiveTreble * 0.04f))
+            val animatedAmp = (amp * 0.72f + kotlin.math.abs(travel) * 0.28f).coerceIn(0f, 1f)
+            val barHeight = (animatedAmp * size.height * baseStrength * (0.85f + pulse * 0.15f)).coerceAtMost(size.height)
+            val isPlayed = index / count.toFloat() <= animatedProgress
+            val barColor = if (isPlayed) color.copy(alpha = (0.85f + audioReactive.flux * 0.15f).coerceAtMost(1f)) else color.copy(0.22f)
+
             drawLine(
-                color = if (index / amplitudes.size.toFloat() <= animatedProgress) color else color.copy(0.3f),
-                start = Offset(x, size.height / 2 - barHeight / 2),
-                end = Offset(x, size.height / 2 + barHeight / 2),
+                color = barColor.copy(alpha = barColor.alpha * 0.35f),
+                start = Offset(x, centerY - barHeight / 2),
+                end = Offset(x, centerY + barHeight / 2),
+                strokeWidth = 7f,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = barColor,
+                start = Offset(x, centerY - barHeight / 2),
+                end = Offset(x, centerY + barHeight / 2),
                 strokeWidth = 4f,
                 cap = StrokeCap.Round
             )

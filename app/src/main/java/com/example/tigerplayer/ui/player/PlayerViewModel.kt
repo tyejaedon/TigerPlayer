@@ -67,7 +67,8 @@ data class PlayerUiState(
     val totalFilesToScan: Int = 0,
     val queue: List<AudioTrack> = emptyList(),
     val visualMode: PlayerVisualMode = PlayerVisualMode.ARTWORK,
-    val currentWaveform: List<Float> = emptyList()
+    val currentWaveform: List<Float> = emptyList(),
+    val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame()
 )
 
 @HiltViewModel
@@ -79,6 +80,7 @@ class PlayerViewModel @Inject constructor(
     private val libraryEngine: LibraryEngine,
     private val networkEngine: NetworkEngine,
     private val waveformEngine: WaveformEngine,
+    private val adaptiveDspEngine: AdaptiveDspEngine,
     private val audioRepository: AudioRepository,
     val youtubeRepository: YouTubeRepository
 ) : ViewModel() {
@@ -146,6 +148,12 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             mediaControllerManager.repeatMode.collect { repeat ->
                 _uiState.update { it.copy(repeatMode = repeat) }
+            }
+        }
+
+        viewModelScope.launch {
+            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
+                _uiState.update { it.copy(audioReactiveFrame = frame) }
             }
         }
 

@@ -30,6 +30,7 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
+import com.example.tigerplayer.ui.theme.elevatedSurface
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 
@@ -65,17 +66,21 @@ fun SongOptionsSheet(
                 .fillMaxWidth()
                 .padding(start = 8.dp, end = 8.dp, bottom = 12.dp)
                 .glassEffect(RoundedCornerShape(32.dp)), // Heavy rounding
-            color = Color.Transparent, // Managed by glassEffect
+            // Use theme-provided elevated surface so this adapts with dark/light palettes.
+            color = MaterialTheme.elevatedSurface.copy(alpha = 0.72f),
             shape = RoundedCornerShape(32.dp),
             border = BorderStroke(
                 width = 1.dp,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.2f), // Specular rim light
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
                         Color.Transparent
                     )
                 )
-            )
+            ),
+            tonalElevation = 2.dp,
+            shadowElevation = 8.dp
         ) {
             Column(
                 modifier = Modifier
