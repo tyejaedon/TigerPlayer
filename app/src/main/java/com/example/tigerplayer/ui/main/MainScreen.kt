@@ -54,7 +54,8 @@ fun MainScreen(
     onNavigateToNavidromeLogin: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToPlaylist: (Long, String) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToQueue: () -> Unit
 ) {
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
@@ -126,6 +127,7 @@ fun MainScreen(
                                 viewModel = playerViewModel,
                                 onExpandClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    playerViewModel.onFullPlayerOpened()
                                     playerState = PlayerSheetState.EXPANDED
                                 }
                             )
@@ -304,6 +306,10 @@ fun MainScreen(
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     playerState = PlayerSheetState.MINI
                 },
+                onOpenQueueScreen = {
+                    playerState = PlayerSheetState.MINI
+                    onNavigateToQueue()
+                },
                 onNavigateToAlbum = {
                     playerState = PlayerSheetState.MINI
                     onNavigateToAlbum(it)
@@ -325,7 +331,7 @@ fun MainScreen(
         // INIT
         // ==============================
         LaunchedEffect(Unit) {
-            playerViewModel.loadLocalAudio(force = false)
+            playerViewModel.loadLocalAudio(forceRefresh = false)
         }
     }
 }

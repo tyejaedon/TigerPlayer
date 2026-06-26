@@ -9,6 +9,23 @@ data class LastFmResponse(
     @SerializedName("artist") val artist: LastFmArtist?
 )
 
+data class LastFmSimilarTracksResponse(
+    @SerializedName("similartracks") val similarTracks: LastFmSimilarTracks?
+)
+
+data class LastFmSimilarTracks(
+    @SerializedName("track") val track: List<LastFmSimilarTrack>?
+)
+
+data class LastFmSimilarTrack(
+    @SerializedName("name") val name: String?,
+    @SerializedName("artist") val artist: LastFmSimilarArtist?
+)
+
+data class LastFmSimilarArtist(
+    @SerializedName("name") val name: String?
+)
+
 data class LastFmArtist(
     @SerializedName("name") val name: String?,
     @SerializedName("mbid") val mbid: String?,

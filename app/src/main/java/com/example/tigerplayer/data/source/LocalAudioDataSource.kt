@@ -2,20 +2,21 @@ package com.example.tigerplayer.data.source
 
 import android.content.ContentUris
 import android.content.Context
-import android.os.Build
 import android.provider.MediaStore
-import androidx.annotation.RequiresExtension
+import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.model.AudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 import androidx.core.net.toUri
 
 class LocalAudioDataSource @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val settingsDataStore: SettingsDataStore
 ) {
 
     /**
@@ -24,6 +25,7 @@ class LocalAudioDataSource @Inject constructor(
      */
     fun getLocalAudioFiles(): Flow<ScanStatus> = flow {
         val tracks = mutableListOf<AudioTrack>()
+        val minDurationMs = settingsDataStore.settingsFlow.first().skipShortAudio.minDurationMs
 
         val projection = mutableListOf(
             MediaStore.Audio.Media._ID,
@@ -74,6 +76,11 @@ class LocalAudioDataSource @Inject constructor(
                 val rawTrack = cursor.getInt(trackCol)
                 val year = cursor.getInt(yearCol)
                 val dateAdded = cursor.getLong(dateAddedCol)
+                val durationMs = cursor.getLong(durCol)
+
+                if (durationMs < minDurationMs) {
+                    continue
+                }
 
                 // Track number normalization (e.g. 1004 -> 4)
                 val cleanTrackNum = if (rawTrack >= 1000) rawTrack % 1000 else rawTrack
@@ -85,7 +92,7 @@ class LocalAudioDataSource @Inject constructor(
                     album = cursor.getString(albumCol) ?: "Unknown Album",
                     uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
                     artworkUri = "content://media/external/audio/albumart/$albumId".toUri(),
-                    durationMs = cursor.getLong(durCol),
+                    durationMs = durationMs,
                     mimeType = cursor.getString(mimeCol) ?: "audio/mpeg",
                     isLocal = true,
                     isRemote = false,

@@ -36,12 +36,35 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.TigerPlayer">
 
+        <profileable
+            android:shell="true"
+            tools:targetApi="q" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|density|uiMode"
             android:theme="@style/Theme.TigerPlayer">
+
+            <!-- Vendor-specific hints for outer-cover display eligibility. Unknown keys are safely ignored on unsupported devices. -->
+            <meta-data
+                android:name="com.samsung.android.app.magicinfo"
+                android:value="true" />
+            <meta-data
+                android:name="com.samsung.android.foldable.cover_screen.support"
+                android:value="true" />
+            <meta-data
+                android:name="com.samsung.android.multiwindow.support"
+                android:value="true" />
+            <meta-data
+                android:name="com.motorola.android.externaldisplay.enabled"
+                android:value="true" />
+            <meta-data
+                android:name="com.motorola.android.externaldisplay.category"
+                android:value="media" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

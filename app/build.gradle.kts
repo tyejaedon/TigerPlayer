@@ -61,7 +61,8 @@ configure<ApplicationExtension> {
 
     buildTypes {
         getByName("release") { // Safely scoped inside the new extension
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -89,6 +90,8 @@ configure<ApplicationExtension> {
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/LICENSE-notice.md"
         }
     }
 }
@@ -118,6 +121,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.glance)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation("androidx.window:window:1.3.0")
 
     // Remote Compose (The Alpha Library)
     implementation(libs.androidx.compose.remote.creation.compose)
@@ -164,8 +168,18 @@ dependencies {
 
     // --- Testing ---
     testImplementation(libs.junit)
+    testImplementation("io.mockk:mockk:1.13.12")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("io.mockk:mockk-android:1.13.12")
+    androidTestImplementation("androidx.room:room-testing:2.8.4")
+    androidTestImplementation("androidx.benchmark:benchmark-macro-junit4:1.3.4")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0-alpha05")
+
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
 }
 
 // =========================================================================

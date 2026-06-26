@@ -27,6 +27,8 @@ val TigerMutedSilk = Color(0xFFF2F0EA)
 // ACCENTS (Samsung-style “clean neon”)
 // ------------------------------
 val TigerNeonOrange = Color(0xFFFF6A00)
+val TigerCyberCyan = Color(0xFF00E5FF)
+val TigerToxicLime = Color(0xFF39FF14)
 val TigerElectricAmber = Color(0xFFFFB300)
 val TigerSpectralViolet = Color(0xFF6C5CE7)
 

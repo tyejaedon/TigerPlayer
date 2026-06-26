@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +48,7 @@ import com.example.tigerplayer.ui.components.DiscoverCarousel
 import com.example.tigerplayer.ui.components.RecentlyPlayedRow
 import com.example.tigerplayer.ui.constellation.ConstellationScreen
 import com.example.tigerplayer.ui.constellation.ConstellationViewModel
+import com.example.tigerplayer.ui.dashboard.DashboardViewModel
 import com.example.tigerplayer.ui.extras.NowBriefWidgetWrapper
 import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.player.PlayerViewModel
@@ -61,6 +63,7 @@ private val AardBlue = Color(0xFF4FC3F7)
 private val IgniRed = Color(0xFFFF5252)
 private val SpotifyGreen = Color(0xFF1DB954)
 private val NeuralPurple = Color(0xFFB388FF) // 🔥 NEW CONSTANT
+private val SonicCyan = Color(0xFF00E5FF)
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
@@ -85,12 +88,16 @@ fun HomeScreen(
 
     // 🔥 NEW: Constellation Integration State
     var showConstellation by remember { mutableStateOf(false) }
+    var showSonicFootprint by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
 
 
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
     val weatherUiState by homeViewModel.weatherUiState.collectAsState()
+    val dashboardViewModel: DashboardViewModel = hiltViewModel()
+    val daylistTracks by dashboardViewModel.daylistTracks.collectAsState()
+    val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsState()
 
     val firstVisibleItem by remember { derivedStateOf { listState.firstVisibleItemIndex } }
 
@@ -98,7 +105,8 @@ fun HomeScreen(
         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation) {
+    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint) {
+        if (showSonicFootprint) showSonicFootprint = false
         if (showConstellation) showConstellation = false
         else if (isStatsExpanded) isStatsExpanded = false
         else if (isSearchActive) {
@@ -155,7 +163,7 @@ fun HomeScreen(
                     matchedArtists = matchedArtists,
                     matchedAlbums = matchedAlbums,
                     onNavigateToAlbum = onNavigateToAlbum,
-                    onNavigateToArtist = onNavigatetoArtist,
+                    onNavigatetoArtist = onNavigatetoArtist,
                     artistDetails = artistDetails,
                     onOptionsClick = { track -> searchTrackForOptions = track }
                 )
@@ -173,6 +181,10 @@ fun HomeScreen(
 
                 item { UserStatisticsHeader(statistics = homeState.statistics, onClick = { isStatsExpanded = true }) }
 
+                item {
+                    SonicFootprintGatewayCard(onClick = { showSonicFootprint = true })
+                }
+
                 // 🔥 NEW: Constellation Gateway Portal
                 item {
                     ConstellationGatewayCard(onClick = { showConstellation = true })
@@ -180,6 +192,28 @@ fun HomeScreen(
 
                 if (homeState.discoverTracks.isNotEmpty()) {
                     item { DiscoverCarousel(tracks = homeState.discoverTracks, onTrackClick = { viewModel.playTrack(it) }) }
+                }
+
+                if (daylistTracks.isNotEmpty()) {
+                    item {
+                        ForYouTrackSection(
+                            title = "DAYLIST",
+                            tracks = daylistTracks,
+                            onTrackClick = { viewModel.playTrack(it) },
+                            onTrackOptionsClick = { track -> searchTrackForOptions = track }
+                        )
+                    }
+                }
+
+                if (discoveryWeeklyTracks.isNotEmpty()) {
+                    item {
+                        ForYouTrackSection(
+                            title = "DISCOVERY WEEKLY",
+                            tracks = discoveryWeeklyTracks,
+                            onTrackClick = { viewModel.playTrack(it) },
+                            onTrackOptionsClick = { track -> searchTrackForOptions = track }
+                        )
+                    }
                 }
 
                 if (homeState.recommendedTracks.isNotEmpty()) {
@@ -212,6 +246,18 @@ fun HomeScreen(
             ExpandedStatsScreen(viewModel = viewModel, onClose = { isStatsExpanded = false })
         }
 
+        AnimatedVisibility(
+            visible = showSonicFootprint,
+            enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.95f, animationSpec = tween(500)),
+            exit = fadeOut(tween(280)) + scaleOut(targetScale = 0.95f)
+        ) {
+            val sonicFootprintViewModel: SonicFootprintViewModel = hiltViewModel()
+            SonicFootprintScreen(
+                viewModel = sonicFootprintViewModel,
+                onClose = { showSonicFootprint = false }
+            )
+        }
+
         // 🔥 NEW: Constellation Full-Screen Overlay Launch
         AnimatedVisibility(
             visible = showConstellation,
@@ -239,7 +285,7 @@ fun HomeScreen(
                 searchTrackForOptions = null
             },
             onPlayNext = {
-                viewModel.addToQueue(selectedTrack)
+                viewModel.addNextToQueue(selectedTrack)
                 searchTrackForOptions = null // Close after action
             },
             onAddToPlaylist = { playlistId ->
@@ -259,6 +305,55 @@ fun HomeScreen(
                 viewModel.createPlaylist(name)
             }
         )
+    }
+}
+
+@Composable
+fun SonicFootprintGatewayCard(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+            .shadow(12.dp, MaterialTheme.shapes.extraLarge, spotColor = SonicCyan.copy(alpha = 0.25f))
+            .clip(MaterialTheme.shapes.extraLarge)
+            .glassEffect(MaterialTheme.shapes.extraLarge)
+            .background(Brush.linearGradient(listOf(Color(0xFF05242B), Color(0xFF09151E))))
+            .border(1.dp, SonicCyan.copy(alpha = 0.25f), MaterialTheme.shapes.extraLarge)
+            .bounceClick { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 14.dp)) {
+                Text(
+                    text = "SONIC FOOTPRINT",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = SonicCyan,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Reveal your local listening DNA with a neon radar profile.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(SonicCyan.copy(alpha = 0.2f), CircleShape)
+                    .border(1.dp, SonicCyan.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.Timeline, contentDescription = null, tint = SonicCyan)
+            }
+        }
     }
 }
 
@@ -510,6 +605,27 @@ fun SectionTitle(title: String) {
         letterSpacing = 1.5.sp,
         modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 12.dp)
     )
+}
+
+@Composable
+private fun ForYouTrackSection(
+    title: String,
+    tracks: List<AudioTrack>,
+    onTrackClick: (AudioTrack) -> Unit,
+    onTrackOptionsClick: (AudioTrack) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        SectionTitle(title)
+        tracks.forEach { track ->
+            ArchiveSongRow(
+                track = track,
+                isCurrentTrack = false,
+                isPlaying = false,
+                onClick = { onTrackClick(track) },
+                onOptionsClick = { onTrackOptionsClick(track) }
+            )
+        }
+    }
 }
 
 @Composable

@@ -147,7 +147,7 @@ class LibraryEngine @Inject constructor(
             historyRepository.recentTracks,
             historyRepository.totalListeningTime,
             historyRepository.listeningTimeToday,
-            historyRepository.topArtist,
+            historyRepository.getTopArtist(),
             allTracksFlow.distinctUntilChanged(),
             recommendationTicker
         ) { args: Array<Any?> ->

@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.palette.graphics.Palette
@@ -62,6 +64,8 @@ import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.engine.AudioReactiveFrame
 import com.example.tigerplayer.ui.library.SongOptionsSheet
+import com.example.tigerplayer.ui.prism.PrismUiState
+import com.example.tigerplayer.ui.prism.PrismViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -83,26 +87,37 @@ enum class MainViewState {
 fun FullPlayerScreen(
     viewModel: PlayerViewModel,
     onCollapse: () -> Unit,
+    onOpenQueueScreen: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
+    prismViewModel: PrismViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val track = uiState.currentTrack ?: return
+    val prismState by prismViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
-    var showQueue by remember { mutableStateOf(false) }
     var showYouTube by remember { mutableStateOf(false) }
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+
+    LaunchedEffect(uiState.visualMode, showLyrics, showYouTube) {
+        val shouldEnablePrism = !showLyrics && !showYouTube && uiState.visualMode == PlayerVisualMode.SONIC_PRISM
+        prismViewModel.setPrismEnabled(shouldEnablePrism)
+    }
 
     val themeSurface = MaterialTheme.colorScheme.surface
     var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
     var dynamicTextColor by remember { mutableStateOf(Color(0xFFF5F5F5)) }
 
-    val imageRequest = remember(track.artworkUri) {
+    val backgroundArtModel = remember(track.artworkUri, uiState.artistImageUrl) {
+        uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: track.artworkUri
+    }
+
+    val imageRequest = remember(backgroundArtModel) {
         ImageRequest.Builder(context)
-            .data(track.artworkUri)
+            .data(backgroundArtModel)
             .crossfade(true)
             .allowHardware(false)
             .listener(onSuccess = { _, result ->
@@ -146,17 +161,13 @@ fun FullPlayerScreen(
                 showLyrics = showLyrics,
                 onToggleLyrics = {
                     showLyrics = it
-                    if (it) { showQueue = false; showYouTube = false }
+                    if (it) { showYouTube = false }
                 },
-                showQueue = showQueue,
-                onToggleQueue = {
-                    showQueue = it
-                    if (it) { showLyrics = false; showYouTube = false }
-                },
+                onOpenQueueScreen = onOpenQueueScreen,
                 showYouTube = showYouTube,
                 onToggleYouTube = {
                     showYouTube = it
-                    if (it) { showLyrics = false; showQueue = false }
+                    if (it) { showLyrics = false }
                 },
                 onShowOptions = {
                     trackForOptions = track
@@ -170,7 +181,6 @@ fun FullPlayerScreen(
 
                 val targetState = when {
                     showYouTube -> MainViewState.YOUTUBE_VIEWPORT
-                    showQueue -> MainViewState.QUEUE
                     showLyrics -> MainViewState.LYRICS
                     else -> MainViewState.ARTWORK
                 }
@@ -185,19 +195,7 @@ fun FullPlayerScreen(
                     label = "MainViewSwitch"
                 ) { state ->
                     when (state) {
-                        MainViewState.QUEUE -> {
-                            QueueDisplay(
-                                queue = uiState.queue,
-                                currentTrackId = track.id,
-                                isPlaying = uiState.isPlaying,
-                                shuffleModeEnabled = uiState.isShuffleEnabled,
-                                repeatMode = uiState.repeatMode,
-                                dynamicTextColor = dynamicTextColor,
-                                onTrackClick = { viewModel.playTrack(it) },
-                                onRemoveFromQueue = { viewModel.removeFromQueue(it) },
-                                onMoveItem = { from, to -> viewModel.moveQueueItem(from, to) }
-                            )
-                        }
+                        MainViewState.QUEUE -> Unit
                         MainViewState.YOUTUBE_VIEWPORT -> {
                             com.example.tigerplayer.ui.youtube.YouTubeSearchScreen(
                                 isEmbedded = true,
@@ -270,6 +268,19 @@ fun FullPlayerScreen(
                                             )
                                         }
                                     }
+
+                                    androidx.compose.animation.AnimatedVisibility(visible = uiState.visualMode == PlayerVisualMode.SONIC_PRISM) {
+                                        PrismInlineMixer(
+                                            state = prismState,
+                                            onVocalsChange = prismViewModel::updateVocals,
+                                            onBeatsChange = prismViewModel::updateBeats,
+                                            onInstrumentsChange = prismViewModel::updateInstruments,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black.copy(alpha = 0.78f))
+                                                .padding(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -306,7 +317,7 @@ fun FullPlayerScreen(
                         showOptionsSheet = false // FIXED: Ensure both are reset upon sheet collapse
                     },
                     onPlayNext = {
-                        viewModel.addToQueue(selectedTrack)
+                        viewModel.addNextToQueue(selectedTrack)
                     },
                     onAddToPlaylist = { playlistId ->
                         viewModel.addTrackToPlaylist(playlistId, selectedTrack)
@@ -317,6 +328,61 @@ fun FullPlayerScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PrismInlineMixer(
+    state: PrismUiState,
+    onVocalsChange: (Float) -> Unit,
+    onBeatsChange: (Float) -> Unit,
+    onInstrumentsChange: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.SpaceEvenly
+    ) {
+        Text(
+            text = "SONIC PRISM",
+            color = Color.White,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.4.sp
+        )
+
+        PrismInlineSlider("VOCALS", state.vocals, Color(0xFFFF6A00), onVocalsChange)
+        PrismInlineSlider("BEATS", state.beats, Color(0xFF00E5FF), onBeatsChange)
+        PrismInlineSlider("INSTRUMENTS", state.instruments, Color(0xFF39FF14), onInstrumentsChange)
+    }
+}
+
+@Composable
+private fun PrismInlineSlider(
+    label: String,
+    value: Float,
+    accent: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = label, color = accent, fontWeight = FontWeight.Bold)
+            Text(text = "${(value * 100).toInt()}%", color = Color.White.copy(alpha = 0.8f))
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = 0f..1f,
+            colors = SliderDefaults.colors(
+                thumbColor = accent,
+                activeTrackColor = accent,
+                inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+            )
+        )
     }
 }
 
@@ -365,35 +431,82 @@ fun SmoothWaveform(
         return
     }
 
-    Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 24.dp)) {
-        val count = amplitudes.size.coerceAtLeast(1)
+    val sampled = remember(amplitudes) {
+        if (amplitudes.isEmpty()) {
+            List(72) { 0f }
+        } else {
+            List(72) { index ->
+                val sourceIndex = ((index / 71f) * amplitudes.lastIndex.coerceAtLeast(0)).toInt()
+                amplitudes[sourceIndex].coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    Canvas(modifier = Modifier.fillMaxWidth().height(110.dp).padding(horizontal = 20.dp)) {
         val centerY = size.height / 2f
-        val spacing = size.width / count.toFloat()
-        val baseStrength = (0.45f + reactiveEnergy * 1.15f + reactiveBass * 0.35f).coerceAtMost(1.65f)
-        val pulse = (0.6f + audioReactive.flux * 1.1f).coerceAtMost(1.8f)
+        val stepX = size.width / (sampled.lastIndex.coerceAtLeast(1)).toFloat()
+        val reactiveScale = (0.35f + reactiveEnergy * 0.95f + reactiveBass * 0.42f).coerceAtMost(1.65f)
+        val sparkle = (0.08f + audioReactive.flux * 0.22f).coerceAtMost(0.28f)
+        val playedX = size.width * animatedProgress.coerceIn(0f, 1f)
 
-        amplitudes.forEachIndexed { index, amp ->
-            val x = index * spacing
-            val travel = kotlin.math.sin(phase + index * (0.16f + reactiveTreble * 0.04f))
-            val animatedAmp = (amp * 0.72f + kotlin.math.abs(travel) * 0.28f).coerceIn(0f, 1f)
-            val barHeight = (animatedAmp * size.height * baseStrength * (0.85f + pulse * 0.15f)).coerceAtMost(size.height)
-            val isPlayed = index / count.toFloat() <= animatedProgress
-            val barColor = if (isPlayed) color.copy(alpha = (0.85f + audioReactive.flux * 0.15f).coerceAtMost(1f)) else color.copy(0.22f)
+        val topPath = Path().apply {
+            moveTo(0f, centerY)
+            sampled.forEachIndexed { index, amp ->
+                val x = index * stepX
+                val phaseOsc = kotlin.math.sin(phase + index * (0.24f + reactiveTreble * 0.08f))
+                val envelope = (amp * 0.72f + kotlin.math.abs(phaseOsc) * 0.28f).coerceIn(0f, 1f)
+                val y = centerY - envelope * size.height * 0.44f * reactiveScale
+                lineTo(x, y)
+            }
+        }
 
-            drawLine(
-                color = barColor.copy(alpha = barColor.alpha * 0.35f),
-                start = Offset(x, centerY - barHeight / 2),
-                end = Offset(x, centerY + barHeight / 2),
-                strokeWidth = 7f,
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = barColor,
-                start = Offset(x, centerY - barHeight / 2),
-                end = Offset(x, centerY + barHeight / 2),
-                strokeWidth = 4f,
-                cap = StrokeCap.Round
-            )
+        val bottomPath = Path().apply {
+            moveTo(0f, centerY)
+            sampled.forEachIndexed { index, amp ->
+                val x = index * stepX
+                val phaseOsc = kotlin.math.sin(phase + index * (0.24f + reactiveTreble * 0.08f) + 1.1f)
+                val envelope = (amp * 0.68f + kotlin.math.abs(phaseOsc) * 0.32f).coerceIn(0f, 1f)
+                val y = centerY + envelope * size.height * 0.44f * reactiveScale
+                lineTo(x, y)
+            }
+        }
+
+        drawLine(
+            color = color.copy(alpha = 0.16f),
+            start = Offset(0f, centerY),
+            end = Offset(size.width, centerY),
+            strokeWidth = 1.5f
+        )
+
+        drawPath(
+            path = topPath,
+            brush = Brush.horizontalGradient(
+                listOf(color.copy(alpha = 0.25f), color.copy(alpha = 0.85f), color.copy(alpha = 0.2f))
+            ),
+            style = Stroke(width = 6f, cap = StrokeCap.Round)
+        )
+        drawPath(
+            path = bottomPath,
+            brush = Brush.horizontalGradient(
+                listOf(color.copy(alpha = 0.2f), color.copy(alpha = 0.78f), color.copy(alpha = 0.18f))
+            ),
+            style = Stroke(width = 6f, cap = StrokeCap.Round)
+        )
+
+        val clipWidth = playedX.coerceAtLeast(0f)
+        if (clipWidth > 0f) {
+            clipRect(left = 0f, top = 0f, right = clipWidth, bottom = size.height) {
+                drawPath(
+                    path = topPath,
+                    color = color.copy(alpha = (0.78f + sparkle).coerceAtMost(1f)),
+                    style = Stroke(width = 2.8f, cap = StrokeCap.Round)
+                )
+                drawPath(
+                    path = bottomPath,
+                    color = color.copy(alpha = (0.72f + sparkle).coerceAtMost(1f)),
+                    style = Stroke(width = 2.8f, cap = StrokeCap.Round)
+                )
+            }
         }
     }
 }
@@ -404,8 +517,7 @@ fun HeaderRitual(
     onCollapse: () -> Unit,
     showLyrics: Boolean,
     onToggleLyrics: (Boolean) -> Unit,
-    showQueue: Boolean,
-    onToggleQueue: (Boolean) -> Unit,
+    onOpenQueueScreen: () -> Unit,
     showYouTube: Boolean = false,
     onToggleYouTube: (Boolean) -> Unit = {},
     onShowOptions: () -> Unit,
@@ -446,11 +558,11 @@ fun HeaderRitual(
                     Icon(Icons.AutoMirrored.Rounded.Subject, null, tint = if (showLyrics) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.8f))
                 }
                 IconButton(
-                    onClick = { onToggleQueue(!showQueue) },
+                    onClick = onOpenQueueScreen,
                     modifier = Modifier
-                        .background(if (showQueue) MaterialTheme.aardBlue.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+                        .background(Color.Transparent, CircleShape)
                 ) {
-                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = if (showQueue) MaterialTheme.aardBlue else dynamicTextColor.copy(alpha = 0.8f))
+                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = dynamicTextColor.copy(alpha = 0.8f))
                 }
                 IconButton(onClick = onShowOptions) {
                     Icon(WitcherIcons.Options, null, tint = dynamicTextColor.copy(alpha = 0.8f))

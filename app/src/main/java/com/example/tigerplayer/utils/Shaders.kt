@@ -31,16 +31,70 @@ object FluidShaders {
         uniform sampler2D uVelocity;
         uniform sampler2D uSource;
         uniform float uDt;
-        uniform float uDissipation; 
+        uniform float uDissipation;
+        uniform float uKick;
         
         in vec2 vUv;
         out vec4 outColor;
         
         void main() {
-            // Back-trace the velocity to find the source of the fluid 'ink'
+            // Back-trace the velocity to find the source of the fluid ink.
             vec2 vel = texture(uVelocity, vUv).xy;
             vec2 coord = vUv - uDt * vel;
-            outColor = texture(uSource, coord) * uDissipation;
+            vec4 advected = texture(uSource, coord);
+            float pulseDissipation = clamp(uDissipation - (uKick * uKick) * 0.12, 0.82, 0.9995);
+            outColor = advected * pulseDissipation;
+        }
+    """
+
+    const val curlFrag = """
+        #version 300 es
+        precision highp float;
+        precision highp sampler2D;
+
+        uniform sampler2D uVelocity;
+        in vec2 vUv;
+        out vec4 outColor;
+
+        void main() {
+            vec2 texel = 1.0 / vec2(textureSize(uVelocity, 0));
+            float vL = texture(uVelocity, vUv - vec2(texel.x, 0.0)).y;
+            float vR = texture(uVelocity, vUv + vec2(texel.x, 0.0)).y;
+            float vB = texture(uVelocity, vUv - vec2(0.0, texel.y)).x;
+            float vT = texture(uVelocity, vUv + vec2(0.0, texel.y)).x;
+            float curl = 0.5 * (vR - vL - vT + vB);
+            outColor = vec4(curl, 0.0, 0.0, 1.0);
+        }
+    """
+
+    const val vorticityFrag = """
+        #version 300 es
+        precision highp float;
+        precision highp sampler2D;
+
+        uniform sampler2D uVelocity;
+        uniform sampler2D uCurl;
+        uniform float uDt;
+        uniform float uConfinement;
+
+        in vec2 vUv;
+        out vec4 outColor;
+
+        void main() {
+            vec2 texel = 1.0 / vec2(textureSize(uVelocity, 0));
+            float cL = abs(texture(uCurl, vUv - vec2(texel.x, 0.0)).x);
+            float cR = abs(texture(uCurl, vUv + vec2(texel.x, 0.0)).x);
+            float cB = abs(texture(uCurl, vUv - vec2(0.0, texel.y)).x);
+            float cT = abs(texture(uCurl, vUv + vec2(0.0, texel.y)).x);
+            float cC = texture(uCurl, vUv).x;
+
+            vec2 grad = vec2(cR - cL, cT - cB);
+            grad *= inversesqrt(max(dot(grad, grad), 1e-5));
+            vec2 force = vec2(grad.y, -grad.x) * cC * uConfinement;
+
+            vec2 vel = texture(uVelocity, vUv).xy;
+            vel += force * uDt;
+            outColor = vec4(vel, 0.0, 1.0);
         }
     """
 
@@ -150,48 +204,119 @@ object FluidShaders {
     precision highp sampler2D;
     
     uniform sampler2D uDensity;
+    uniform vec3 uBandsLow;
+    uniform vec3 uBandsHigh;
     in vec2 vUv;
     out vec4 outColor;
-    
-    // ACES Filmic Tone Mapping: Compresses HDR colors for high-end cinematic displays
-    vec3 ACESFilm(vec3 x) {
-        float a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;
-        return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
-    }
 
     void main() {
-        // 1. Raw Sample
-        vec3 rawColor = texture(uDensity, vUv).rgb;
-        float luma = length(rawColor);
+        vec3 density = texture(uDensity, vUv).rgb;
 
-        // 2. SUPREME AMPLIFICATION
-        // On mobile, FFT data can be quiet. We use a non-linear gain 
-        // to make subtle ripples look like glowing ink.
-        float gain = 1.0 + 8.0 * smoothstep(0.0, 0.5, luma);
-        vec3 color = rawColor * gain;
+        // 6-band neon palette map.
+        vec3 c0 = vec3(0.95, 0.06, 0.30);
+        vec3 c1 = vec3(0.70, 0.00, 1.00);
+        vec3 c2 = vec3(0.24, 0.12, 1.00);
+        vec3 c3 = vec3(0.00, 0.68, 1.00);
+        vec3 c4 = vec3(0.18, 0.88, 1.00);
+        vec3 c5 = vec3(1.00, 1.00, 1.00);
 
-        // 3. WITCHER AESTHETIC: Chromatic Depth
-        // We boost the "Aard Blue" or "Igni Red" components if they are dominant
-        color.r *= 1.1; // Slight warmth boost for Igni
-        color.b *= 1.2; // Deep cold boost for Aard
+        vec3 weightsLo = max(uBandsLow, vec3(0.0));
+        vec3 weightsHi = max(uBandsHigh, vec3(0.0));
+        float sumW = dot(weightsLo, vec3(1.0)) + dot(weightsHi, vec3(1.0)) + 1e-4;
 
-        // 4. TONEMAPPING & GAMMA CORRECTION
-        color = ACESFilm(color);
-        color = pow(color, vec3(1.0 / 2.2)); // Corrects for Android's display gamma
-        
-        // 5. CINEMATIC VIGNETTE
-        // Darkens the edges slightly to draw the eye into the vortex center
-        float dist = distance(vUv, vec2(0.5));
-        float vignette = smoothstep(0.85, 0.4, dist);
-        color *= mix(0.7, 1.0, vignette);
-        
-        // 6. STABILIZED ALPHA (The "Hole-Punch" Fix)
-        // If luma is low, we keep a faint 0.1 alpha to maintain the "Glass" look.
-        // If luma is high, we push alpha to 1.0 for a solid, vibrant fluid effect.
-        float alpha = clamp(luma * 4.0, 0.15, 1.0); 
-        
-        // Final Output using Straight Alpha for standard GLES 3.0 blending
-        outColor = vec4(color, alpha);
+        vec3 spectral =
+            c0 * weightsLo.x +
+            c1 * weightsLo.y +
+            c2 * weightsLo.z +
+            c3 * weightsHi.x +
+            c4 * weightsHi.y +
+            c5 * weightsHi.z;
+        spectral /= sumW;
+
+        float luma = max(max(density.r, density.g), density.b);
+        vec3 color = density * (1.2 + 3.0 * luma);
+        color = mix(color, color * spectral, 0.62);
+        color += spectral * luma * 0.45;
+
+        outColor = vec4(color, clamp(luma * 2.6, 0.08, 1.0));
     }
 """
+
+    const val bloomPrefilterFrag = """
+        #version 300 es
+        precision highp float;
+        precision highp sampler2D;
+
+        uniform sampler2D uScene;
+        uniform float uThreshold;
+
+        in vec2 vUv;
+        out vec4 outColor;
+
+        void main() {
+            vec3 c = texture(uScene, vUv).rgb;
+            float peak = max(max(c.r, c.g), c.b);
+            float w = max(peak - uThreshold, 0.0) / max(peak, 1e-4);
+            outColor = vec4(c * w, 1.0);
+        }
+    """
+
+    const val blurFrag = """
+        #version 300 es
+        precision mediump float;
+        precision mediump sampler2D;
+
+        uniform sampler2D uTexture;
+        uniform vec2 uTexelDir;
+
+        in vec2 vUv;
+        out vec4 outColor;
+
+        void main() {
+            vec3 sum = texture(uTexture, vUv).rgb * 0.227027;
+            sum += texture(uTexture, vUv + uTexelDir * 1.384615).rgb * 0.316216;
+            sum += texture(uTexture, vUv - uTexelDir * 1.384615).rgb * 0.316216;
+            sum += texture(uTexture, vUv + uTexelDir * 3.230769).rgb * 0.070270;
+            sum += texture(uTexture, vUv - uTexelDir * 3.230769).rgb * 0.070270;
+            outColor = vec4(sum, 1.0);
+        }
+    """
+
+    const val bloomCompositeFrag = """
+        #version 300 es
+        precision highp float;
+        precision highp sampler2D;
+
+        uniform sampler2D uScene;
+        uniform sampler2D uBloom;
+        uniform float uBloomStrength;
+
+        in vec2 vUv;
+        out vec4 outColor;
+
+        vec3 ACESFilm(vec3 x) {
+            float a = 2.51;
+            float b = 0.03;
+            float c = 2.43;
+            float d = 0.59;
+            float e = 0.14;
+            return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+        }
+
+        void main() {
+            vec3 scene = texture(uScene, vUv).rgb;
+            vec3 bloom = texture(uBloom, vUv).rgb;
+            vec3 color = scene + bloom * uBloomStrength;
+
+            float dist = distance(vUv, vec2(0.5));
+            float vignette = smoothstep(0.90, 0.35, dist);
+            color *= mix(0.72, 1.0, vignette);
+
+            color = ACESFilm(color);
+            color = pow(color, vec3(1.0 / 2.2));
+
+            float alpha = clamp(max(max(color.r, color.g), color.b) * 1.6, 0.15, 1.0);
+            outColor = vec4(color, alpha);
+        }
+    """
 }

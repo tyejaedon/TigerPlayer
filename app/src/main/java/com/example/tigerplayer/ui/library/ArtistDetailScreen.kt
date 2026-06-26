@@ -227,7 +227,7 @@ fun ArtistDetailsScreen(
                     playlists = playlists,
                     onDismiss = { trackForOptions = null },
                     onPlayNext = {
-                        viewModel.addToQueue(selectedTrack) // Ensure your VM supports 'Play Next'
+                        viewModel.addNextToQueue(selectedTrack)
                         trackForOptions = null
                     },
                     onAddToPlaylist = { playlistId ->

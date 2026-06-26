@@ -33,6 +33,7 @@ import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.main.MainScreen
 import com.example.tigerplayer.ui.permissions.PermissionScreen
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.queue.QueueScreen
 import com.example.tigerplayer.ui.settings.SettingsScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -166,6 +167,9 @@ fun TigerPlayerNavGraph(
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
+                },
+                onNavigateToQueue = {
+                    navController.navigate(Screen.Queue.route)
                 }
             )
         }
@@ -176,6 +180,10 @@ fun TigerPlayerNavGraph(
 
         composable(Screen.Settings.route) {
             SettingsScreen(onBackClick = { navController.popBackStack() })
+        }
+
+        composable(Screen.Queue.route) {
+            QueueScreen(onBackClick = { navController.popBackStack() })
         }
 
         // ----------------------------------
