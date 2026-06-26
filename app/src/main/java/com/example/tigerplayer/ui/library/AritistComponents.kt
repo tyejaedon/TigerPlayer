@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.tigerplayer.data.repository.ArtistDetails
+import com.example.tigerplayer.ui.theme.PremiumGlassCard
 import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.glassEffect
 
 
 fun formatMinutesListened(totalMinutes: Int): String {
@@ -47,87 +47,96 @@ fun formatMinutesListened(totalMinutes: Int): String {
 }
 @Composable
 fun ArtistHeroImage(model: Any?, artistName: String) {
-    AsyncImage(
-        model = model,
-        contentDescription = "Image of $artistName",
-        // Fallback to the Tiger logo if Last.fm fails
-        fallback = painterResource(com.example.tigerplayer.R.drawable.ic_tiger_logo),
-        error = painterResource(com.example.tigerplayer.R.drawable.ic_tiger_logo),
+    PremiumGlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(340.dp)
-            .padding(16.dp)
-            // Use glassEffect instead of hard shadows to avoid boxy artifacts
-            .glassEffect(MaterialTheme.shapes.extraLarge)
-            .clip(MaterialTheme.shapes.extraLarge),
-        contentScale = ContentScale.Crop
-    )
+            .padding(16.dp),
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = "Image of $artistName",
+            fallback = painterResource(com.example.tigerplayer.R.drawable.ic_tiger_logo),
+            error = painterResource(com.example.tigerplayer.R.drawable.ic_tiger_logo),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(340.dp)
+                .clip(MaterialTheme.shapes.extraLarge),
+            contentScale = ContentScale.Crop
+        )
+    }
 }
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun ArtistVanguardStats(profile: ArtistDetails?, accentColor: Color) {
-    Column(
+    PremiumGlassCard(
         modifier = Modifier
             .padding(16.dp)
-            .fillMaxWidth()
-            .glassEffect(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f), MaterialTheme.shapes.large)
-            .border(1.dp, accentColor.copy(alpha = 0.2f), MaterialTheme.shapes.large)
-            .padding(20.dp)
+            .fillMaxWidth(),
+        shape = MaterialTheme.shapes.large
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f), MaterialTheme.shapes.large)
+                .border(1.dp, accentColor.copy(alpha = 0.2f), MaterialTheme.shapes.large)
+                .padding(20.dp)
         ) {
-            Column {
-                Text(
-                    text = "VANGUARD DOSSIER",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.surfaceBright,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Global Resonance: ${profile?.popularity ?: 0}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column {
+                    Text(
+                        text = "VANGUARD DOSSIER",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.surfaceBright,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Global Resonance: ${profile?.popularity ?: 0}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                val totalMinutes = profile?.minutesListened ?: 0
+                ArtistMetadataBadge(
+                    text = formatMinutesListened(totalMinutes),
+                    textColor = if (totalMinutes >= 60) MaterialTheme.aardBlue else Color.Gray,
+                    isHighlight = totalMinutes >= 600
                 )
             }
 
-            val totalMinutes = profile?.minutesListened ?: 0
-            ArtistMetadataBadge(
-                text = formatMinutesListened(totalMinutes),
-                textColor = if (totalMinutes >= 60) MaterialTheme.aardBlue else Color.Gray,
-                isHighlight = totalMinutes >= 600
-            )
-        }
+            Spacer(modifier = Modifier.height(20.dp))
 
-        Spacer(modifier = Modifier.height(20.dp))
+            if (profile?.bio != null) {
+                Text(
+                    text = profile.bio,
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 22.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                )
 
-        if (profile?.bio != null) {
-            Text(
-                text = profile.bio,
-                style = MaterialTheme.typography.bodyMedium,
-                lineHeight = 22.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-            )
-
-            if (profile.genres.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    profile.genres.take(5).forEach { genre ->
-                        GenrePill(genre, accentColor)
+                if (profile.genres.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        profile.genres.take(5).forEach { genre ->
+                            GenrePill(genre, accentColor)
+                        }
                     }
                 }
+            } else {
+                ConsultingArchivesState()
             }
-        } else {
-            ConsultingArchivesState()
         }
     }
 }

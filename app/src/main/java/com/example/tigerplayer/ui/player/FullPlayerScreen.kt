@@ -2,7 +2,6 @@
 package com.example.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
-import android.graphics.drawable.BitmapDrawable
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -56,19 +55,27 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
-import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.engine.AudioReactiveFrame
 import com.example.tigerplayer.ui.library.SongOptionsSheet
+import com.example.tigerplayer.ui.theme.DominantColorExtractor
+import com.example.tigerplayer.ui.theme.LocalTigerAmbientBrush
+import com.example.tigerplayer.ui.theme.LocalTigerDynamicAccent
+import com.example.tigerplayer.ui.theme.LocalTigerNeonContrastMode
+import com.example.tigerplayer.ui.theme.LocalTigerNeonIntensityMode
+import com.example.tigerplayer.ui.theme.NeonContrastMode
+import com.example.tigerplayer.ui.theme.NeonIntensityMode
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
+import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import kotlin.math.sin
 
@@ -97,48 +104,82 @@ fun FullPlayerScreen(
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
 
     val themeSurface = MaterialTheme.colorScheme.surface
-    var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
+    val colorScope = rememberCoroutineScope()
+    var snappedNeonColor by remember(track.id, themeSurface) { mutableStateOf(themeSurface) }
+    val animatedNeonColor by animateColorAsState(
+        targetValue = snappedNeonColor,
+        animationSpec = tween(550, easing = FastOutSlowInEasing),
+        label = "SnappedNeonColor"
+    )
+    val neonContrastMode = LocalTigerNeonContrastMode.current
+    val neonIntensityMode = LocalTigerNeonIntensityMode.current
+    val ambientBrush = rememberTigerAmbientGradient(animatedNeonColor, baseTopAlpha = 0.18f)
+
+    val fluidTintAlpha = remember(neonContrastMode, neonIntensityMode) {
+        val base = when (neonIntensityMode) {
+            NeonIntensityMode.SOFT -> 0.10f
+            NeonIntensityMode.BALANCED -> 0.16f
+            NeonIntensityMode.HIGH -> 0.23f
+        }
+        val boost = if (neonContrastMode == NeonContrastMode.HIGH) 0.04f else 0f
+        (base + boost).coerceIn(0.08f, 0.32f)
+    }
     var dynamicTextColor by remember { mutableStateOf(Color(0xFFF5F5F5)) }
 
-    val imageRequest = remember(track.artworkUri) {
+    val imageRequest = remember(track.artworkUri, themeSurface) {
         ImageRequest.Builder(context)
             .data(track.artworkUri)
             .crossfade(true)
             .allowHardware(false)
             .listener(onSuccess = { _, result ->
-                val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                bitmap?.let { b ->
-                    Palette.from(b).generate { palette ->
-                        val extractedColor = palette?.dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
-                        dominantBgColor = extractedColor
-                        viewModel.updateTrackColor(extractedColor)
-                        val luminance = ColorUtils.calculateLuminance(extractedColor.toArgb())
-                        dynamicTextColor = if (luminance > 0.5) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
-                    }
+                colorScope.launch {
+                    val snapped = DominantColorExtractor.extractSnappedNeon(
+                        drawable = result.drawable,
+                        fallback = themeSurface
+                    )
+                    snappedNeonColor = snapped
+                    viewModel.updateTrackColor(snapped)
+
+                    val luminance = ColorUtils.calculateLuminance(snapped.toArgb())
+                    dynamicTextColor = if (luminance > 0.5) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
                 }
+            }, onError = { _, _ ->
+                snappedNeonColor = themeSurface
+                viewModel.updateTrackColor(themeSurface)
+                dynamicTextColor = Color(0xFFF5F5F5)
             })
             .build()
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF020202))) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(ambientBrush)
+        )
+
         // --- 1. SHARP CINEMATIC BACKGROUND ---
         AsyncImage(
             model = imageRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().alpha(0.4f)
+            modifier = Modifier.fillMaxSize().alpha(0.34f)
         )
 
         Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.9f)))))
 
-        // --- 2. FOREGROUND CORE CONTENT (Fixed Rendering Order) ---
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-                .statusBarsPadding()
-                .navigationBarsPadding()
+        CompositionLocalProvider(
+            LocalTigerDynamicAccent provides animatedNeonColor,
+            LocalTigerAmbientBrush provides ambientBrush
         ) {
+            // --- 2. FOREGROUND CORE CONTENT (Fixed Rendering Order) ---
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+            ) {
             // FIXED: HeaderRitual sits at the top of the Column so it is visible and clickable in front of the blur layers
             HeaderRitual(
                 dynamicTextColor = dynamicTextColor,
@@ -228,7 +269,7 @@ fun FullPlayerScreen(
                                             rotationY = tiltY
                                             cameraDistance = 16f * density
                                         }
-                                        .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = dominantBgColor)
+                                        .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = animatedNeonColor)
                                         .clip(RoundedCornerShape(32.dp))
                                         .pointerInput(Unit) {
                                             detectTapGestures(onTap = { viewModel.toggleVisualMode() })
@@ -244,13 +285,27 @@ fun FullPlayerScreen(
 
                                     // 2. Vortex Overlay
                                     androidx.compose.animation.AnimatedVisibility(visible = uiState.visualMode == PlayerVisualMode.VORTEX) {
-                                        FluidVortexRenderer(
-                                            isPlaying = uiState.isPlaying,
-                                            amplitudes = uiState.currentWaveform,
-                                            audioReactive = uiState.audioReactiveFrame,
-                                            trackId = track.id,
-                                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(32.dp))
-                                        )
+                                        Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(32.dp))) {
+                                            FluidVortexRenderer(
+                                                isPlaying = uiState.isPlaying,
+                                                amplitudes = uiState.currentWaveform,
+                                                audioReactive = uiState.audioReactiveFrame,
+                                                trackId = track.id,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(
+                                                        Brush.radialGradient(
+                                                            colors = listOf(
+                                                                animatedNeonColor.copy(alpha = fluidTintAlpha),
+                                                                Color.Transparent
+                                                            )
+                                                        )
+                                                    )
+                                            )
+                                        }
                                     }
 
                                     // 3. Waveform Overlay (FIXED: Brought back AnimatedVisibility wrapper)
@@ -258,7 +313,7 @@ fun FullPlayerScreen(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxSize()
-                                                .background(Color.Black.copy(0.6f)),
+                                                .background(Color.Black.copy(0.56f + fluidTintAlpha * 0.5f)),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             SmoothWaveform(
@@ -294,6 +349,7 @@ fun FullPlayerScreen(
                 PlaybackControls(uiState, viewModel, dynamicTextColor)
             }
         }
+        }
 
         // Modal Bottom Sheet Placeholder for Options
         if (showOptionsSheet) {
@@ -306,7 +362,7 @@ fun FullPlayerScreen(
                         showOptionsSheet = false // FIXED: Ensure both are reset upon sheet collapse
                     },
                     onPlayNext = {
-                        viewModel.addToQueue(selectedTrack)
+                        viewModel.addNextToQueue(selectedTrack)
                     },
                     onAddToPlaylist = { playlistId ->
                         viewModel.addTrackToPlaylist(playlistId, selectedTrack)

@@ -1,16 +1,13 @@
 package com.example.tigerplayer.data.repository
 
 import android.net.Uri
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresExtension
 import androidx.core.net.toUri
 import com.example.tigerplayer.data.local.dao.PlaylistDao
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.CachedTrackEntity
 import com.example.tigerplayer.data.local.entity.PlaylistEntity
-import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.remote.api.RemoteTrack
@@ -209,6 +206,29 @@ class AudioRepository @Inject constructor(
             trackIds.mapNotNull { id -> allTracks.find { it.id == id } }
         }
     }
+
+    fun getNeonDaylistTracks(
+        segment: String,
+        sinceMillis: Long,
+        limit: Int = 15
+    ): Flow<List<AudioTrack>> {
+        return tigerDao.getNeonDaylistTracks(
+            segment = segment,
+            sinceMillis = sinceMillis,
+            limit = limit
+        ).map { entities -> entities.map { it.toDomainModel() } }
+    }
+
+    fun getVaultDiscoveryTracks(
+        sinceMillis: Long,
+        limit: Int = 15
+    ): Flow<List<AudioTrack>> {
+        return tigerDao.getVaultDiscoveryTracks(
+            sinceMillis = sinceMillis,
+            limit = limit
+        ).map { entities -> entities.map { it.toDomainModel() } }
+    }
+
     fun getArtistCacheFlow(): Flow<Map<String, String?>> =
         tigerDao.getAllArtistCache().map { entities ->
             entities.associate { it.artistName to it.imageUrl }

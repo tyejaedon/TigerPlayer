@@ -1,7 +1,6 @@
 package com.example.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,16 +38,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
-import androidx.palette.graphics.Palette
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.theme.DominantColorExtractor
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @Composable
@@ -83,7 +85,8 @@ fun PlaylistDetailsScreen(
         fallbackColors[kotlin.math.abs(playlistName.hashCode()) % fallbackColors.size]
     }
 
-    var dominantColor by remember { mutableStateOf(nameHashColor) }
+    var dominantColor by remember(playlistId, playlistName) { mutableStateOf(nameHashColor) }
+    val ambientBrush = rememberTigerAmbientGradient(dominantColor, baseTopAlpha = 0.18f)
 
     // Determine the art to display. If the playlist has a custom image, use it.
     // If not, we do NOT fall back to the first track's art here anymore, we let the UI render the gradient.
@@ -94,14 +97,13 @@ fun PlaylistDetailsScreen(
         if (displayArt != null) {
             val loader = ImageLoader(context)
             val request = ImageRequest.Builder(context).data(displayArt).allowHardware(false).build()
-            val result = (loader.execute(request) as? SuccessResult)?.drawable
-            val bitmap = (result as? BitmapDrawable)?.bitmap
-            bitmap?.let { b ->
-                Palette.from(b).generate { palette ->
-                    val swatch = palette?.vibrantSwatch ?: palette?.dominantSwatch
-                    swatch?.rgb?.let { dominantColor = Color(it) }
-                }
+            val drawable = withContext(Dispatchers.IO) {
+                (loader.execute(request) as? SuccessResult)?.drawable
             }
+            dominantColor = DominantColorExtractor.extractSnappedNeon(
+                drawable = drawable,
+                fallback = nameHashColor
+            )
         } else {
             // Revert to generated hash color if art is cleared
             dominantColor = nameHashColor
@@ -116,7 +118,7 @@ fun PlaylistDetailsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(colors = listOf(dominantColor.copy(alpha = 0.25f), Color.Transparent), endY = 1000f))
+                .background(ambientBrush)
         )
 
         LazyColumn(

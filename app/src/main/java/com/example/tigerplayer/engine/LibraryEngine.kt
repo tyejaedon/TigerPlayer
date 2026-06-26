@@ -21,6 +21,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
+import java.util.Calendar
 import kotlin.random.Random
 
 class LibraryEngine @Inject constructor(
@@ -147,7 +148,7 @@ class LibraryEngine @Inject constructor(
             historyRepository.recentTracks,
             historyRepository.totalListeningTime,
             historyRepository.listeningTimeToday,
-            historyRepository.topArtist,
+            historyRepository.getTopArtist(getStartOfWeek()),
             allTracksFlow.distinctUntilChanged(),
             recommendationTicker
         ) { args: Array<Any?> ->
@@ -268,5 +269,17 @@ class LibraryEngine @Inject constructor(
             audioRepository.createPlaylist("Liked Songs", id = LIKED_SONGS_ID)
             audioRepository.getCustomPlaylists().first { list -> list.any { it.id == LIKED_SONGS_ID } }
         }
+    }
+
+    private fun getStartOfWeek(): Long {
+        val calendar = Calendar.getInstance().apply {
+            firstDayOfWeek = Calendar.MONDAY
+            set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return calendar.timeInMillis
     }
 }

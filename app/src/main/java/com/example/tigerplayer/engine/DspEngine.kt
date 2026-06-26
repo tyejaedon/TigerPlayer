@@ -27,6 +27,12 @@ data class AudioReactiveFrame(
     val flux: Float = 0f
 )
 
+enum class AcousticEnvironmentMode {
+    OFF,
+    VINYL_WARMTH,
+    CONCERT_HALL
+}
+
 @UnstableApi
 @Singleton
 class AdaptiveDspEngine @Inject constructor(
@@ -70,7 +76,19 @@ class AdaptiveDspEngine @Inject constructor(
     private var trebleAccumulator = 0f
     private var energyAccumulator = 0f
 
+    @Volatile
+    private var acousticEnvironmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.OFF
+    private var environmentWetCurrent = 0f
+    private var vinylNoiseState = 0x6A09E667u.toUInt()
+    private val concertHallReverb = LightweightSchroederReverb(maxChannels = 2)
+
     private fun clamp01(v: Float): Float = v.coerceIn(0f, 1f)
+
+    fun setAcousticEnvironmentMode(mode: AcousticEnvironmentMode) {
+        acousticEnvironmentMode = mode
+    }
+
+    fun getAcousticEnvironmentMode(): AcousticEnvironmentMode = acousticEnvironmentMode
 
     init {
         detectAndApplyDeviceProfile()
@@ -191,6 +209,30 @@ class AdaptiveDspEngine @Inject constructor(
                 if (channels == 2) sampleR = localActiveFilters[i].process(sampleR, 1)
             }
 
+            // Acoustic environment stage sits after tone shaping and before AGC.
+            val envMode = acousticEnvironmentMode
+            val envWetTarget = when (envMode) {
+                AcousticEnvironmentMode.OFF -> 0f
+                AcousticEnvironmentMode.VINYL_WARMTH -> 0.38f
+                AcousticEnvironmentMode.CONCERT_HALL -> 0.34f
+            }
+            environmentWetCurrent += (envWetTarget - environmentWetCurrent) * 0.0038f
+
+            when (envMode) {
+                AcousticEnvironmentMode.VINYL_WARMTH -> {
+                    val vinylL = vinylWarmth(sampleL, channel = 0)
+                    val vinylR = vinylWarmth(sampleR, channel = if (channels == 2) 1 else 0)
+                    sampleL += (vinylL - sampleL) * environmentWetCurrent
+                    sampleR += (vinylR - sampleR) * environmentWetCurrent
+                }
+                AcousticEnvironmentMode.CONCERT_HALL -> {
+                    val wet = concertHallReverb.process(sampleL, sampleR, channels)
+                    sampleL += (wet.first - sampleL) * environmentWetCurrent
+                    sampleR += (wet.second - sampleR) * environmentWetCurrent
+                }
+                AcousticEnvironmentMode.OFF -> Unit
+            }
+
             // Real-time automatic gain limiting (prevent clipping)
             val maxPeak = max(abs(sampleL), abs(sampleR))
             if (maxPeak > agcEnvelope) {
@@ -291,12 +333,125 @@ class AdaptiveDspEngine @Inject constructor(
         midAccumulator = 0f
         trebleAccumulator = 0f
         energyAccumulator = 0f
+        environmentWetCurrent = 0f
+        concertHallReverb.reset()
         _audioReactiveFrame.value = AudioReactiveFrame()
     }
 
     override fun reset() {
         flush()
         buffer = AudioProcessor.EMPTY_BUFFER
+    }
+
+    private fun vinylWarmth(sample: Float, channel: Int): Float {
+        val drive = 1.75f
+        val driven = (sample * drive).coerceIn(-1.5f, 1.5f)
+        val third = (driven * driven * driven) / 3f
+        val fifth = (driven * driven * driven * driven * driven) * 0.055f
+        val harmonics = (driven - third + fifth) * 0.78f
+
+        // Faint generated floor with slight channel decorrelation.
+        val noiseFloor = nextVinylNoise() * if (channel == 0) 0.0017f else 0.00195f
+        return (sample * 0.9f + harmonics * 0.1f + noiseFloor).coerceIn(-1f, 1f)
+    }
+
+    private fun nextVinylNoise(): Float {
+        vinylNoiseState = vinylNoiseState * 1664525u + 1013904223u
+        val normalized = ((vinylNoiseState.toLong() and 0xFFFFFFFFL).toFloat() / 4294967295f)
+        return normalized * 2f - 1f
+    }
+}
+
+private class LightweightSchroederReverb(maxChannels: Int) {
+    // Tuned for subtle room bloom while staying mobile-friendly.
+    private val combL = arrayOf(
+        FeedbackComb(1499, 0.79f),
+        FeedbackComb(1861, 0.75f),
+        FeedbackComb(2137, 0.72f)
+    )
+    private val combR = arrayOf(
+        FeedbackComb(1559, 0.79f),
+        FeedbackComb(1931, 0.75f),
+        FeedbackComb(2203, 0.72f)
+    )
+    private val allpassL = arrayOf(AllPass(347, 0.52f), AllPass(113, 0.5f))
+    private val allpassR = arrayOf(AllPass(373, 0.52f), AllPass(127, 0.5f))
+
+    private var lpL = 0f
+    private var lpR = 0f
+
+    fun process(inputL: Float, inputR: Float, channels: Int): Pair<Float, Float> {
+        val monoIn = if (channels == 2) (inputL + inputR) * 0.5f else inputL
+        val predelayL = highpassPreDelay(inputL, true)
+        val predelayR = highpassPreDelay(if (channels == 2) inputR else monoIn, false)
+
+        var wetL = 0f
+        var wetR = 0f
+        for (comb in combL) wetL += comb.process(predelayL)
+        for (comb in combR) wetR += comb.process(predelayR)
+        wetL /= combL.size.toFloat()
+        wetR /= combR.size.toFloat()
+
+        for (allPass in allpassL) wetL = allPass.process(wetL)
+        for (allPass in allpassR) wetR = allPass.process(wetR)
+
+        return Pair(wetL.coerceIn(-1f, 1f), wetR.coerceIn(-1f, 1f))
+    }
+
+    fun reset() {
+        combL.forEach { it.reset() }
+        combR.forEach { it.reset() }
+        allpassL.forEach { it.reset() }
+        allpassR.forEach { it.reset() }
+        lpL = 0f
+        lpR = 0f
+    }
+
+    private fun highpassPreDelay(input: Float, left: Boolean): Float {
+        if (left) {
+            lpL += (input - lpL) * 0.12f
+            return (input - lpL * 0.82f).coerceIn(-1f, 1f)
+        }
+        lpR += (input - lpR) * 0.12f
+        return (input - lpR * 0.82f).coerceIn(-1f, 1f)
+    }
+
+    private class FeedbackComb(size: Int, private val feedback: Float) {
+        private val buffer = FloatArray(size)
+        private var index = 0
+
+        fun process(input: Float): Float {
+            val delayed = buffer[index]
+            val output = delayed
+            buffer[index] = (input + delayed * feedback).coerceIn(-1f, 1f)
+            index += 1
+            if (index >= buffer.size) index = 0
+            return output
+        }
+
+        fun reset() {
+            buffer.fill(0f)
+            index = 0
+        }
+    }
+
+    private class AllPass(size: Int, private val gain: Float) {
+        private val buffer = FloatArray(size)
+        private var index = 0
+
+        fun process(input: Float): Float {
+            val delayed = buffer[index]
+            val output = -input + delayed
+            buffer[index] = (input + delayed * gain).coerceIn(-1f, 1f)
+            index += 1
+            if (index >= buffer.size) index = 0
+            return output
+        }
+
+        fun reset() {
+            buffer.fill(0f)
+            index = 0
+        }
     }
 }
 

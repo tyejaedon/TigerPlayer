@@ -24,6 +24,7 @@ import androidx.media3.session.SessionResult
 import com.example.tigerplayer.MainActivity
 import com.example.tigerplayer.R
 import com.example.tigerplayer.engine.AcousticNode
+import com.example.tigerplayer.engine.AcousticEnvironmentMode
 import com.example.tigerplayer.engine.AdaptiveDspEngine
 import com.example.tigerplayer.engine.FilterType
 import com.google.common.util.concurrent.Futures
@@ -53,6 +54,8 @@ class AudioPlayerService : MediaSessionService() {
         private const val CUSTOM_COMMAND_REPEAT = "ACTION_REPEAT"
         const val ACTION_TOGGLE_DSP = "ACTION_TOGGLE_DSP"
         const val ACTION_LOAD_PEQ = "ACTION_LOAD_PEQ"
+        const val ACTION_SET_ACOUSTIC_ENVIRONMENT = "ACTION_SET_ACOUSTIC_ENVIRONMENT"
+        const val EXTRA_ACOUSTIC_ENVIRONMENT_MODE = "EXTRA_ACOUSTIC_ENVIRONMENT_MODE"
     }
 
     @OptIn(UnstableApi::class)
@@ -206,7 +209,10 @@ class AudioPlayerService : MediaSessionService() {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY)).add(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY)).add(SessionCommand(ACTION_LOAD_PEQ, Bundle.EMPTY)).build()
+                .add(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_LOAD_PEQ, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_SET_ACOUSTIC_ENVIRONMENT, Bundle.EMPTY))
+                .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session).setAvailableSessionCommands(sessionCommands).setCustomLayout(createCustomLayoutList()).build()
         }
 
@@ -229,6 +235,13 @@ class AudioPlayerService : MediaSessionService() {
                     val profileName = args.getString("peq_profile_name") ?: "Custom Nexus Shape"
                     loadAutoEqPreset(rawText, profileName)
                     invalidateCustomLayout()
+                }
+                ACTION_SET_ACOUSTIC_ENVIRONMENT -> {
+                    val modeName = args.getString(EXTRA_ACOUSTIC_ENVIRONMENT_MODE)
+                    val mode = runCatching {
+                        AcousticEnvironmentMode.valueOf(modeName ?: AcousticEnvironmentMode.OFF.name)
+                    }.getOrDefault(AcousticEnvironmentMode.OFF)
+                    adaptiveDspEngine.setAcousticEnvironmentMode(mode)
                 }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))

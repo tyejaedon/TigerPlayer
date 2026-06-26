@@ -1,6 +1,5 @@
 package com.example.tigerplayer.ui.library
 
-import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.widget.Toast
 import androidx.annotation.RequiresExtension
@@ -18,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
@@ -29,14 +27,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.theme.DominantColorExtractor
+import com.example.tigerplayer.ui.theme.PremiumGlassCard
+import com.example.tigerplayer.ui.theme.TigerNeonOrange
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import kotlinx.coroutines.launch
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +49,7 @@ fun AlbumDetailsScreen(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val colorScope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsState()
     val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
 
@@ -58,14 +61,14 @@ fun AlbumDetailsScreen(
     val firstTrack = albumTracks.firstOrNull()
 
     // --- DYNAMIC COLOR EXTRACTION ---
-    val fallbackColor = MaterialTheme.colorScheme.background
-    var dominantColor by remember { mutableStateOf(fallbackColor) }
+    var dominantColor by remember(albumName, firstTrack?.artworkUri) { mutableStateOf(TigerNeonOrange) }
 
     val animatedDominantColor by animateColorAsState(
         targetValue = dominantColor,
         animationSpec = tween(1000),
         label = "AlbumColorAnimation"
     )
+    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.20f)
 
     val imageRequest = remember(firstTrack?.artworkUri) {
         ImageRequest.Builder(context)
@@ -74,17 +77,15 @@ fun AlbumDetailsScreen(
             .allowHardware(false)
             .listener(
                 onSuccess = { _, result ->
-                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                    bitmap?.let { b ->
-                        Palette.from(b).generate { palette ->
-                            // RECTIFIED: Priority goes to Vibrant and LightVibrant for readability
-                            val colorInt = palette?.vibrantSwatch?.rgb
-                                ?: palette?.lightVibrantSwatch?.rgb
-                                ?: palette?.dominantSwatch?.rgb
-
-                            colorInt?.let { dominantColor = Color(it) }
-                        }
+                    colorScope.launch {
+                        dominantColor = DominantColorExtractor.extractSnappedNeon(
+                            drawable = result.drawable,
+                            fallback = TigerNeonOrange
+                        )
                     }
+                },
+                onError = { _, _ ->
+                    dominantColor = TigerNeonOrange
                 }
             )
             .build()
@@ -111,16 +112,7 @@ fun AlbumDetailsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            animatedDominantColor.copy(alpha = 0.5f),
-                            fallbackColor
-                        ),
-                        startY = 0f,
-                        endY = 1500f
-                    )
-                )
+                .background(ambientBrush)
         )
 
         // 2. SCROLLABLE CONTENT
@@ -174,56 +166,61 @@ fun AlbumDetailsScreen(
 
                 item {
                     // THE GLASS BUBBLE HEADER
-                    Column(
+                    PremiumGlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .glassEffect(MaterialTheme.shapes.extraLarge)
-                            .background(
-                                accentColor.copy(alpha = 0.15f),
-                                MaterialTheme.shapes.extraLarge
-                            )
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        shape = MaterialTheme.shapes.extraLarge
                     ) {
-                        Text(
-                            text = albumName,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Black,
-                            textAlign = TextAlign.Center,
-                            letterSpacing = (-1).sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = firstTrack?.artist?.uppercase() ?: "UNKNOWN ARTIST",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = accentColor,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // --- NEW METADATA ROW ---
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    accentColor.copy(alpha = 0.15f),
+                                    MaterialTheme.shapes.extraLarge
+                                )
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            MetadataItem(
-                                label = "CHANTS",
-                                value = albumTracks.size.toString(),
-                                accentColor = accentColor
+                            Text(
+                                text = albumName,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Black,
+                                textAlign = TextAlign.Center,
+                                letterSpacing = (-1).sp
                             )
-                            MetadataItem(
-                                label = "DURATION",
-                                value = formatTotalDuration(albumTracks.sumOf { it.durationMs }),
-                                accentColor = accentColor
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = firstTrack?.artist?.uppercase() ?: "UNKNOWN ARTIST",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = accentColor,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.sp
                             )
-                            firstTrack?.year?.let { year ->
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // --- NEW METADATA ROW ---
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
                                 MetadataItem(
-                                    label = "RELEASED",
-                                    value = year,
+                                    label = "CHANTS",
+                                    value = albumTracks.size.toString(),
                                     accentColor = accentColor
                                 )
+                                MetadataItem(
+                                    label = "DURATION",
+                                    value = formatTotalDuration(albumTracks.sumOf { it.durationMs }),
+                                    accentColor = accentColor
+                                )
+                                firstTrack?.year?.let { year ->
+                                    MetadataItem(
+                                        label = "RELEASED",
+                                        value = year,
+                                        accentColor = accentColor
+                                    )
+                                }
                             }
                         }
                     }
@@ -252,7 +249,7 @@ fun AlbumDetailsScreen(
                     playlists = playlists,
                     onDismiss = { trackForOptions = null },
                     onPlayNext = {
-                        viewModel.addToQueue(selectedTrack)
+                        viewModel.addNextToQueue(selectedTrack)
                     },
                     onAddToPlaylist = { playlistId ->
                         viewModel.addTrackToPlaylist(playlistId, selectedTrack)

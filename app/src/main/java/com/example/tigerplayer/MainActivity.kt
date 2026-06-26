@@ -21,8 +21,9 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.compose.rememberNavController
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.navigation.TigerPlayerNavGraph
-import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.theme.NeonContrastMode
+import com.example.tigerplayer.ui.theme.NeonIntensityMode
 import com.example.tigerplayer.ui.settings.SettingsViewModel
 import com.example.tigerplayer.ui.settings.ThemeMode
 import com.example.tigerplayer.ui.theme.TigerPlayerTheme
@@ -41,7 +42,6 @@ class MainActivity : ComponentActivity() {
     lateinit var authManager: SpotifyAuthManager
 
     private val playerViewModel: PlayerViewModel by viewModels()
-    private val homeViewModel : HomeViewModel by viewModels()
 
     private val redirectUri = "tigerplayer://callback"
 
@@ -108,6 +108,8 @@ class MainActivity : ComponentActivity() {
                     "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
                 }, null)
             val themeMode by settingsViewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+            val neonContrastMode by settingsViewModel.neonContrastMode.collectAsState(initial = NeonContrastMode.BALANCED)
+            val neonIntensityMode by settingsViewModel.neonIntensityMode.collectAsState(initial = NeonIntensityMode.BALANCED)
 
             val useDarkTheme = when (themeMode) {
                 ThemeMode.LIGHT -> false
@@ -115,7 +117,11 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
 
-            TigerPlayerTheme(darkTheme = useDarkTheme) {
+            TigerPlayerTheme(
+                darkTheme = useDarkTheme,
+                neonContrastMode = neonContrastMode,
+                neonIntensityMode = neonIntensityMode
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -123,8 +129,7 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     TigerPlayerNavGraph(
                         navController = navController,
-                        playerViewModel = playerViewModel,
-                        homeViewModel = homeViewModel
+                        playerViewModel = playerViewModel
                     )
                 }
             }

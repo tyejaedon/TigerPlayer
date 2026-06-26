@@ -34,7 +34,8 @@ import com.example.tigerplayer.ui.library.ScanningOverlay
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
 import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.queue.QueueScreen
+import com.example.tigerplayer.ui.theme.PremiumGlassCard
 
 // ------------------------------
 // UI STATE MACHINE (CLEAN CONTROL)
@@ -90,6 +91,7 @@ fun MainScreen(
     val tabs = listOf(
         BottomNavTab.Home,
         BottomNavTab.Library,
+        BottomNavTab.Queue,
         BottomNavTab.Cloud
     )
 
@@ -109,13 +111,14 @@ fun MainScreen(
                 }
                 .clip(RoundedCornerShape(appCornerRadius.coerceAtLeast(0.dp))),
             bottomBar = {
-                Column(
+                PremiumGlassCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         // Ensure the bottom bar accounts for edge-to-edge navigation gestures
-                        .windowInsetsPadding(WindowInsets.navigationBars)
-                        .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                        .windowInsetsPadding(WindowInsets.navigationBars),
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
                 ) {
+                    Column {
                     AnimatedVisibility(
                         visible = hasTrack && !isExpanded,
                         enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
@@ -130,6 +133,7 @@ fun MainScreen(
                                 }
                             )
 
+                            }
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 24.dp),
                                 thickness = 0.5.dp,
@@ -250,6 +254,10 @@ fun MainScreen(
                         )
                     }
 
+                    composable(BottomNavTab.Queue.route) {
+                        QueueScreen(viewModel = playerViewModel)
+                    }
+
                     composable(BottomNavTab.Cloud.route) {
                         // CloudScreen inside inherently uses hiltViewModel() based on your earlier code
                         CloudScreen(
@@ -325,7 +333,7 @@ fun MainScreen(
         // INIT
         // ==============================
         LaunchedEffect(Unit) {
-            playerViewModel.loadLocalAudio(force = false)
+            playerViewModel.loadLocalAudio(forceRefresh = false)
         }
     }
 }
