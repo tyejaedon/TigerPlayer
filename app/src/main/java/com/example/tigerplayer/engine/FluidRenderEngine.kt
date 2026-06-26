@@ -14,7 +14,7 @@ import javax.inject.Singleton
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.max
+import android.util.Log
 
 /**
  * THE SUPREME GPU VORTEX: FluidRenderer
@@ -45,24 +45,13 @@ class FluidRenderer @Inject constructor(
     private var densityRes: PingPongBuffer? = null
     private var pressureRes: PingPongBuffer? = null
     private var divergenceRes: FrameBuffer? = null
-    private var curlRes: FrameBuffer? = null
-
-    private var sceneRes: FrameBuffer? = null
-    private var bloomPrefilterRes: FrameBuffer? = null
-    private var bloomPingRes: FrameBuffer? = null
-    private var bloomPongRes: FrameBuffer? = null
 
     private var advectionShader: Shader? = null
-    private var curlShader: Shader? = null
-    private var vorticityShader: Shader? = null
     private var divergenceShader: Shader? = null
     private var pressureShader: Shader? = null
     private var gradientSubtractShader: Shader? = null
     private var splatShader: Shader? = null
     private var displayShader: Shader? = null
-    private var bloomPrefilterShader: Shader? = null
-    private var blurShader: Shader? = null
-    private var bloomCompositeShader: Shader? = null
 
     private var quadVao: Int = 0
     private var quadVbo: Int = 0
@@ -86,24 +75,15 @@ class FluidRenderer @Inject constructor(
         densityRes = PingPongBuffer(simWidth, simHeight)
         pressureRes = PingPongBuffer(simWidth, simHeight)
         divergenceRes = FrameBuffer(simWidth, simHeight)
-        curlRes = FrameBuffer(simWidth, simHeight)
 
         advectionShader = Shader(FluidShaders.vert, FluidShaders.advectionFrag)
-        curlShader = Shader(FluidShaders.vert, FluidShaders.curlFrag)
-        vorticityShader = Shader(FluidShaders.vert, FluidShaders.vorticityFrag)
         divergenceShader = Shader(FluidShaders.vert, FluidShaders.divergenceFrag)
         pressureShader = Shader(FluidShaders.vert, FluidShaders.pressureFrag)
         gradientSubtractShader = Shader(FluidShaders.vert, FluidShaders.gradientSubtractFrag)
         splatShader = Shader(FluidShaders.vert, FluidShaders.splatFrag)
         displayShader = Shader(FluidShaders.vert, FluidShaders.displayFrag)
-        bloomPrefilterShader = Shader(FluidShaders.vert, FluidShaders.bloomPrefilterFrag)
-        blurShader = Shader(FluidShaders.vert, FluidShaders.blurFrag)
-        bloomCompositeShader = Shader(FluidShaders.vert, FluidShaders.bloomCompositeFrag)
 
         setupQuad()
-        if (screenWidth > 0 && screenHeight > 0) {
-            rebuildPostFxBuffers(screenWidth, screenHeight)
-        }
         lastFrameTime = System.nanoTime()
     }
 
@@ -128,7 +108,6 @@ class FluidRenderer @Inject constructor(
         // Lock the internal screen dimensions
         screenWidth = width
         screenHeight = height
-        rebuildPostFxBuffers(width, height)
     }
     override fun onDrawFrame(gl: GL10?) {
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
@@ -194,71 +173,48 @@ class FluidRenderer @Inject constructor(
         }
     }
     private fun stepSimulation(dt: Float) {
-        val bands = currentEnergy.get()
-        val kick = bands.getOrElse(0) { 0f }.coerceIn(0f, 1f)
-
         GLES30.glViewport(0, 0, simWidth, simHeight)
         GLES30.glBindVertexArray(quadVao)
 
         advectionShader?.let { shader ->
             shader.use()
             shader.setUniform("uDt", dt)
-            shader.setUniform("uKick", kick)
 
-            bindTexture(0, velocityRes?.readTexture ?: 0)
+            // 🔥 FIX: Velocity Texture
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, velocityRes?.readTexture ?: 0)
             shader.setUniform("uVelocity", 0)
 
             // Move Velocity
-            bindTexture(1, velocityRes?.readTexture ?: 0)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, velocityRes?.readTexture ?: 0)
             shader.setUniform("uSource", 1)
             shader.setUniform("uDissipation", 0.995f)
             velocityRes?.write(shader, false)
             velocityRes?.swap()
 
             // Move Density
-            bindTexture(0, velocityRes?.readTexture ?: 0)
-            bindTexture(1, densityRes?.readTexture ?: 0)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, densityRes?.readTexture ?: 0)
             shader.setUniform("uSource", 1)
             shader.setUniform("uDissipation", 0.985f)
             densityRes?.write(shader, false)
             densityRes?.swap()
         }
 
-        curlShader?.let { curlS ->
-            curlS.use()
-            bindTexture(0, velocityRes?.readTexture ?: 0)
-            curlS.setUniform("uVelocity", 0)
-            curlRes?.write(curlS, false)
-        }
-
-        vorticityShader?.let { vortS ->
-            vortS.use()
-            bindTexture(0, velocityRes?.readTexture ?: 0)
-            bindTexture(1, curlRes?.texture ?: 0)
-            vortS.setUniform("uVelocity", 0)
-            vortS.setUniform("uCurl", 1)
-            vortS.setUniform("uDt", dt)
-            vortS.setUniform("uConfinement", 26.0f)
-            velocityRes?.write(vortS, false)
-            velocityRes?.swap()
-        }
-
         // 2. Projection (Divergence -> Pressure -> Gradient Subtract)
         divergenceShader?.let { divS ->
             divS.use()
-            bindTexture(0, velocityRes?.readTexture ?: 0)
-            divS.setUniform("uVelocity", 0)
+            divS.setUniform("uVelocity", velocityRes?.readTexture ?: 0)
             divergenceRes?.write(divS, false)
         }
 
         pressureShader?.let { presS ->
             presS.use()
-            bindTexture(1, divergenceRes?.texture ?: 0)
-            presS.setUniform("uDivergence", 1)
+            presS.setUniform("uDivergence", divergenceRes?.texture ?: 0)
             // 20 Iterations is the sweet spot for mobile (Stability vs Performance)
             repeat(20) {
-                bindTexture(0, pressureRes?.readTexture ?: 0)
-                presS.setUniform("uPressure", 0)
+                presS.setUniform("uPressure", pressureRes?.readTexture ?: 0)
                 pressureRes?.write(presS, false)
                 pressureRes?.swap()
             }
@@ -266,10 +222,8 @@ class FluidRenderer @Inject constructor(
 
         gradientSubtractShader?.let { gradS ->
             gradS.use()
-            bindTexture(0, pressureRes?.readTexture ?: 0)
-            bindTexture(1, velocityRes?.readTexture ?: 0)
-            gradS.setUniform("uPressure", 0)
-            gradS.setUniform("uVelocity", 1)
+            gradS.setUniform("uPressure", pressureRes?.readTexture ?: 0)
+            gradS.setUniform("uVelocity", velocityRes?.readTexture ?: 0)
             velocityRes?.write(gradS, false)
             velocityRes?.swap()
         }
@@ -280,110 +234,31 @@ class FluidRenderer @Inject constructor(
     private fun renderToDisplay() {
         val shader = displayShader ?: return
         val density = densityRes ?: return
-        val scene = sceneRes ?: return
-        val prefilter = bloomPrefilterRes ?: return
-        val bloomA = bloomPingRes ?: return
-        val bloomB = bloomPongRes ?: return
-        val prefilterShader = bloomPrefilterShader ?: return
-        val blur = blurShader ?: return
-        val composite = bloomCompositeShader ?: return
-        val bands = currentEnergy.get()
 
-        val low0 = bands.getOrElse(0) { 0f }
-        val low1 = bands.getOrElse(1) { 0f }
-        val low2 = bands.getOrElse(2) { 0f }
-        val high0 = bands.getOrElse(3) { 0f }
-        val high1 = bands.getOrElse(4) { 0f }
-        val high2 = bands.getOrElse(5) { 0f }
-        val avgEnergy = (low0 + low1 + low2 + high0 + high1 + high2) / 6f
-
-        GLES30.glBindVertexArray(quadVao)
-
-        // Pass 1: density -> chromatic HDR scene
-        shader.use()
-        bindTexture(0, density.readTexture)
-        shader.setUniform("uDensity", 0)
-        shader.setUniform("uBandsLow", low0, low1, low2)
-        shader.setUniform("uBandsHigh", high0, high1, high2)
-        scene.write(shader, false)
-
-        // Pass 2: bright-pass prefilter
-        prefilterShader.use()
-        bindTexture(0, scene.texture)
-        prefilterShader.setUniform("uScene", 0)
-        prefilterShader.setUniform("uThreshold", (0.68f - avgEnergy * 0.2f).coerceIn(0.38f, 0.75f))
-        prefilter.write(prefilterShader, false)
-
-        // Pass 3: separable blur (2 passes)
-        blur.use()
-        bindTexture(0, prefilter.texture)
-        blur.setUniform("uTexture", 0)
-        blur.setUniform("uTexelDir", 1.0f / prefilter.width, 0.0f)
-        bloomA.write(blur, false)
-
-        blur.use()
-        bindTexture(0, bloomA.texture)
-        blur.setUniform("uTexture", 0)
-        blur.setUniform("uTexelDir", 0.0f, 1.0f / prefilter.height)
-        bloomB.write(blur, false)
-
-        // Pass 4: composite on default framebuffer
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, screenWidth, screenHeight)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
 
-        composite.use()
-        bindTexture(0, scene.texture)
-        bindTexture(1, bloomB.texture)
-        composite.setUniform("uScene", 0)
-        composite.setUniform("uBloom", 1)
-        composite.setUniform("uBloomStrength", (0.92f + avgEnergy * 1.4f).coerceIn(0.9f, 2.2f))
+        shader.use()
 
+        // 🔥 FIX: Bind density to unit 0
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, density.readTexture)
+        shader.setUniform("uDensity", 0)
+
+        GLES30.glBindVertexArray(quadVao)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glBindVertexArray(0)
     }
-
-    private fun bindTexture(unit: Int, textureId: Int) {
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
-    }
-
-    private fun rebuildPostFxBuffers(width: Int, height: Int) {
-        if (width <= 0 || height <= 0) return
-
-        sceneRes?.release()
-        bloomPrefilterRes?.release()
-        bloomPingRes?.release()
-        bloomPongRes?.release()
-
-        sceneRes = FrameBuffer(width, height)
-        val bloomW = max(1, width / 2)
-        val bloomH = max(1, height / 2)
-        bloomPrefilterRes = FrameBuffer(bloomW, bloomH)
-        bloomPingRes = FrameBuffer(bloomW, bloomH)
-        bloomPongRes = FrameBuffer(bloomW, bloomH)
-    }
-
     fun release() {
         GLES30.glDeleteVertexArrays(1, intArrayOf(quadVao), 0)
         GLES30.glDeleteBuffers(1, intArrayOf(quadVbo), 0)
         listOf(velocityRes, densityRes, pressureRes).forEach { it?.release() }
-        listOf(divergenceRes, curlRes, sceneRes, bloomPrefilterRes, bloomPingRes, bloomPongRes).forEach { it?.release() }
-        listOf(
-            advectionShader,
-            curlShader,
-            vorticityShader,
-            divergenceShader,
-            pressureShader,
-            gradientSubtractShader,
-            splatShader,
-            displayShader,
-            bloomPrefilterShader,
-            blurShader,
-            bloomCompositeShader
-        ).forEach { it?.release() }
+        divergenceRes?.release()
+        listOf(advectionShader, divergenceShader, pressureShader, gradientSubtractShader, splatShader, displayShader).forEach { it?.release() }
         currentGlContextHash = 0
     }
 }

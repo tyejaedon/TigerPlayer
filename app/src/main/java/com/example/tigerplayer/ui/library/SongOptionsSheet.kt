@@ -42,8 +42,7 @@ fun SongOptionsSheet(
     onDismiss: () -> Unit,
     onPlayNext: () -> Unit,
     onAddToPlaylist: (Long) -> Unit,
-    onGoToAlbum: (String) -> Unit,
-    onCreatePlaylist: (String) -> Unit = {}
+    onGoToAlbum: (String) -> Unit
 ) {
     var showPlaylistSelector by remember { mutableStateOf(false) }
     ModalBottomSheet(

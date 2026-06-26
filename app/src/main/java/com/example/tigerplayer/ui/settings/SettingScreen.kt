@@ -1,78 +1,42 @@
 package com.example.tigerplayer.ui.settings
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.BluetoothAudio
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Headset
-import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Timer
-import androidx.compose.material.icons.rounded.Vibration
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.tigerplayer.data.local.DefaultPlayerView
-import com.example.tigerplayer.data.local.SkipShortAudio
-import com.example.tigerplayer.data.local.TigerAccentStyle
-import com.example.tigerplayer.ui.theme.TigerCyberCyan
-import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.TigerSpectralViolet
-import com.example.tigerplayer.ui.theme.TigerToxicLime
+import com.example.tigerplayer.ui.equalizer.AuralNexusScreen
+import com.example.tigerplayer.ui.equalizer.AuralNexusViewModel
+import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.tigerGlow
-import kotlin.math.roundToInt
+
+private val IgniRed = Color(0xFFF11F1A)
+private val AardBlue = Color(0xFF4FC3F7)
+private val BitPerfectGold = Color(0xFFFFD700)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,269 +44,318 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
     onBackClick: () -> Unit
 ) {
-    val settings by viewModel.settingsState.collectAsStateWithLifecycle()
-    val rescan by viewModel.libraryRescanState.collectAsStateWithLifecycle()
-    val accent = accentColor(settings.accentStyle)
-    var crossfadeSlider by remember(settings.crossfadeDurationSec) {
-        mutableFloatStateOf(settings.crossfadeDurationSec.toFloat())
-    }
+    // Collect variables safely conforming to the lifecycles of background service environments
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val cacheSize by viewModel.cacheSizeFormatted.collectAsStateWithLifecycle()
+    val isBp by viewModel.isBitPerfect.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-    ) {
-        CenterAlignedTopAppBar(
-            title = {
-                Text(
-                    text = "CONTROL MATRIX",
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.6.sp
-                )
-            },
-            navigationIcon = {
-                IconButton(onClick = onBackClick) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-        )
+    var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
+    var showAuralNexusScreen by remember { mutableStateOf(false) }
+    var showSpotifyLogoutConfirm by remember { mutableStateOf(false) } // Safety confirmation state
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            MatrixSection(title = "Appearance", icon = Icons.Rounded.Palette, accent = accent) {
-                ListItem(
-                    headlineContent = { Text("Pure AMOLED Black") },
-                    supportingContent = { Text("Force #000000 background for OLED efficiency") },
-                    leadingContent = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = accent) },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.pureAmoledBlack,
-                            onCheckedChange = viewModel::setPureAmoledBlack
+    val scrollState = rememberScrollState()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text(
+                            text = "ARCHIVE PREFERENCES",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 2.sp
                         )
-                    }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
                 )
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
 
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Text("Neon Accent", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                // --- SECTION: APPEARANCE ---
+                SettingsSection(title = "THE LOOK", icon = Icons.Rounded.ColorLens) {
+                    ThemePreferenceSelector(
+                        currentMode = themeMode,
+                        onModeSelected = { viewModel.setThemeMode(it) }
+                    )
+                }
+
+                // --- SECTION: ACOUSTIC RESONANCE ---
+                SettingsSection(title = "ACOUSTIC RESONANCE", icon = Icons.Rounded.Audiotrack) {
+                    val primaryColor = if (isBp) BitPerfectGold else AardBlue
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.large)
+                            .background(Brush.linearGradient(listOf(primaryColor.copy(alpha = 0.1f), Color.Transparent)))
+                            .border(1.dp, primaryColor.copy(alpha = 0.2f), MaterialTheme.shapes.large)
+                            .padding(20.dp)
                     ) {
-                        TigerAccentStyle.entries.forEach { style ->
-                            val selected = style == settings.accentStyle
-                            val swatch = accentColor(style)
-                            Box(
-                                modifier = Modifier
-                                    .size(if (selected) 44.dp else 38.dp)
-                                    .clip(CircleShape)
-                                    .background(swatch)
-                                    .border(
-                                        width = if (selected) 2.dp else 1.dp,
-                                        color = if (selected) Color.White else Color.White.copy(alpha = 0.25f),
-                                        shape = CircleShape
-                                    )
-                                    .then(if (selected) Modifier.tigerGlow(swatch) else Modifier)
-                                    .bounceClick { viewModel.setAccentStyle(style) }
-                            )
-                        }
-                    }
-                }
-
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Text("Default Player View", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    DefaultPlayerView.entries.forEach { option ->
-                        val selected = option == settings.defaultPlayerView
-                        FilterChip(
-                            selected = selected,
-                            onClick = { viewModel.setDefaultPlayerView(option) },
-                            label = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                                 Text(
-                                    when (option) {
-                                        DefaultPlayerView.ARTWORK_3D -> "3D Artwork"
-                                        DefaultPlayerView.FLUID_VORTEX -> "Fluid Vortex"
-                                        DefaultPlayerView.SONIC_PRISM -> "Sonic Prism"
-                                    }
+                                    text = "AUDIO ENGINE",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = primaryColor
                                 )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = accent.copy(alpha = 0.2f)
-                            ),
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
-                    }
-                }
-            }
-
-            MatrixSection(title = "Audio Engine", icon = Icons.Rounded.GraphicEq, accent = accent) {
-                ListItem(
-                    headlineContent = { Text("Crossfade Duration") },
-                    supportingContent = { Text("${crossfadeSlider.roundToInt()} seconds") },
-                    leadingContent = { Icon(Icons.Rounded.Timer, contentDescription = null, tint = accent) }
-                )
-
-                Slider(
-                    value = crossfadeSlider,
-                    onValueChange = { crossfadeSlider = it },
-                    onValueChangeFinished = { viewModel.setCrossfadeDuration(crossfadeSlider.roundToInt()) },
-                    valueRange = 0f..12f,
-                    steps = 11,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                ListItem(
-                    headlineContent = { Text("Gapless Playback") },
-                    supportingContent = { Text("Enable seamless transitions with no frame gaps") },
-                    leadingContent = { Icon(Icons.Rounded.Memory, contentDescription = null, tint = accent) },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.gaplessPlayback,
-                            onCheckedChange = viewModel::setGaplessPlayback
-                        )
-                    }
-                )
-
-                ListItem(
-                    headlineContent = { Text("Audio-Reactive Haptics") },
-                    supportingContent = { Text("Pulse vibration with kick and bass energy") },
-                    leadingContent = { Icon(Icons.Rounded.Vibration, contentDescription = null, tint = accent) },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.audioReactiveHaptics,
-                            onCheckedChange = viewModel::setAudioReactiveHaptics
-                        )
-                    }
-                )
-            }
-
-            MatrixSection(title = "Library & Behaviors", icon = Icons.Rounded.Headset, accent = accent) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Text("Skip Short Audio", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SkipShortAudio.entries.forEach { option ->
-                            val selected = option == settings.skipShortAudio
-                            FilterChip(
-                                selected = selected,
-                                onClick = { viewModel.setSkipShortAudio(option) },
-                                label = {
-                                    Text(
-                                        when (option) {
-                                            SkipShortAudio.OFF -> "Off"
-                                            SkipShortAudio.BELOW_30_SECONDS -> "< 30s"
-                                            SkipShortAudio.BELOW_60_SECONDS -> "< 60s"
-                                        }
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = accent.copy(alpha = 0.2f)
-                                )
-                            )
-                        }
-                    }
-                }
-
-                ListItem(
-                    headlineContent = { Text("Resume on Bluetooth connect") },
-                    leadingContent = { Icon(Icons.Rounded.BluetoothAudio, contentDescription = null, tint = accent) },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.resumeOnBluetoothConnect,
-                            onCheckedChange = viewModel::setResumeOnBluetoothConnect
-                        )
-                    }
-                )
-
-                ListItem(
-                    headlineContent = { Text("Resume on wired headset connect") },
-                    leadingContent = { Icon(Icons.Rounded.Headset, contentDescription = null, tint = accent) },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.resumeOnWiredHeadsetConnect,
-                            onCheckedChange = viewModel::setResumeOnWiredHeadsetConnect
-                        )
-                    }
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(accent.copy(alpha = 0.24f), accent.copy(alpha = 0.08f))
-                            )
-                        )
-                        .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
-                        .tigerGlow(accent)
-                        .bounceClick { viewModel.triggerLibraryRescan() }
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = null, tint = accent)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text("Rescan Library", fontWeight = FontWeight.Black)
-                            AnimatedVisibility(visible = rescan.isRunning, enter = fadeIn(), exit = fadeOut()) {
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Scanning ${rescan.current}/${rescan.total}",
+                                    text = if (isBp) "Bit-Perfect Output Active\nBypassing Android Mixer"
+                                    else "Aural Nexus Active\nSpatial DSP Engine",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 16.sp
                                 )
                             }
+
+                            Switch(
+                                checked = isBp,
+                                onCheckedChange = { viewModel.toggleBitPerfect() },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = BitPerfectGold,
+                                    uncheckedThumbColor = Color.White,
+                                    uncheckedTrackColor = Color.White.copy(alpha = 0.2f)
+                                )
+                            )
+
+                            // FIXED: Added horizontal transitions to avoid Row layout shifts and height jumps
+                            AnimatedVisibility(
+                                visible = !isBp,
+                                enter = expandHorizontally() + fadeIn(),
+                                exit = shrinkHorizontally() + fadeOut()
+                            ) {
+                                Row {
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape)
+                                            .background(primaryColor.copy(alpha = 0.15f))
+                                            .bounceClick { showAuralNexusScreen = true },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Rounded.Tune, contentDescription = "Tune", tint = primaryColor)
+                                    }
+                                }
+                            }
                         }
-                        Spacer(modifier = Modifier.weight(1f))
-                        Icon(Icons.Rounded.Bolt, contentDescription = null, tint = accent)
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(18.dp))
+                // --- SECTION: REMOTE SERVICES ---
+                SettingsSection(title = "CONTRACTS", icon = Icons.Rounded.CloudOff) {
+                    PreferenceRow(
+                        title = "Spotify Connection",
+                        subtitle = "Sever the link with the cloud oracle",
+                        action = {
+                            TextButton(onClick = { showSpotifyLogoutConfirm = true }) {
+                                Text("LOGOUT", color = IgniRed, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    )
+                }
+
+                // --- SECTION: LOCAL STORAGE ---
+                SettingsSection(title = "STORAGE", icon = Icons.Rounded.DeleteSweep) {
+                    PreferenceRow(
+                        title = "Purge Temporary Archives",
+                        subtitle = cacheClearedMessage ?: "Currently utilizing $cacheSize of space",
+                        action = {
+                            OutlinedButton(
+                                onClick = { viewModel.clearTotalCache { cacheClearedMessage = "Archives purged successfully." } },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Text("PURGE", fontWeight = FontWeight.Black)
+                            }
+                        }
+                    )
+                }
+
+                // --- SECTION: THE CREATOR ---
+                SettingsSection(title = "THE ARCHIVIST", icon = Icons.Rounded.Code) {
+                    AboutMeSection()
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+
+        // --- FULL SCREEN OVERLAY: AURAL NEXUS ---
+        AnimatedVisibility(
+            visible = showAuralNexusScreen,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val auralNexusViewModel: AuralNexusViewModel = hiltViewModel()
+            AuralNexusScreen(
+                viewModel = auralNexusViewModel,
+                onClose = { showAuralNexusScreen = false }
+            )
+        }
+
+        // --- SAFETY CONFIRMATION DIALOG ---
+        if (showSpotifyLogoutConfirm) {
+            AlertDialog(
+                onDismissRequest = { showSpotifyLogoutConfirm = false },
+                title = { Text("SEVER CONNECTION", fontWeight = FontWeight.Black, color = Color.White) },
+                text = { Text("Are you certain you wish to sever the link with the cloud oracle? This will sign you out of Spotify.", color = Color.White.copy(alpha = 0.7f)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.logoutSpotify()
+                            showSpotifyLogoutConfirm = false
+                        }
+                    ) {
+                        Text("SEVER", color = IgniRed, fontWeight = FontWeight.Black)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSpotifyLogoutConfirm = false }) {
+                        Text("CANCEL", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = Color(0xFF151515),
+                shape = MaterialTheme.shapes.large
+            )
         }
     }
 }
 
 @Composable
-private fun MatrixSection(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    accent: Color,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-            .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(22.dp))
-    ) {
+fun SettingsSection(title: String, icon: ImageVector, content: @Composable () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = accent)
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(title.uppercase(), color = accent, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            Text(text = title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
         }
         content()
     }
 }
 
 @Composable
-private fun accentColor(accentStyle: TigerAccentStyle): Color {
-    return when (accentStyle) {
-        TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
-        TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
-        TigerAccentStyle.TOXIC_LIME -> TigerToxicLime
-        TigerAccentStyle.SPECTRAL_VIOLET -> TigerSpectralViolet
+fun ThemePreferenceSelector(currentMode: ThemeMode, onModeSelected: (ThemeMode) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassEffect(shape = MaterialTheme.shapes.large)
+            .padding(20.dp)
+    ) {
+        Text("Visual Resonance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Dictate the application's ambient lighting", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeOption("Light", currentMode == ThemeMode.LIGHT, { onModeSelected(ThemeMode.LIGHT) }, Modifier.weight(1f))
+            ThemeOption("Dark", currentMode == ThemeMode.DARK, { onModeSelected(ThemeMode.DARK) }, Modifier.weight(1f))
+            ThemeOption("System", currentMode == ThemeMode.SYSTEM, { onModeSelected(ThemeMode.SYSTEM) }, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+fun ThemeOption(label: String, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.height(40.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium, fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun PreferenceRow(title: String, subtitle: String, action: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassEffect(shape = MaterialTheme.shapes.large)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
+        }
+        action()
+    }
+}
+
+@Composable
+fun AboutMeSection() {
+    val uriHandler = LocalUriHandler.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassEffect(shape = MaterialTheme.shapes.extraLarge)
+            .padding(24.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("TY", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text("Jaedon", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Text("Forged in Nairobi, Kenya", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            "Strathmore University student, Android alchemist, and high-fidelity audio archivist. Passionate about crafting clean architectures, exploring cybersecurity, and ensuring every FLAC track plays with absolute precision.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 22.sp
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+            SocialLink("GitHub") { uriHandler.openUri("[https://github.com/tyejaedon](https://github.com/tyejaedon)") }
+            SocialLink("LinkedIn") { uriHandler.openUri("[https://linkedin.com/in/tyejaedon](https://linkedin.com/in/tyejaedon)") }
+            SocialLink("Instagram") { uriHandler.openUri("[https://instagram.com/tyjaedon](https://instagram.com/tyjaedon)") }
+        }
+    }
+}
+
+@Composable
+fun SocialLink(label: String, onClick: () -> Unit) {
+    Surface(color = Color.Transparent, shape = CircleShape, modifier = Modifier.bounceClick { onClick() }) {
+        Text(label.uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }

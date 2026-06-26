@@ -133,21 +133,12 @@ class PlaybackEngine @Inject constructor(
         if (isSpotify) spotifyRepository.skipPrevious() else mediaControllerManager.skipToPrevious()
     }
 
-    fun playNext(track: AudioTrack) {
-        val isSpotify = track.id.startsWith("spotify:")
-        if (isSpotify) {
-            Log.w("TigerPlayer", "Spotify queueing requires extended API access.")
-        } else {
-            mediaControllerManager.playNext(track)
-        }
-    }
-
     fun addToQueue(track: AudioTrack) {
         val isSpotify = track.id.startsWith("spotify:")
         if (isSpotify) {
             Log.w("TigerPlayer", "Spotify queueing requires extended API access.")
         } else {
-            mediaControllerManager.addToQueue(track)
+            mediaControllerManager.addNextToQueue(track)
         }
     }
 

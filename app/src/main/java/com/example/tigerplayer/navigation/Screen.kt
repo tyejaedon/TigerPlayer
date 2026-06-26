@@ -21,7 +21,6 @@ sealed class Screen(val route: String) {
 
     // --- Settings & Global Routes ---
     object Settings : Screen("settings")
-    object Queue : Screen("queue")
 
     // --- Global Detail Routes (These will cover the Bottom Bar) ---
 

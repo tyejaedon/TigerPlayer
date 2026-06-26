@@ -1,11 +1,8 @@
 package com.example.tigerplayer
 
 import android.Manifest
-import android.app.PictureInPictureParams
-import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
-import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,20 +19,17 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.compose.rememberNavController
-import com.example.tigerplayer.data.local.ThemeMode
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.navigation.TigerPlayerNavGraph
-import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
-import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
-import com.example.tigerplayer.ui.player.PipVisualizerSurface
+import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.settings.SettingsViewModel
+import com.example.tigerplayer.ui.settings.ThemeMode
 import com.example.tigerplayer.ui.theme.TigerPlayerTheme
 import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.sdk.android.auth.AuthorizationResponse
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -47,7 +41,7 @@ class MainActivity : ComponentActivity() {
     lateinit var authManager: SpotifyAuthManager
 
     private val playerViewModel: PlayerViewModel by viewModels()
-    private val isInPipMode = MutableStateFlow(false)
+    private val homeViewModel : HomeViewModel by viewModels()
 
     private val redirectUri = "tigerplayer://callback"
 
@@ -109,14 +103,11 @@ class MainActivity : ComponentActivity() {
         requestSystemPermissions()
 
         setContent {
-            val pipMode by isInPipMode.collectAsState()
-            val coverWindowState = rememberCoverScreenWindowState()
             val settingsViewModel: SettingsViewModel =
                 hiltViewModel(checkNotNull(LocalViewModelStoreOwner.current) {
                     "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
                 }, null)
-            val settingsState by settingsViewModel.settingsState.collectAsState()
-            val themeMode = settingsState.themeMode
+            val themeMode by settingsViewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
 
             val useDarkTheme = when (themeMode) {
                 ThemeMode.LIGHT -> false
@@ -124,61 +115,20 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
 
-            TigerPlayerTheme(
-                darkTheme = useDarkTheme,
-                pureAmoledBlack = settingsState.pureAmoledBlack,
-                accentStyle = settingsState.accentStyle
-            ) {
+            TigerPlayerTheme(darkTheme = useDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (pipMode) {
-                        PipVisualizerSurface(playerViewModel = playerViewModel)
-                    } else if (coverWindowState.isCoverScreen) {
-                        CoverScreenMiniHub(
-                            playerViewModel = playerViewModel,
-                            windowState = coverWindowState
-                        )
-                    } else {
-                        val navController = rememberNavController()
-                        TigerPlayerNavGraph(
-                            navController = navController,
-                            playerViewModel = playerViewModel
-                        )
-                    }
+                    val navController = rememberNavController()
+                    TigerPlayerNavGraph(
+                        navController = navController,
+                        playerViewModel = playerViewModel,
+                        homeViewModel = homeViewModel
+                    )
                 }
             }
         }
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (shouldEnterPictureInPicture()) {
-            enterPlayerPictureInPicture()
-        }
-    }
-
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        isInPipMode.value = isInPictureInPictureMode
-    }
-
-    private fun shouldEnterPictureInPicture(): Boolean {
-        if (isFinishing || isDestroyed || isInPipMode.value) return false
-        val uiState = playerViewModel.uiState.value
-        return uiState.isPlaying && uiState.currentTrack != null
-    }
-
-    private fun enterPlayerPictureInPicture() {
-        val aspectRatio = Rational(1, 1)
-        val paramsBuilder = PictureInPictureParams.Builder()
-            .setAspectRatio(aspectRatio)
-
-        enterPictureInPictureMode(paramsBuilder.build())
     }
 
     private fun requestSystemPermissions() {

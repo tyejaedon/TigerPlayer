@@ -26,10 +26,6 @@ class PlaybackPrefs @Inject constructor(
         val ORIGINAL_QUEUE_IDS = stringPreferencesKey("original_queue_ids")
         val EQ_NODES_DATA = stringPreferencesKey("eq_nodes_data")
         val CURRENT_MOOD = stringPreferencesKey("current_mood")
-        val ACOUSTIC_ENVIRONMENT_MODE = stringPreferencesKey("acoustic_environment_mode")
-        val FLOW_STATE_ENABLED = booleanPreferencesKey("flow_state_enabled")
-        val FLOW_STATE_WINDOW_MS = longPreferencesKey("flow_state_window_ms")
-        val FLOW_STATE_TRUE_OVERLAP = booleanPreferencesKey("flow_state_true_overlap")
     }
 
     val lastTrackId: Flow<String?> = dataStore.data.map { it[LAST_TRACK_ID] }
@@ -44,47 +40,11 @@ class PlaybackPrefs @Inject constructor(
     }
     val eqNodesData: Flow<String?> = dataStore.data.map { it[EQ_NODES_DATA] }
     val currentMood: Flow<String?> = dataStore.data.map { it[CURRENT_MOOD] }
-    val acousticEnvironmentMode: Flow<String> = dataStore.data.map {
-        it[ACOUSTIC_ENVIRONMENT_MODE] ?: "STUDIO"
-    }
-    val flowStateEnabled: Flow<Boolean> = dataStore.data.map {
-        it[FLOW_STATE_ENABLED] ?: true
-    }
-    val flowStateWindowMs: Flow<Long> = dataStore.data.map {
-        it[FLOW_STATE_WINDOW_MS] ?: 7000L
-    }
-    val flowStateTrueOverlap: Flow<Boolean> = dataStore.data.map {
-        it[FLOW_STATE_TRUE_OVERLAP] ?: true
-    }
 
     suspend fun saveEqState(nodesData: String, mood: String) {
         dataStore.edit { prefs ->
             prefs[EQ_NODES_DATA] = nodesData
             prefs[CURRENT_MOOD] = mood
-        }
-    }
-
-    suspend fun saveAcousticEnvironmentMode(modeName: String) {
-        dataStore.edit { prefs ->
-            prefs[ACOUSTIC_ENVIRONMENT_MODE] = modeName
-        }
-    }
-
-    suspend fun saveFlowStateEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[FLOW_STATE_ENABLED] = enabled
-        }
-    }
-
-    suspend fun saveFlowStateWindowMs(windowMs: Long) {
-        dataStore.edit { prefs ->
-            prefs[FLOW_STATE_WINDOW_MS] = windowMs.coerceIn(3000L, 12000L)
-        }
-    }
-
-    suspend fun saveFlowStateTrueOverlap(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[FLOW_STATE_TRUE_OVERLAP] = enabled
         }
     }
 

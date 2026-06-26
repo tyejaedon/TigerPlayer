@@ -15,12 +15,4 @@ interface LastFmApi {
         @Query("artist") artistName: String,
         @Query("api_key") apiKey: String = BuildConfig.LASTFM_API_KEY
     ): Response<LastFmResponse>
-
-    @GET("2.0/?method=track.getsimilar&format=json&autocorrect=1")
-    suspend fun getSimilarTracks(
-        @Query("track") trackName: String,
-        @Query("artist") artistName: String,
-        @Query("limit") limit: Int = 50,
-        @Query("api_key") apiKey: String = BuildConfig.LASTFM_API_KEY
-    ): Response<com.example.tigerplayer.data.remote.model.LastFmSimilarTracksResponse>
 }

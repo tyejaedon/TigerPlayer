@@ -7,7 +7,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.example.tigerplayer.data.local.TigerAccentStyle
 
 // ------------------------------
 // DARK / LIGHT SYSTEM SCHEMES
@@ -49,29 +48,9 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun TigerPlayerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    pureAmoledBlack: Boolean = false,
-    accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_ORANGE,
     content: @Composable () -> Unit
 ) {
-    val accent = when (accentStyle) {
-        TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
-        TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
-        TigerAccentStyle.TOXIC_LIME -> TigerToxicLime
-        TigerAccentStyle.SPECTRAL_VIOLET -> TigerSpectralViolet
-    }
-
-    val scheme = if (darkTheme) {
-        DarkColorScheme.copy(
-            primary = accent,
-            secondary = accent.copy(alpha = 0.82f),
-            background = if (pureAmoledBlack) Color.Black else TigerBlack
-        )
-    } else {
-        LightColorScheme.copy(
-            primary = accent,
-            secondary = accent.copy(alpha = 0.82f)
-        )
-    }
+    val scheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val view = LocalView.current
 
     if (!view.isInEditMode) {

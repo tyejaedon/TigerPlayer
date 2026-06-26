@@ -196,24 +196,6 @@ class AudioRepository @Inject constructor(
         return tigerDao.getHeavyRotation(since)
         }
 
-    fun getDaylistTracks(
-        historyStartMs: Long,
-        bucketStartHour: Int,
-        bucketEndHour: Int,
-        limit: Int = 20
-    ): Flow<List<AudioTrack>> {
-        return tigerDao.getDaylistTracks(historyStartMs, bucketStartHour, bucketEndHour, limit)
-            .map { entities -> entities.map { it.toDomainModel() } }
-    }
-
-    fun getDiscoveryWeeklyTracks(
-        staleBeforeMs: Long,
-        limit: Int = 30
-    ): Flow<List<AudioTrack>> {
-        return tigerDao.getDiscoveryWeeklyTracks(staleBeforeMs, limit)
-            .map { entities -> entities.map { it.toDomainModel() } }
-    }
-
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
         // AudioRepository.kt line 211

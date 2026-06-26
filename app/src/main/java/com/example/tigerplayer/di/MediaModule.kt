@@ -2,10 +2,9 @@ package com.example.tigerplayer.di
 
 import android.content.Context
 import com.example.tigerplayer.data.local.PlaybackPrefs
-import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.MediaDataRepository
 import com.example.tigerplayer.service.MediaControllerManager
+import com.example.tigerplayer.service.WaveformCaptureProcessor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,13 +21,14 @@ object MediaModule {
     fun provideMediaControllerManager(
         @ApplicationContext context: Context,
         playbackPrefs: PlaybackPrefs,
-        settingsDataStore: SettingsDataStore,
         audioRepository: AudioRepository,
-        mediaDataRepository: MediaDataRepository
+        waveformCaptureProcessor: WaveformCaptureProcessor
     ): MediaControllerManager {
         // Hilt will automatically pass the dependencies into your Manager
         return MediaControllerManager(
-            context, playbackPrefs, settingsDataStore, audioRepository, mediaDataRepository
+            context, playbackPrefs, audioRepository,
+            waveformCaptureProcessor
+
         )
     }
 }

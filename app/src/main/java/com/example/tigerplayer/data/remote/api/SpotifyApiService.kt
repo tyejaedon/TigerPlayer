@@ -1,14 +1,6 @@
 package com.example.tigerplayer.data.remote.api
 
-import com.example.tigerplayer.data.remote.model.PlaylistTrackItem
-import com.example.tigerplayer.data.remote.model.SpotifyPaging
-import com.example.tigerplayer.data.remote.model.SpotifyPlaylistResponse
-import com.example.tigerplayer.data.remote.model.SpotifyRecommendationsResponse
-import com.example.tigerplayer.data.remote.model.SpotifySavedAlbumResponse
-import com.example.tigerplayer.data.remote.model.SpotifySearchResponse
-import com.example.tigerplayer.data.remote.model.SpotifyTokenResponse
-import com.example.tigerplayer.data.remote.model.SpotifyTopTracksResponse
-import com.example.tigerplayer.data.remote.model.SpotifyTrack
+import com.example.tigerplayer.data.remote.model.*
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -63,21 +55,6 @@ interface SpotifyApiService {
         @Path("id") albumId: String,
         @Query("limit") limit: Int = 50
     ): Response<SpotifyPaging<SpotifyTrack>>
-
-    @GET("v1/recommendations")
-    suspend fun getRecommendations(
-        @Header("Authorization") bearerToken: String,
-        @Query("seed_tracks") seedTracks: String? = null,
-        @Query("seed_artists") seedArtists: String? = null,
-        @Query("limit") limit: Int = 20
-    ): Response<SpotifyRecommendationsResponse>
-
-    @GET("v1/artists/{id}/top-tracks")
-    suspend fun getArtistTopTracks(
-        @Header("Authorization") bearerToken: String,
-        @Path("id") artistId: String,
-        @Query("market") market: String = "US"
-    ): Response<SpotifyTopTracksResponse>
 }
 
 interface SpotifyAuthApi {

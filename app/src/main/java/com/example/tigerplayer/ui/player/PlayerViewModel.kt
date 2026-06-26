@@ -6,8 +6,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
-import com.example.tigerplayer.data.local.DefaultPlayerView
-import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.remote.api.YouTubeRepository
@@ -24,7 +22,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class PlayerVisualMode { ARTWORK, WAVEFORM, VORTEX, SONIC_PRISM }
+enum class PlayerVisualMode { ARTWORK, WAVEFORM, VORTEX }
 
 data class LibraryArtist(
     val name: String,
@@ -83,7 +81,6 @@ class PlayerViewModel @Inject constructor(
     private val networkEngine: NetworkEngine,
     private val waveformEngine: WaveformEngine,
     private val adaptiveDspEngine: AdaptiveDspEngine,
-    private val settingsDataStore: SettingsDataStore,
     private val audioRepository: AudioRepository,
     val youtubeRepository: YouTubeRepository
 ) : ViewModel() {
@@ -96,7 +93,6 @@ class PlayerViewModel @Inject constructor(
 
     private var scanJob: Job? = null
     private val libraryRefreshTrigger = MutableStateFlow(0)
-    private var preferredDefaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D
 
     private val _trackSortOrder = MutableStateFlow(LibraryEngine.SortOrder.TITLE)
     private val _albumSortOrder = MutableStateFlow(LibraryEngine.SortOrder.TITLE)
@@ -140,12 +136,6 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             mediaControllerManager.currentPosition.collect { pos ->
                 _uiState.update { it.copy(currentPosition = pos) }
-            }
-        }
-
-        viewModelScope.launch {
-            settingsDataStore.settingsFlow.collect { settings ->
-                preferredDefaultPlayerView = settings.defaultPlayerView
             }
         }
 
@@ -317,7 +307,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun addNextToQueue(track: AudioTrack) {
-        playbackEngine.playNext(track)
+        playbackEngine.addToQueue(track)
     }
 
     fun removeFromQueue(track: AudioTrack) {
@@ -415,24 +405,14 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // Cycle through all visual surfaces including Sonic Prism.
+    // FIXED: Correctly cycle through all 3 PlayerVisualModes (ARTWORK -> WAVEFORM -> VORTEX)
     fun toggleVisualMode() {
         val nextMode = when (_uiState.value.visualMode) {
             PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
             PlayerVisualMode.WAVEFORM -> PlayerVisualMode.VORTEX
-            PlayerVisualMode.VORTEX -> PlayerVisualMode.SONIC_PRISM
-            PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
+            PlayerVisualMode.VORTEX -> PlayerVisualMode.ARTWORK
         }
         _uiState.update { it.copy(visualMode = nextMode) }
-    }
-
-    fun onFullPlayerOpened() {
-        val targetMode = when (preferredDefaultPlayerView) {
-            DefaultPlayerView.ARTWORK_3D -> PlayerVisualMode.ARTWORK
-            DefaultPlayerView.FLUID_VORTEX -> PlayerVisualMode.VORTEX
-            DefaultPlayerView.SONIC_PRISM -> PlayerVisualMode.SONIC_PRISM
-        }
-        _uiState.update { it.copy(visualMode = targetMode) }
     }
 
     fun onSearchQueryChanged(query: String) {

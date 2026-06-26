@@ -21,23 +21,15 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
-import com.example.tigerplayer.data.local.PlaybackPrefs
 import com.example.tigerplayer.MainActivity
 import com.example.tigerplayer.R
 import com.example.tigerplayer.engine.AcousticNode
-import com.example.tigerplayer.engine.AcousticEnvironmentMode
 import com.example.tigerplayer.engine.AdaptiveDspEngine
 import com.example.tigerplayer.engine.FilterType
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
 import kotlin.math.pow
 
 data class PeqBand(val type: String, val frequency: Float, val gain: Float, val q: Float)
@@ -52,19 +44,15 @@ class AudioPlayerService : MediaSessionService() {
     private lateinit var player: ExoPlayer
 
     @Inject lateinit var adaptiveDspEngine: AdaptiveDspEngine
-    @Inject lateinit var playbackPrefs: PlaybackPrefs
 
     private var isBitPerfectMode = true
     private var currentProfile: PeqProfile? = null
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     companion object {
         private const val CUSTOM_COMMAND_SHUFFLE = "ACTION_SHUFFLE"
         private const val CUSTOM_COMMAND_REPEAT = "ACTION_REPEAT"
         const val ACTION_TOGGLE_DSP = "ACTION_TOGGLE_DSP"
         const val ACTION_LOAD_PEQ = "ACTION_LOAD_PEQ"
-        const val ACTION_SET_ACOUSTIC_ENV = "ACTION_SET_ACOUSTIC_ENV"
-        const val EXTRA_ACOUSTIC_ENV_MODE = "EXTRA_ACOUSTIC_ENV_MODE"
     }
 
     @OptIn(UnstableApi::class)
@@ -98,13 +86,6 @@ class AudioPlayerService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
-
-        serviceScope.launch {
-            val savedModeName = playbackPrefs.acousticEnvironmentMode.firstOrNull() ?: AcousticEnvironmentMode.STUDIO.name
-            val savedMode = runCatching { AcousticEnvironmentMode.valueOf(savedModeName) }
-                .getOrDefault(AcousticEnvironmentMode.STUDIO)
-            adaptiveDspEngine.setAcousticEnvironmentMode(savedMode)
-        }
 
         setAudioOffloadEnabled(true)
 
@@ -217,7 +198,6 @@ class AudioPlayerService : MediaSessionService() {
             release()
             mediaSession = null
         }
-        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -226,10 +206,7 @@ class AudioPlayerService : MediaSessionService() {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY)).add(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_LOAD_PEQ, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_SET_ACOUSTIC_ENV, Bundle.EMPTY))
-                .build()
+                .add(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY)).add(SessionCommand(ACTION_LOAD_PEQ, Bundle.EMPTY)).build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session).setAvailableSessionCommands(sessionCommands).setCustomLayout(createCustomLayoutList()).build()
         }
 
@@ -252,15 +229,6 @@ class AudioPlayerService : MediaSessionService() {
                     val profileName = args.getString("peq_profile_name") ?: "Custom Nexus Shape"
                     loadAutoEqPreset(rawText, profileName)
                     invalidateCustomLayout()
-                }
-                ACTION_SET_ACOUSTIC_ENV -> {
-                    val modeName = args.getString(EXTRA_ACOUSTIC_ENV_MODE) ?: AcousticEnvironmentMode.STUDIO.name
-                    val mode = runCatching { AcousticEnvironmentMode.valueOf(modeName) }
-                        .getOrDefault(AcousticEnvironmentMode.STUDIO)
-                    adaptiveDspEngine.setAcousticEnvironmentMode(mode)
-                    serviceScope.launch {
-                        playbackPrefs.saveAcousticEnvironmentMode(mode.name)
-                    }
                 }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))

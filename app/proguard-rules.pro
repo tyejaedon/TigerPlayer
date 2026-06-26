@@ -1,65 +1,21 @@
-# ============================
-# TigerPlayer Release Hardening
-# ============================
+# Add project specific ProGuard rules here.
+# You can control the set of applied configuration files using the
+# proguardFiles setting in build.gradle.
+#
+# For more details, see
+#   http://developer.android.com/guide/developing/tools/proguard.html
 
--keepattributes Signature,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault,InnerClasses,EnclosingMethod
+# If your project uses WebView with JS, uncomment the following
+# and specify the fully qualified class name to the JavaScript interface
+# class:
+#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
+#   public *;
+#}
 
-# --- Media3 / ExoPlayer ---
--keep class * extends androidx.media3.session.MediaSessionService { *; }
--keep class * implements androidx.media3.common.audio.AudioProcessor { *; }
--keep class com.example.tigerplayer.service.AudioPlayerService { *; }
--keep class com.example.tigerplayer.service.MediaControllerManager { *; }
--keep class com.example.tigerplayer.engine.AdaptiveDspEngine { *; }
--dontwarn androidx.media3.**
+# Uncomment this to preserve the line number information for
+# debugging stack traces.
+#-keepattributes SourceFile,LineNumberTable
 
-# --- OpenGL renderer entry points (reflection-safe) ---
--keep class com.example.tigerplayer.ui.player.TigerVortexRenderer { *; }
-
-# --- Coil ---
--keep class coil.request.ImageRequest$Builder { *; }
--keep class coil.fetch.** { *; }
--keep class coil.decode.** { *; }
--dontwarn coil.**
-
-# --- Retrofit / OkHttp / Gson ---
--keep,allowobfuscation interface * {
-	@retrofit2.http.* <methods>;
-}
--keepclassmembers,allowshrinking,allowobfuscation interface * {
-	@retrofit2.http.* <methods>;
-}
--dontwarn retrofit2.**
--dontwarn okhttp3.**
-
--keep class com.example.tigerplayer.data.remote.model.** { *; }
--keepclassmembers class com.example.tigerplayer.data.remote.model.** {
-	<fields>;
-}
-
--keepclassmembers,allowobfuscation class * {
-	@com.google.gson.annotations.SerializedName <fields>;
-}
-
-# --- Room ---
--keep class * extends androidx.room.RoomDatabase
--keep @androidx.room.Entity class *
--dontwarn androidx.room.paging.**
-
--keepclassmembers class * {
-	@androidx.room.PrimaryKey <fields>;
-	@androidx.room.ColumnInfo <fields>;
-	@androidx.room.Relation <fields>;
-	@androidx.room.Embedded <fields>;
-}
-
-# Keep generated schema helpers and DAO impls.
--keep class *_Impl { *; }
--keep class *Dao_Impl { *; }
-
-# --- Coroutines / Kotlin metadata interop ---
--dontwarn kotlinx.coroutines.**
-
-# --- Spotify App Remote optional transitive classes ---
--dontwarn com.fasterxml.jackson.databind.**
--dontwarn com.spotify.base.annotations.**
--dontwarn com.spotify.protocol.mappers.jackson.**
+# If you keep the line number information, uncomment this to
+# hide the original source file name.
+#-renamesourcefileattribute SourceFile
