@@ -9,13 +9,11 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -35,7 +33,6 @@ import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.queue.QueueScreen
-import com.example.tigerplayer.ui.theme.PremiumGlassCard
 
 // ------------------------------
 // UI STATE MACHINE (CLEAN CONTROL)
@@ -71,23 +68,6 @@ fun MainScreen(
         playerState = PlayerSheetState.MINI
     }
 
-    // --- Z-AXIS MODAL PHYSICS (Apple Music / Spotify Style) ---
-    val appScale by animateFloatAsState(
-        targetValue = if (isExpanded) 0.93f else 1f,
-        animationSpec = spring(dampingRatio = 0.85f, stiffness = 250f),
-        label = "AppScale"
-    )
-    val appCornerRadius by animateDpAsState(
-        targetValue = if (isExpanded) 32.dp else 0.dp,
-        animationSpec = spring(dampingRatio = 0.85f, stiffness = 250f),
-        label = "AppCornerRadius"
-    )
-    val appAlpha by animateFloatAsState(
-        targetValue = if (isExpanded) 0.4f else 1f,
-        animationSpec = tween(400),
-        label = "AppAlpha"
-    )
-
     val tabs = listOf(
         BottomNavTab.Home,
         BottomNavTab.Library,
@@ -102,94 +82,50 @@ fun MainScreen(
         // ==============================
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = appScale
-                    scaleY = appScale
-                    alpha = appAlpha
-                }
-                .clip(RoundedCornerShape(appCornerRadius.coerceAtLeast(0.dp))),
+            modifier = Modifier.fillMaxSize(),
             bottomBar = {
-                PremiumGlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // Ensure the bottom bar accounts for edge-to-edge navigation gestures
-                        .windowInsetsPadding(WindowInsets.navigationBars),
-                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
                 ) {
-                    Column {
-                    AnimatedVisibility(
-                        visible = hasTrack && !isExpanded,
-                        enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
-                        exit = shrinkVertically(tween(250)) + fadeOut(tween(200))
-                    ) {
-                        Column {
-                            MiniPlayer(
-                                viewModel = playerViewModel,
-                                onExpandClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    playerState = PlayerSheetState.EXPANDED
-                                }
-                            )
+                    val backStack by tabNavController.currentBackStackEntryAsState()
+                    val destination = backStack?.destination
 
-                            }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 24.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                            )
-                        }
-                    }
+                    tabs.forEach { tab ->
+                        val selected = destination?.hierarchy?.any { it.route == tab.route } == true
 
-                    NavigationBar(
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        modifier = Modifier.background(Color.Transparent)
-                    ) {
-                        val backStack by tabNavController.currentBackStackEntryAsState()
-                        val destination = backStack?.destination
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                playerViewModel.clearSearch()
 
-                        tabs.forEach { tab ->
-                            val selected = destination?.hierarchy?.any { it.route == tab.route } == true
-
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                                    playerViewModel.clearSearch()
-
-                                    tabNavController.navigate(tab.route) {
-                                        // Pop up to the start destination of the graph to
-                                        // avoid building up a large stack of destinations
-                                        popUpTo(tabNavController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        // Avoid multiple copies of the same destination when
-                                        // reselecting the same item
-                                        launchSingleTop = true
-                                        // Restore state when reselecting a previously selected item
-                                        restoreState = true
+                                tabNavController.navigate(tab.route) {
+                                    popUpTo(tabNavController.graph.findStartDestination().id) {
+                                        saveState = true
                                     }
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = tab.icon,
-                                        contentDescription = tab.title,
-                                        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = tab.title,
-                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.title,
+                                    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.title,
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                             )
-                        }
+                        )
                     }
                 }
             }
@@ -201,7 +137,9 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = padding.calculateBottomPadding())
+                    .padding(padding)
+                    .consumeWindowInsets(padding)
+                    .padding(bottom = if (hasTrack && !isExpanded) 92.dp else 0.dp)
             ) {
                 NavHost(
                     navController = tabNavController,
@@ -279,6 +217,24 @@ fun MainScreen(
                     }
                 }
             }
+        }
+
+        AnimatedVisibility(
+            visible = hasTrack && !isExpanded,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 64.dp, start = 12.dp, end = 12.dp),
+            enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut()
+        ) {
+            MiniPlayer(
+                viewModel = playerViewModel,
+                onExpandClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    playerState = PlayerSheetState.EXPANDED
+                }
+            )
         }
 
         // ==============================

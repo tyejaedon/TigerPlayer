@@ -61,12 +61,17 @@ class MediaControllerManager @Inject constructor(
     private var crossfadeInJob: Job? = null
     @Volatile
     private var flowStateCrossfadeEnabled: Boolean = true
+    @Volatile
+    private var flowStateCrossfadeDurationSec: Int = FlowStateCrossfadeMath.DEFAULT_CROSSFADE_SECONDS
+    @Volatile
+    private var flowStateWindowMs: Long = FlowStateCrossfadeMath.windowMs(flowStateCrossfadeDurationSec)
+    @Volatile
+    private var flowStateFadeInMs: Long = FlowStateCrossfadeMath.fadeInMs(flowStateCrossfadeDurationSec)
 
     private companion object {
-        const val FLOW_STATE_WINDOW_MS = 7_000L
         const val FLOW_STATE_POLL_MS = 120L
         const val FLOW_STATE_TAIL_VOLUME = 0.08f
-        const val FLOW_STATE_FADE_IN_MS = 2_200L
+        const val FLOW_STATE_SEEK_ABORT_MARGIN_MS = 420L
     }
 
     init {
@@ -144,6 +149,24 @@ class MediaControllerManager @Inject constructor(
                 val trackId = item?.mediaId
                 if (!trackId.isNullOrBlank()) {
                     maybeAppendInfiniteQueue(trackId)
+                }
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                if (!flowStateCrossfadeEnabled) return
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    crossfadeOutJob?.cancel()
+                    crossfadeInJob?.cancel()
+                    mediaController?.let { controller ->
+                        runCatching { controller.volume = 1f }
+                    }
+                    if (_isPlaying.value) {
+                        startFlowStateCrossfadeMonitor()
+                    }
                 }
             }
 
@@ -249,6 +272,18 @@ class MediaControllerManager @Inject constructor(
             controller.moveMediaItem(fromIndex, toIndex)
             saveCurrentState()
         }
+    }
+
+    fun playQueueItem(index: Int) {
+        val controller = mediaController ?: return
+        if (index !in 0 until controller.mediaItemCount) return
+
+        controller.seekToDefaultPosition(index)
+        controller.volume = controller.volume.coerceAtLeast(FLOW_STATE_TAIL_VOLUME)
+        if (!controller.isPlaying) {
+            controller.play()
+        }
+        saveCurrentState()
     }
 
     private fun saveCurrentState() {
@@ -363,8 +398,28 @@ class MediaControllerManager @Inject constructor(
 
     fun isFlowStateCrossfadeEnabled(): Boolean = flowStateCrossfadeEnabled
 
+    fun setFlowStateCrossfadeDurationSeconds(seconds: Int) {
+        flowStateCrossfadeDurationSec = FlowStateCrossfadeMath.normalizeCrossfadeSeconds(seconds)
+        flowStateWindowMs = FlowStateCrossfadeMath.windowMs(flowStateCrossfadeDurationSec)
+        flowStateFadeInMs = FlowStateCrossfadeMath.fadeInMs(flowStateCrossfadeDurationSec)
+
+        if (!flowStateCrossfadeEnabled || flowStateWindowMs <= 0L) {
+            crossfadeMonitorJob?.cancel()
+            crossfadeOutJob?.cancel()
+            crossfadeInJob?.cancel()
+            mediaController?.let { controller -> runCatching { controller.volume = 1f } }
+            return
+        }
+
+        if (_isPlaying.value) {
+            startFlowStateCrossfadeMonitor()
+        }
+    }
+
+    fun getFlowStateCrossfadeDurationSeconds(): Int = flowStateCrossfadeDurationSec
+
     private fun startFlowStateCrossfadeMonitor() {
-        if (!flowStateCrossfadeEnabled) return
+        if (!flowStateCrossfadeEnabled || flowStateWindowMs <= 0L) return
         crossfadeMonitorJob?.cancel()
         crossfadeOutJob?.cancel()
 
@@ -383,7 +438,7 @@ class MediaControllerManager @Inject constructor(
                 }
 
                 val remaining = (duration - controller.currentPosition).coerceAtLeast(0L)
-                if (remaining <= FLOW_STATE_WINDOW_MS) {
+                if (remaining <= flowStateWindowMs) {
                     startFlowStateFadeOut(mediaId, remaining)
                     return@launch
                 }
@@ -394,19 +449,29 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun startFlowStateFadeOut(mediaId: String, remainingMs: Long) {
-        if (!flowStateCrossfadeEnabled) return
+        if (!flowStateCrossfadeEnabled || flowStateWindowMs <= 0L) return
         crossfadeOutJob?.cancel()
         crossfadeOutJob = managerScope.launch {
             val controller = mediaController ?: return@launch
             if (controller.currentMediaItem?.mediaId != mediaId) return@launch
 
             val startVolume = controller.volume.coerceIn(FLOW_STATE_TAIL_VOLUME, 1f)
-            val fadeMs = remainingMs.coerceIn(1_200L, FLOW_STATE_WINDOW_MS)
+            val fadeMs = FlowStateCrossfadeMath.computeFadeOutDuration(remainingMs, flowStateWindowMs)
+            if (fadeMs <= 0L) return@launch
             val startTime = System.currentTimeMillis()
 
             while (isActive) {
-                if (!controller.isPlaying) return@launch
-                if (controller.currentMediaItem?.mediaId != mediaId) return@launch
+                val nowRemaining = (controller.duration - controller.currentPosition).coerceAtLeast(0L)
+                if (FlowStateCrossfadeMath.shouldAbortFadeOut(
+                        isPlaying = controller.isPlaying,
+                        expectedMediaId = mediaId,
+                        currentMediaId = controller.currentMediaItem?.mediaId,
+                        remainingMs = nowRemaining,
+                        windowMs = flowStateWindowMs,
+                        seekAbortMarginMs = FLOW_STATE_SEEK_ABORT_MARGIN_MS
+                    )) {
+                    return@launch
+                }
 
                 val elapsed = (System.currentTimeMillis() - startTime).coerceAtLeast(0L)
                 val t = (elapsed.toFloat() / fadeMs.toFloat()).coerceIn(0f, 1f)
@@ -420,7 +485,7 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun startFlowStateFadeIn() {
-        if (!flowStateCrossfadeEnabled) {
+        if (!flowStateCrossfadeEnabled || flowStateFadeInMs <= 0L) {
             mediaController?.let { controller ->
                 runCatching { controller.volume = 1f }
             }
@@ -435,7 +500,7 @@ class MediaControllerManager @Inject constructor(
             while (isActive) {
                 if (!controller.isPlaying) return@launch
                 val elapsed = (System.currentTimeMillis() - startTime).coerceAtLeast(0L)
-                val t = (elapsed.toFloat() / FLOW_STATE_FADE_IN_MS.toFloat()).coerceIn(0f, 1f)
+                val t = (elapsed.toFloat() / flowStateFadeInMs.toFloat()).coerceIn(0f, 1f)
                 controller.volume = lerp(startVolume, 1f, t)
 
                 if (t >= 1f) return@launch
@@ -505,5 +570,40 @@ class MediaControllerManager @Inject constructor(
                 saveCurrentState()
             }
         }
+    }
+}
+
+internal object FlowStateCrossfadeMath {
+    const val DEFAULT_CROSSFADE_SECONDS = 7
+    private const val MAX_CROSSFADE_SECONDS = 12
+
+    fun normalizeCrossfadeSeconds(seconds: Int): Int = seconds.coerceIn(0, MAX_CROSSFADE_SECONDS)
+
+    fun windowMs(seconds: Int): Long = normalizeCrossfadeSeconds(seconds) * 1_000L
+
+    fun fadeInMs(seconds: Int): Long {
+        val normalized = normalizeCrossfadeSeconds(seconds)
+        if (normalized == 0) return 0L
+        return (normalized * 320L).coerceIn(650L, 4_000L)
+    }
+
+    fun computeFadeOutDuration(remainingMs: Long, windowMs: Long): Long {
+        if (windowMs <= 0L) return 0L
+        val minFade = minOf(1_200L, windowMs.coerceAtLeast(400L))
+        return remainingMs.coerceIn(minFade, windowMs)
+    }
+
+    fun shouldAbortFadeOut(
+        isPlaying: Boolean,
+        expectedMediaId: String,
+        currentMediaId: String?,
+        remainingMs: Long,
+        windowMs: Long,
+        seekAbortMarginMs: Long
+    ): Boolean {
+        if (!isPlaying) return true
+        if (currentMediaId != expectedMediaId) return true
+        if (windowMs <= 0L) return true
+        return remainingMs > (windowMs + seekAbortMarginMs)
     }
 }

@@ -2,7 +2,9 @@ package com.example.tigerplayer.ui.queue
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,10 +16,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -31,14 +39,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,15 +63,24 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
+import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 
 @Composable
 fun QueueScreen(
     viewModel: PlayerViewModel,
     modifier: Modifier = Modifier
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val queue = uiState.queue
-    val currentTrackId = uiState.currentTrack?.id
+    val queue by viewModel.queueState.collectAsStateWithLifecycle()
+    val currentTrackId by viewModel.currentQueueTrackId.collectAsStateWithLifecycle()
+    val isPlaying by viewModel.queueIsPlaying.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val itemHeightPx = with(LocalDensity.current) { 76.dp.toPx() }
+    val reorderStepThresholdPx = itemHeightPx * 0.55f
+    var lastAutoScrollTs by remember { mutableLongStateOf(0L) }
+    var lastHapticTickTs by remember { mutableLongStateOf(0L) }
 
     if (queue.isEmpty()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -72,13 +96,28 @@ fun QueueScreen(
     val currentIndex = queue.indexOfFirst { it.id == currentTrackId }
         .takeIf { it >= 0 }
         ?: 0
-    val nowPlaying = queue.getOrNull(currentIndex) ?: uiState.currentTrack
+    val nowPlaying = queue.getOrNull(currentIndex)
     val upcoming = queue.drop((currentIndex + 1).coerceAtMost(queue.size))
 
     var localUpcoming by remember(upcoming) { mutableStateOf(upcoming) }
     var dragStartIndex by remember { mutableIntStateOf(-1) }
     var dragCurrentIndex by remember { mutableIntStateOf(-1) }
     var draggedDistance by remember { mutableFloatStateOf(0f) }
+    val dropTargetIndex = if (dragStartIndex == -1 || dragCurrentIndex == -1) {
+        -1
+    } else {
+        when {
+            draggedDistance > reorderStepThresholdPx * 0.28f -> {
+                (dragCurrentIndex + 1).coerceAtMost(localUpcoming.size)
+            }
+            draggedDistance < -reorderStepThresholdPx * 0.28f -> {
+                dragCurrentIndex.coerceAtLeast(0)
+            }
+            else -> {
+                dragCurrentIndex.coerceAtLeast(0)
+            }
+        }
+    }
 
     LaunchedEffect(upcoming) {
         if (dragStartIndex == -1) {
@@ -102,9 +141,9 @@ fun QueueScreen(
         nowPlaying?.let {
             NowPlayingHeader(
                 track = it,
-                isPlaying = uiState.isPlaying,
+                isPlaying = isPlaying,
                 onClick = {
-                    viewModel.setPlaylistAndPlay(queue, currentIndex)
+                    viewModel.playQueueItem(currentIndex)
                 }
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -123,69 +162,154 @@ fun QueueScreen(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
-                itemsIndexed(localUpcoming, key = { _, track -> track.id }) { index, track ->
+                itemsIndexed(localUpcoming, key = { index, track -> "${track.id}_${currentIndex + 1 + index}" }) { index, track ->
                     val isDragging = dragCurrentIndex == index && dragStartIndex != -1
-                    QueueRow(
-                        track = track,
-                        isDragging = isDragging,
-                        onClick = {
-                            val absoluteIndex = currentIndex + 1 + index
-                            viewModel.setPlaylistAndPlay(queue, absoluteIndex)
-                        },
-                        onRemove = { viewModel.removeFromQueue(track) },
-                        modifier = Modifier.pointerInput(localUpcoming) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = {
-                                    dragStartIndex = index
-                                    dragCurrentIndex = index
-                                    draggedDistance = 0f
-                                },
-                                onDragEnd = {
-                                    if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
-                                        val from = currentIndex + 1 + dragStartIndex
-                                        val to = currentIndex + 1 + dragCurrentIndex
-                                        viewModel.moveQueueItem(from, to)
-                                    }
-                                    dragStartIndex = -1
-                                    dragCurrentIndex = -1
-                                    draggedDistance = 0f
-                                },
-                                onDragCancel = {
-                                    localUpcoming = upcoming
-                                    dragStartIndex = -1
-                                    dragCurrentIndex = -1
-                                    draggedDistance = 0f
-                                },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    draggedDistance += dragAmount.y
-                                    val itemHeight = 72.dp.toPx()
-                                    val offsetSteps = (draggedDistance / itemHeight).toInt()
+                    val neighborDisplacement = if (dragStartIndex != -1 && !isDragging) {
+                        when (index) {
+                            dragCurrentIndex - 1 -> -1
+                            dragCurrentIndex + 1 -> 1
+                            else -> 0
+                        }
+                    } else {
+                        0
+                    }
 
-                                    if (offsetSteps != 0) {
-                                        val targetIndex = (dragCurrentIndex + offsetSteps)
-                                            .coerceIn(0, localUpcoming.lastIndex)
-                                        if (targetIndex != dragCurrentIndex) {
-                                            val mutable = localUpcoming.toMutableList()
-                                            val movedItem = mutable.removeAt(dragCurrentIndex)
-                                            mutable.add(targetIndex, movedItem)
-                                            localUpcoming = mutable
-                                            dragCurrentIndex = targetIndex
-                                            draggedDistance -= offsetSteps * itemHeight
+                    Column {
+                        if (dropTargetIndex == index) {
+                            QueueDropTargetIndicator()
+                        }
+                        QueueRow(
+                            modifier = Modifier,
+                            track = track,
+                            isDragging = isDragging,
+                            neighborDisplacement = neighborDisplacement,
+                            onClick = {
+                                val absoluteIndex = currentIndex + 1 + index
+                                viewModel.playQueueItem(absoluteIndex)
+                                localUpcoming = localUpcoming.drop((index + 1).coerceAtMost(localUpcoming.size))
+                            },
+                            onRemove = {
+                                if (index in localUpcoming.indices) {
+                                    val mutable = localUpcoming.toMutableList()
+                                    mutable.removeAt(index)
+                                    localUpcoming = mutable
+                                }
+                                viewModel.removeFromQueue(track)
+                            },
+                            dragHandleModifier = Modifier.pointerInput(index, localUpcoming.size) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        dragStartIndex = index
+                                        dragCurrentIndex = index
+                                        draggedDistance = 0f
+                                        lastHapticTickTs = 0L
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    },
+                                    onDragEnd = {
+                                        if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
+                                            val from = currentIndex + 1 + dragStartIndex
+                                            val to = currentIndex + 1 + dragCurrentIndex
+                                            viewModel.moveQueueItem(from, to)
+                                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                        }
+                                        dragStartIndex = -1
+                                        dragCurrentIndex = -1
+                                        draggedDistance = 0f
+                                    },
+                                    onDragCancel = {
+                                        localUpcoming = upcoming
+                                        dragStartIndex = -1
+                                        dragCurrentIndex = -1
+                                        draggedDistance = 0f
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        draggedDistance += dragAmount.y
+                                        val now = System.currentTimeMillis()
+
+                                        val direction = when {
+                                            draggedDistance > reorderStepThresholdPx -> 1
+                                            draggedDistance < -reorderStepThresholdPx -> -1
+                                            else -> 0
+                                        }
+
+                                        if (direction != 0) {
+                                            val targetIndex = (dragCurrentIndex + direction)
+                                                .coerceIn(0, localUpcoming.lastIndex)
+                                            if (targetIndex != dragCurrentIndex) {
+                                                val mutable = localUpcoming.toMutableList()
+                                                val movedItem = mutable.removeAt(dragCurrentIndex)
+                                                mutable.add(targetIndex, movedItem)
+                                                localUpcoming = mutable
+                                                dragCurrentIndex = targetIndex
+                                                draggedDistance -= direction * reorderStepThresholdPx
+                                                if (now - lastHapticTickTs >= 70L) {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    lastHapticTickTs = now
+                                                }
+                                            } else {
+                                                draggedDistance = 0f
+                                            }
+                                        }
+
+                                        if (now - lastAutoScrollTs >= 42L) {
+                                            val visible = listState.layoutInfo.visibleItemsInfo
+                                            val firstVisible = visible.firstOrNull()?.index ?: 0
+                                            val lastVisible = visible.lastOrNull()?.index ?: 0
+                                            val nearTop = dragCurrentIndex <= (firstVisible + 1)
+                                            val nearBottom = dragCurrentIndex >= (lastVisible - 1)
+                                            val dragMagnitude = dragAmount.y.absoluteValue
+
+                                            when {
+                                                nearTop && dragAmount.y < 0f -> {
+                                                    lastAutoScrollTs = now
+                                                    scope.launch {
+                                                        listState.scrollBy((-24f - dragMagnitude).coerceAtLeast(-56f))
+                                                    }
+                                                }
+
+                                                nearBottom && dragAmount.y > 0f -> {
+                                                    lastAutoScrollTs = now
+                                                    scope.launch {
+                                                        listState.scrollBy((24f + dragMagnitude).coerceAtMost(56f))
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
-                                }
-                            )
-                        }
-                    )
+                                )
+                            },
+                        )
+                    }
+                }
+
+                if (dropTargetIndex == localUpcoming.size && localUpcoming.isNotEmpty()) {
+                    item(key = "queue_drop_target_end") {
+                        QueueDropTargetIndicator()
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun QueueDropTargetIndicator() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .height(2.dp)
+            .background(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.78f),
+                shape = RoundedCornerShape(999.dp)
+            )
+    )
 }
 
 @Composable
@@ -252,19 +376,56 @@ private fun NowPlayingHeader(
 
 @Composable
 private fun QueueRow(
+    modifier: Modifier = Modifier,
     track: AudioTrack,
     isDragging: Boolean,
+    neighborDisplacement: Int,
     onClick: () -> Unit,
     onRemove: () -> Unit,
-    modifier: Modifier = Modifier
+    dragHandleModifier: Modifier
 ) {
+    val dragScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.015f else 1f,
+        animationSpec = tween(durationMillis = 140),
+        label = "QueueRowDragScale"
+    )
+    val dragElevation by animateDpAsState(
+        targetValue = if (isDragging) 12.dp else 0.dp,
+        animationSpec = tween(durationMillis = 140),
+        label = "QueueRowDragElevation"
+    )
+    val neighborOffsetY by animateDpAsState(
+        targetValue = when (neighborDisplacement) {
+            -1 -> (-5).dp
+            1 -> 5.dp
+            else -> 0.dp
+        },
+        animationSpec = tween(durationMillis = 150),
+        label = "QueueRowNeighborOffset"
+    )
+    val handleTint by animateColorAsState(
+        targetValue = if (isDragging) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        },
+        animationSpec = tween(durationMillis = 140),
+        label = "QueueRowHandleTint"
+    )
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .bounceClick(onClick = onClick),
+            .shadow(dragElevation, RoundedCornerShape(16.dp), clip = false)
+            .graphicsLayer {
+                scaleX = dragScale
+                scaleY = dragScale
+            }
+            .offset(y = neighborOffsetY)
+            .clickable(enabled = !isDragging, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         color = if (isDragging) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
         }
@@ -303,8 +464,9 @@ private fun QueueRow(
             }
             Icon(
                 imageVector = WitcherIcons.Menu,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                contentDescription = "Reorder queue",
+                tint = handleTint,
+                modifier = dragHandleModifier.padding(horizontal = 6.dp, vertical = 6.dp)
             )
             IconButton(onClick = onRemove) {
                 Icon(

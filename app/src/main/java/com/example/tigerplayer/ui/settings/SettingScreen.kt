@@ -36,6 +36,7 @@ import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.engine.AcousticEnvironmentMode
 import com.example.tigerplayer.ui.theme.NeonContrastMode
 import com.example.tigerplayer.ui.theme.NeonIntensityMode
+import kotlin.math.roundToInt
 
 private val IgniRed = Color(0xFFF11F1A)
 private val AardBlue = Color(0xFF4FC3F7)
@@ -54,6 +55,7 @@ fun SettingsScreen(
     val isBp by viewModel.isBitPerfect.collectAsStateWithLifecycle()
     val acousticEnvironmentMode by viewModel.acousticEnvironmentMode.collectAsStateWithLifecycle()
     val flowStateCrossfadeEnabled by viewModel.flowStateCrossfadeEnabled.collectAsStateWithLifecycle()
+    val flowStateCrossfadeDurationSeconds by viewModel.flowStateCrossfadeDurationSeconds.collectAsStateWithLifecycle()
     val neonContrastMode by viewModel.neonContrastMode.collectAsStateWithLifecycle()
     val neonIntensityMode by viewModel.neonIntensityMode.collectAsStateWithLifecycle()
 
@@ -216,7 +218,11 @@ fun SettingsScreen(
                     PreferenceRow(
                         title = "Flow State Crossfade",
                         subtitle = if (flowStateCrossfadeEnabled) {
-                            "Enabled - dynamic 7s tail fade"
+                            if (flowStateCrossfadeDurationSeconds == 0) {
+                                "Enabled - duration set to 0s (instant transition)"
+                            } else {
+                                "Enabled - dynamic ${flowStateCrossfadeDurationSeconds}s tail fade"
+                            }
                         } else {
                             "Disabled - instant full-volume transitions"
                         },
@@ -226,6 +232,37 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setFlowStateCrossfadeEnabled
                             )
                         }
+                    )
+
+                    val crossfadeSliderValue = remember(flowStateCrossfadeDurationSeconds) {
+                        mutableFloatStateOf(flowStateCrossfadeDurationSeconds.toFloat())
+                    }
+
+                    PreferenceRow(
+                        title = "Crossfade Duration",
+                        subtitle = "Set transition window from 0s to 12s",
+                        action = {
+                            Text(
+                                text = "${crossfadeSliderValue.floatValue.roundToInt()}s",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    )
+
+                    Slider(
+                        value = crossfadeSliderValue.floatValue,
+                        onValueChange = { crossfadeSliderValue.floatValue = it },
+                        onValueChangeFinished = {
+                            viewModel.setFlowStateCrossfadeDurationSeconds(
+                                crossfadeSliderValue.floatValue.roundToInt()
+                            )
+                        },
+                        valueRange = 0f..12f,
+                        steps = 11,
+                        enabled = flowStateCrossfadeEnabled,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 

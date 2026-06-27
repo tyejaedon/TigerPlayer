@@ -7,6 +7,7 @@ import androidx.annotation.OptIn
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
@@ -80,6 +81,14 @@ class SettingsViewModel @Inject constructor(
             initialValue = true
         )
 
+    val flowStateCrossfadeDurationSeconds: StateFlow<Int> = dataStore.data
+        .map { pref -> (pref[FLOW_STATE_CROSSFADE_DURATION_SECONDS_KEY] ?: 7).coerceIn(0, 12) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 7
+        )
+
     val neonContrastMode: StateFlow<NeonContrastMode> = dataStore.data
         .map { preferences ->
             val modeName = preferences[NEON_CONTRAST_MODE_KEY] ?: NeonContrastMode.BALANCED.name
@@ -145,6 +154,16 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setFlowStateCrossfadeDurationSeconds(seconds: Int) {
+        val clamped = seconds.coerceIn(0, 12)
+        viewModelScope.launch {
+            dataStore.edit { pref ->
+                pref[FLOW_STATE_CROSSFADE_DURATION_SECONDS_KEY] = clamped
+            }
+            mediaControllerManager.setFlowStateCrossfadeDurationSeconds(clamped)
+        }
+    }
+
     // --- APPEARANCE STATEFLOW (Optimized to avoid resource leak) ---
     val themeMode: StateFlow<ThemeMode> = dataStore.data
         .map { preferences ->
@@ -191,6 +210,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             flowStateCrossfadeEnabled.collect { enabled ->
                 mediaControllerManager.setFlowStateCrossfadeEnabled(enabled)
+            }
+        }
+        viewModelScope.launch {
+            flowStateCrossfadeDurationSeconds.collect { seconds ->
+                mediaControllerManager.setFlowStateCrossfadeDurationSeconds(seconds)
             }
         }
     }
@@ -248,5 +272,6 @@ class SettingsViewModel @Inject constructor(
         private val BIT_PERFECT_KEY = booleanPreferencesKey("bit_perfect_mode")
         private val ACOUSTIC_ENVIRONMENT_KEY = stringPreferencesKey("acoustic_environment_mode")
         private val FLOW_STATE_CROSSFADE_KEY = booleanPreferencesKey("flow_state_crossfade_enabled")
+        private val FLOW_STATE_CROSSFADE_DURATION_SECONDS_KEY = intPreferencesKey("flow_state_crossfade_duration_seconds")
     }
 }

@@ -251,6 +251,9 @@ fun AlbumDetailsScreen(
                     onPlayNext = {
                         viewModel.addNextToQueue(selectedTrack)
                     },
+                    onAddToQueueEnd = {
+                        viewModel.addToQueue(selectedTrack)
+                    },
                     onAddToPlaylist = { playlistId ->
                         viewModel.addTrackToPlaylist(playlistId, selectedTrack)
                     },

@@ -39,6 +39,16 @@ Execution rule: after every implementation run, this file must be updated immedi
 - [x] Infinite tail auto-append logic implemented in `MediaControllerManager`.
 - [x] Dedicated `QueueScreen` added with pinned now playing + drag reorder.
 - [x] Daylist/Vault Room queries and dashboard state wiring added.
+- [x] Daylist/Vault home containers redesigned into packed Material cards that open playlist-style sheets.
+- [x] Queue UX hardening pass applied (drag-handle long-press reorder with haptic feedback + row long-press Song Options sheet).
+- [x] Song Options sheet now supports both `Play Next` and `Add to Queue End` actions.
+- [x] Queue reorder fluidity pass applied (animated item placement + step-threshold drag smoothing to reduce jitter).
+- [x] QueueScreen interaction pass: removed queue-row Song Options long-press and switched queue item play to index seek (`playQueueItem`) to avoid full playlist resets/flicker.
+- [x] Daylist/Vault recommendation pipeline replaced with a two-phase Discovery Engine (Cold Start trendsetters -> Personalized weighted scoring + unseen-genre injection).
+- [x] Daily discovery regeneration + stale/empty container messaging added (midnight refresh and >24h launch refresh guard).
+- [x] Full Player queue upgraded with drag-handle long-press reorder + index-based queue seek, and artist-image backdrop rendering restored from metadata pipeline.
+- [x] Queue drag visual feedback polish pass applied (lifted dragged row, subtle shadow/scale, and active drag-handle tinting in Queue + Full Player queue views).
+- [x] Queue reorder affordance pass applied (between-row drop target indicator, neighbor offset animation, and throttled haptic ticks on long drags).
 
 ### M3 - Apex DSP + Crossfade
 - [x] Acoustic Environments DSP mode added (`OFF`, `VINYL_WARMTH`, `CONCERT_HALL`).
@@ -46,6 +56,10 @@ Execution rule: after every implementation run, this file must be updated immedi
 - [x] `AcousticEnvironmentScreen` and settings wiring implemented.
 - [x] Flow State crossfade engine implemented (7s tail fade + transition fade-in).
 - [x] Runtime crossfade toggle added and persisted via DataStore.
+- [x] Tuned Vinyl Warmth and Concert Hall coefficients by output route profile (speaker/headphones/bluetooth).
+- [x] Acoustic environment mode now restores across service lifecycle transitions via settings persistence.
+- [x] Flow State crossfade duration control added (0-12s) and bound to engine behavior.
+- [x] Added DSP output-safety unit tests and crossfade regression tests (seek/skip/manual conflict guards).
 
 ### M4 - Sonic Footprint + PiP
 - [x] Sonic Footprint DAO aggregation + repository flow implemented.
@@ -112,7 +126,7 @@ Execution rule: after every implementation run, this file must be updated immedi
 
 **Description:** Harden queue UX and recommendation containers for predictable, resilient playback and discovery.
 
-**Stage:** In progress (queue/daylist foundation complete; resilience and automated test coverage pending).
+**Stage:** In progress (queue/daylist UX + personalization generation are wired, including Full Player drag reorder, artist backdrop restore, drag-feedback polish, and stronger reorder affordances; shuffle/repeat validation, tail-ranking hardening, and automated tests remain).
 
 **Files edited so far:**
 - `app/src/main/java/com/example/tigerplayer/service/MediaControllerManager.kt`
@@ -122,20 +136,35 @@ Execution rule: after every implementation run, this file must be updated immedi
 - `app/src/main/java/com/example/tigerplayer/data/local/dao/TigerDao.kt`
 - `app/src/main/java/com/example/tigerplayer/data/repository/AudioRepository.kt`
 - `app/src/main/java/com/example/tigerplayer/ui/home/DashboardViewModel.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/home/DashboardContainers.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/library/SongOptionsSheet.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/home/HomeScreen.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/library/LibraryScreen.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/library/AlbumDetailScreen.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/library/ArtistDetailScreen.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/player/FullPlayerScreen.kt`
+- `app/src/main/java/com/example/tigerplayer/ui/player/PlayerViewModel.kt`
+- `app/src/main/java/com/example/tigerplayer/engine/PlaybackEngine.kt`
+- `app/src/main/java/com/example/tigerplayer/engine/DiscoveryEngine.kt`
+- `app/src/main/java/com/example/tigerplayer/engine/ListeningDensityTracker.kt`
+- `app/src/main/java/com/example/tigerplayer/data/repository/HistoryRepository.kt`
+- `app/src/main/java/com/example/tigerplayer/data/repository/MediaDataRepository.kt`
+- `app/src/main/java/com/example/tigerplayer/di/DiscoveryModule.kt`
+- `app/src/main/res/raw/global_trending_tracks.json`
 
 ### Issues
 - [ ] M2-01 Add QueueScreen instrumentation tests for drag/drop persistence.
 - [ ] M2-02 Validate queue semantics under shuffle/repeat edge cases.
 - [ ] M2-03 Improve infinite tail candidate ranking and fallback behavior.
 - [ ] M2-04 Add Last.fm timeout/backoff handling for auto-append.
-- [ ] M2-05 Add Daylist/Vault empty and stale data states.
+- [x] M2-05 Add Daylist/Vault empty and stale data states.
 - [ ] M2-06 Add tests for day segment boundaries and SQL expectations.
 
 ## M3 - Apex DSP + Crossfade
 
 **Description:** Tune and validate audio-engine enhancements for artifact-free real-world playback.
 
-**Stage:** In progress (Acoustic Environments + Flow State implemented; tuning, duration control, and test hardening pending).
+**Stage:** Completed (all M3 issues closed with route-aware tuning, persisted environment state, duration controls, and targeted unit regression coverage).
 
 **Files edited so far:**
 - `app/src/main/java/com/example/tigerplayer/engine/DspEngine.kt`
@@ -144,14 +173,16 @@ Execution rule: after every implementation run, this file must be updated immedi
 - `app/src/main/java/com/example/tigerplayer/ui/settings/AcousticEnvironmentScreen.kt`
 - `app/src/main/java/com/example/tigerplayer/ui/settings/SettingsViewModel.kt`
 - `app/src/main/java/com/example/tigerplayer/ui/settings/SettingScreen.kt`
+- `app/src/test/java/com/example/tigerplayer/engine/AdaptiveDspEngineSafetyTest.kt`
+- `app/src/test/java/com/example/tigerplayer/service/FlowStateCrossfadeMathTest.kt`
 
 ### Issues
-- [ ] M3-01 Tune Vinyl Warmth harmonic/noise coefficients across device outputs.
-- [ ] M3-02 Tune Concert Hall reverb decay/predelay per speaker/headphone profile.
-- [ ] M3-03 Add DSP unit tests for Acoustic Environment output safety.
-- [ ] M3-04 Persist acoustic environment state across service lifecycle transitions.
-- [ ] M3-05 Add crossfade duration setting (0-12s) and bind to Flow State engine.
-- [ ] M3-06 Add crossfade regression tests for seek/skip/manual transition conflicts.
+- [x] M3-01 Tune Vinyl Warmth harmonic/noise coefficients across device outputs.
+- [x] M3-02 Tune Concert Hall reverb decay/predelay per speaker/headphone profile.
+- [x] M3-03 Add DSP unit tests for Acoustic Environment output safety.
+- [x] M3-04 Persist acoustic environment state across service lifecycle transitions.
+- [x] M3-05 Add crossfade duration setting (0-12s) and bind to Flow State engine.
+- [x] M3-06 Add crossfade regression tests for seek/skip/manual transition conflicts.
 
 ## M4 - Sonic Footprint + PiP
 

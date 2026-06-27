@@ -27,6 +27,9 @@ class HistoryRepository @Inject constructor(
 
     // --- 1. RECENT CHANTS ---
     val recentTracks: Flow<List<PlaybackHistoryEntity>> = tigerDao.getRecentTracks()
+    val playbackHistory: Flow<List<PlaybackHistoryEntity>> = tigerDao.getPlaybackHistory()
+    val uniqueArtistCount: Flow<Int> = tigerDao.getUniqueArtistCount()
+    val uniqueTrackCount: Flow<Int> = tigerDao.getUniqueTrackCount()
 
     // --- 2. AGGREGATE POWER ---
     val totalListeningTime: Flow<Long?> = tigerDao.getTotalListeningTimeMs()
@@ -78,6 +81,9 @@ class HistoryRepository @Inject constructor(
 
     fun getTotalListeningTime(startTime: Long): Flow<Long?> =
         tigerDao.getTotalListeningTimeMs(startTime)
+
+    fun getPlaybackHistorySince(sinceMillis: Long): Flow<List<PlaybackHistoryEntity>> =
+        tigerDao.getPlaybackHistorySince(sinceMillis)
 
     fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats> =
         tigerDao.getSonicFootprintStats(startTime)

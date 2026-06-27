@@ -222,6 +222,10 @@ fun ArtistDetailsScreen(
                         viewModel.addNextToQueue(selectedTrack)
                         trackForOptions = null
                     },
+                    onAddToQueueEnd = {
+                        viewModel.addToQueue(selectedTrack)
+                        trackForOptions = null
+                    },
                     onAddToPlaylist = { playlistId ->
                         viewModel.addTrackToPlaylist(playlistId, selectedTrack)
                         trackForOptions = null

@@ -25,7 +25,7 @@ fun PremiumGlassCard(
             .clip(shape)
             .glassEffect(
                 shape = shape,
-                showRgbBorder = true,
+                showRgbBorder = false,
                 borderWidth = borderWidth
             )
             .padding(contentPadding),

@@ -33,6 +33,81 @@ enum class AcousticEnvironmentMode {
     CONCERT_HALL
 }
 
+internal enum class OutputRouteProfile {
+    SPEAKER,
+    HEADPHONES,
+    BLUETOOTH,
+    UNKNOWN
+}
+
+internal data class AcousticEnvironmentTuning(
+    val vinylWetTarget: Float,
+    val vinylDrive: Float,
+    val vinylHarmonicMix: Float,
+    val vinylNoiseFloorL: Float,
+    val vinylNoiseFloorR: Float,
+    val vinylDryBlend: Float,
+    val hallWetTarget: Float,
+    val hallDecayScale: Float,
+    val hallPreDelayDamping: Float,
+    val hallDiffusion: Float
+) {
+    companion object {
+        fun forProfile(profile: OutputRouteProfile): AcousticEnvironmentTuning {
+            return when (profile) {
+                OutputRouteProfile.SPEAKER -> AcousticEnvironmentTuning(
+                    vinylWetTarget = 0.30f,
+                    vinylDrive = 1.58f,
+                    vinylHarmonicMix = 0.11f,
+                    vinylNoiseFloorL = 0.00120f,
+                    vinylNoiseFloorR = 0.00134f,
+                    vinylDryBlend = 0.93f,
+                    hallWetTarget = 0.26f,
+                    hallDecayScale = 0.88f,
+                    hallPreDelayDamping = 0.16f,
+                    hallDiffusion = 0.48f
+                )
+                OutputRouteProfile.HEADPHONES -> AcousticEnvironmentTuning(
+                    vinylWetTarget = 0.44f,
+                    vinylDrive = 1.90f,
+                    vinylHarmonicMix = 0.16f,
+                    vinylNoiseFloorL = 0.00158f,
+                    vinylNoiseFloorR = 0.00182f,
+                    vinylDryBlend = 0.89f,
+                    hallWetTarget = 0.40f,
+                    hallDecayScale = 1.03f,
+                    hallPreDelayDamping = 0.11f,
+                    hallDiffusion = 0.56f
+                )
+                OutputRouteProfile.BLUETOOTH -> AcousticEnvironmentTuning(
+                    vinylWetTarget = 0.35f,
+                    vinylDrive = 1.72f,
+                    vinylHarmonicMix = 0.13f,
+                    vinylNoiseFloorL = 0.00134f,
+                    vinylNoiseFloorR = 0.00152f,
+                    vinylDryBlend = 0.91f,
+                    hallWetTarget = 0.30f,
+                    hallDecayScale = 0.94f,
+                    hallPreDelayDamping = 0.13f,
+                    hallDiffusion = 0.50f
+                )
+                OutputRouteProfile.UNKNOWN -> AcousticEnvironmentTuning(
+                    vinylWetTarget = 0.38f,
+                    vinylDrive = 1.75f,
+                    vinylHarmonicMix = 0.14f,
+                    vinylNoiseFloorL = 0.00170f,
+                    vinylNoiseFloorR = 0.00195f,
+                    vinylDryBlend = 0.90f,
+                    hallWetTarget = 0.34f,
+                    hallDecayScale = 0.98f,
+                    hallPreDelayDamping = 0.12f,
+                    hallDiffusion = 0.52f
+                )
+            }
+        }
+    }
+}
+
 @UnstableApi
 @Singleton
 class AdaptiveDspEngine @Inject constructor(
@@ -41,8 +116,6 @@ class AdaptiveDspEngine @Inject constructor(
 
     companion object {
         private const val PCM_FLOAT = 32768f
-        private const val PCM_MAX_INT = 32767
-        private const val PCM_MIN_INT = -32768
     }
 
     private var isActive = true
@@ -58,6 +131,8 @@ class AdaptiveDspEngine @Inject constructor(
     @Volatile private var deviceCompensationFilters: List<BiquadFilter> = emptyList()
 
     private var isHeadphones = false
+    @Volatile private var outputRouteProfile: OutputRouteProfile = OutputRouteProfile.UNKNOWN
+    @Volatile private var environmentTuning = AcousticEnvironmentTuning.forProfile(OutputRouteProfile.UNKNOWN)
     private var agcEnvelope = 0f
     private var agcReleaseCoef = 0.00005f
 
@@ -79,8 +154,11 @@ class AdaptiveDspEngine @Inject constructor(
     @Volatile
     private var acousticEnvironmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.OFF
     private var environmentWetCurrent = 0f
-    private var vinylNoiseState = 0x6A09E667u.toUInt()
-    private val concertHallReverb = LightweightSchroederReverb(maxChannels = 2)
+    private var vinylNoiseState = 0x6A09E667u
+    private val concertHallReverb = LightweightSchroederReverb()
+
+    private val bleHeadsetDeviceType: Int? by lazy { lookupAudioDeviceType("TYPE_BLE_HEADSET") }
+    private val bleSpeakerDeviceType: Int? by lazy { lookupAudioDeviceType("TYPE_BLE_SPEAKER") }
 
     private fun clamp01(v: Float): Float = v.coerceIn(0f, 1f)
 
@@ -98,11 +176,31 @@ class AdaptiveDspEngine @Inject constructor(
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
 
-        val isBluetooth = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-        val isBuiltIn = devices.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-        isHeadphones = devices.any {
-            it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+        val isBluetooth = devices.any {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                isBleOutputType(it.type)
         }
+        val isBuiltIn = devices.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+        val isWiredHeadphones = devices.any {
+            it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+        }
+        outputRouteProfile = when {
+            isWiredHeadphones -> OutputRouteProfile.HEADPHONES
+            isBluetooth -> OutputRouteProfile.BLUETOOTH
+            isBuiltIn -> OutputRouteProfile.SPEAKER
+            else -> OutputRouteProfile.UNKNOWN
+        }
+        isHeadphones = outputRouteProfile == OutputRouteProfile.HEADPHONES ||
+            outputRouteProfile == OutputRouteProfile.BLUETOOTH
+        environmentTuning = AcousticEnvironmentTuning.forProfile(outputRouteProfile)
+        concertHallReverb.setTuning(
+            decayScale = environmentTuning.hallDecayScale,
+            preDelayDamping = environmentTuning.hallPreDelayDamping,
+            diffusion = environmentTuning.hallDiffusion
+        )
 
         val sampleRate = if (inputAudioFormat.sampleRate != AudioFormat.NOT_SET.sampleRate) inputAudioFormat.sampleRate else 48000
         agcReleaseCoef = 2.4f / sampleRate.toFloat()
@@ -116,6 +214,16 @@ class AdaptiveDspEngine @Inject constructor(
         }
 
         deviceCompensationFilters = newDeviceFilters
+    }
+
+    private fun lookupAudioDeviceType(fieldName: String): Int? {
+        return runCatching {
+            AudioDeviceInfo::class.java.getField(fieldName).getInt(null)
+        }.getOrNull()
+    }
+
+    private fun isBleOutputType(type: Int): Boolean {
+        return type == bleHeadsetDeviceType || type == bleSpeakerDeviceType
     }
 
     fun updateAcousticNodes(nodes: List<AcousticNode>) {
@@ -184,10 +292,11 @@ class AdaptiveDspEngine @Inject constructor(
         val localDeviceFilters = deviceCompensationFilters
         val localActiveFilters = activeFilters
         val sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
+        val envTuning = environmentTuning
         val bassCoef = (90f / sampleRate).coerceIn(0.002f, 0.25f)
         val midCoef = (1200f / sampleRate).coerceIn(0.002f, 0.35f)
 
-        for (frame in 0 until framesToProcess) {
+        repeat(framesToProcess) {
             var sampleL = shortBuffer.get().toFloat() / PCM_FLOAT
             var sampleR = if (channels == 2) shortBuffer.get().toFloat() / PCM_FLOAT else sampleL
 
@@ -213,22 +322,22 @@ class AdaptiveDspEngine @Inject constructor(
             val envMode = acousticEnvironmentMode
             val envWetTarget = when (envMode) {
                 AcousticEnvironmentMode.OFF -> 0f
-                AcousticEnvironmentMode.VINYL_WARMTH -> 0.38f
-                AcousticEnvironmentMode.CONCERT_HALL -> 0.34f
+                AcousticEnvironmentMode.VINYL_WARMTH -> envTuning.vinylWetTarget
+                AcousticEnvironmentMode.CONCERT_HALL -> envTuning.hallWetTarget
             }
             environmentWetCurrent += (envWetTarget - environmentWetCurrent) * 0.0038f
 
             when (envMode) {
                 AcousticEnvironmentMode.VINYL_WARMTH -> {
-                    val vinylL = vinylWarmth(sampleL, channel = 0)
-                    val vinylR = vinylWarmth(sampleR, channel = if (channels == 2) 1 else 0)
-                    sampleL += (vinylL - sampleL) * environmentWetCurrent
-                    sampleR += (vinylR - sampleR) * environmentWetCurrent
+                    val vinylL = vinylWarmth(sampleL, channel = 0, tuning = envTuning)
+                    val vinylR = vinylWarmth(sampleR, channel = if (channels == 2) 1 else 0, tuning = envTuning)
+                    sampleL = DspMath.mixDryWet(sampleL, vinylL, environmentWetCurrent)
+                    sampleR = DspMath.mixDryWet(sampleR, vinylR, environmentWetCurrent)
                 }
                 AcousticEnvironmentMode.CONCERT_HALL -> {
                     val wet = concertHallReverb.process(sampleL, sampleR, channels)
-                    sampleL += (wet.first - sampleL) * environmentWetCurrent
-                    sampleR += (wet.second - sampleR) * environmentWetCurrent
+                    sampleL = DspMath.mixDryWet(sampleL, wet.first, environmentWetCurrent)
+                    sampleR = DspMath.mixDryWet(sampleR, wet.second, environmentWetCurrent)
                 }
                 AcousticEnvironmentMode.OFF -> Unit
             }
@@ -295,9 +404,9 @@ class AdaptiveDspEngine @Inject constructor(
                 energyAccumulator = 0f
             }
 
-            outShortBuffer.put((sampleL * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
+            outShortBuffer.put(DspMath.toPcm16(sampleL))
             if (channels == 2) {
-                outShortBuffer.put((sampleR * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
+                outShortBuffer.put(DspMath.toPcm16(sampleR))
             }
         }
 
@@ -343,16 +452,17 @@ class AdaptiveDspEngine @Inject constructor(
         buffer = AudioProcessor.EMPTY_BUFFER
     }
 
-    private fun vinylWarmth(sample: Float, channel: Int): Float {
-        val drive = 1.75f
-        val driven = (sample * drive).coerceIn(-1.5f, 1.5f)
+    private fun vinylWarmth(sample: Float, channel: Int, tuning: AcousticEnvironmentTuning): Float {
+        val driven = (sample * tuning.vinylDrive).coerceIn(-1.5f, 1.5f)
         val third = (driven * driven * driven) / 3f
         val fifth = (driven * driven * driven * driven * driven) * 0.055f
         val harmonics = (driven - third + fifth) * 0.78f
 
         // Faint generated floor with slight channel decorrelation.
-        val noiseFloor = nextVinylNoise() * if (channel == 0) 0.0017f else 0.00195f
-        return (sample * 0.9f + harmonics * 0.1f + noiseFloor).coerceIn(-1f, 1f)
+        val noiseFloor = nextVinylNoise() * if (channel == 0) tuning.vinylNoiseFloorL else tuning.vinylNoiseFloorR
+        val dry = sample * tuning.vinylDryBlend
+        val wet = harmonics * (1f - tuning.vinylDryBlend)
+        return (dry + wet + noiseFloor).coerceIn(-1f, 1f)
     }
 
     private fun nextVinylNoise(): Float {
@@ -362,23 +472,66 @@ class AdaptiveDspEngine @Inject constructor(
     }
 }
 
-private class LightweightSchroederReverb(maxChannels: Int) {
+internal object DspMath {
+    private const val PCM_MAX_INT = 32767
+    private const val PCM_MIN_INT = -32768
+
+    fun mixDryWet(dry: Float, wet: Float, wetAmount: Float): Float {
+        val amount = wetAmount.coerceIn(0f, 1f)
+        return (dry + (wet - dry) * amount).coerceIn(-1f, 1f)
+    }
+
+    fun toPcm16(sample: Float): Short {
+        val clamped = sample.coerceIn(-1f, 1f)
+        if (clamped <= -1f) return PCM_MIN_INT.toShort()
+        if (clamped >= 1f) return PCM_MAX_INT.toShort()
+        return (clamped * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort()
+    }
+}
+
+private class LightweightSchroederReverb {
     // Tuned for subtle room bloom while staying mobile-friendly.
+    private val baseCombFeedback = floatArrayOf(0.79f, 0.75f, 0.72f)
+    private val baseAllPassGain = floatArrayOf(0.52f, 0.5f)
     private val combL = arrayOf(
-        FeedbackComb(1499, 0.79f),
-        FeedbackComb(1861, 0.75f),
-        FeedbackComb(2137, 0.72f)
+        FeedbackComb(1499, baseCombFeedback[0]),
+        FeedbackComb(1861, baseCombFeedback[1]),
+        FeedbackComb(2137, baseCombFeedback[2])
     )
     private val combR = arrayOf(
-        FeedbackComb(1559, 0.79f),
-        FeedbackComb(1931, 0.75f),
-        FeedbackComb(2203, 0.72f)
+        FeedbackComb(1559, baseCombFeedback[0]),
+        FeedbackComb(1931, baseCombFeedback[1]),
+        FeedbackComb(2203, baseCombFeedback[2])
     )
-    private val allpassL = arrayOf(AllPass(347, 0.52f), AllPass(113, 0.5f))
-    private val allpassR = arrayOf(AllPass(373, 0.52f), AllPass(127, 0.5f))
+    private val allpassL = arrayOf(AllPass(347, baseAllPassGain[0]), AllPass(113, baseAllPassGain[1]))
+    private val allpassR = arrayOf(AllPass(373, baseAllPassGain[0]), AllPass(127, baseAllPassGain[1]))
 
     private var lpL = 0f
     private var lpR = 0f
+    private var preDelayDamping = 0.12f
+    private var preDelayHighPass = 0.82f
+
+    fun setTuning(decayScale: Float, preDelayDamping: Float, diffusion: Float) {
+        val decay = decayScale.coerceIn(0.78f, 1.15f)
+        val diffusionScale = diffusion.coerceIn(0.42f, 0.65f)
+
+        combL.forEachIndexed { index, comb ->
+            comb.setFeedback((baseCombFeedback[index] * decay).coerceIn(0.62f, 0.91f))
+        }
+        combR.forEachIndexed { index, comb ->
+            comb.setFeedback((baseCombFeedback[index] * decay).coerceIn(0.62f, 0.91f))
+        }
+
+        allpassL.forEachIndexed { index, allPass ->
+            allPass.setGain((baseAllPassGain[index] * (diffusionScale / 0.52f)).coerceIn(0.35f, 0.72f))
+        }
+        allpassR.forEachIndexed { index, allPass ->
+            allPass.setGain((baseAllPassGain[index] * (diffusionScale / 0.52f)).coerceIn(0.35f, 0.72f))
+        }
+
+        this.preDelayDamping = preDelayDamping.coerceIn(0.08f, 0.24f)
+        this.preDelayHighPass = (0.70f + this.preDelayDamping * 0.95f).coerceIn(0.70f, 0.92f)
+    }
 
     fun process(inputL: Float, inputR: Float, channels: Int): Pair<Float, Float> {
         val monoIn = if (channels == 2) (inputL + inputR) * 0.5f else inputL
@@ -409,16 +562,20 @@ private class LightweightSchroederReverb(maxChannels: Int) {
 
     private fun highpassPreDelay(input: Float, left: Boolean): Float {
         if (left) {
-            lpL += (input - lpL) * 0.12f
-            return (input - lpL * 0.82f).coerceIn(-1f, 1f)
+            lpL += (input - lpL) * preDelayDamping
+            return (input - lpL * preDelayHighPass).coerceIn(-1f, 1f)
         }
-        lpR += (input - lpR) * 0.12f
-        return (input - lpR * 0.82f).coerceIn(-1f, 1f)
+        lpR += (input - lpR) * preDelayDamping
+        return (input - lpR * preDelayHighPass).coerceIn(-1f, 1f)
     }
 
-    private class FeedbackComb(size: Int, private val feedback: Float) {
+    private class FeedbackComb(size: Int, private var feedback: Float) {
         private val buffer = FloatArray(size)
         private var index = 0
+
+        fun setFeedback(value: Float) {
+            feedback = value.coerceIn(0f, 0.97f)
+        }
 
         fun process(input: Float): Float {
             val delayed = buffer[index]
@@ -435,9 +592,13 @@ private class LightweightSchroederReverb(maxChannels: Int) {
         }
     }
 
-    private class AllPass(size: Int, private val gain: Float) {
+    private class AllPass(size: Int, private var gain: Float) {
         private val buffer = FloatArray(size)
         private var index = 0
+
+        fun setGain(value: Float) {
+            gain = value.coerceIn(0f, 0.9f)
+        }
 
         fun process(input: Float): Float {
             val delayed = buffer[index]

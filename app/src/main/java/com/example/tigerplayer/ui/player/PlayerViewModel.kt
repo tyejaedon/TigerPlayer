@@ -107,6 +107,21 @@ class PlayerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    val queueState: StateFlow<List<AudioTrack>> = _uiState
+        .map { it.queue }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val currentQueueTrackId: StateFlow<String?> = _uiState
+        .map { it.currentTrack?.id }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val queueIsPlaying: StateFlow<Boolean> = _uiState
+        .map { it.isPlaying }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     private val _trackColor = MutableStateFlow(Color(0xFF4FC3F7))
     val trackColor: StateFlow<Color> = _trackColor.asStateFlow()
 
@@ -353,6 +368,10 @@ class PlayerViewModel @Inject constructor(
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         playbackEngine.moveQueueItem(fromIndex, toIndex)
+    }
+
+    fun playQueueItem(index: Int) {
+        playbackEngine.playQueueItem(index)
     }
 
     // ==========================================

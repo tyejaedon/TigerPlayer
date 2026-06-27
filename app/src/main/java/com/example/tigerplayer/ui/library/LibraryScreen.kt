@@ -507,6 +507,9 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                 onPlayNext = {
                     viewModel.addNextToQueue(selectedTrack)
                 },
+                onAddToQueueEnd = {
+                    viewModel.addToQueue(selectedTrack)
+                },
                 onAddToPlaylist = { playlistId ->
                     viewModel.addTrackToPlaylist(playlistId, selectedTrack)
                 },

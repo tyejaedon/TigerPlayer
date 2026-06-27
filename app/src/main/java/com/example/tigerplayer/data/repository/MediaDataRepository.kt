@@ -1,20 +1,32 @@
 package com.example.tigerplayer.data.repository
 
+import android.content.Context
 import android.util.Log
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
 import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.remote.api.LastFmApi
 import com.example.tigerplayer.data.remote.api.SpotifyApiService
 import com.example.tigerplayer.data.remote.model.LastFmImage
 import com.example.tigerplayer.data.remote.model.SpotifyArtistDetail
+import com.example.tigerplayer.R
 import com.example.tigerplayer.utils.ArtistUtils
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.*
+import kotlin.random.Random
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,8 +45,39 @@ class MediaDataRepository @Inject constructor(
     private val tigerDao: TigerDao,
     private val spotifyApiService: SpotifyApiService,
     private val authManager: SpotifyAuthManager,
-    private val lastFmApi: LastFmApi
+    private val lastFmApi: LastFmApi,
+    @param:ApplicationContext private val context: Context,
+    private val dataStore: DataStore<Preferences>
 ) {
+
+    private data class GlobalTrendTrackSeed(
+        val title: String,
+        val artist: String,
+        val genre: String? = null
+    )
+
+    private data class ScoredDiscoveryTrack(
+        val track: AudioTrack,
+        val genres: Set<String>,
+        val score: Double
+    )
+
+    private val globalTrendCatalog: List<GlobalTrendTrackSeed> by lazy {
+        loadGlobalTrendCatalog()
+    }
+
+    val lastDiscoveryGenerationAt: Flow<Long> = dataStore.data
+        .map { prefs -> prefs[DISCOVERY_LAST_GENERATION_KEY] ?: 0L }
+
+    suspend fun getLastDiscoveryGenerationTimestamp(): Long {
+        return dataStore.data.first()[DISCOVERY_LAST_GENERATION_KEY] ?: 0L
+    }
+
+    suspend fun updateDiscoveryGenerationTimestamp(timestamp: Long = System.currentTimeMillis()) {
+        dataStore.edit { prefs ->
+            prefs[DISCOVERY_LAST_GENERATION_KEY] = timestamp
+        }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getArtistDetails(artistName: String): Flow<ArtistDetails> {
@@ -164,6 +207,158 @@ class MediaDataRepository @Inject constructor(
             else -> "AN EMERGING FORCE"
         }
         return "Known in the archives as $renown of $genreText. Their potency is marked at ${artist.popularity ?: 0}/100."
+    }
+
+    fun resolveGlobalTrendsetters(
+        allAvailableTracks: List<AudioTrack>,
+        limit: Int,
+        seed: Long
+    ): List<AudioTrack> {
+        if (allAvailableTracks.isEmpty()) return emptyList()
+        val random = Random(seed)
+        val normalizedPool = allAvailableTracks.groupBy { track ->
+            normalizeTrackLookupKey(track.title, track.artist)
+        }
+
+        val matched = globalTrendCatalog
+            .shuffled(random)
+            .flatMap { seedTrack ->
+                normalizedPool[normalizeTrackLookupKey(seedTrack.title, seedTrack.artist)].orEmpty()
+            }
+            .distinctBy { it.id }
+
+        if (matched.size >= limit) return matched.take(limit)
+
+        val fallback = allAvailableTracks
+            .asSequence()
+            .filter { track -> track.id !in matched.map { it.id }.toSet() }
+            .shuffled(random)
+            .take(limit - matched.size)
+            .toList()
+
+        return (matched + fallback).take(limit)
+    }
+
+    fun inferGenresForTrack(track: AudioTrack): Set<String> {
+        val normalizedText = listOf(track.title, track.artist, track.album)
+            .joinToString(" ")
+            .lowercase()
+        return inferGenresFromText(normalizedText)
+    }
+
+    fun rankTracksForDiscovery(
+        candidates: List<AudioTrack>,
+        topGenres: Map<String, Double>,
+        artistFamiliarity: Map<String, Double>,
+        heardGenres: Set<String>,
+        seed: Long,
+        discoveryWeightMultiplier: Double = 1.0,
+        limit: Int
+    ): List<AudioTrack> {
+        if (candidates.isEmpty()) return emptyList()
+
+        val random = Random(seed)
+        val normalizedTopGenres = normalizeWeights(topGenres)
+        val normalizedArtistFamiliarity = normalizeWeights(artistFamiliarity)
+
+        val scored = candidates.map { track ->
+            val genres = inferGenresForTrack(track)
+            val normalizedArtist = ArtistUtils.getBaseArtist(track.artist).trim().lowercase()
+
+            val genreScore = if (genres.isEmpty()) {
+                0.15
+            } else {
+                genres.maxOfOrNull { genre -> normalizedTopGenres[genre] ?: 0.0 } ?: 0.0
+            }
+
+            val artistScore = normalizedArtistFamiliarity[normalizedArtist] ?: 0.0
+            val unseenGenreBoost = genres.any { it !in heardGenres }
+            val discoveryScore = when {
+                unseenGenreBoost -> 1.0
+                artistScore == 0.0 -> 0.65
+                else -> 0.25
+            }
+
+            val jitter = deterministicJitter(track.id, seed)
+            val totalScore =
+                (GENRE_WEIGHT * genreScore) +
+                    (ARTIST_WEIGHT * artistScore) +
+                    ((DISCOVERY_WEIGHT * discoveryWeightMultiplier) * discoveryScore) +
+                    jitter
+
+            ScoredDiscoveryTrack(
+                track = track,
+                genres = genres,
+                score = totalScore
+            )
+        }.sortedByDescending { it.score }
+
+        val unseenGenrePool = scored
+            .filter { scoredTrack -> scoredTrack.genres.any { it !in heardGenres } }
+            .map { it.track }
+            .distinctBy { it.id }
+            .shuffled(random)
+
+        val injectionCount = when {
+            limit <= 6 -> 2
+            else -> 3
+        }
+
+        val injected = unseenGenrePool.take(injectionCount)
+        val injectedIds = injected.map { it.id }.toSet()
+
+        val ordered = buildList {
+            addAll(injected)
+            addAll(
+                scored
+                    .map { it.track }
+                    .filter { track -> track.id !in injectedIds }
+            )
+        }
+
+        return ordered
+            .distinctBy { it.id }
+            .take(limit)
+    }
+
+    private fun normalizeWeights(weights: Map<String, Double>): Map<String, Double> {
+        if (weights.isEmpty()) return emptyMap()
+        val maxValue = weights.values.maxOrNull()?.takeIf { it > 0.0 } ?: return emptyMap()
+        return weights.mapValues { (_, value) -> (value / maxValue).coerceIn(0.0, 1.0) }
+    }
+
+    private fun inferGenresFromText(normalizedText: String): Set<String> {
+        val inferred = buildSet {
+            GENRE_KEYWORDS.forEach { (genre, keywords) ->
+                if (keywords.any { keyword -> normalizedText.contains(keyword) }) {
+                    add(genre)
+                }
+            }
+        }
+        return if (inferred.isEmpty()) setOf(DEFAULT_DISCOVERY_GENRE) else inferred
+    }
+
+    private fun deterministicJitter(trackId: String, seed: Long): Double {
+        val combinedSeed = seed xor trackId.hashCode().toLong()
+        val random = Random(combinedSeed)
+        return random.nextDouble(-0.05, 0.05)
+    }
+
+    private fun loadGlobalTrendCatalog(): List<GlobalTrendTrackSeed> {
+        return runCatching {
+            val json = context.resources.openRawResource(R.raw.global_trending_tracks)
+                .bufferedReader()
+                .use { it.readText() }
+            val type = object : TypeToken<List<GlobalTrendTrackSeed>>() {}.type
+            Gson().fromJson<List<GlobalTrendTrackSeed>>(json, type).orEmpty()
+        }.getOrElse {
+            Log.e("MediaRepo", "Failed to load global trend catalog: ${it.message}")
+            emptyList()
+        }
+    }
+
+    private fun normalizeTrackLookupKey(title: String, artist: String): String {
+        return "${title.trim().lowercase()}::${ArtistUtils.getBaseArtist(artist).trim().lowercase()}"
     }
 
     suspend fun clearArtistCache() {
@@ -311,5 +506,25 @@ class MediaDataRepository @Inject constructor(
             Log.e("MediaRepo", "Failed to batch import chants: ${e.message}")
             false
         }
+    }
+
+    companion object {
+        private const val DEFAULT_DISCOVERY_GENRE = "general"
+        private const val GENRE_WEIGHT = 0.40
+        private const val ARTIST_WEIGHT = 0.30
+        private const val DISCOVERY_WEIGHT = 0.30
+
+        val DISCOVERY_LAST_GENERATION_KEY = longPreferencesKey("discovery_last_generation_at")
+
+        private val GENRE_KEYWORDS: Map<String, Set<String>> = mapOf(
+            "hip hop" to setOf("hip hop", "rap", "drill", "trap", "808"),
+            "electronic" to setOf("edm", "electro", "house", "techno", "trance", "synth"),
+            "rock" to setOf("rock", "metal", "punk", "grunge", "alt rock"),
+            "pop" to setOf("pop", "radio", "anthem"),
+            "rnb" to setOf("rnb", "soul", "neo soul"),
+            "afrobeats" to setOf("afro", "afrobeats", "amapiano"),
+            "lofi" to setOf("lofi", "chill", "ambient", "study"),
+            "acoustic" to setOf("acoustic", "unplugged", "folk", "singer songwriter")
+        )
     }
 }

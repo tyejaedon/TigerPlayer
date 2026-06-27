@@ -207,6 +207,12 @@ class AudioRepository @Inject constructor(
         }
     }
 
+    fun getCachedLibraryTracks(): Flow<List<AudioTrack>> {
+        return tigerDao.getCachedTracks().map { entities ->
+            entities.map { it.toDomainModel() }
+        }
+    }
+
     fun getNeonDaylistTracks(
         segment: String,
         sinceMillis: Long,

@@ -54,6 +54,25 @@ abstract class TigerDao {
     @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 60")
     abstract fun getRecentTracks(): Flow<List<PlaybackHistoryEntity>>
 
+    @Query("SELECT * FROM playback_history ORDER BY timestamp DESC")
+    abstract fun getPlaybackHistory(): Flow<List<PlaybackHistoryEntity>>
+
+    @Query("SELECT * FROM playback_history WHERE timestamp >= :sinceMillis ORDER BY timestamp DESC")
+    abstract fun getPlaybackHistorySince(sinceMillis: Long): Flow<List<PlaybackHistoryEntity>>
+
+    @Query(
+        """
+        SELECT COUNT(DISTINCT lower(trim(artist)))
+        FROM playback_history
+        WHERE trim(artist) != ''
+          AND lower(trim(artist)) NOT IN ('unknown', 'unknown artist', '<unknown>', 'various artists')
+    """
+    )
+    abstract fun getUniqueArtistCount(): Flow<Int>
+
+    @Query("SELECT COUNT(DISTINCT trackId) FROM playback_history")
+    abstract fun getUniqueTrackCount(): Flow<Int>
+
     @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history")
     abstract fun getTotalListeningTimeMs(): Flow<Long>
 

@@ -158,4 +158,8 @@ class PlaybackEngine @Inject constructor(
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         mediaControllerManager.moveQueueItem(fromIndex, toIndex)
     }
+
+    fun playQueueItem(index: Int) {
+        mediaControllerManager.playQueueItem(index)
+    }
 }

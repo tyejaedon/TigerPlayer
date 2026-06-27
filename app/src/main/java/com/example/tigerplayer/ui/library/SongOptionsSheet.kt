@@ -41,6 +41,7 @@ fun SongOptionsSheet(
     playlists: List<Playlist>,
     onDismiss: () -> Unit,
     onPlayNext: () -> Unit,
+    onAddToQueueEnd: () -> Unit,
     onAddToPlaylist: (Long) -> Unit,
     onGoToAlbum: (String) -> Unit
 ) {
@@ -129,6 +130,15 @@ fun SongOptionsSheet(
                         accentColor = MaterialTheme.aardBlue
                     ) {
                         onPlayNext()
+                        onDismiss()
+                    }
+
+                    SheetActionRow(
+                        icon = WitcherIcons.Playlist,
+                        text = "Add to Queue End",
+                        accentColor = MaterialTheme.aardBlue
+                    ) {
+                        onAddToQueueEnd()
                         onDismiss()
                     }
 

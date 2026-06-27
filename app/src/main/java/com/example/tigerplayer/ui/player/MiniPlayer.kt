@@ -21,9 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -103,20 +101,12 @@ fun MiniPlayer(
                 label = "MiniPlayerActionColor"
             )
 
-            val glassBg = Brush.verticalGradient(
-                colors = listOf(
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                    MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-                )
-            )
-
             PremiumGlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(82.dp)
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(vertical = 6.dp)
                     .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                    .shadow(24.dp, RoundedCornerShape(24.dp), spotColor = actionColor.copy(alpha = 0.3f))
                     .pointerInput(track.id) {
                         detectTapGestures(
                             onTap = { onExpandClick() },
@@ -173,10 +163,9 @@ fun MiniPlayer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(glassBg)
-                        .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
-                // --- 1. NEON THREAD PROGRESS LINE ---
+                // Keep a thin progress rail for glanceable playback state.
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -320,7 +309,7 @@ fun MiniPlayer(
                             )
                             Icon(
                                 imageVector = if (isPlaying) WitcherIcons.Pause else WitcherIcons.Play,
-                                contentDescription = "Toggle Ritual",
+                                contentDescription = "Toggle playback",
                                 tint = if (isPlaying) MaterialTheme.igniRed else MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)
                             )

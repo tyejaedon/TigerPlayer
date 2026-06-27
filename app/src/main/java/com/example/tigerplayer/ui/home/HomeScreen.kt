@@ -177,7 +177,11 @@ fun HomeScreen(
                 item {
                     DashboardContainersSection(
                         state = dashboardState,
-                        onTrackClick = { viewModel.playTrack(it) },
+                        onTrackClick = { tracks, startIndex ->
+                            if (tracks.isNotEmpty()) {
+                                viewModel.setPlaylistAndPlay(tracks, startIndex.coerceIn(0, tracks.lastIndex))
+                            }
+                        },
                         onRefresh = { dashboardViewModel.refresh() }
                     )
                 }
@@ -250,6 +254,10 @@ fun HomeScreen(
             onPlayNext = {
                 viewModel.addNextToQueue(selectedTrack)
                 searchTrackForOptions = null // Close after action
+            },
+            onAddToQueueEnd = {
+                viewModel.addToQueue(selectedTrack)
+                searchTrackForOptions = null
             },
             onAddToPlaylist = { playlistId ->
                 viewModel.addTrackToPlaylist(playlistId, selectedTrack)
