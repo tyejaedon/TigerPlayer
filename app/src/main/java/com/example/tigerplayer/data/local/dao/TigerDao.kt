@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 data class ArtistStats(
     val artistName: String,
     val playCount: Int,
+    val totalListeningMs: Long,
     val imageUrl: String? = null
 )
 
@@ -24,6 +25,15 @@ data class TrackStats(
     val artist: String,
     val imageUrl: String?,
     val playCount: Int
+)
+
+data class SonicFootprintStats(
+    val acoustic: Int,
+    val electronic: Int,
+    val bassHeavy: Int,
+    val vocal: Int,
+    val atmospheric: Int,
+    val total: Int
 )
 
 /**
@@ -50,6 +60,63 @@ abstract class TigerDao {
     @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history WHERE timestamp >= :startTime")
     abstract fun getTotalListeningTimeMs(startTime: Long): Flow<Long>
 
+    @Query(
+        """
+        SELECT
+            COALESCE(SUM(
+                CASE WHEN (
+                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%acoustic%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%unplugged%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%folk%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%guitar%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%singer songwriter%'
+                ) THEN 1 ELSE 0 END
+            ), 0) AS acoustic,
+            COALESCE(SUM(
+                CASE WHEN (
+                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%electro%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%edm%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%house%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%techno%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%synth%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%trance%'
+                ) THEN 1 ELSE 0 END
+            ), 0) AS electronic,
+            COALESCE(SUM(
+                CASE WHEN (
+                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%bass%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%trap%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%drill%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%808%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%dubstep%'
+                ) THEN 1 ELSE 0 END
+            ), 0) AS bassHeavy,
+            COALESCE(SUM(
+                CASE WHEN (
+                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%vocal%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%choir%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%ballad%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%aria%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%soul%'
+                ) THEN 1 ELSE 0 END
+            ), 0) AS vocal,
+            COALESCE(SUM(
+                CASE WHEN (
+                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%ambient%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%chill%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%cinematic%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%space%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%dream%'
+                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%lofi%'
+                ) THEN 1 ELSE 0 END
+            ), 0) AS atmospheric,
+            COUNT(*) AS total
+        FROM playback_history
+        WHERE timestamp >= :startTime
+    """
+    )
+    abstract fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats>
+
     /**
      * IDENTIFY TOP ARTIST
      * Performs a single-pass string cleaning to identify the most played artist.
@@ -57,22 +124,34 @@ abstract class TigerDao {
      */
     @Query(
         """
-        WITH CleanedHistory AS (
+        WITH NormalizedHistory AS (
             SELECT 
                 trim(CASE 
-                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
+                    WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
+                    WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
+                    WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
+                    WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
+                    WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
+                    WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
                     ELSE artist 
-                END) as artistName
+                END) as artistName,
+                durationListenedMs
             FROM playback_history 
             WHERE timestamp >= :startTime
+        ),
+        FilteredHistory AS (
+            SELECT artistName, durationListenedMs
+            FROM NormalizedHistory
+            WHERE trim(artistName) != ''
+              AND lower(trim(artistName)) NOT IN ('unknown', 'unknown artist', '<unknown>', 'various artists')
         )
         SELECT artistName
-        FROM CleanedHistory
+        FROM FilteredHistory
         GROUP BY artistName 
-        ORDER BY COUNT(*) DESC 
+        ORDER BY SUM(durationListenedMs) DESC, COUNT(*) DESC
         LIMIT 1
     """
     )
@@ -85,23 +164,35 @@ abstract class TigerDao {
      */
     @Query(
         """
-        WITH CleanedHistory AS (
+        WITH NormalizedHistory AS (
             SELECT 
                 trim(CASE 
-                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
+                    WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
+                    WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
+                    WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
+                    WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
+                    WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
+                    WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
                     ELSE artist 
-                END) as artistName
+                END) as artistName,
+                durationListenedMs
             FROM playback_history
             WHERE timestamp >= :startTime
+        ),
+        FilteredHistory AS (
+            SELECT artistName, durationListenedMs
+            FROM NormalizedHistory
+            WHERE trim(artistName) != ''
+              AND lower(trim(artistName)) NOT IN ('unknown', 'unknown artist', '<unknown>', 'various artists')
         )
-        SELECT h.artistName, COUNT(*) as playCount, ac.imageUrl as imageUrl
-        FROM CleanedHistory h
-        LEFT JOIN artist_cache ac ON ac.artistName = LOWER(h.artistName)
+        SELECT h.artistName, COUNT(*) as playCount, COALESCE(SUM(h.durationListenedMs), 0) as totalListeningMs, ac.imageUrl as imageUrl
+        FROM FilteredHistory h
+        LEFT JOIN artist_cache ac ON ac.artistName = LOWER(TRIM(h.artistName))
         GROUP BY h.artistName
-        ORDER BY playCount DESC 
+        ORDER BY totalListeningMs DESC, playCount DESC
         LIMIT :limit
     """
     )
@@ -148,39 +239,51 @@ abstract class TigerDao {
      */
     @Query(
         """
-        WITH CleanedHistory AS (
+        WITH NormalizedHistory AS (
             SELECT 
                 trim(CASE 
-                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
+                    WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
+                    WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
+                    WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
+                    WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
+                    WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
+                    WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
                     ELSE artist 
                 END) as artistName
             FROM playback_history
         )
-        SELECT COUNT(*) FROM CleanedHistory WHERE artistName = :artistName
+        SELECT COUNT(*)
+        FROM NormalizedHistory
+        WHERE lower(trim(artistName)) = lower(trim(:artistName))
     """
     )
     abstract suspend fun getArtistPlayCount(artistName: String): Int
 
     @Query(
         """
-        WITH CleanedHistory AS (
+        WITH NormalizedHistory AS (
             SELECT 
                 trim(CASE 
-                    WHEN artist LIKE '% ft.%' THEN substr(artist, 1, instr(artist, ' ft.') - 1)
-                    WHEN artist LIKE '% feat.%' THEN substr(artist, 1, instr(artist, ' feat.') - 1)
-                    WHEN artist LIKE '% & %' THEN substr(artist, 1, instr(artist, ' & ') - 1)
-                    WHEN artist LIKE '%,%' THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
+                    WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
+                    WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
+                    WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
+                    WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
+                    WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
+                    WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
                     ELSE artist 
                 END) as artistName,
                 durationListenedMs
             FROM playback_history
         )
         SELECT CAST(COALESCE(SUM(durationListenedMs), 0) / 60000 AS INTEGER) 
-        FROM CleanedHistory 
-        WHERE artistName = :artistName
+        FROM NormalizedHistory 
+        WHERE lower(trim(artistName)) = lower(trim(:artistName))
     """
     )
     abstract suspend fun getArtistMinutesListened(artistName: String): Int
@@ -239,6 +342,101 @@ abstract class TigerDao {
 
     @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
     abstract fun getCachedTracks(): Flow<List<CachedTrackEntity>>
+
+    @Query(
+        """
+        WITH filtered_history AS (
+            SELECT trackId, timestamp
+            FROM playback_history
+            WHERE timestamp >= :sinceMillis
+              AND (
+                (:segment = 'MORNING' AND CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 5 AND 11)
+                OR (:segment = 'AFTERNOON' AND CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 12 AND 16)
+                OR (:segment = 'EVENING' AND CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) BETWEEN 17 AND 21)
+                OR (:segment = 'NIGHT' AND (CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) >= 22
+                    OR CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) <= 4))
+              )
+        ),
+        ranked AS (
+            SELECT
+                trackId,
+                COUNT(*) AS playCount,
+                MAX(timestamp) AS lastPlayed
+            FROM filtered_history
+            GROUP BY trackId
+        )
+        SELECT c.*
+        FROM cached_tracks c
+        LEFT JOIN ranked r ON r.trackId = c.id
+        ORDER BY COALESCE(r.playCount, 0) DESC, COALESCE(r.lastPlayed, 0) DESC, c.dateAdded DESC
+        LIMIT :limit
+    """
+    )
+    abstract fun getNeonDaylistTracks(
+        segment: String,
+        sinceMillis: Long,
+        limit: Int
+    ): Flow<List<CachedTrackEntity>>
+
+    @Query(
+        """
+        WITH top_artists AS (
+            SELECT LOWER(TRIM(artist)) AS artistName
+            FROM playback_history
+            WHERE timestamp >= :sinceMillis
+            GROUP BY LOWER(TRIM(artist))
+            ORDER BY COUNT(*) DESC
+            LIMIT 3
+        ),
+        never_played AS (
+            SELECT
+                c.id,
+                c.title,
+                c.artist,
+                c.album,
+                c.uriString,
+                c.artworkUriString,
+                c.durationMs,
+                c.mimeType,
+                c.bitrate,
+                c.sampleRate,
+                c.trackNumber,
+                c.year,
+                c.dateAdded,
+                c.isLiked,
+                c.path,
+                CASE
+                    WHEN LOWER(TRIM(c.artist)) IN (SELECT artistName FROM top_artists) THEN 0
+                    ELSE 1
+                END AS priority
+            FROM cached_tracks c
+            WHERE c.id NOT IN (SELECT DISTINCT trackId FROM playback_history)
+        )
+        SELECT
+            id,
+            title,
+            artist,
+            album,
+            uriString,
+            artworkUriString,
+            durationMs,
+            mimeType,
+            bitrate,
+            sampleRate,
+            trackNumber,
+            year,
+            dateAdded,
+            isLiked,
+            path
+        FROM never_played
+        ORDER BY priority ASC, dateAdded DESC
+        LIMIT :limit
+    """
+    )
+    abstract fun getVaultDiscoveryTracks(
+        sinceMillis: Long,
+        limit: Int
+    ): Flow<List<CachedTrackEntity>>
 
     @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
     abstract suspend fun getCachedTracksSync(): List<CachedTrackEntity>

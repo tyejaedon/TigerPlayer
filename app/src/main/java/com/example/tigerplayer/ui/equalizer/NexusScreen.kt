@@ -25,17 +25,21 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tigerplayer.engine.AudioReactiveFrame
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import kotlin.math.*
 
-private val AardBlue = Color(0xFF4FC3F7)
-private val IgniRed = Color(0xFFFF5252)
-private val NeuralPurple = Color(0xFFB388FF)
-private val BitPerfectGold = Color(0xFFFFD700)
+private val CyberCyan = Color(0xFF00E5FF)
+private val ToxicLime = Color(0xFF39FF14)
+private val HotPink = Color(0xFFFF007F)
+private val ElectricAmber = Color(0xFFFFD500)
 
 @Composable
 fun AuralNexusScreen(
@@ -50,13 +54,15 @@ fun AuralNexusScreen(
             .fillMaxSize()
             .background(Color(0xFF030406))
     ) {
-        NebulaBackground(uiState.frequencyResponseCurve)
+        NebulaBackground(uiState.frequencyResponseCurve, uiState.audioReactiveFrame)
 
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Header(uiState.currentMood, onClose)
 
             NexusSpatialCanvas(
                 nodes = uiState.nodes,
+                frequencyResponseCurve = uiState.frequencyResponseCurve,
+                audioReactiveFrame = uiState.audioReactiveFrame,
                 modifier = Modifier.weight(1f),
                 onNodeDragged = viewModel::moveNode
             )
@@ -95,7 +101,7 @@ private fun Header(currentMood: String, onClose: () -> Unit) {
             Text(
                 text = currentMood.uppercase(),
                 style = MaterialTheme.typography.labelMedium,
-                color = AardBlue,
+                color = CyberCyan,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )
@@ -116,14 +122,18 @@ private fun Header(currentMood: String, onClose: () -> Unit) {
 @Composable
 fun NexusSpatialCanvas(
     nodes: List<SpatialNode>,
+    frequencyResponseCurve: List<Offset>,
+    audioReactiveFrame: AudioReactiveFrame,
     modifier: Modifier = Modifier,
     onNodeDragged: (String, Offset) -> Unit
 ) {
+    val haptics = LocalHapticFeedback.current
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 8.dp)
-            .shadow(16.dp, RoundedCornerShape(32.dp), spotColor = AardBlue.copy(alpha = 0.2f))
+            .testTag("nexus_canvas")
+            .shadow(16.dp, RoundedCornerShape(32.dp), spotColor = CyberCyan.copy(alpha = 0.2f))
             .glassEffect(RoundedCornerShape(32.dp))
             .border(1.dp, Color.White.copy(0.08f), RoundedCornerShape(32.dp))
     ) {
@@ -149,11 +159,56 @@ fun NexusSpatialCanvas(
             drawLine(Color.White.copy(0.06f), Offset(cx, 0f), Offset(cx, h), strokeWidth = 2f)
         }
 
+        Canvas(Modifier.fillMaxSize()) {
+            if (frequencyResponseCurve.isEmpty()) return@Canvas
+
+            val path = Path()
+            val first = frequencyResponseCurve.first()
+            path.moveTo(first.x * size.width, size.height / 2f + first.y * size.height * 0.32f)
+
+            for (i in 1 until frequencyResponseCurve.size) {
+                val prev = frequencyResponseCurve[i - 1]
+                val curr = frequencyResponseCurve[i]
+
+                val px = prev.x * size.width
+                val py = size.height / 2f + prev.y * size.height * 0.32f
+                val cxPath = curr.x * size.width
+                val cyPath = size.height / 2f + curr.y * size.height * 0.32f
+                val midX = (px + cxPath) * 0.5f
+
+                path.cubicTo(midX, py, midX, cyPath, cxPath, cyPath)
+            }
+
+            val glowWidth = 38f + audioReactiveFrame.flux * 26f + audioReactiveFrame.energy * 20f
+            val beamWidth = 10f + audioReactiveFrame.energy * 9f
+            val beamAlpha = (0.45f + audioReactiveFrame.flux * 0.35f).coerceIn(0.2f, 0.9f)
+
+            // Neon tube effect: wide transparent glow -> colored beam -> white core.
+            drawPath(
+                path = path,
+                brush = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, CyberCyan, ToxicLime)),
+                style = Stroke(width = glowWidth, cap = StrokeCap.Round),
+                alpha = beamAlpha * 0.35f
+            )
+            drawPath(
+                path = path,
+                brush = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, CyberCyan, ToxicLime)),
+                style = Stroke(width = beamWidth, cap = StrokeCap.Round),
+                alpha = beamAlpha
+            )
+            drawPath(
+                path = path,
+                color = Color.White.copy(alpha = 0.78f),
+                style = Stroke(width = 2f + audioReactiveFrame.treble * 2f, cap = StrokeCap.Round)
+            )
+        }
+
         // --- CELESTIAL NODES ---
         nodes.forEach { node ->
             // FIXED: Key local drag states to individual node IDs to avoid loop reuse bugs
             var isDragging by remember(node.id) { mutableStateOf(false) }
             var dragOffset by remember(node.id) { mutableStateOf(node.spatialPos) }
+            var lastHapticBucket by remember(node.id) { mutableIntStateOf(Int.MIN_VALUE) }
 
             // FIXED: Update dragOffset locally if ViewModel state changes from outside (Preset selections)
             LaunchedEffect(node.spatialPos) {
@@ -174,10 +229,18 @@ fun NexusSpatialCanvas(
             val px = cx + animatedPos.x * cx
             val py = cy + animatedPos.y * cy
 
-            val glowIntensity = (1f - (abs(animatedPos.y))).coerceIn(0.2f, 1f)
+            val bandPeak = when (node.id) {
+                "sub" -> audioReactiveFrame.bass
+                "warmth" -> audioReactiveFrame.mid
+                "vocal" -> max(audioReactiveFrame.mid, audioReactiveFrame.treble * 0.85f)
+                else -> audioReactiveFrame.treble
+            }
+            val glowIntensity = (0.25f + bandPeak * 0.95f + (1f - abs(animatedPos.y)) * 0.18f)
+                .coerceIn(0.2f, 1.15f)
 
             Box(
                 modifier = Modifier
+                    .testTag("nexus_node_${node.id}")
                     .offset(
                         with(LocalDensity.current) { px.toDp() - 36.dp },
                         with(LocalDensity.current) { py.toDp() - 36.dp }
@@ -194,6 +257,9 @@ fun NexusSpatialCanvas(
                                 // Magnetic snapping on axis lines applied purely on end of drag
                                 val snapX = if (abs(dragOffset.x) < 0.08f) 0f else dragOffset.x
                                 val snapY = if (abs(dragOffset.y) < 0.08f) 0f else dragOffset.y
+                                if (snapY == 0f) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
                                 onNodeDragged(node.id, Offset(snapX, snapY))
                             },
                             onDragCancel = {
@@ -206,6 +272,14 @@ fun NexusSpatialCanvas(
                             val newX = (dragOffset.x + dragAmount.x / cx).coerceIn(-1f, 1f)
                             val newY = (dragOffset.y + dragAmount.y / cy).coerceIn(-1f, 1f)
 
+                            val xBucket = ((newX + 1f) * 8f).toInt().coerceIn(0, 16)
+                            val yBucket = ((newY + 1f) * 8f).toInt().coerceIn(0, 16)
+                            val hapticBucket = (xBucket shl 8) or yBucket
+                            if (hapticBucket != lastHapticBucket) {
+                                lastHapticBucket = hapticBucket
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+
                             dragOffset = Offset(newX, newY)
                             onNodeDragged(node.id, dragOffset)
                         }
@@ -213,9 +287,7 @@ fun NexusSpatialCanvas(
             ) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(node.color.copy(alpha = glowIntensity * 0.6f), Color.Transparent)
-                        ),
+                        brush = Brush.radialGradient(listOf(node.color.copy(alpha = glowIntensity * 0.6f), Color.Transparent)),
                         radius = size.width / 2f
                     )
                     drawCircle(
@@ -239,12 +311,11 @@ fun NexusSpatialCanvas(
             }
         }
 
-        // --- CENTER CORE (USER ANCHOR) ---
-        val infiniteTransition = rememberInfiniteTransition(label = "CorePulse")
-        val pulseRadius by infiniteTransition.animateFloat(
-            initialValue = 0.7f, targetValue = 1.3f,
-            animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-            label = "pulse"
+        // --- CENTER CORE (AUDIO-REACTIVE ANCHOR) ---
+        val pulseRadius by animateFloatAsState(
+            targetValue = (0.70f + audioReactiveFrame.bass * 0.85f + audioReactiveFrame.flux * 0.2f).coerceIn(0.65f, 1.6f),
+            animationSpec = tween(160, easing = FastOutSlowInEasing),
+            label = "corePulse"
         )
 
         Box(
@@ -255,15 +326,20 @@ fun NexusSpatialCanvas(
         ) {
             Canvas(Modifier.fillMaxSize()) {
                 drawCircle(
-                    brush = Brush.radialGradient(listOf(Color.White.copy(0.1f), Color.Transparent)),
+                    brush = Brush.radialGradient(
+                        listOf(
+                            CyberCyan.copy(alpha = 0.10f + audioReactiveFrame.energy * 0.25f),
+                            Color.Transparent
+                        )
+                    ),
                     radius = (size.width / 2f) * pulseRadius
                 )
             }
             Box(
                 modifier = Modifier
                     .size(12.dp)
-                    .background(Color.White.copy(alpha = 0.8f), CircleShape)
-                    .shadow(8.dp, CircleShape, spotColor = Color.White)
+                    .background(Color.White.copy(alpha = 0.88f), CircleShape)
+                    .shadow(8.dp, CircleShape, spotColor = CyberCyan.copy(alpha = 0.9f))
             )
         }
     }
@@ -284,7 +360,7 @@ fun PresetSelector(
             val active = mood == selected
 
             val bgColor by animateColorAsState(
-                targetValue = if (active) AardBlue else Color.White.copy(alpha = 0.05f),
+                targetValue = if (active) CyberCyan else Color.White.copy(alpha = 0.05f),
                 label = "presetBg"
             )
             val textColor by animateColorAsState(
@@ -313,15 +389,17 @@ fun PresetSelector(
 }
 
 @Composable
-fun NebulaBackground(points: List<Offset>) {
-    val alphaAnim by rememberInfiniteTransition(label = "NebulaAlphaTransition").animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
+fun NebulaBackground(points: List<Offset>, audioReactiveFrame: AudioReactiveFrame) {
+    val alphaAnim by animateFloatAsState(
+        targetValue = (0.26f + audioReactiveFrame.flux * 0.40f + audioReactiveFrame.energy * 0.20f)
+            .coerceIn(0.16f, 0.92f),
+        animationSpec = tween(180, easing = FastOutSlowInEasing),
         label = "NebulaAlpha"
+    )
+    val reactiveStroke by animateFloatAsState(
+        targetValue = 48f + audioReactiveFrame.energy * 84f + audioReactiveFrame.flux * 52f,
+        animationSpec = tween(180),
+        label = "NebulaStroke"
     )
 
     Canvas(
@@ -354,22 +432,22 @@ fun NebulaBackground(points: List<Offset>) {
 
         drawPath(
             path = path,
-            brush = Brush.horizontalGradient(listOf(IgniRed, BitPerfectGold, AardBlue, NeuralPurple)),
-            style = Stroke(width = 120f, cap = StrokeCap.Round),
+            brush = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, CyberCyan, ToxicLime)),
+            style = Stroke(width = reactiveStroke * 1.8f, cap = StrokeCap.Round),
             alpha = alphaAnim * 0.5f
         )
 
         drawPath(
             path = path,
-            brush = Brush.horizontalGradient(listOf(IgniRed, BitPerfectGold, AardBlue, NeuralPurple)),
-            style = Stroke(width = 30f, cap = StrokeCap.Round),
+            brush = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, CyberCyan, ToxicLime)),
+            style = Stroke(width = reactiveStroke, cap = StrokeCap.Round),
             alpha = alphaAnim
         )
 
         drawPath(
             path = path,
             color = Color.White.copy(alpha = 0.6f),
-            style = Stroke(width = 3f)
+            style = Stroke(width = 2f + audioReactiveFrame.treble * 2f)
         )
     }
 }

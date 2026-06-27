@@ -42,6 +42,7 @@ data class DetailedStatsUiState(
     val selectedFilter: String = "Today",
     val totalListeningHours: Int = 0,
     val totalListeningMinutes: Int = 0,
+    val globalListeningSharePercent: Float = 0f,
     val topArtists: List<StatItem> = emptyList(),
     val topTracks: List<StatItem> = emptyList()
 )
@@ -85,11 +86,31 @@ class PlayerViewModel @Inject constructor(
     val youtubeRepository: YouTubeRepository
 ) : ViewModel() {
 
+    private data class PlaybackTelemetrySample(
+        val mediaId: String,
+        val positionMs: Long,
+        val isPlaying: Boolean
+    )
+
+    private data class PlaybackTelemetryState(
+        val mediaId: String? = null,
+        val track: AudioTrack? = null,
+        val lastPositionMs: Long = 0L,
+        val listenedMs: Long = 0L,
+        val wasPlaying: Boolean = false
+    )
+
+    private companion object {
+        const val MAX_VALID_POSITION_DELTA_MS = 20_000L
+    }
+
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
     private val _trackColor = MutableStateFlow(Color(0xFF4FC3F7))
     val trackColor: StateFlow<Color> = _trackColor.asStateFlow()
+
+    private var playbackTelemetryState = PlaybackTelemetryState()
 
     private var scanJob: Job? = null
     private val libraryRefreshTrigger = MutableStateFlow(0)
@@ -136,6 +157,23 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             mediaControllerManager.currentPosition.collect { pos ->
                 _uiState.update { it.copy(currentPosition = pos) }
+            }
+        }
+
+        // Track true listened time from live position deltas (not full track duration).
+        viewModelScope.launch {
+            combine(
+                mediaControllerManager.currentMediaId,
+                mediaControllerManager.currentPosition,
+                mediaControllerManager.isPlaying
+            ) { mediaId, position, isPlaying ->
+                PlaybackTelemetrySample(
+                    mediaId = mediaId,
+                    positionMs = position.coerceAtLeast(0L),
+                    isPlaying = isPlaying
+                )
+            }.collect { sample ->
+                processPlaybackTelemetry(sample)
             }
         }
 
@@ -233,7 +271,6 @@ class PlayerViewModel @Inject constructor(
 
                     metadataEngine.clearTrackMetadata()
                     metadataEngine.fetchTrackMetadata(track)
-                    statsEngine.recordPlaybackHistory(track)
 
                     if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
                         viewModelScope.launch(Dispatchers.IO) {
@@ -307,7 +344,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun addNextToQueue(track: AudioTrack) {
-        playbackEngine.addToQueue(track)
+        playbackEngine.addNextToQueue(track)
     }
 
     fun removeFromQueue(track: AudioTrack) {
@@ -448,6 +485,77 @@ class PlayerViewModel @Inject constructor(
     fun fetchArtistProfile(artistName: String) {
         viewModelScope.launch {
             metadataEngine.fetchArtistProfile(artistName)
+        }
+    }
+
+    private fun processPlaybackTelemetry(sample: PlaybackTelemetrySample) {
+        val previous = playbackTelemetryState
+        val mediaId = sample.mediaId
+
+        if (mediaId.isBlank()) {
+            flushPlaybackTelemetry(previous)
+            playbackTelemetryState = PlaybackTelemetryState()
+            return
+        }
+
+        if (previous.mediaId == null) {
+            playbackTelemetryState = PlaybackTelemetryState(
+                mediaId = mediaId,
+                track = resolveTrackForMediaId(mediaId),
+                lastPositionMs = sample.positionMs,
+                listenedMs = 0L,
+                wasPlaying = sample.isPlaying
+            )
+            return
+        }
+
+        if (previous.mediaId != mediaId) {
+            flushPlaybackTelemetry(previous)
+            playbackTelemetryState = PlaybackTelemetryState(
+                mediaId = mediaId,
+                track = resolveTrackForMediaId(mediaId),
+                lastPositionMs = sample.positionMs,
+                listenedMs = 0L,
+                wasPlaying = sample.isPlaying
+            )
+            return
+        }
+
+        val delta = (sample.positionMs - previous.lastPositionMs).coerceAtLeast(0L)
+        var listenedMs = previous.listenedMs
+
+        if (previous.wasPlaying && sample.isPlaying) {
+            if (delta in 1L..MAX_VALID_POSITION_DELTA_MS) {
+                listenedMs += delta
+            }
+        } else if (previous.wasPlaying && !sample.isPlaying) {
+            if (delta in 1L..MAX_VALID_POSITION_DELTA_MS) {
+                listenedMs += delta
+            }
+            flushPlaybackTelemetry(previous.copy(listenedMs = listenedMs))
+            listenedMs = 0L
+        }
+
+        playbackTelemetryState = previous.copy(
+            track = previous.track ?: resolveTrackForMediaId(mediaId),
+            lastPositionMs = sample.positionMs,
+            listenedMs = listenedMs,
+            wasPlaying = sample.isPlaying
+        )
+    }
+
+    private fun resolveTrackForMediaId(mediaId: String): AudioTrack? {
+        return _uiState.value.tracks.firstOrNull { it.id == mediaId }
+            ?: _uiState.value.currentTrack?.takeIf { it.id == mediaId }
+    }
+
+    private fun flushPlaybackTelemetry(state: PlaybackTelemetryState) {
+        val mediaId = state.mediaId ?: return
+        if (state.listenedMs <= 0L) return
+
+        val track = state.track ?: resolveTrackForMediaId(mediaId) ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            statsEngine.recordPlaybackHistory(track, listenedDurationMs = state.listenedMs)
         }
     }
 

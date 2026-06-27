@@ -16,6 +16,7 @@ import androidx.media3.session.SessionToken
 import com.example.tigerplayer.data.local.PlaybackPrefs
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.AudioRepository
+import com.example.tigerplayer.data.repository.LastFmRepository
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
@@ -27,7 +28,8 @@ import javax.inject.Singleton
 class MediaControllerManager @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val playbackPrefs: PlaybackPrefs,
-    private val audioRepository: AudioRepository
+    private val audioRepository: AudioRepository,
+    private val lastFmRepository: LastFmRepository
 ) {
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -53,6 +55,19 @@ class MediaControllerManager @Inject constructor(
 
     private val managerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionJob: Job? = null
+    private var autoQueueJob: Job? = null
+    private var crossfadeMonitorJob: Job? = null
+    private var crossfadeOutJob: Job? = null
+    private var crossfadeInJob: Job? = null
+    @Volatile
+    private var flowStateCrossfadeEnabled: Boolean = true
+
+    private companion object {
+        const val FLOW_STATE_WINDOW_MS = 7_000L
+        const val FLOW_STATE_POLL_MS = 120L
+        const val FLOW_STATE_TAIL_VOLUME = 0.08f
+        const val FLOW_STATE_FADE_IN_MS = 2_200L
+    }
 
     init {
         initializeController()
@@ -97,8 +112,11 @@ class MediaControllerManager @Inject constructor(
                 _isPlaying.value = isPlaying
                 if (isPlaying) {
                     startPositionTicker()
+                    startFlowStateCrossfadeMonitor()
                 } else {
                     positionJob?.cancel()
+                    crossfadeMonitorJob?.cancel()
+                    crossfadeOutJob?.cancel()
                     // Save position safely to disk only when paused to prevent I/O overload
                     managerScope.launch { playbackPrefs.savePosition(controller.currentPosition) }
                 }
@@ -118,6 +136,15 @@ class MediaControllerManager @Inject constructor(
                 _currentMediaId.value = item?.mediaId ?: ""
                 _currentPosition.value = 0L
                 saveCurrentState()
+
+                // Incoming track blooms in after tail fade from previous track.
+                startFlowStateFadeIn()
+                startFlowStateCrossfadeMonitor()
+
+                val trackId = item?.mediaId
+                if (!trackId.isNullOrBlank()) {
+                    maybeAppendInfiniteQueue(trackId)
+                }
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
@@ -164,6 +191,7 @@ class MediaControllerManager @Inject constructor(
         val mediaItems = tracks.map { createMediaItem(it) }
 
         controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+        controller.volume = 1f
         controller.prepare()
         controller.play()
 
@@ -182,6 +210,10 @@ class MediaControllerManager @Inject constructor(
     }
 
     fun addNextToQueue(track: AudioTrack) {
+        playNext(track)
+    }
+
+    fun playNext(track: AudioTrack) {
         val controller = mediaController ?: return
         val newItem = createMediaItem(track)
 
@@ -193,6 +225,21 @@ class MediaControllerManager @Inject constructor(
             val insertIndex = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
             controller.addMediaItem(insertIndex, newItem)
         }
+        saveCurrentState()
+    }
+
+    fun addToQueue(track: AudioTrack) {
+        val controller = mediaController ?: return
+        val newItem = createMediaItem(track)
+
+        if (controller.mediaItemCount == 0) {
+            controller.setMediaItem(newItem)
+            controller.prepare()
+            controller.play()
+        } else {
+            controller.addMediaItem(controller.mediaItemCount, newItem)
+        }
+
         saveCurrentState()
     }
 
@@ -275,7 +322,9 @@ class MediaControllerManager @Inject constructor(
         } else if (controller.playbackState == Player.STATE_IDLE || controller.playbackState == Player.STATE_ENDED) {
             controller.prepare()
         }
+        controller.volume = controller.volume.coerceAtLeast(FLOW_STATE_TAIL_VOLUME)
         controller.play()
+        startFlowStateCrossfadeMonitor()
     }
 
     fun pause() = mediaController?.pause()
@@ -284,10 +333,177 @@ class MediaControllerManager @Inject constructor(
     fun skipToPrevious() = mediaController?.seekToPrevious()
 
     fun release() {
+        autoQueueJob?.cancel()
+        crossfadeMonitorJob?.cancel()
+        crossfadeOutJob?.cancel()
+        crossfadeInJob?.cancel()
+        mediaController?.let { controller ->
+            runCatching { controller.volume = 1f }
+        }
         saveCurrentState()
         positionJob?.cancel()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         mediaController = null
         managerScope.cancel()
+    }
+
+    fun setFlowStateCrossfadeEnabled(enabled: Boolean) {
+        flowStateCrossfadeEnabled = enabled
+        if (!enabled) {
+            crossfadeMonitorJob?.cancel()
+            crossfadeOutJob?.cancel()
+            crossfadeInJob?.cancel()
+            mediaController?.let { controller ->
+                runCatching { controller.volume = 1f }
+            }
+        } else if (_isPlaying.value) {
+            startFlowStateCrossfadeMonitor()
+        }
+    }
+
+    fun isFlowStateCrossfadeEnabled(): Boolean = flowStateCrossfadeEnabled
+
+    private fun startFlowStateCrossfadeMonitor() {
+        if (!flowStateCrossfadeEnabled) return
+        crossfadeMonitorJob?.cancel()
+        crossfadeOutJob?.cancel()
+
+        crossfadeMonitorJob = managerScope.launch {
+            val controller = mediaController ?: return@launch
+            val mediaId = controller.currentMediaItem?.mediaId ?: return@launch
+
+            while (isActive) {
+                if (!controller.isPlaying) return@launch
+                if (controller.currentMediaItem?.mediaId != mediaId) return@launch
+
+                val duration = controller.duration
+                if (duration == C.TIME_UNSET || duration <= 0L) {
+                    delay(FLOW_STATE_POLL_MS)
+                    continue
+                }
+
+                val remaining = (duration - controller.currentPosition).coerceAtLeast(0L)
+                if (remaining <= FLOW_STATE_WINDOW_MS) {
+                    startFlowStateFadeOut(mediaId, remaining)
+                    return@launch
+                }
+
+                delay(FLOW_STATE_POLL_MS)
+            }
+        }
+    }
+
+    private fun startFlowStateFadeOut(mediaId: String, remainingMs: Long) {
+        if (!flowStateCrossfadeEnabled) return
+        crossfadeOutJob?.cancel()
+        crossfadeOutJob = managerScope.launch {
+            val controller = mediaController ?: return@launch
+            if (controller.currentMediaItem?.mediaId != mediaId) return@launch
+
+            val startVolume = controller.volume.coerceIn(FLOW_STATE_TAIL_VOLUME, 1f)
+            val fadeMs = remainingMs.coerceIn(1_200L, FLOW_STATE_WINDOW_MS)
+            val startTime = System.currentTimeMillis()
+
+            while (isActive) {
+                if (!controller.isPlaying) return@launch
+                if (controller.currentMediaItem?.mediaId != mediaId) return@launch
+
+                val elapsed = (System.currentTimeMillis() - startTime).coerceAtLeast(0L)
+                val t = (elapsed.toFloat() / fadeMs.toFloat()).coerceIn(0f, 1f)
+                val volume = lerp(startVolume, FLOW_STATE_TAIL_VOLUME, t)
+                controller.volume = volume
+
+                if (t >= 1f) return@launch
+                delay(32L)
+            }
+        }
+    }
+
+    private fun startFlowStateFadeIn() {
+        if (!flowStateCrossfadeEnabled) {
+            mediaController?.let { controller ->
+                runCatching { controller.volume = 1f }
+            }
+            return
+        }
+        crossfadeInJob?.cancel()
+        crossfadeInJob = managerScope.launch {
+            val controller = mediaController ?: return@launch
+            val startVolume = controller.volume.coerceIn(FLOW_STATE_TAIL_VOLUME, 1f)
+            val startTime = System.currentTimeMillis()
+
+            while (isActive) {
+                if (!controller.isPlaying) return@launch
+                val elapsed = (System.currentTimeMillis() - startTime).coerceAtLeast(0L)
+                val t = (elapsed.toFloat() / FLOW_STATE_FADE_IN_MS.toFloat()).coerceIn(0f, 1f)
+                controller.volume = lerp(startVolume, 1f, t)
+
+                if (t >= 1f) return@launch
+                delay(32L)
+            }
+        }
+    }
+
+    private fun lerp(start: Float, end: Float, t: Float): Float {
+        return start + (end - start) * t
+    }
+
+    private fun maybeAppendInfiniteQueue(currentTrackId: String) {
+        val controller = mediaController ?: return
+        val remainingItems = controller.mediaItemCount - (controller.currentMediaItemIndex + 1)
+        if (remainingItems > 1) return
+
+        autoQueueJob?.cancel()
+        autoQueueJob = managerScope.launch(Dispatchers.IO) {
+            val localLibrary = audioRepository.getLocalTracks().firstOrNull().orEmpty()
+            if (localLibrary.isEmpty()) return@launch
+
+            val currentTrack = localLibrary.firstOrNull { it.id == currentTrackId } ?: return@launch
+            val queueIds = withContext(Dispatchers.Main) {
+                val c = mediaController ?: return@withContext emptySet<String>()
+                List(c.mediaItemCount) { index -> c.getMediaItemAt(index).mediaId }.toSet()
+            }
+            if (queueIds.isEmpty()) return@launch
+
+            val sameArtist = localLibrary
+                .asSequence()
+                .filter { it.id !in queueIds }
+                .filter { it.artist.equals(currentTrack.artist, ignoreCase = true) }
+                .take(5)
+                .toList()
+
+            val similarArtists = lastFmRepository.getSimilarArtistNames(currentTrack.artist, limit = 12)
+                .map { it.lowercase().trim() }
+                .toSet()
+
+            val similarArtistTracks = localLibrary
+                .asSequence()
+                .filter { it.id !in queueIds }
+                .filter { it.artist.lowercase().trim() in similarArtists }
+                .take(18)
+                .toList()
+
+            val fallbackTracks = localLibrary
+                .asSequence()
+                .filter { it.id !in queueIds }
+                .shuffled()
+                .take(18)
+                .toList()
+
+            val candidates = (sameArtist + similarArtistTracks + fallbackTracks)
+                .distinctBy { it.id }
+                .take(12)
+            if (candidates.isEmpty()) return@launch
+
+            withContext(Dispatchers.Main) {
+                val c = mediaController ?: return@withContext
+                val nowRemaining = c.mediaItemCount - (c.currentMediaItemIndex + 1)
+                if (nowRemaining > 1) return@withContext
+
+                c.addMediaItems(c.mediaItemCount, candidates.map { createMediaItem(it) })
+                _mediaControllerState.tryEmit(Unit)
+                saveCurrentState()
+            }
+        }
     }
 }

@@ -21,6 +21,7 @@ sealed class Screen(val route: String) {
 
     // --- Settings & Global Routes ---
     object Settings : Screen("settings")
+    object SonicFootprint : Screen("sonic_footprint")
 
     // --- Global Detail Routes (These will cover the Bottom Bar) ---
 
@@ -61,5 +62,6 @@ sealed class Screen(val route: String) {
 sealed class BottomNavTab(val route: String, val title: String, val icon: ImageVector) {
     object Home : BottomNavTab("tab_home", "Home", WitcherIcons.Home)
     object Library : BottomNavTab("tab_library", "Library", WitcherIcons.Library)
+    object Queue : BottomNavTab("tab_queue", "Queue", WitcherIcons.Playlist)
     object Cloud : BottomNavTab("tab_cloud", "Remote", WitcherIcons.Cloud)
 }

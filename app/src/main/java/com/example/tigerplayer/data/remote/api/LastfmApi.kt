@@ -2,6 +2,7 @@ package com.example.tigerplayer.data.remote.api
 
 import com.example.tigerplayer.BuildConfig
 import com.example.tigerplayer.data.remote.model.LastFmResponse
+import com.example.tigerplayer.data.remote.model.LastFmSimilarArtistsResponse
 import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Query
@@ -15,4 +16,11 @@ interface LastFmApi {
         @Query("artist") artistName: String,
         @Query("api_key") apiKey: String = BuildConfig.LASTFM_API_KEY
     ): Response<LastFmResponse>
+
+    @GET("2.0/?method=artist.getsimilar&format=json&autocorrect=1")
+    suspend fun getSimilarArtists(
+        @Query("artist") artistName: String,
+        @Query("limit") limit: Int = 12,
+        @Query("api_key") apiKey: String = BuildConfig.LASTFM_API_KEY
+    ): Response<LastFmSimilarArtistsResponse>
 }

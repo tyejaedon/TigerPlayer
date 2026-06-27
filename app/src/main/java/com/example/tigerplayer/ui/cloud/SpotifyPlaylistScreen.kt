@@ -1,6 +1,5 @@
 package com.example.tigerplayer.ui.cloud
 
-import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -14,21 +13,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.remote.model.SpotifyTrack
-import com.example.tigerplayer.ui.theme.SpotifyGreen
+import com.example.tigerplayer.ui.theme.DominantColorExtractor
+import com.example.tigerplayer.ui.theme.TigerNeonOrange
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,15 +42,16 @@ fun SpotifyPlaylistScreen(
     val tracks by viewModel.currentPlaylistTracks.collectAsState()
     val isLoading by viewModel.isLoadingTracks.collectAsState()
     val context = LocalContext.current
+    val colorScope = rememberCoroutineScope()
 
-    val fallbackColor = Color(0xFF121212)
-    var dominantColor by remember { mutableStateOf(fallbackColor) }
+    var dominantColor by remember(playlistId, playlistImageUrl) { mutableStateOf(TigerNeonOrange) }
 
     val animatedDominantColor by animateColorAsState(
         targetValue = dominantColor,
         animationSpec = tween(1000),
         label = "SpotifyPlaylistColor"
     )
+    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.20f)
 
     // Palette Ritual: Extracting essence from the artwork
     val imageRequest = remember(playlistImageUrl) {
@@ -59,20 +60,19 @@ fun SpotifyPlaylistScreen(
             .crossfade(true)
             .allowHardware(false)
             .listener(onSuccess = { _, result ->
-                val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                bitmap?.let { b ->
-                    Palette.from(b).generate { palette ->
-                        val colorInt = palette?.dominantSwatch?.rgb
-                            ?: palette?.vibrantSwatch?.rgb
-                            ?: palette?.mutedSwatch?.rgb
-                        colorInt?.let { dominantColor = Color(it) }
-                    }
+                colorScope.launch {
+                    dominantColor = DominantColorExtractor.extractSnappedNeon(
+                        drawable = result.drawable,
+                        fallback = TigerNeonOrange
+                    )
                 }
+            }, onError = { _, _ ->
+                dominantColor = TigerNeonOrange
             })
             .build()
     }
 
-    val accentColor = if (dominantColor == fallbackColor) SpotifyGreen else animatedDominantColor
+    val accentColor = animatedDominantColor
 
     LaunchedEffect(playlistId) {
         viewModel.fetchTracksForPlaylist(playlistId)
@@ -83,12 +83,7 @@ fun SpotifyPlaylistScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(animatedDominantColor.copy(alpha = 0.6f), fallbackColor),
-                        endY = 1500f
-                    )
-                )
+                .background(ambientBrush)
         )
 
         Scaffold(

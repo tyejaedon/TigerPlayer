@@ -77,6 +77,8 @@ fun HomeScreen(
     val homeState by viewModel.homeUiState.collectAsState()
 
     val artistDetails by viewModel.artistDetails.collectAsState()
+    val dashboardViewModel: DashboardViewModel = hiltViewModel()
+    val dashboardState by dashboardViewModel.uiState.collectAsState()
 
     var isStatsExpanded by remember { mutableStateOf(false) }
     var isSearchActive by remember { mutableStateOf(false) }
@@ -155,9 +157,8 @@ fun HomeScreen(
                     matchedArtists = matchedArtists,
                     matchedAlbums = matchedAlbums,
                     onNavigateToAlbum = onNavigateToAlbum,
-                    onNavigateToArtist = onNavigatetoArtist,
-                    artistDetails = artistDetails,
-                    onOptionsClick = { track -> searchTrackForOptions = track }
+                    onNavigatetoArtist = onNavigatetoArtist,
+                    artistDetails = artistDetails
                 )
             } else {
 
@@ -172,6 +173,14 @@ fun HomeScreen(
                 }
 
                 item { UserStatisticsHeader(statistics = homeState.statistics, onClick = { isStatsExpanded = true }) }
+
+                item {
+                    DashboardContainersSection(
+                        state = dashboardState,
+                        onTrackClick = { viewModel.playTrack(it) },
+                        onRefresh = { dashboardViewModel.refresh() }
+                    )
+                }
 
                 // 🔥 NEW: Constellation Gateway Portal
                 item {
@@ -239,7 +248,7 @@ fun HomeScreen(
                 searchTrackForOptions = null
             },
             onPlayNext = {
-                viewModel.addToQueue(selectedTrack)
+                viewModel.addNextToQueue(selectedTrack)
                 searchTrackForOptions = null // Close after action
             },
             onAddToPlaylist = { playlistId ->
@@ -253,10 +262,6 @@ fun HomeScreen(
                 viewModel.clearSearch()
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
-            },
-            onCreatePlaylist = { name ->
-                // 🔥 Link the "Forge" ritual to the Master ViewModel
-                viewModel.createPlaylist(name)
             }
         )
     }

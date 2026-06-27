@@ -2,11 +2,11 @@ package com.example.tigerplayer.data.repository
 
 import com.example.tigerplayer.data.local.MediaSource
 import com.example.tigerplayer.data.local.dao.ArtistStats
+import com.example.tigerplayer.data.local.dao.SonicFootprintStats
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,10 +15,14 @@ import javax.inject.Singleton
 class HistoryRepository @Inject constructor(
     private val tigerDao: TigerDao
 ) {
-    // Helper to get start of day without expensive Calendar objects
+    // Local midnight anchor used by home stats chips.
     private fun getStartOfToday(): Long {
-        val now = System.currentTimeMillis()
-        return now - (now % 86400000L) // Simple math to snap to UTC midnight
+        return Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
     }
 
     // --- 1. RECENT CHANTS ---
@@ -46,7 +50,7 @@ class HistoryRepository @Inject constructor(
 
     /**
      * Records a manifestation.
-     * Optimization: If duration is < 5s, we skip recording to avoid polluting stats with "skips".
+     * Optimization: If listened duration is < 7s, skip recording to avoid polluting stats with accidental transitions.
      */
     suspend fun addTrackToHistory(
         trackId: String,
@@ -54,10 +58,10 @@ class HistoryRepository @Inject constructor(
         artist: String,
         album: String,
         imageUrl: String?,
-        durationMs: Long,
+        listenedDurationMs: Long,
         source: MediaSource
     ) {
-        if (durationMs < 5000) return // Ignore brief skips
+        if (listenedDurationMs < 7000L) return // Ignore micro-skips and accidental transitions.
 
         val historyEntry = PlaybackHistoryEntity(
             trackId = trackId,
@@ -65,7 +69,7 @@ class HistoryRepository @Inject constructor(
             artist = artist,
             album = album,
             imageUrl = imageUrl,
-            durationListenedMs = durationMs,
+            durationListenedMs = listenedDurationMs,
             source = source,
             timestamp = System.currentTimeMillis()
         )
@@ -74,4 +78,7 @@ class HistoryRepository @Inject constructor(
 
     fun getTotalListeningTime(startTime: Long): Flow<Long?> =
         tigerDao.getTotalListeningTimeMs(startTime)
+
+    fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats> =
+        tigerDao.getSonicFootprintStats(startTime)
 }

@@ -9,6 +9,7 @@ import androidx.media3.common.util.UnstableApi
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.engine.AcousticNode
 import com.example.tigerplayer.engine.AdaptiveDspEngine
+import com.example.tigerplayer.engine.AudioReactiveFrame
 import com.example.tigerplayer.engine.FilterType
 import com.example.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,11 +34,18 @@ data class SpatialNode(
     val color: Color
 ) {
     fun toAcousticNode(): AcousticNode {
-        val gain = -(spatialPos.y * 15f)
-        val freqShift = 2.0.pow((spatialPos.x).toDouble()).toFloat()
-        val dynamicFreq = (baseFreq * freqShift).coerceIn(20f, 20000f)
-        val distance = sqrt(spatialPos.x.pow(2) + spatialPos.y.pow(2))
-        val q = 0.5f + (distance * 2f).coerceIn(0.1f, 4f)
+        val clampedX = spatialPos.x.coerceIn(-1f, 1f)
+        val clampedY = spatialPos.y.coerceIn(-1f, 1f)
+
+        // Exact log mapping from 20Hz -> 20kHz across X in [-1, 1].
+        val normalizedX = (clampedX + 1f) * 0.5f
+        val dynamicFreq = (20f * 1000f.pow(normalizedX)).coerceIn(20f, 20000f)
+
+        // Exact gain mapping: top is +15dB, center is 0dB, bottom is -15dB.
+        val gain = (-clampedY * 15f).coerceIn(-15f, 15f)
+
+        val distance = sqrt(clampedX.pow(2) + clampedY.pow(2))
+        val q = (0.7f + (distance * 2.3f)).coerceIn(0.7f, 4.2f)
 
         return AcousticNode(id, label, type, dynamicFreq, gain, q)
     }
@@ -46,7 +54,8 @@ data class SpatialNode(
 data class AuralNexusState(
     val nodes: List<SpatialNode> = emptyList(),
     val currentMood: String = "Neural Adaptive",
-    val frequencyResponseCurve: List<Offset> = emptyList()
+    val frequencyResponseCurve: List<Offset> = emptyList(),
+    val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame()
 )
 
 @HiltViewModel
@@ -63,13 +72,20 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
 
     init {
         val defaultNodes = listOf(
-            SpatialNode("sub", "Sub-Bass", FilterType.LOW_SHELF, 60f, Offset(-0.6f, 0.2f), Color(0xFFFF5252)),
-            SpatialNode("warmth", "Warmth", FilterType.PEAKING, 250f, Offset(-0.3f, -0.1f), Color(0xFFFFD700)),
-            SpatialNode("vocal", "Presence", FilterType.PEAKING, 3500f, Offset(0.3f, -0.4f), Color(0xFF4FC3F7)),
-            SpatialNode("air", "Air", FilterType.HIGH_SHELF, 12000f, Offset(0.6f, -0.2f), Color(0xFFB388FF))
+            SpatialNode("sub", "Sub-Bass", FilterType.LOW_SHELF, 60f, Offset(-0.6f, 0.2f), Color(0xFFFFD500)),
+            SpatialNode("warmth", "Warmth", FilterType.PEAKING, 250f, Offset(-0.3f, -0.1f), Color(0xFFFF007F)),
+            SpatialNode("vocal", "Presence", FilterType.PEAKING, 3500f, Offset(0.3f, -0.4f), Color(0xFF00E5FF)),
+            SpatialNode("air", "Air", FilterType.HIGH_SHELF, 12000f, Offset(0.6f, -0.2f), Color(0xFF39FF14))
         )
 
         _uiState.value = AuralNexusState(nodes = defaultNodes)
+
+        viewModelScope.launch {
+            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
+                _uiState.value = _uiState.value.copy(audioReactiveFrame = frame)
+            }
+        }
+
         updateDspAndVisuals()
     }
 
@@ -114,8 +130,12 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
     }
 
     fun moveNode(nodeId: String, newSpatialPos: Offset) {
+        val clamped = Offset(
+            x = newSpatialPos.x.coerceIn(-1f, 1f),
+            y = newSpatialPos.y.coerceIn(-1f, 1f)
+        )
         val updatedNodes = _uiState.value.nodes.map {
-            if (it.id == nodeId) it.copy(spatialPos = newSpatialPos) else it
+            if (it.id == nodeId) it.copy(spatialPos = clamped) else it
         }
         _uiState.value = _uiState.value.copy(nodes = updatedNodes, currentMood = "Custom Shape")
         updateDspAndVisuals()

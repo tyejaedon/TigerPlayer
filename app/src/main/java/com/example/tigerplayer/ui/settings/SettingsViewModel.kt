@@ -13,11 +13,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.SessionCommand
+import com.example.tigerplayer.engine.AcousticEnvironmentMode
 import com.example.tigerplayer.data.repository.LyricsRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.service.AudioPlayerService
 import com.example.tigerplayer.service.MediaControllerManager
+import com.example.tigerplayer.ui.theme.NeonContrastMode
+import com.example.tigerplayer.ui.theme.NeonIntensityMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +60,50 @@ class SettingsViewModel @Inject constructor(
             initialValue = true
         )
 
+    val acousticEnvironmentMode: StateFlow<AcousticEnvironmentMode> = dataStore.data
+        .map { pref ->
+            val raw = pref[ACOUSTIC_ENVIRONMENT_KEY] ?: AcousticEnvironmentMode.OFF.name
+            runCatching { AcousticEnvironmentMode.valueOf(raw) }
+                .getOrDefault(AcousticEnvironmentMode.OFF)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AcousticEnvironmentMode.OFF
+        )
+
+    val flowStateCrossfadeEnabled: StateFlow<Boolean> = dataStore.data
+        .map { pref -> pref[FLOW_STATE_CROSSFADE_KEY] ?: true }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
+    val neonContrastMode: StateFlow<NeonContrastMode> = dataStore.data
+        .map { preferences ->
+            val modeName = preferences[NEON_CONTRAST_MODE_KEY] ?: NeonContrastMode.BALANCED.name
+            runCatching { NeonContrastMode.valueOf(modeName) }
+                .getOrDefault(NeonContrastMode.BALANCED)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = NeonContrastMode.BALANCED
+        )
+
+    val neonIntensityMode: StateFlow<NeonIntensityMode> = dataStore.data
+        .map { preferences ->
+            val modeName = preferences[NEON_INTENSITY_MODE_KEY] ?: NeonIntensityMode.BALANCED.name
+            runCatching { NeonIntensityMode.valueOf(modeName) }
+                .getOrDefault(NeonIntensityMode.BALANCED)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = NeonIntensityMode.BALANCED
+        )
+
     @OptIn(UnstableApi::class)
     fun toggleBitPerfect() {
         viewModelScope.launch {
@@ -68,6 +115,33 @@ class SettingsViewModel @Inject constructor(
                 SessionCommand(AudioPlayerService.ACTION_TOGGLE_DSP, Bundle.EMPTY),
                 Bundle.EMPTY
             )
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    fun setAcousticEnvironmentMode(mode: AcousticEnvironmentMode) {
+        viewModelScope.launch {
+            dataStore.edit { pref ->
+                pref[ACOUSTIC_ENVIRONMENT_KEY] = mode.name
+            }
+
+            val args = Bundle().apply {
+                putString(AudioPlayerService.EXTRA_ACOUSTIC_ENVIRONMENT_MODE, mode.name)
+            }
+
+            mediaControllerManager.mediaController?.sendCustomCommand(
+                SessionCommand(AudioPlayerService.ACTION_SET_ACOUSTIC_ENVIRONMENT, Bundle.EMPTY),
+                args
+            )
+        }
+    }
+
+    fun setFlowStateCrossfadeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStore.edit { pref ->
+                pref[FLOW_STATE_CROSSFADE_KEY] = enabled
+            }
+            mediaControllerManager.setFlowStateCrossfadeEnabled(enabled)
         }
     }
 
@@ -95,9 +169,30 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setNeonContrastMode(mode: NeonContrastMode) {
+        viewModelScope.launch {
+            dataStore.edit { preferences ->
+                preferences[NEON_CONTRAST_MODE_KEY] = mode.name
+            }
+        }
+    }
+
+    fun setNeonIntensityMode(mode: NeonIntensityMode) {
+        viewModelScope.launch {
+            dataStore.edit { preferences ->
+                preferences[NEON_INTENSITY_MODE_KEY] = mode.name
+            }
+        }
+    }
+
     // --- CACHE & STORAGE ---
     init {
         calculateTotalCache()
+        viewModelScope.launch {
+            flowStateCrossfadeEnabled.collect { enabled ->
+                mediaControllerManager.setFlowStateCrossfadeEnabled(enabled)
+            }
+        }
     }
 
     private fun calculateTotalCache() {
@@ -148,6 +243,10 @@ class SettingsViewModel @Inject constructor(
 
     companion object {
         private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
+        private val NEON_CONTRAST_MODE_KEY = stringPreferencesKey("neon_contrast_mode")
+        private val NEON_INTENSITY_MODE_KEY = stringPreferencesKey("neon_intensity_mode")
         private val BIT_PERFECT_KEY = booleanPreferencesKey("bit_perfect_mode")
+        private val ACOUSTIC_ENVIRONMENT_KEY = stringPreferencesKey("acoustic_environment_mode")
+        private val FLOW_STATE_CROSSFADE_KEY = booleanPreferencesKey("flow_state_crossfade_enabled")
     }
 }

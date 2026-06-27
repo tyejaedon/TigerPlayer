@@ -38,11 +38,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.PremiumGlassCard
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -111,17 +110,13 @@ fun MiniPlayer(
                 )
             )
 
-            Box(
+            PremiumGlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(82.dp)
                     .padding(horizontal = 12.dp, vertical = 6.dp)
                     .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                     .shadow(24.dp, RoundedCornerShape(24.dp), spotColor = actionColor.copy(alpha = 0.3f))
-                    .clip(RoundedCornerShape(24.dp))
-                    .glassEffect(RoundedCornerShape(24.dp))
-                    .background(glassBg)
-                    .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
                     .pointerInput(track.id) {
                         detectTapGestures(
                             onTap = { onExpandClick() },
@@ -172,8 +167,15 @@ fun MiniPlayer(
                                 }
                             }
                         )
-                    }
+                    },
+                shape = RoundedCornerShape(24.dp)
             ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(glassBg)
+                        .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+                ) {
                 // --- 1. NEON THREAD PROGRESS LINE ---
                 Canvas(
                     modifier = Modifier
@@ -324,6 +326,7 @@ fun MiniPlayer(
                             )
                         }
                     }
+                }
                 }
             }
         }

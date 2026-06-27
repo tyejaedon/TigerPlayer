@@ -34,6 +34,7 @@ import com.example.tigerplayer.ui.main.MainScreen
 import com.example.tigerplayer.ui.permissions.PermissionScreen
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.settings.SettingsScreen
+import com.example.tigerplayer.ui.home.SonicFootprintScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -175,7 +176,14 @@ fun TigerPlayerNavGraph(
         // ----------------------------------
 
         composable(Screen.Settings.route) {
-            SettingsScreen(onBackClick = { navController.popBackStack() })
+            SettingsScreen(
+                onBackClick = { navController.popBackStack() },
+                onOpenSonicFootprint = { navController.navigate(Screen.SonicFootprint.route) }
+            )
+        }
+
+        composable(Screen.SonicFootprint.route) {
+            SonicFootprintScreen(onBackClick = { navController.popBackStack() })
         }
 
         // ----------------------------------

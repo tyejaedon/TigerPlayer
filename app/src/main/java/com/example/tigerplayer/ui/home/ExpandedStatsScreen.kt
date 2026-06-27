@@ -56,7 +56,16 @@ fun ExpandedStatsScreen(
     onClose: () -> Unit
 ) {
     val statsState by viewModel.detailedStatsState.collectAsState()
-    val filters = listOf("Today", "This Week", "This Month", "Lifetime")
+    val filters = listOf(
+        "Today",
+        "This Week",
+        "Last 7 Days",
+        "This Month",
+        "Last 30 Days",
+        "Last 90 Days",
+        "This Year",
+        "Lifetime"
+    )
     val haptic = LocalHapticFeedback.current
 
     // --- SEARCH & SORT STATE ---
@@ -238,6 +247,13 @@ fun ExpandedStatsScreen(
                                     Text(text = animatedMins.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
                                     Text(text = "M", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 12.dp))
                                 }
+                                Text(
+                                    text = String.format("%.1f%% of lifetime listening", statsState.globalListeningSharePercent),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = AardBlue.copy(alpha = 0.9f),
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 10.dp)
+                                )
                             }
                         }
                     }
@@ -564,7 +580,11 @@ private fun StatRow(rank: Int, item: StatItem) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "${item.playCount} SUMMONS",
+                text = if (item.secondaryText.isNotBlank()) {
+                    "${item.playCount} SUMMONS • ${item.secondaryText.uppercase()}"
+                } else {
+                    "${item.playCount} SUMMONS"
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                 fontWeight = FontWeight.Black,

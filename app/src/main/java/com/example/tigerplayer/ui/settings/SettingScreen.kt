@@ -33,6 +33,9 @@ import com.example.tigerplayer.ui.equalizer.AuralNexusScreen
 import com.example.tigerplayer.ui.equalizer.AuralNexusViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.engine.AcousticEnvironmentMode
+import com.example.tigerplayer.ui.theme.NeonContrastMode
+import com.example.tigerplayer.ui.theme.NeonIntensityMode
 
 private val IgniRed = Color(0xFFF11F1A)
 private val AardBlue = Color(0xFF4FC3F7)
@@ -42,15 +45,21 @@ private val BitPerfectGold = Color(0xFFFFD700)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onOpenSonicFootprint: () -> Unit = {}
 ) {
     // Collect variables safely conforming to the lifecycles of background service environments
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val cacheSize by viewModel.cacheSizeFormatted.collectAsStateWithLifecycle()
     val isBp by viewModel.isBitPerfect.collectAsStateWithLifecycle()
+    val acousticEnvironmentMode by viewModel.acousticEnvironmentMode.collectAsStateWithLifecycle()
+    val flowStateCrossfadeEnabled by viewModel.flowStateCrossfadeEnabled.collectAsStateWithLifecycle()
+    val neonContrastMode by viewModel.neonContrastMode.collectAsStateWithLifecycle()
+    val neonIntensityMode by viewModel.neonIntensityMode.collectAsStateWithLifecycle()
 
     var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
     var showAuralNexusScreen by remember { mutableStateOf(false) }
+    var showAcousticEnvironmentScreen by remember { mutableStateOf(false) }
     var showSpotifyLogoutConfirm by remember { mutableStateOf(false) } // Safety confirmation state
 
     val scrollState = rememberScrollState()
@@ -94,6 +103,28 @@ fun SettingsScreen(
                     ThemePreferenceSelector(
                         currentMode = themeMode,
                         onModeSelected = { viewModel.setThemeMode(it) }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    NeonContrastSelector(
+                        currentMode = neonContrastMode,
+                        onModeSelected = viewModel::setNeonContrastMode
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    NeonIntensitySelector(
+                        currentMode = neonIntensityMode,
+                        onModeSelected = viewModel::setNeonIntensityMode
+                    )
+                }
+
+                SettingsSection(title = "SONIC FOOTPRINT", icon = Icons.Rounded.Tune) {
+                    PreferenceRow(
+                        title = "On-Device Wrapped",
+                        subtitle = "Radar profile of your listening DNA",
+                        action = {
+                            TextButton(onClick = onOpenSonicFootprint) {
+                                Text("OPEN", fontWeight = FontWeight.Black)
+                            }
+                        }
                     )
                 }
 
@@ -163,6 +194,39 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    PreferenceRow(
+                        title = "Acoustic Environment",
+                        subtitle = when (acousticEnvironmentMode) {
+                            AcousticEnvironmentMode.OFF -> "Neutral"
+                            AcousticEnvironmentMode.VINYL_WARMTH -> "Vinyl Warmth"
+                            AcousticEnvironmentMode.CONCERT_HALL -> "Concert Hall"
+                        },
+                        action = {
+                            TextButton(onClick = { showAcousticEnvironmentScreen = true }) {
+                                Text("OPEN", fontWeight = FontWeight.Black)
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    PreferenceRow(
+                        title = "Flow State Crossfade",
+                        subtitle = if (flowStateCrossfadeEnabled) {
+                            "Enabled - dynamic 7s tail fade"
+                        } else {
+                            "Disabled - instant full-volume transitions"
+                        },
+                        action = {
+                            Switch(
+                                checked = flowStateCrossfadeEnabled,
+                                onCheckedChange = viewModel::setFlowStateCrossfadeEnabled
+                            )
+                        }
+                    )
                 }
 
                 // --- SECTION: REMOTE SERVICES ---
@@ -214,6 +278,19 @@ fun SettingsScreen(
             AuralNexusScreen(
                 viewModel = auralNexusViewModel,
                 onClose = { showAuralNexusScreen = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showAcousticEnvironmentScreen,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            AcousticEnvironmentScreen(
+                selectedMode = acousticEnvironmentMode,
+                onModeSelected = viewModel::setAcousticEnvironmentMode,
+                onBack = { showAcousticEnvironmentScreen = false }
             )
         }
 
@@ -276,6 +353,84 @@ fun ThemePreferenceSelector(currentMode: ThemeMode, onModeSelected: (ThemeMode) 
             ThemeOption("Light", currentMode == ThemeMode.LIGHT, { onModeSelected(ThemeMode.LIGHT) }, Modifier.weight(1f))
             ThemeOption("Dark", currentMode == ThemeMode.DARK, { onModeSelected(ThemeMode.DARK) }, Modifier.weight(1f))
             ThemeOption("System", currentMode == ThemeMode.SYSTEM, { onModeSelected(ThemeMode.SYSTEM) }, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+fun NeonContrastSelector(
+    currentMode: NeonContrastMode,
+    onModeSelected: (NeonContrastMode) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassEffect(shape = MaterialTheme.shapes.large)
+            .padding(20.dp)
+    ) {
+        Text("Neon Contrast", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Balanced keeps clean readability. High amplifies glow and neon edge intensity.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeOption(
+                label = "Balanced",
+                isSelected = currentMode == NeonContrastMode.BALANCED,
+                onClick = { onModeSelected(NeonContrastMode.BALANCED) },
+                modifier = Modifier.weight(1f)
+            )
+            ThemeOption(
+                label = "High",
+                isSelected = currentMode == NeonContrastMode.HIGH,
+                onClick = { onModeSelected(NeonContrastMode.HIGH) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+fun NeonIntensitySelector(
+    currentMode: NeonIntensityMode,
+    onModeSelected: (NeonIntensityMode) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassEffect(shape = MaterialTheme.shapes.large)
+            .padding(20.dp)
+    ) {
+        Text("Neon Intensity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Soft tones down glow, Balanced is default, High boosts ambient and fluid tint power.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeOption(
+                label = "Soft",
+                isSelected = currentMode == NeonIntensityMode.SOFT,
+                onClick = { onModeSelected(NeonIntensityMode.SOFT) },
+                modifier = Modifier.weight(1f)
+            )
+            ThemeOption(
+                label = "Balanced",
+                isSelected = currentMode == NeonIntensityMode.BALANCED,
+                onClick = { onModeSelected(NeonIntensityMode.BALANCED) },
+                modifier = Modifier.weight(1f)
+            )
+            ThemeOption(
+                label = "High",
+                isSelected = currentMode == NeonIntensityMode.HIGH,
+                onClick = { onModeSelected(NeonIntensityMode.HIGH) },
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
