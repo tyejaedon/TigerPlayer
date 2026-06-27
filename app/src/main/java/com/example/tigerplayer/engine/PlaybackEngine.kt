@@ -69,13 +69,12 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun playTrack(track: AudioTrack, libraryTracks: List<AudioTrack>) {
-        val isSpotifyTrack = track.id.startsWith("spotify:")
-        if (isSpotifyTrack) {
+        if (PlaybackEngineRouting.targetForTrackId(track.id) == PlaybackTarget.SPOTIFY) {
             mediaControllerManager.pause()
             spotifyRepository.playUri(track.id)
         } else {
             spotifyRepository.pause()
-            val startIndex = libraryTracks.indexOf(track).coerceAtLeast(0)
+            val startIndex = PlaybackEngineRouting.playlistStartIndex(track.id, libraryTracks.map { it.id })
             mediaControllerManager.setPlaylistAndPlay(
                 libraryTracks,
                 startIndex
@@ -84,8 +83,7 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun togglePlayPause(currentTrack: AudioTrack?, isCurrentlyPlaying: Boolean) {
-        val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
-        if (isSpotify) {
+        if (PlaybackEngineRouting.targetForTrackId(currentTrack?.id) == PlaybackTarget.SPOTIFY) {
             if (isCurrentlyPlaying) spotifyRepository.pause() else spotifyRepository.resume()
         } else {
             if (isCurrentlyPlaying) mediaControllerManager.pause() else mediaControllerManager.resume()
@@ -93,13 +91,15 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun seekTo(position: Long, currentTrack: AudioTrack?) {
-        val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
-        if (isSpotify) spotifyRepository.seekTo(position) else mediaControllerManager.seekTo(position)
+        if (PlaybackEngineRouting.targetForTrackId(currentTrack?.id) == PlaybackTarget.SPOTIFY) {
+            spotifyRepository.seekTo(position)
+        } else {
+            mediaControllerManager.seekTo(position)
+        }
     }
 
     fun toggleShuffle(currentTrack: AudioTrack?) {
-        val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
-        if (isSpotify) {
+        if (PlaybackEngineRouting.targetForTrackId(currentTrack?.id) == PlaybackTarget.SPOTIFY) {
             spotifyRepository.toggleShuffle()
         } else {
             mediaControllerManager.toggleShuffleMode()
@@ -107,8 +107,7 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun toggleRepeat(currentTrack: AudioTrack?) {
-        val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
-        if (isSpotify) {
+        if (PlaybackEngineRouting.targetForTrackId(currentTrack?.id) == PlaybackTarget.SPOTIFY) {
             spotifyRepository.toggleRepeat()
         } else {
             mediaControllerManager.toggleRepeatMode()
@@ -124,18 +123,23 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun skipToNext(currentTrack: AudioTrack?) {
-        val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
-        if (isSpotify) spotifyRepository.skipNext() else mediaControllerManager.skipToNext()
+        if (PlaybackEngineRouting.targetForTrackId(currentTrack?.id) == PlaybackTarget.SPOTIFY) {
+            spotifyRepository.skipNext()
+        } else {
+            mediaControllerManager.skipToNext()
+        }
     }
 
     fun skipToPrevious(currentTrack: AudioTrack?) {
-        val isSpotify = currentTrack?.id?.startsWith("spotify:") == true
-        if (isSpotify) spotifyRepository.skipPrevious() else mediaControllerManager.skipToPrevious()
+        if (PlaybackEngineRouting.targetForTrackId(currentTrack?.id) == PlaybackTarget.SPOTIFY) {
+            spotifyRepository.skipPrevious()
+        } else {
+            mediaControllerManager.skipToPrevious()
+        }
     }
 
     fun addToQueue(track: AudioTrack) {
-        val isSpotify = track.id.startsWith("spotify:")
-        if (isSpotify) {
+        if (PlaybackEngineRouting.targetForTrackId(track.id) == PlaybackTarget.SPOTIFY) {
             Log.w("TigerPlayer", "Spotify queueing requires extended API access.")
         } else {
             mediaControllerManager.addToQueue(track)
@@ -143,8 +147,7 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun addNextToQueue(track: AudioTrack) {
-        val isSpotify = track.id.startsWith("spotify:")
-        if (isSpotify) {
+        if (PlaybackEngineRouting.targetForTrackId(track.id) == PlaybackTarget.SPOTIFY) {
             Log.w("TigerPlayer", "Spotify queueing requires extended API access.")
         } else {
             mediaControllerManager.playNext(track)

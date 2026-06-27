@@ -2,6 +2,13 @@
 package com.example.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.media.AudioAttributes
+import android.os.Build
+import android.os.CombinedVibration
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -36,6 +43,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -70,12 +78,14 @@ import com.example.tigerplayer.ui.theme.LocalTigerNeonContrastMode
 import com.example.tigerplayer.ui.theme.LocalTigerNeonIntensityMode
 import com.example.tigerplayer.ui.theme.NeonContrastMode
 import com.example.tigerplayer.ui.theme.NeonIntensityMode
+import com.example.tigerplayer.ui.theme.TigerNeonOrange
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.igniRed
 import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import com.example.tigerplayer.ui.theme.tigerGlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -929,7 +939,9 @@ fun QueueDisplay(
         return
     }
 
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val vanguardVibration = remember(context) { FullQueueVibration(context) }
     val scope = rememberCoroutineScope()
     val itemHeightPx = with(LocalDensity.current) { 74.dp.toPx() }
     val reorderStepThresholdPx = itemHeightPx * 0.55f
@@ -942,18 +954,30 @@ fun QueueDisplay(
     var draggedDistance by remember { mutableFloatStateOf(0f) }
     var lastAutoScrollTs by remember { mutableLongStateOf(0L) }
     var lastHapticTickTs by remember { mutableLongStateOf(0L) }
-    val dropTargetIndex = if (dragStartIndex == -1 || dragCurrentIndex == -1) {
-        -1
-    } else {
-        when {
-            draggedDistance > reorderStepThresholdPx * 0.28f -> {
-                (dragCurrentIndex + 1).coerceAtMost(localQueue.size)
-            }
-            draggedDistance < -reorderStepThresholdPx * 0.28f -> {
-                dragCurrentIndex.coerceAtLeast(0)
-            }
-            else -> {
-                dragCurrentIndex.coerceAtLeast(0)
+    val dropTargetIndex by remember(
+        dragStartIndex,
+        dragCurrentIndex,
+        draggedDistance,
+        reorderStepThresholdPx,
+        localQueue.size
+    ) {
+        derivedStateOf {
+            if (dragStartIndex == -1 || dragCurrentIndex == -1) {
+                -1
+            } else {
+                when {
+                    draggedDistance > reorderStepThresholdPx * 0.28f -> {
+                        (dragCurrentIndex + 1).coerceAtMost(localQueue.size)
+                    }
+
+                    draggedDistance < -reorderStepThresholdPx * 0.28f -> {
+                        dragCurrentIndex.coerceAtLeast(0)
+                    }
+
+                    else -> {
+                        dragCurrentIndex.coerceAtLeast(0)
+                    }
+                }
             }
         }
     }
@@ -964,8 +988,10 @@ fun QueueDisplay(
         }
     }
 
-    val currentIndex = remember(localQueue, currentTrackId) {
-        localQueue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0)
+    val currentIndex by remember(localQueue, currentTrackId) {
+        derivedStateOf {
+            localQueue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0)
+        }
     }
 
     LaunchedEffect(currentTrackId, localQueue.size) {
@@ -1004,18 +1030,24 @@ fun QueueDisplay(
                     0
                 }
                 val rowScale by animateFloatAsState(
-                    targetValue = if (isDragging) 1.016f else 1f,
-                    animationSpec = tween(durationMillis = 140),
+                    targetValue = if (isDragging) 1.05f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
                     label = "FullQueueRowScale"
                 )
                 val rowElevation by animateDpAsState(
-                    targetValue = if (isDragging) 12.dp else 0.dp,
-                    animationSpec = tween(durationMillis = 140),
+                    targetValue = if (isDragging) 8.dp else 0.dp,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
                     label = "FullQueueRowElevation"
                 )
                 val handleTint by animateColorAsState(
-                    targetValue = if (isDragging) dynamicTextColor else dynamicTextColor.copy(alpha = 0.48f),
-                    animationSpec = tween(durationMillis = 140),
+                    targetValue = if (isDragging) TigerNeonOrange else dynamicTextColor.copy(alpha = 0.48f),
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
                     label = "FullQueueHandleTint"
                 )
                 val neighborOffsetY by animateDpAsState(
@@ -1024,7 +1056,10 @@ fun QueueDisplay(
                         1 -> 5.dp
                         else -> 0.dp
                     },
-                    animationSpec = tween(durationMillis = 150),
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
                     label = "FullQueueNeighborOffset"
                 )
 
@@ -1034,13 +1069,11 @@ fun QueueDisplay(
                     }
                     Surface(
                         modifier = Modifier
+                            .animateItem()
                             .fillMaxWidth()
-                            .shadow(rowElevation, RoundedCornerShape(16.dp), clip = false)
-                            .graphicsLayer {
-                                scaleX = rowScale
-                                scaleY = rowScale
-                            }
-                            .offset(y = neighborOffsetY)
+                            .fullQueueVanguardLift(isDragging = isDragging, scale = rowScale, elevation = rowElevation)
+                            .fullQueueVanguardGlow(isDragging = isDragging)
+                            .offset { IntOffset(x = 0, y = neighborOffsetY.roundToPx()) }
                             .clickable(enabled = !isDragging) { onTrackClick(index) },
                         color = Color.Transparent,
                         shape = RoundedCornerShape(16.dp)
@@ -1078,7 +1111,11 @@ fun QueueDisplay(
                                     contentDescription = "Reorder queue",
                                     tint = handleTint,
                                     modifier = Modifier
-                                        .padding(horizontal = 6.dp, vertical = 6.dp)
+                                        .background(
+                                            color = if (isDragging) TigerNeonOrange.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
                                         .pointerInput(index, localQueue.size, dragCurrentIndex) {
                                             detectDragGesturesAfterLongPress(
                                                 onDragStart = {
@@ -1087,18 +1124,21 @@ fun QueueDisplay(
                                                     draggedDistance = 0f
                                                     lastHapticTickTs = 0L
                                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                    vanguardVibration.onDragStart()
                                                 },
                                                 onDragEnd = {
                                                     if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
                                                         onMoveItem(dragStartIndex, dragCurrentIndex)
                                                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick)
                                                     }
+                                                    vanguardVibration.onDragEnd()
                                                     dragStartIndex = -1
                                                     dragCurrentIndex = -1
                                                     draggedDistance = 0f
                                                 },
                                                 onDragCancel = {
                                                     localQueue = queue
+                                                    vanguardVibration.onDragCancel()
                                                     dragStartIndex = -1
                                                     dragCurrentIndex = -1
                                                     draggedDistance = 0f
@@ -1125,6 +1165,7 @@ fun QueueDisplay(
                                                             draggedDistance -= direction * reorderStepThresholdPx
                                                             if (now - lastHapticTickTs >= 70L) {
                                                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                                vanguardVibration.onIndexCrossed()
                                                                 lastHapticTickTs = now
                                                             }
                                                         } else {
@@ -1192,6 +1233,78 @@ private fun FullQueueDropTargetIndicator(color: Color) {
                 shape = RoundedCornerShape(999.dp)
             )
     )
+}
+
+private fun Modifier.fullQueueVanguardLift(
+    isDragging: Boolean,
+    scale: Float,
+    elevation: androidx.compose.ui.unit.Dp
+): Modifier {
+    return this
+        .shadow(elevation, RoundedCornerShape(16.dp), clip = false)
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            alpha = if (isDragging) 1f else 0.98f
+        }
+}
+
+@Composable
+private fun Modifier.fullQueueVanguardGlow(isDragging: Boolean): Modifier {
+    return if (isDragging) {
+        this.tigerGlow(TigerNeonOrange.copy(alpha = 0.34f))
+    } else {
+        this
+    }
+}
+
+private class FullQueueVibration(context: Context) {
+    private val audioAttributes = AudioAttributes.Builder()
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+        .build()
+
+    private val vibratorManager: VibratorManager? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java)
+    } else {
+        null
+    }
+
+    @Suppress("DEPRECATION")
+    private val legacyVibrator: Vibrator? = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    } else {
+        null
+    }
+
+    fun onDragStart() = vibrate(strongEffect())
+
+    fun onDragEnd() = vibrate(strongEffect())
+
+    fun onDragCancel() = vibrate(softEffect())
+
+    fun onIndexCrossed() = vibrate(tickEffect())
+
+    private fun tickEffect(): VibrationEffect {
+        return VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+    }
+
+    private fun strongEffect(): VibrationEffect {
+        return VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
+    }
+
+    private fun softEffect(): VibrationEffect {
+        return VibrationEffect.createOneShot(12L, 120)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun vibrate(effect: VibrationEffect) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            vibratorManager?.vibrate(CombinedVibration.createParallel(effect))
+        } else {
+            legacyVibrator?.vibrate(effect, audioAttributes)
+        }
+    }
 }
 
 data class LyricLine(val timeMs: Long, val text: String)

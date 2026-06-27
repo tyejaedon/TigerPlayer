@@ -19,6 +19,7 @@ Deliver milestone-driven, production-ready feature increments while preserving a
 3. Use `Dispatchers.IO` for DB/network and `Dispatchers.Default` for heavy compute.
 4. Avoid placeholder logic for DSP math, SQL, and rendering passes.
 5. **After every execution, update `PENDING_TASKS.md` immediately.**
+6. **After each test run, write a report file named `report-(test type).md` (for example: `report-unit.md`, `report-androidTest.md`, `report-instrumentation.md`).**
 
 ## Mandatory Post-Execution Update (`PENDING_TASKS.md`)
 After each implementation step:

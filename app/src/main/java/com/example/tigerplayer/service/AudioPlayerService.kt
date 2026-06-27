@@ -251,13 +251,9 @@ class AudioPlayerService : MediaSessionService() {
 
         override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
             when (customCommand.customAction) {
-                CUSTOM_COMMAND_SHUFFLE -> player.shuffleModeEnabled = !player.shuffleModeEnabled
+                CUSTOM_COMMAND_SHUFFLE -> player.shuffleModeEnabled = PlaybackSemantics.toggledShuffle(player.shuffleModeEnabled)
                 CUSTOM_COMMAND_REPEAT -> {
-                    player.repeatMode = when (player.repeatMode) {
-                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                        else -> Player.REPEAT_MODE_OFF
-                    }
+                    player.repeatMode = PlaybackSemantics.nextRepeatMode(player.repeatMode)
                 }
                 ACTION_TOGGLE_DSP -> {
                     setAudioOffloadEnabled(!isBitPerfectMode)

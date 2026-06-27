@@ -49,6 +49,10 @@ Execution rule: after every implementation run, this file must be updated immedi
 - [x] Full Player queue upgraded with drag-handle long-press reorder + index-based queue seek, and artist-image backdrop rendering restored from metadata pipeline.
 - [x] Queue drag visual feedback polish pass applied (lifted dragged row, subtle shadow/scale, and active drag-handle tinting in Queue + Full Player queue views).
 - [x] Queue reorder affordance pass applied (between-row drop target indicator, neighbor offset animation, and throttled haptic ticks on long drags).
+ - [x] QueueScreen drag/drop persistence instrumentation tests added (absolute-index move callback coverage + local reorder persistence through host queue sync).
+- [x] Shuffle/repeat queue semantics validation added via shared playback semantics helpers and unit tests (repeat cycle, shuffle toggles, queue index/move bounds).
+	- [x] PlaybackEngine delegation/routing follow-up test pass added (Spotify-vs-local target resolution + playlist start-index fallback coverage).
+- [x] PlaybackEngine interaction-level delegation tests added (Spotify/local command dispatch verification for play, seek, shuffle/repeat, and queue actions).
 
 ### M3 - Apex DSP + Crossfade
 - [x] Acoustic Environments DSP mode added (`OFF`, `VINYL_WARMTH`, `CONCERT_HALL`).
@@ -126,7 +130,7 @@ Execution rule: after every implementation run, this file must be updated immedi
 
 **Description:** Harden queue UX and recommendation containers for predictable, resilient playback and discovery.
 
-**Stage:** In progress (queue/daylist UX + personalization generation are wired, including Full Player drag reorder, artist backdrop restore, drag-feedback polish, and stronger reorder affordances; shuffle/repeat validation, tail-ranking hardening, and automated tests remain).
+**Stage:** In progress (queue/daylist UX + personalization generation are wired, including Full Player drag reorder, artist backdrop restore, drag-feedback polish, stronger reorder affordances, QueueScreen drag/drop instrumentation coverage, and shuffle/repeat queue semantics validation; tail-ranking hardening and remaining day-segment SQL/recommendation tests remain).
 
 **Files edited so far:**
 - `app/src/main/java/com/example/tigerplayer/service/MediaControllerManager.kt`
@@ -151,10 +155,19 @@ Execution rule: after every implementation run, this file must be updated immedi
 - `app/src/main/java/com/example/tigerplayer/data/repository/MediaDataRepository.kt`
 - `app/src/main/java/com/example/tigerplayer/di/DiscoveryModule.kt`
 - `app/src/main/res/raw/global_trending_tracks.json`
+- `app/src/main/java/com/example/tigerplayer/ui/queue/QueueTestTags.kt`
+- `app/src/androidTest/java/com/example/tigerplayer/ui/queue/QueueScreenTest.kt`
+- `app/src/main/java/com/example/tigerplayer/service/PlaybackSemantics.kt`
+- `app/src/test/java/com/example/tigerplayer/service/PlaybackSemanticsTest.kt`
+- `app/src/main/java/com/example/tigerplayer/service/AudioPlayerService.kt`
+- `app/src/main/java/com/example/tigerplayer/engine/PlaybackEngineRouting.kt`
+- `app/src/test/java/com/example/tigerplayer/engine/PlaybackEngineRoutingTest.kt`
+- `app/src/test/java/com/example/tigerplayer/engine/PlaybackEngineDelegationTest.kt`
+- `app/build.gradle.kts`
 
 ### Issues
-- [ ] M2-01 Add QueueScreen instrumentation tests for drag/drop persistence.
-- [ ] M2-02 Validate queue semantics under shuffle/repeat edge cases.
+- [x] M2-01 Add QueueScreen instrumentation tests for drag/drop persistence.
+- [x] M2-02 Validate queue semantics under shuffle/repeat edge cases.
 - [ ] M2-03 Improve infinite tail candidate ranking and fallback behavior.
 - [ ] M2-04 Add Last.fm timeout/backoff handling for auto-append.
 - [x] M2-05 Add Daylist/Vault empty and stale data states.

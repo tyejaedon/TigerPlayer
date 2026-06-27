@@ -1,5 +1,13 @@
 package com.example.tigerplayer.ui.queue
 
+import android.content.Context
+import android.media.AudioAttributes
+import android.os.Build
+import android.os.CombinedVibration
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,13 +56,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,8 +73,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.theme.TigerNeonOrange
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.tigerGlow
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 
@@ -74,7 +88,31 @@ fun QueueScreen(
     val queue by viewModel.queueState.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentQueueTrackId.collectAsStateWithLifecycle()
     val isPlaying by viewModel.queueIsPlaying.collectAsStateWithLifecycle()
+
+    QueueScreenContent(
+        queue = queue,
+        currentTrackId = currentTrackId,
+        isPlaying = isPlaying,
+        onPlayQueueItem = viewModel::playQueueItem,
+        onRemoveFromQueue = viewModel::removeFromQueue,
+        onMoveQueueItem = viewModel::moveQueueItem,
+        modifier = modifier
+    )
+}
+
+@Composable
+internal fun QueueScreenContent(
+    queue: List<AudioTrack>,
+    currentTrackId: String?,
+    isPlaying: Boolean,
+    onPlayQueueItem: (Int) -> Unit,
+    onRemoveFromQueue: (AudioTrack) -> Unit,
+    onMoveQueueItem: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val vanguardVibration = remember(context) { VanguardQueueVibration(context) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val itemHeightPx = with(LocalDensity.current) { 76.dp.toPx() }
@@ -93,28 +131,48 @@ fun QueueScreen(
         return
     }
 
-    val currentIndex = queue.indexOfFirst { it.id == currentTrackId }
-        .takeIf { it >= 0 }
-        ?: 0
-    val nowPlaying = queue.getOrNull(currentIndex)
-    val upcoming = queue.drop((currentIndex + 1).coerceAtMost(queue.size))
+    val currentIndex by remember(queue, currentTrackId) {
+        derivedStateOf {
+            queue.indexOfFirst { it.id == currentTrackId }
+                .takeIf { it >= 0 }
+                ?: 0
+        }
+    }
+    val nowPlaying by remember(queue, currentIndex) {
+        derivedStateOf { queue.getOrNull(currentIndex) }
+    }
+    val upcoming by remember(queue, currentIndex) {
+        derivedStateOf { queue.drop((currentIndex + 1).coerceAtMost(queue.size)) }
+    }
 
     var localUpcoming by remember(upcoming) { mutableStateOf(upcoming) }
     var dragStartIndex by remember { mutableIntStateOf(-1) }
     var dragCurrentIndex by remember { mutableIntStateOf(-1) }
     var draggedDistance by remember { mutableFloatStateOf(0f) }
-    val dropTargetIndex = if (dragStartIndex == -1 || dragCurrentIndex == -1) {
-        -1
-    } else {
-        when {
-            draggedDistance > reorderStepThresholdPx * 0.28f -> {
-                (dragCurrentIndex + 1).coerceAtMost(localUpcoming.size)
-            }
-            draggedDistance < -reorderStepThresholdPx * 0.28f -> {
-                dragCurrentIndex.coerceAtLeast(0)
-            }
-            else -> {
-                dragCurrentIndex.coerceAtLeast(0)
+    val dropTargetIndex by remember(
+        dragStartIndex,
+        dragCurrentIndex,
+        draggedDistance,
+        reorderStepThresholdPx,
+        localUpcoming.size
+    ) {
+        derivedStateOf {
+            if (dragStartIndex == -1 || dragCurrentIndex == -1) {
+                -1
+            } else {
+                when {
+                    draggedDistance > reorderStepThresholdPx * 0.28f -> {
+                        (dragCurrentIndex + 1).coerceAtMost(localUpcoming.size)
+                    }
+
+                    draggedDistance < -reorderStepThresholdPx * 0.28f -> {
+                        dragCurrentIndex.coerceAtLeast(0)
+                    }
+
+                    else -> {
+                        dragCurrentIndex.coerceAtLeast(0)
+                    }
+                }
             }
         }
     }
@@ -128,6 +186,7 @@ fun QueueScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .testTag(QueueTestTags.SCREEN)
             .padding(horizontal = 16.dp)
             .padding(top = 16.dp)
     ) {
@@ -143,7 +202,7 @@ fun QueueScreen(
                 track = it,
                 isPlaying = isPlaying,
                 onClick = {
-                    viewModel.playQueueItem(currentIndex)
+                    onPlayQueueItem(currentIndex)
                 }
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -184,13 +243,15 @@ fun QueueScreen(
                             QueueDropTargetIndicator()
                         }
                         QueueRow(
-                            modifier = Modifier,
+                            modifier = Modifier.animateItem(),
+                            rowTestTag = QueueTestTags.row(index),
+                            dragHandleTestTag = QueueTestTags.dragHandle(index),
                             track = track,
                             isDragging = isDragging,
                             neighborDisplacement = neighborDisplacement,
                             onClick = {
                                 val absoluteIndex = currentIndex + 1 + index
-                                viewModel.playQueueItem(absoluteIndex)
+                                onPlayQueueItem(absoluteIndex)
                                 localUpcoming = localUpcoming.drop((index + 1).coerceAtMost(localUpcoming.size))
                             },
                             onRemove = {
@@ -199,7 +260,7 @@ fun QueueScreen(
                                     mutable.removeAt(index)
                                     localUpcoming = mutable
                                 }
-                                viewModel.removeFromQueue(track)
+                                onRemoveFromQueue(track)
                             },
                             dragHandleModifier = Modifier.pointerInput(index, localUpcoming.size) {
                                 detectDragGesturesAfterLongPress(
@@ -209,14 +270,16 @@ fun QueueScreen(
                                         draggedDistance = 0f
                                         lastHapticTickTs = 0L
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        vanguardVibration.onDragStart()
                                     },
                                     onDragEnd = {
                                         if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
                                             val from = currentIndex + 1 + dragStartIndex
                                             val to = currentIndex + 1 + dragCurrentIndex
-                                            viewModel.moveQueueItem(from, to)
+                                            onMoveQueueItem(from, to)
                                             haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                                         }
+                                        vanguardVibration.onDragEnd()
                                         dragStartIndex = -1
                                         dragCurrentIndex = -1
                                         draggedDistance = 0f
@@ -226,6 +289,7 @@ fun QueueScreen(
                                         dragStartIndex = -1
                                         dragCurrentIndex = -1
                                         draggedDistance = 0f
+                                        vanguardVibration.onDragCancel()
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
@@ -250,6 +314,7 @@ fun QueueScreen(
                                                 draggedDistance -= direction * reorderStepThresholdPx
                                                 if (now - lastHapticTickTs >= 70L) {
                                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    vanguardVibration.onIndexCrossed()
                                                     lastHapticTickTs = now
                                                 }
                                             } else {
@@ -377,6 +442,8 @@ private fun NowPlayingHeader(
 @Composable
 private fun QueueRow(
     modifier: Modifier = Modifier,
+    rowTestTag: String,
+    dragHandleTestTag: String,
     track: AudioTrack,
     isDragging: Boolean,
     neighborDisplacement: Int,
@@ -385,13 +452,19 @@ private fun QueueRow(
     dragHandleModifier: Modifier
 ) {
     val dragScale by animateFloatAsState(
-        targetValue = if (isDragging) 1.015f else 1f,
-        animationSpec = tween(durationMillis = 140),
+        targetValue = if (isDragging) 1.05f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "QueueRowDragScale"
     )
     val dragElevation by animateDpAsState(
-        targetValue = if (isDragging) 12.dp else 0.dp,
-        animationSpec = tween(durationMillis = 140),
+        targetValue = if (isDragging) 8.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
         label = "QueueRowDragElevation"
     )
     val neighborOffsetY by animateDpAsState(
@@ -400,32 +473,33 @@ private fun QueueRow(
             1 -> 5.dp
             else -> 0.dp
         },
-        animationSpec = tween(durationMillis = 150),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "QueueRowNeighborOffset"
     )
     val handleTint by animateColorAsState(
         targetValue = if (isDragging) {
-            MaterialTheme.colorScheme.primary
+            TigerNeonOrange
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         },
-        animationSpec = tween(durationMillis = 140),
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "QueueRowHandleTint"
     )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(dragElevation, RoundedCornerShape(16.dp), clip = false)
-            .graphicsLayer {
-                scaleX = dragScale
-                scaleY = dragScale
-            }
-            .offset(y = neighborOffsetY)
+            .testTag(rowTestTag)
+            .vanguardLift(isDragging = isDragging, liftScale = dragScale, liftElevation = dragElevation)
+            .vanguardDragGlow(isDragging = isDragging)
+            .offset { IntOffset(x = 0, y = neighborOffsetY.roundToPx()) }
             .clickable(enabled = !isDragging, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         color = if (isDragging) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+            TigerNeonOrange.copy(alpha = 0.20f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
         }
@@ -466,7 +540,13 @@ private fun QueueRow(
                 imageVector = WitcherIcons.Menu,
                 contentDescription = "Reorder queue",
                 tint = handleTint,
-                modifier = dragHandleModifier.padding(horizontal = 6.dp, vertical = 6.dp)
+                modifier = dragHandleModifier
+                    .testTag(dragHandleTestTag)
+                    .background(
+                        color = if (isDragging) TigerNeonOrange.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             )
             IconButton(onClick = onRemove) {
                 Icon(
@@ -475,6 +555,78 @@ private fun QueueRow(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+private fun Modifier.vanguardLift(
+    isDragging: Boolean,
+    liftScale: Float,
+    liftElevation: androidx.compose.ui.unit.Dp
+): Modifier {
+    return this
+        .shadow(liftElevation, RoundedCornerShape(16.dp), clip = false)
+        .graphicsLayer {
+            scaleX = liftScale
+            scaleY = liftScale
+            alpha = if (isDragging) 1f else 0.98f
+        }
+}
+
+@Composable
+private fun Modifier.vanguardDragGlow(isDragging: Boolean): Modifier {
+    return if (isDragging) {
+        this.tigerGlow(TigerNeonOrange.copy(alpha = 0.36f))
+    } else {
+        this
+    }
+}
+
+private class VanguardQueueVibration(context: Context) {
+    private val audioAttributes = AudioAttributes.Builder()
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+        .build()
+
+    private val vibratorManager: VibratorManager? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java)
+    } else {
+        null
+    }
+
+    @Suppress("DEPRECATION")
+    private val legacyVibrator: Vibrator? = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    } else {
+        null
+    }
+
+    fun onDragStart() = vibrate(strongEffect())
+
+    fun onDragEnd() = vibrate(strongEffect())
+
+    fun onDragCancel() = vibrate(softEffect())
+
+    fun onIndexCrossed() = vibrate(tickEffect())
+
+    private fun tickEffect(): VibrationEffect {
+        return VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+    }
+
+    private fun strongEffect(): VibrationEffect {
+        return VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
+    }
+
+    private fun softEffect(): VibrationEffect {
+        return VibrationEffect.createOneShot(12L, 120)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun vibrate(effect: VibrationEffect) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            vibratorManager?.vibrate(CombinedVibration.createParallel(effect))
+        } else {
+            legacyVibrator?.vibrate(effect, audioAttributes)
         }
     }
 }

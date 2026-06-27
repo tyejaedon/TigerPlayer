@@ -39,6 +39,7 @@ uiGraphics = "1.11.0"
 animationVersion = "1.11.2"
 youtubeextractor = "1.5.1"
 foundationLayout = "1.11.2"
+mockk = "1.14.11"
 
 [libraries]
 # Core & Lifecycle
@@ -103,6 +104,7 @@ animation = { group = "androidx.compose.animation", name = "animation", version.
 youtubeextractor = { module = "com.github.Yash-K-B:youtubeextractor", version.ref = "youtubeextractor" }
 youtubePlayer = { module = "com.pierfrancescosoffritti.androidyoutubeplayer:core", version.ref = "youtubePlayer" }
 androidx-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

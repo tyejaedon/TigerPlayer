@@ -268,7 +268,7 @@ class MediaControllerManager @Inject constructor(
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         val controller = mediaController ?: return
-        if (fromIndex in 0 until controller.mediaItemCount && toIndex in 0 until controller.mediaItemCount) {
+        if (PlaybackSemantics.canMoveQueueItem(fromIndex, toIndex, controller.mediaItemCount)) {
             controller.moveMediaItem(fromIndex, toIndex)
             saveCurrentState()
         }
@@ -276,7 +276,7 @@ class MediaControllerManager @Inject constructor(
 
     fun playQueueItem(index: Int) {
         val controller = mediaController ?: return
-        if (index !in 0 until controller.mediaItemCount) return
+        if (!PlaybackSemantics.isValidQueueIndex(index, controller.mediaItemCount)) return
 
         controller.seekToDefaultPosition(index)
         controller.volume = controller.volume.coerceAtLeast(FLOW_STATE_TAIL_VOLUME)
@@ -333,17 +333,13 @@ class MediaControllerManager @Inject constructor(
         // Let ExoPlayer handle the shuffle natively.
         // DO NOT manipulate the queue array, ExoPlayer manages this via an internal Index mapping.
         mediaController?.let {
-            it.shuffleModeEnabled = !it.shuffleModeEnabled
+            it.shuffleModeEnabled = PlaybackSemantics.toggledShuffle(it.shuffleModeEnabled)
         }
     }
 
     fun toggleRepeatMode() {
         mediaController?.let {
-            it.repeatMode = when (it.repeatMode) {
-                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                else -> Player.REPEAT_MODE_OFF
-            }
+            it.repeatMode = PlaybackSemantics.nextRepeatMode(it.repeatMode)
         }
     }
 

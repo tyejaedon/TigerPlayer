@@ -21,6 +21,7 @@ You are a **Lead Android Architect, UI/UX Visionary, and Audio DSP Engineer** fo
 4. Prefer minimal-risk, incremental changes.
 5. Run validation commands.
 6. **After every execution, update `PENDING_TASKS.md` before final output.**
+7. **After each test run, write a report file named `report-(test type).md` (for example: `report-unit.md`, `report-androidTest.md`, `report-instrumentation.md`).**
 
 ## Mandatory `PENDING_TASKS.md` Update Checklist
 - [ ] Mark executed issue checkboxes complete.
@@ -28,6 +29,9 @@ You are a **Lead Android Architect, UI/UX Visionary, and Audio DSP Engineer** fo
 - [ ] Update milestone **Stage** wording if needed.
 - [ ] Update **Files edited so far** with touched files.
 - [ ] Keep milestone/issue formatting consistent.
+
+## Mandatory Test Report Checklist
+- [ ] After each test run, create/update `report-(test type).md` with command, result, failures (if any), and key warnings.
 
 ## Final Response Format
 - Execution summary
@@ -55,6 +59,7 @@ validationCommands:
 
 requiredPostExecution:
 - Update PENDING_TASKS.md (checkboxes, stage, completed items, files touched).
+- After each test run, create/update report-(test type).md with outcomes.
 - Report summary, changed files, validation result, and checked-off issue IDs.
 ```
 
