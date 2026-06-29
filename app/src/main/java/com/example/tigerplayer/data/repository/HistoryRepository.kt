@@ -16,24 +16,32 @@ import javax.inject.Singleton
 class HistoryRepository @Inject constructor(
     private val tigerDao: TigerDao
 ) {
-    // Helper to get start of day without expensive Calendar objects
+    // Correctly snap to local midnight
     private fun getStartOfToday(): Long {
-        val now = System.currentTimeMillis()
-        return now - (now % 86400000L) // Simple math to snap to UTC midnight
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
+    }
+
+    fun getTimestampDaysAgo(days: Int): Long {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, -days)
+        return calendar.timeInMillis
     }
 
     // --- 1. RECENT CHANTS ---
     val recentTracks: Flow<List<PlaybackHistoryEntity>> = tigerDao.getRecentTracks()
 
     // --- 2. AGGREGATE POWER ---
-    val totalListeningTime: Flow<Long?> = tigerDao.getTotalListeningTimeMs()
+    val totalListeningTime: Flow<Long?> = tigerDao.getTotalListeningTimeMs(0L)
 
     // Today's stats refreshed automatically
     val listeningTimeToday: Flow<Long?> = tigerDao.getTotalListeningTimeMs(getStartOfToday())
 
     // --- 3. ANALYTICAL QUERIES ---
-
-    // Top Artist for the current day/week/month
     fun getTopArtist(startTime: Long = 0L): Flow<String?> = tigerDao.getTopArtist(startTime)
 
 
@@ -46,7 +54,6 @@ class HistoryRepository @Inject constructor(
         tigerDao.getTopGenreFootprint(startTime, limit)
 
     fun getAllTracksStats(): Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
-    val getAllTracks: Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
 
     /**
      * Records a manifestation.

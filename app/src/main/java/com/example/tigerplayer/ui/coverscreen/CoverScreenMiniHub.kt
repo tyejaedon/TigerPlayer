@@ -354,7 +354,7 @@ private fun CoverMicroWaveform(
             moveTo(0f, centerY)
             points.forEachIndexed { index, amp ->
                 val x = index * step
-                val oscillation = sin(phase + index * 0.42f).toFloat()
+                val oscillation = sin(phase + index * 0.42f)
                 val reactive = (amp * 0.65f + bass * 0.35f) * animatedEnergy
                 val y = centerY + oscillation * reactive * (size.height * 0.48f)
                 lineTo(x, y)

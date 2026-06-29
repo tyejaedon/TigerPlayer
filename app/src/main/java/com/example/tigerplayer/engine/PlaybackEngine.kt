@@ -155,6 +155,14 @@ class PlaybackEngine @Inject constructor(
         mediaControllerManager.removeFromQueue(track.id)
     }
 
+    fun playQueueItem(index: Int) {
+        val controller = mediaControllerManager.mediaController ?: return
+        if (index in 0 until controller.mediaItemCount) {
+            controller.seekTo(index, androidx.media3.common.C.TIME_UNSET)
+            controller.play()
+        }
+    }
+
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         mediaControllerManager.moveQueueItem(fromIndex, toIndex)
     }

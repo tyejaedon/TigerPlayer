@@ -7,7 +7,6 @@ import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.util.UnstableApi
-import com.example.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -48,12 +47,23 @@ class AdaptiveDspEngine @Inject constructor(
     private var inputAudioFormat = AudioFormat.NOT_SET
     private var outputAudioFormat = AudioFormat.NOT_SET
 
-    @Volatile private var activeFilters: List<BiquadFilter> = emptyList()
-    @Volatile private var deviceCompensationFilters: List<BiquadFilter> = emptyList()
+    @Volatile private var activeFilters: List<StateVariableFilter> = emptyList()
+    @Volatile private var deviceCompensationFilters: List<StateVariableFilter> = emptyList()
 
     private var isHeadphones = false
     private var agcEnvelope = 0f
+    private var agcAttackCoef = 0.01f
     private var agcReleaseCoef = 0.00005f
+
+    // LOOK-AHEAD BUFFER: 5ms at 48kHz is ~240 samples
+    private val lookAheadBufferL = FloatArray(512)
+    private val lookAheadBufferR = FloatArray(512)
+    private var lookAheadIndex = 0
+    private val lookAheadDelay = 240 // ~5ms at 48kHz
+
+    // TPDF DITHER SEEDS
+    private var ditherSeed1 = 0x12345678
+    private var ditherSeed2 = 0x87654321
 
     @Volatile private var pendingNodes: List<AcousticNode> = emptyList()
     @Volatile private var acousticEnvironmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.STUDIO
@@ -71,10 +81,21 @@ class AdaptiveDspEngine @Inject constructor(
     private var vinylNoiseSeed = 0x13579BDF.toInt()
     private var vinylNoiseDc = 0f
     private val hallProcessor = SchroederHallProcessor()
+    
+    // VINYL WOW LFO
+    private var vinylWowPhase = 0f
+    private val vinylWowFreq = 0.5f // 0.5 Hz Wow
+    private val vinylWowBufferL = FloatArray(1024)
+    private val vinylWowBufferR = FloatArray(1024)
+    private var vinylWowIndex = 0
+
+    // VINYL RIAA SHELF (SVF)
+    private var vinylShelf: StateVariableFilter? = null
 
     // Lightweight real-time spectrum approximation for visualizers.
     private var lpBass = 0f
     private var lpMid = 0f
+    private var lpTreble = 0f
     private var prevEnergy = 0f
     private var analysisFrameCounter = 0
     private var bassAccumulator = 0f
@@ -90,16 +111,49 @@ class AdaptiveDspEngine @Inject constructor(
         return normalized * 2f - 1f
     }
 
-    private fun applyVinylWarmth(sample: Float): Float {
-        val driven = (sample * 1.16f).coerceIn(-1.2f, 1.2f)
-        val softSaturation = driven - ((driven * driven * driven) / 3f)
-        val secondHarmonic = driven * abs(driven) * 0.055f
+    private fun applyVinylWarmth(sampleL: Float, sampleR: Float, channels: Int, sampleRate: Int): StereoFrame {
+        // 1. WOW LFO (Pitch Modulation)
+        vinylWowPhase += (2f * PI.toFloat() * vinylWowFreq) / sampleRate.toFloat()
+        if (vinylWowPhase > 2f * PI.toFloat()) vinylWowPhase -= 2f * PI.toFloat()
+        
+        val modulation = sin(vinylWowPhase) * 1.5f + 2.0f // 0.5 to 3.5 samples delay
+        
+        vinylWowBufferL[vinylWowIndex] = sampleL
+        vinylWowBufferR[vinylWowIndex] = sampleR
+        
+        val readIdx = (vinylWowIndex - modulation.toInt() + 1024) % 1024
+        val frac = modulation - modulation.toInt()
+        val nextIdx = (readIdx + 1) % 1024
+        
+        val wowL = vinylWowBufferL[readIdx] * (1f - frac) + vinylWowBufferL[nextIdx] * frac
+        val wowR = vinylWowBufferR[readIdx] * (1f - frac) + vinylWowBufferR[nextIdx] * frac
+        vinylWowIndex = (vinylWowIndex + 1) % 1024
 
-        val rawNoise = nextNoise() * 0.0016f
+        // 2. SATURATION (Non-linear)
+        val drive = 1.18f
+        val drivenL = (wowL * drive).coerceIn(-1.2f, 1.2f)
+        val softL = drivenL - ((drivenL * drivenL * drivenL) / 3f)
+        
+        val drivenR = (wowR * drive).coerceIn(-1.2f, 1.2f)
+        val softR = drivenR - ((drivenR * drivenR * drivenR) / 3f)
+
+        // 3. NOISE & HISS
+        val rawNoise = nextNoise() * 0.0018f
         vinylNoiseDc += (rawNoise - vinylNoiseDc) * 0.004f
         val hiss = rawNoise - vinylNoiseDc
 
-        return (sample * 0.84f + softSaturation * 0.13f + secondHarmonic + hiss).coerceIn(-1.15f, 1.15f)
+        // 4. RIAA / WARMTH SHELF
+        if (vinylShelf == null || vinylShelf?.sampleRate != sampleRate) {
+            vinylShelf = StateVariableFilter(FilterType.LOW_SHELF, sampleRate, 350f, 2.5f, 0.5f)
+        }
+        
+        var outL = (wowL * 0.82f + softL * 0.15f + hiss).coerceIn(-1.15f, 1.15f)
+        var outR = (wowR * 0.82f + softR * 0.15f + hiss).coerceIn(-1.15f, 1.15f)
+        
+        outL = vinylShelf!!.process(outL, 0)
+        if (channels == 2) outR = vinylShelf!!.process(outR, 1)
+
+        return StereoFrame(outL, outR)
     }
 
     init {
@@ -117,14 +171,15 @@ class AdaptiveDspEngine @Inject constructor(
         }
 
         val sampleRate = if (inputAudioFormat.sampleRate != AudioFormat.NOT_SET.sampleRate) inputAudioFormat.sampleRate else 48000
-        agcReleaseCoef = 2.4f / sampleRate.toFloat()
+        agcAttackCoef = 1f - exp(-1f / (sampleRate * 0.005f)) // 5ms attack
+        agcReleaseCoef = 1f - exp(-1f / (sampleRate * 0.250f)) // 250ms release
 
-        val newDeviceFilters = mutableListOf<BiquadFilter>()
+        val newDeviceFilters = mutableListOf<StateVariableFilter>()
         if (isBuiltIn) {
-            newDeviceFilters.add(BiquadFilter(FilterType.LOW_SHELF, sampleRate, 150f, -6f, 0.707f))
-            newDeviceFilters.add(BiquadFilter(FilterType.PEAKING, sampleRate, 2500f, 3f, 1.0f))
+            newDeviceFilters.add(StateVariableFilter(FilterType.LOW_SHELF, sampleRate, 150f, -6f, 0.707f))
+            newDeviceFilters.add(StateVariableFilter(FilterType.PEAKING, sampleRate, 2500f, 3f, 1.0f))
         } else if (isBluetooth) {
-            newDeviceFilters.add(BiquadFilter(FilterType.HIGH_SHELF, sampleRate, 12000f, 2.5f, 0.707f))
+            newDeviceFilters.add(StateVariableFilter(FilterType.HIGH_SHELF, sampleRate, 12000f, 2.5f, 0.707f))
         }
 
         deviceCompensationFilters = newDeviceFilters
@@ -141,7 +196,7 @@ class AdaptiveDspEngine @Inject constructor(
             }
         } else {
             activeFilters = nodes.map { node ->
-                BiquadFilter(node.filterType, sampleRate, node.frequency, node.gainDb, node.qFactor)
+                StateVariableFilter(node.filterType, sampleRate, node.frequency, node.gainDb, node.qFactor)
             }
         }
     }
@@ -151,6 +206,8 @@ class AdaptiveDspEngine @Inject constructor(
     }
 
     fun getAcousticEnvironmentMode(): AcousticEnvironmentMode = acousticEnvironmentMode
+
+    fun getSampleRate(): Int = if (inputAudioFormat.sampleRate != AudioFormat.NOT_SET.sampleRate) inputAudioFormat.sampleRate else 48000
 
     fun setPrismMode(mode: PrismMode) {
         prismMode = mode
@@ -219,14 +276,24 @@ class AdaptiveDspEngine @Inject constructor(
         val localPrismMode = prismMode
         val localPrismTargetMix = prismTargetMix
         val sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
-        val bassCoef = (90f / sampleRate).coerceIn(0.002f, 0.25f)
-        val midCoef = (1200f / sampleRate).coerceIn(0.002f, 0.35f)
+        val bassCoefA = 1f - exp(-1f / (sampleRate * 0.010f)) // 10ms attack
+        val bassCoefR = 1f - exp(-1f / (sampleRate * 0.080f)) // 80ms release
+        val midCoefA = 1f - exp(-1f / (sampleRate * 0.015f))
+        val midCoefR = 1f - exp(-1f / (sampleRate * 0.120f))
+        val trebleCoefA = 1f - exp(-1f / (sampleRate * 0.020f))
+        val trebleCoefR = 1f - exp(-1f / (sampleRate * 0.180f))
+
         val prismMixSmoothing = (36f / sampleRate).coerceIn(0.0008f, 0.05f)
 
         for (frame in 0 until framesToProcess) {
             var sampleL = shortBuffer.get().toFloat() / PCM_FLOAT
             var sampleR = if (channels == 2) shortBuffer.get().toFloat() / PCM_FLOAT else sampleL
 
+            // 1. INPUT LOOK-AHEAD WRITE
+            lookAheadBufferL[lookAheadIndex] = sampleL
+            lookAheadBufferR[lookAheadIndex] = sampleR
+
+            // 2. HEADPHONE WIDENING
             if (isHeadphones && channels == 2) {
                 val mid = (sampleL + sampleR) * 0.5f
                 val side = (sampleL - sampleR) * 0.5f
@@ -235,6 +302,7 @@ class AdaptiveDspEngine @Inject constructor(
                 sampleR = mid - widenedSide
             }
 
+            // 3. APPLY FILTERS (SVF)
             for (i in localDeviceFilters.indices) {
                 sampleL = localDeviceFilters[i].process(sampleL, 0)
                 if (channels == 2) sampleR = localDeviceFilters[i].process(sampleR, 1)
@@ -245,11 +313,13 @@ class AdaptiveDspEngine @Inject constructor(
                 if (channels == 2) sampleR = localActiveFilters[i].process(sampleR, 1)
             }
 
+            // 4. ACOUSTIC ENVIRONMENTS
             when (localEnvironmentMode) {
                 AcousticEnvironmentMode.STUDIO -> Unit
                 AcousticEnvironmentMode.VINYL_WARMTH -> {
-                    sampleL = applyVinylWarmth(sampleL)
-                    sampleR = if (channels == 2) applyVinylWarmth(sampleR) else sampleL
+                    val vinylFrame = applyVinylWarmth(sampleL, sampleR, channels, sampleRate)
+                    sampleL = vinylFrame.left
+                    sampleR = vinylFrame.right
                 }
                 AcousticEnvironmentMode.CONCERT_HALL -> {
                     hallProcessor.process(sampleL, sampleR, channels)
@@ -258,6 +328,7 @@ class AdaptiveDspEngine @Inject constructor(
                 }
             }
 
+            // 5. PRISM ISOLATION (Linkwitz-Riley)
             if (localPrismMode == PrismMode.ISOLATION) {
                 prismCurrentVocals += (localPrismTargetMix.vocals - prismCurrentVocals) * prismMixSmoothing
                 prismCurrentBeats += (localPrismTargetMix.beats - prismCurrentBeats) * prismMixSmoothing
@@ -275,17 +346,21 @@ class AdaptiveDspEngine @Inject constructor(
                 sampleR = prismFrame.right
             }
 
-            // Real-time automatic gain limiting (prevent clipping)
-            val maxPeak = max(abs(sampleL), abs(sampleR))
-            if (maxPeak > agcEnvelope) {
-                agcEnvelope = maxPeak
+            // 6. AGC / LIMITER (Look-ahead + Exponential Release)
+            val delayedL = lookAheadBufferL[(lookAheadIndex - lookAheadDelay + 512) % 512]
+            val delayedR = lookAheadBufferR[(lookAheadIndex - lookAheadDelay + 512) % 512]
+            lookAheadIndex = (lookAheadIndex + 1) % 512
+
+            val currentPeak = max(abs(sampleL), abs(sampleR))
+            if (currentPeak > agcEnvelope) {
+                agcEnvelope += agcAttackCoef * (currentPeak - agcEnvelope)
             } else {
-                agcEnvelope += agcReleaseCoef * (maxPeak - agcEnvelope)
+                agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
             }
 
             val reduction = if (agcEnvelope > 0.85f) 0.85f / agcEnvelope else 1f
-            sampleL *= reduction
-            sampleR *= reduction
+            sampleL = delayedL * reduction
+            sampleR = delayedR * reduction
 
             // Soft-clipping saturation function
             val clampL = sampleL.coerceIn(-1.25f, 1.25f)
@@ -294,13 +369,15 @@ class AdaptiveDspEngine @Inject constructor(
             val clampR = sampleR.coerceIn(-1.25f, 1.25f)
             sampleR = if (abs(clampR) > 1f) sign(clampR) else clampR - ((clampR * clampR * clampR) / 3f)
 
-            // --- Real-time band analysis used by waveform/vortex visualizers ---
+            // 7. REAL-TIME ANALYSIS (Envelope Followers)
             val mono = (sampleL + sampleR) * 0.5f
-            lpBass += bassCoef * (mono - lpBass)
-            lpMid += midCoef * (mono - lpMid)
-            val bass = abs(lpBass)
+            lpBass += (if (abs(mono) > lpBass) bassCoefA else bassCoefR) * (abs(mono) - lpBass)
+            lpMid += (if (abs(mono) > lpMid) midCoefA else midCoefR) * (abs(mono) - lpMid)
+            lpTreble += (if (abs(mono - lpMid) > lpTreble) trebleCoefA else trebleCoefR) * (abs(mono - lpMid) - lpTreble)
+            
+            val bass = lpBass
             val mid = abs(lpMid - lpBass)
-            val treble = abs(mono - lpMid)
+            val treble = lpTreble
             val energy = abs(mono)
 
             bassAccumulator += bass
@@ -337,9 +414,16 @@ class AdaptiveDspEngine @Inject constructor(
                 energyAccumulator = 0f
             }
 
-            outShortBuffer.put((sampleL * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
+            // 8. TPDF DITHERING (Final 16-bit Stage)
+            ditherSeed1 = ditherSeed1 * 1664525 + 1013904223
+            ditherSeed2 = ditherSeed2 * 1664525 + 1013904223
+            val rand1 = (ditherSeed1 shr 8 and 0x00FFFFFF) / 16777215f
+            val rand2 = (ditherSeed2 shr 8 and 0x00FFFFFF) / 16777215f
+            val tpdf = (rand1 + rand2 - 1f) / PCM_FLOAT
+
+            outShortBuffer.put(((sampleL + tpdf) * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
             if (channels == 2) {
-                outShortBuffer.put((sampleR * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
+                outShortBuffer.put(((sampleR + tpdf) * PCM_MAX_INT).toInt().coerceIn(PCM_MIN_INT, PCM_MAX_INT).toShort())
             }
         }
 
@@ -361,6 +445,7 @@ class AdaptiveDspEngine @Inject constructor(
         return inputEnded && outputBuffer === AudioProcessor.EMPTY_BUFFER
     }
 
+    @Suppress("DEPRECATION")
     override fun flush() {
         outputBuffer = AudioProcessor.EMPTY_BUFFER
         inputEnded = false
@@ -376,12 +461,22 @@ class AdaptiveDspEngine @Inject constructor(
         prismCurrentInstruments = prismTargetMix.instruments
         lpBass = 0f
         lpMid = 0f
+        lpTreble = 0f
         prevEnergy = 0f
         analysisFrameCounter = 0
         bassAccumulator = 0f
         midAccumulator = 0f
         trebleAccumulator = 0f
         energyAccumulator = 0f
+        
+        vinylWowPhase = 0f
+        vinylWowBufferL.fill(0f)
+        vinylWowBufferR.fill(0f)
+        vinylWowIndex = 0
+        
+        lookAheadBufferL.fill(0f)
+        lookAheadBufferR.fill(0f)
+        lookAheadIndex = 0
         _audioReactiveFrame.value = AudioReactiveFrame()
     }
 
@@ -403,6 +498,11 @@ private class SchroederHallProcessor {
     private var combIndexR = IntArray(0)
     private var combStoreL = FloatArray(0)
     private var combStoreR = FloatArray(0)
+    
+    // REVERB DAMPING: One-pole LPF states per comb filter
+    private var combDampL = FloatArray(0)
+    private var combDampR = FloatArray(0)
+    private val dampingFactor = 0.45f
 
     private var allPassL: Array<FloatArray> = emptyArray()
     private var allPassR: Array<FloatArray> = emptyArray()
@@ -424,6 +524,8 @@ private class SchroederHallProcessor {
         combIndexR = IntArray(combMs.size)
         combStoreL = FloatArray(combMs.size)
         combStoreR = FloatArray(combMs.size)
+        combDampL = FloatArray(combMs.size)
+        combDampR = FloatArray(combMs.size)
 
         allPassL = Array(allPassMs.size) { i -> FloatArray(((sampleRate * allPassMs[i]) / 1000f).toInt().coerceAtLeast(1)) }
         allPassR = Array(allPassMs.size) { i -> FloatArray(((sampleRate * (allPassMs[i] + 0.3f)) / 1000f).toInt().coerceAtLeast(1)) }
@@ -452,7 +554,7 @@ private class SchroederHallProcessor {
             diffuseIn,
             combL,
             combIndexL,
-            combStoreL,
+            combDampL,
             allPassL,
             allPassIndexL
         )
@@ -460,7 +562,7 @@ private class SchroederHallProcessor {
             diffuseIn,
             combR,
             combIndexR,
-            combStoreR,
+            combDampR,
             allPassR,
             allPassIndexR
         )
@@ -478,6 +580,8 @@ private class SchroederHallProcessor {
         combIndexR.fill(0)
         combStoreL.fill(0f)
         combStoreR.fill(0f)
+        combDampL.fill(0f)
+        combDampR.fill(0f)
         allPassIndexL.fill(0)
         allPassIndexR.fill(0)
         haasL.fill(0f)
@@ -506,7 +610,7 @@ private class SchroederHallProcessor {
         input: Float,
         comb: Array<FloatArray>,
         combIndices: IntArray,
-        combStore: FloatArray,
+        combDamp: FloatArray,
         allPass: Array<FloatArray>,
         allPassIndices: IntArray
     ): Float {
@@ -516,9 +620,11 @@ private class SchroederHallProcessor {
             val buffer = comb[i]
             val idx = combIndices[i]
             val delayed = buffer[idx]
-
-            combStore[i] += (delayed - combStore[i]) * 0.17f
-            buffer[idx] = input + combStore[i] * 0.79f
+            
+            // DAMPING RITUAL: Filter the feedback signal
+            combDamp[i] += (delayed - combDamp[i]) * dampingFactor
+            
+            buffer[idx] = input + combDamp[i] * 0.79f
             combIndices[i] = (idx + 1) % buffer.size
             sum += delayed
         }
@@ -556,79 +662,82 @@ data class AcousticNode(
 )
 
 /**
- * 🔒 THREAD-SAFE IMMUTABLE COEFFICIENT SWAPPER
- * This ensures parameters calculated on the CPU thread do not write-race
- * or split values while the Audio Processor is executing.
+ * 🎨 STATE VARIABLE FILTER (SVF)
+ * The Gold Standard for real-time studio equipment.
+ * Inherently stable, perfectly coherent, and allows smooth parameter sweeps
+ * without the "zipper noise" or "pops" of standard Biquads.
  */
-class BiquadFilter(
-    val type: FilterType, val sampleRate: Int,
-    initialFreq: Float, initialGain: Float, initialQ: Float
+class StateVariableFilter(
+    var type: FilterType,
+    val sampleRate: Int,
+    initialFreq: Float,
+    initialGain: Float,
+    initialQ: Float
 ) {
-    class Coefficients(
-        val b0: Float, val b1: Float, val b2: Float,
-        val a1: Float, val a2: Float
-    )
+    // Current parameters for smoothing
+    private var targetG = 0f
+    private var targetK = 0f
+    private var targetA = 0f
 
-    // Thread-shared pointer updated atomically
-    @Volatile private var currentTargetCoeffs: Coefficients
+    private var g = 0f
+    private var k = 0f
+    private var a = 0f
 
-    // Render-thread local parameters
-    private var b0 = 0f; private var b1 = 0f; private var b2 = 0f
-    private var a1 = 0f; private var a2 = 0f
-    private val z1 = FloatArray(2)
-    private val z2 = FloatArray(2)
+    // Internal state (integrators) per channel
+    private val ic1eq = FloatArray(2)
+    private val ic2eq = FloatArray(2)
 
     init {
-        val raw = BiquadDesigner.design(type, initialFreq, initialGain, initialQ, sampleRate.toFloat())
-        val a0 = raw.a0.toFloat()
-        currentTargetCoeffs = Coefficients(
-            b0 = (raw.b0 / a0).toFloat(),
-            b1 = (raw.b1 / a0).toFloat(),
-            b2 = (raw.b2 / a0).toFloat(),
-            a1 = (raw.a1 / a0).toFloat(),
-            a2 = (raw.a2 / a0).toFloat()
-        )
-        // Instant pop-free initialization
-        b0 = currentTargetCoeffs.b0
-        b1 = currentTargetCoeffs.b1
-        b2 = currentTargetCoeffs.b2
-        a1 = currentTargetCoeffs.a1
-        a2 = currentTargetCoeffs.a2
+        updateParameters(initialFreq, initialGain, initialQ, sampleRate)
+        // Instant init
+        g = targetG; k = targetK; a = targetA
     }
 
     fun updateParameters(freq: Float, gainDb: Float, q: Float, sampleRate: Int) {
-        val raw = BiquadDesigner.design(type, freq, gainDb, q, sampleRate.toFloat())
-        val a0 = raw.a0.toFloat()
-        // Atomic Volatile Swap
-        currentTargetCoeffs = Coefficients(
-            b0 = (raw.b0 / a0).toFloat(),
-            b1 = (raw.b1 / a0).toFloat(),
-            b2 = (raw.b2 / a0).toFloat(),
-            a1 = (raw.a1 / a0).toFloat(),
-            a2 = (raw.a2 / a0).toFloat()
-        )
+        val f = freq.coerceIn(20f, (sampleRate / 2f) * 0.9f)
+        val qVal = q.coerceIn(0.1f, 10f)
+        val gain = 10f.pow(gainDb / 40f)
+
+        targetG = tan(PI.toFloat() * f / sampleRate.toFloat())
+        targetK = 1f / qVal
+        targetA = gain
     }
 
     fun process(sample: Float, channel: Int): Float {
-        val target = currentTargetCoeffs // Read volatile reference exactly once per process frame
+        // Smooth parameters
+        val smooth = 0.003f
+        g += (targetG - g) * smooth
+        k += (targetK - k) * smooth
+        a += (targetA - a) * smooth
 
-        // Seamless real-time filter parameter interpolation (smoothing coefficient transitions)
-        val smooth = 0.0025f
-        b0 += (target.b0 - b0) * smooth
-        b1 += (target.b1 - b1) * smooth
-        b2 += (target.b2 - b2) * smooth
-        a1 += (target.a1 - a1) * smooth
-        a2 += (target.a2 - a2) * smooth
+        val a1 = 1f / (1f + g * (g + k))
+        val a2 = g * a1
+        val a3 = g * a2
 
-        val out = b0 * sample + z1[channel]
-        z1[channel] = b1 * sample - a1 * out + z2[channel]
-        z2[channel] = b2 * sample - a2 * out
-        return out
+        val v3 = sample - ic2eq[channel]
+        val v1 = a1 * ic1eq[channel] + a2 * v3
+        val v2 = ic2eq[channel] + a2 * ic1eq[channel] + a3 * v3
+
+        ic1eq[channel] = 2f * v1 - ic1eq[channel]
+        ic2eq[channel] = 2f * v2 - ic2eq[channel]
+
+        return when (type) {
+            FilterType.LOW_SHELF -> {
+                sample + (a - 1f) * v2
+            }
+            FilterType.PEAKING -> {
+                sample + k * (a - 1f) * v1
+            }
+            FilterType.HIGH_SHELF -> {
+                val hp = sample - k * v1 - v2
+                sample + (a - 1f) * hp
+            }
+        }
     }
 
     fun reset() {
-        z1.fill(0f)
-        z2.fill(0f)
+        ic1eq.fill(0f)
+        ic2eq.fill(0f)
     }
 }
 
@@ -637,33 +746,38 @@ internal data class StereoFrame(val left: Float, val right: Float)
 internal class PrismIsolator {
     private var sampleRateHz = 48_000f
 
-    // Vocals (center/mid): steep HP 200Hz + LP 3000Hz (two cascaded stages each)
-    private val vocalHp1 = MonoBiquad()
-    private val vocalHp2 = MonoBiquad()
-    private val vocalLp1 = MonoBiquad()
-    private val vocalLp2 = MonoBiquad()
-
-    // Beats/Bass: steep LP 150Hz
-    private val beatsLp1 = MonoBiquad()
-    private val beatsLp2 = MonoBiquad()
-
-    // Instruments from side channel: remove sub mud so side bed is cleaner.
-    private val sideHp1 = MonoBiquad()
-    private val sideHp2 = MonoBiquad()
+    // LINKWITZ-RILEY 4TH ORDER (LR4)
+    // Created by cascading two Butterworth filters (Q=0.707)
+    // Stage 1
+    private val lowLp1 = MonoBiquad()
+    private val lowLp2 = MonoBiquad()
+    
+    // Stage 2
+    private val midHp1 = MonoBiquad()
+    private val midHp2 = MonoBiquad()
+    private val midLp1 = MonoBiquad()
+    private val midLp2 = MonoBiquad()
+    
+    // Stage 3
+    private val highHp1 = MonoBiquad()
+    private val highHp2 = MonoBiquad()
 
     fun configure(sampleRate: Int) {
         sampleRateHz = sampleRate.toFloat().coerceAtLeast(8_000f)
 
-        vocalHp1.configureHighPass(sampleRateHz, 200f, 0.707f)
-        vocalHp2.configureHighPass(sampleRateHz, 200f, 0.707f)
-        vocalLp1.configureLowPass(sampleRateHz, 3000f, 0.707f)
-        vocalLp2.configureLowPass(sampleRateHz, 3000f, 0.707f)
+        // Crossover 1: 150 Hz
+        lowLp1.configureLowPass(sampleRateHz, 150f, 0.707f)
+        lowLp2.configureLowPass(sampleRateHz, 150f, 0.707f)
+        
+        midHp1.configureHighPass(sampleRateHz, 150f, 0.707f)
+        midHp2.configureHighPass(sampleRateHz, 150f, 0.707f)
 
-        beatsLp1.configureLowPass(sampleRateHz, 150f, 0.707f)
-        beatsLp2.configureLowPass(sampleRateHz, 150f, 0.707f)
-
-        sideHp1.configureHighPass(sampleRateHz, 180f, 0.707f)
-        sideHp2.configureHighPass(sampleRateHz, 180f, 0.707f)
+        // Crossover 2: 3000 Hz
+        midLp1.configureLowPass(sampleRateHz, 3000f, 0.707f)
+        midLp2.configureLowPass(sampleRateHz, 3000f, 0.707f)
+        
+        highHp1.configureHighPass(sampleRateHz, 3000f, 0.707f)
+        highHp2.configureHighPass(sampleRateHz, 3000f, 0.707f)
     }
 
     fun process(
@@ -680,12 +794,19 @@ internal class PrismIsolator {
         val mid = (left + stereoRight) * 0.5f
         val side = if (channels == 2) (left - stereoRight) * 0.5f else 0f
 
-        val vocals = vocalLp2.process(vocalLp1.process(vocalHp2.process(vocalHp1.process(mid))))
-        val beats = beatsLp2.process(beatsLp1.process(mid))
-        val instruments = sideHp2.process(sideHp1.process(side))
+        // SPLIT INTO BANDS (PHASE COHERENT LR4)
+        val low = lowLp2.process(lowLp1.process(mid))
+        
+        val midBandRaw = midHp2.process(midHp1.process(mid))
+        val vocals = midLp2.process(midLp1.process(midBandRaw))
+        
+        val highBandRaw = highHp2.process(highHp1.process(midBandRaw))
+        // High frequencies from Side channel for instruments
+        val instruments = highBandRaw + highHp2.process(highHp1.process(side))
 
-        // Recombine user-controlled stems back to stereo.
-        val outMid = vocals * vocalsGain + beats * beatsGain
+        // Recombine with gains
+        // In LR4, the crossover summation is perfectly flat.
+        val outMid = vocals * vocalsGain + low * beatsGain
         val outSide = instruments * instrumentsGain
 
         val outL = (outMid + outSide).coerceIn(-1.2f, 1.2f)
@@ -695,9 +816,10 @@ internal class PrismIsolator {
     }
 
     fun reset() {
-        vocalHp1.reset(); vocalHp2.reset(); vocalLp1.reset(); vocalLp2.reset()
-        beatsLp1.reset(); beatsLp2.reset()
-        sideHp1.reset(); sideHp2.reset()
+        lowLp1.reset(); lowLp2.reset()
+        midHp1.reset(); midHp2.reset()
+        midLp1.reset(); midLp2.reset()
+        highHp1.reset(); highHp2.reset()
     }
 }
 

@@ -26,6 +26,8 @@ import javax.inject.Inject
 
 enum class PlayerVisualMode { ARTWORK, WAVEFORM, VORTEX, SONIC_PRISM }
 
+enum class MainViewState { ARTWORK, LYRICS, QUEUE, YOUTUBE_VIEWPORT }
+
 data class LibraryArtist(
     val name: String,
     val trackCount: Int,
@@ -70,7 +72,8 @@ data class PlayerUiState(
     val queue: List<AudioTrack> = emptyList(),
     val visualMode: PlayerVisualMode = PlayerVisualMode.ARTWORK,
     val currentWaveform: List<Float> = emptyList(),
-    val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame()
+    val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame(),
+    val mainViewState: MainViewState = MainViewState.ARTWORK
 )
 
 @HiltViewModel
@@ -227,42 +230,44 @@ class PlayerViewModel @Inject constructor(
 
         // --- 5. THE TRACK TRANSITION RITUAL ---
         viewModelScope.launch {
-            mediaControllerManager.currentMediaId.collectLatest { mediaId ->
-                val allTracks = _uiState.value.tracks
-                val track = allTracks.find { it.id == mediaId }
+            combine(
+                mediaControllerManager.currentMediaId,
+                _uiState.map { it.tracks }.distinctUntilChanged()
+            ) { mediaId, allTracks ->
+                allTracks.find { it.id == mediaId }
+            }.filterNotNull()
+             .distinctUntilChanged { old, new -> old.id == new.id }
+             .collectLatest { track ->
+                _uiState.update {
+                    it.copy(
+                        currentTrack = track,
+                        currentLyrics = null,
+                        artistImageUrl = null,
+                        currentWaveform = emptyList()
+                    )
+                }
 
-                if (track != null && _uiState.value.currentTrack?.id != track.id) {
-                    _uiState.update {
-                        it.copy(
-                            currentTrack = track,
-                            currentLyrics = null,
-                            artistImageUrl = null,
-                            currentWaveform = emptyList()
-                        )
-                    }
+                metadataEngine.clearTrackMetadata()
+                metadataEngine.fetchTrackMetadata(track)
+                statsEngine.recordPlaybackHistory(track)
 
-                    metadataEngine.clearTrackMetadata()
-                    metadataEngine.fetchTrackMetadata(track)
-                    statsEngine.recordPlaybackHistory(track)
-
-                    if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
-                        viewModelScope.launch(Dispatchers.IO) {
-                            val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist, track.album)
-                            if (highResUri != null) {
-                                audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
-                                _uiState.update { state ->
-                                    if (state.currentTrack?.id == track.id) {
-                                        state.copy(currentTrack = track.copy(artworkUri = highResUri))
-                                    } else state
-                                }
+                if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist, track.album)
+                        if (highResUri != null) {
+                            audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
+                            _uiState.update { state ->
+                                if (state.currentTrack?.id == track.id) {
+                                    state.copy(currentTrack = track.copy(artworkUri = highResUri))
+                                } else state
                             }
                         }
                     }
+                }
 
-                    viewModelScope.launch(Dispatchers.IO) {
-                        val realWaveform = waveformEngine.getWaveform(track)
-                        _uiState.update { it.copy(currentWaveform = realWaveform) }
-                    }
+                viewModelScope.launch(Dispatchers.IO) {
+                    val realWaveform = waveformEngine.getWaveform(track)
+                    _uiState.update { it.copy(currentWaveform = realWaveform) }
                 }
             }
         }
@@ -326,6 +331,14 @@ class PlayerViewModel @Inject constructor(
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         playbackEngine.moveQueueItem(fromIndex, toIndex)
+    }
+
+    fun playQueueItem(index: Int) {
+        playbackEngine.playQueueItem(index)
+    }
+
+    fun setMainViewState(state: MainViewState) {
+        _uiState.update { it.copy(mainViewState = state) }
     }
 
     // ==========================================

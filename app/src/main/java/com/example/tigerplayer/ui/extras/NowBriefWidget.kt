@@ -108,85 +108,58 @@ fun NowBriefWidget(
             in 5..11 -> "MORNING, Witcher."
             in 12..16 -> "GOOD AFTERNOON, Padawan."
             in 17..20 -> "EVENING, Slayer."
-            else -> "THE NIGHT IS DARK, BRUCE."
+            else -> "GOOD NIGHT, Hunter."
         }
     }
 
-    // Dynamic contrast adaptation based on the sky background
     val contentColor = if (weatherState.isDay) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
-    val secondaryContentColor = contentColor.copy(alpha = 0.7f)
-    val ambientGlowColor = if (weatherState.isDay) Color(0xFFFF9100) else MaterialTheme.aardBlue
+    val secondaryContentColor = contentColor.copy(alpha = 0.65f)
+    val ambientGlowColor = if (weatherState.isDay) Color(0xFFFF9100) else Color(0xFF4FC3F7)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-            .shadow(16.dp, MaterialTheme.shapes.extraLarge, spotColor = ambientGlowColor.copy(alpha = 0.4f))
+            .padding(horizontal = 24.dp, vertical = 12.dp)
+            .shadow(12.dp, MaterialTheme.shapes.extraLarge, spotColor = ambientGlowColor.copy(alpha = 0.3f))
             .clip(MaterialTheme.shapes.extraLarge)
             .bounceClick {
                 isExpanded = !isExpanded
                 onWidgetClick()
             }
-            .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow))
+            .animateContentSize()
     ) {
-        // --- LAYER 1: THE DYNAMIC PARTICLE WEATHER SKY ---
+        // --- OPTIMIZED WEATHER BACKDROP ---
         AnimatedWeatherBackground(
             isDay = weatherState.isDay,
             condition = weatherState.condition,
             modifier = Modifier.matchParentSize()
         )
 
-        // --- LAYER 2: AMBIENT OVERLAY GLOW ---
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(ambientGlowColor.copy(alpha = 0.15f), Color.Transparent),
-                        center = Offset(1000f, 0f),
-                        radius = 800f
-                    )
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.2f), MaterialTheme.shapes.extraLarge)
-        )
-
-        // --- LAYER 3: FOREGROUND DATA ---
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
+                .padding(20.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = weatherState.location.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = secondaryContentColor,
+                    text = greeting,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = contentColor,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.5.sp
+                    modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    imageVector = Icons.Rounded.LocationOn,
-                    contentDescription = "Location",
-                    tint = secondaryContentColor,
-                    modifier = Modifier.size(16.dp)
+                    imageVector = weatherState.weatherIcon,
+                    contentDescription = null,
+                    tint = contentColor.copy(alpha = 0.8f),
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = greeting,
-                style = MaterialTheme.typography.titleMedium,
-                color = contentColor,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.5.sp
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -196,80 +169,38 @@ fun NowBriefWidget(
                 Column {
                     Text(
                         text = buildAnnotatedString {
-                            withStyle(SpanStyle(fontSize = 64.sp, fontWeight = FontWeight.Black, color = contentColor)) {
+                            withStyle(SpanStyle(fontSize = 52.sp, fontWeight = FontWeight.Black, color = contentColor)) {
                                 append(weatherState.temperature)
                             }
-                            withStyle(SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ambientGlowColor, baselineShift = BaselineShift.Superscript)) {
+                            withStyle(SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ambientGlowColor, baselineShift = BaselineShift.Superscript)) {
                                 append("°")
                             }
                         }
                     )
                     Text(
                         text = weatherState.condition.uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = ambientGlowColor.copy(alpha = 0.9f),
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
-                    )
-                }
-
-                Box(
-                    modifier = Modifier.size(72.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(ambientGlowColor.copy(alpha = 0.2f), CircleShape)
-                            .blur(16.dp)
-                    )
-                    Icon(
-                        imageVector = weatherState.weatherIcon,
-                        contentDescription = weatherState.condition,
-                        tint = if (weatherState.isDay) Color(0xFFE65100) else ambientGlowColor,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                BriefStatChip(icon = Icons.Rounded.Air, value = weatherState.windSpeed, label = "WIND", weight = 1f, contentColor = contentColor)
-                BriefStatChip(icon = Icons.Rounded.WaterDrop, value = weatherState.humidity, label = "HUMIDITY", weight = 1f, contentColor = contentColor)
-            }
-
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically(spring(stiffness = Spring.StiffnessLow)) + fadeIn(tween(400)),
-                exit = shrinkVertically(spring(stiffness = Spring.StiffnessMedium)) + fadeOut(tween(200))
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 20.dp),
-                        color = contentColor.copy(alpha = 0.1f)
-                    )
-
-                    Text(
-                        text = "ATMOSPHERIC INTEL",
                         style = MaterialTheme.typography.labelSmall,
-                        color = ambientGlowColor,
+                        color = secondaryContentColor,
                         fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
+                        letterSpacing = 1.5.sp
                     )
+                }
 
+                Column(horizontalAlignment = Alignment.End) {
+                    BriefStatRow(icon = Icons.Rounded.Air, value = weatherState.windSpeed, contentColor = contentColor)
                     Spacer(modifier = Modifier.height(8.dp))
+                    BriefStatRow(icon = Icons.Rounded.WaterDrop, value = weatherState.humidity, contentColor = contentColor)
+                }
+            }
 
-                    val intel = "Core temperature is holding at ${weatherState.temperature}° with ${weatherState.condition.lowercase()} in the immediate vicinity. Winds are tracking at ${weatherState.windSpeed}. Atmospheric conditions are nominal."
-
+            AnimatedVisibility(visible = isExpanded) {
+                Column {
+                    HorizontalDivider(Modifier.padding(vertical = 16.dp), color = contentColor.copy(alpha = 0.1f))
                     Text(
-                        text = intel,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = contentColor.copy(alpha = 0.8f),
-                        lineHeight = 20.sp
+                        text = "Current atmospheric conditions in ${weatherState.location} are nominal. Perfect for a deep listening session.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryContentColor,
+                        lineHeight = 16.sp
                     )
                 }
             }
@@ -277,9 +208,14 @@ fun NowBriefWidget(
     }
 }
 
-// ==========================================================
-// 🌌 THE ADVANCED ANIMATED SKY SYSTEM
-// ==========================================================
+@Composable
+private fun BriefStatRow(icon: ImageVector, value: String, contentColor: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = contentColor.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = value, style = MaterialTheme.typography.labelMedium, color = contentColor.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
+    }
+}
 
 @Composable
 fun AnimatedWeatherBackground(
@@ -289,211 +225,42 @@ fun AnimatedWeatherBackground(
 ) {
     val cond = condition.lowercase()
     val isRain = cond.contains("rain") || cond.contains("drizzle")
-    val isStorm = cond.contains("thunderstorm") || cond.contains("storm")
     val isSnow = cond.contains("snow")
-    val isFog = cond.contains("mist") || cond.contains("fog") || cond.contains("haze")
-    val isClear = cond.contains("clear")
-    val isCloudy = !isClear
-
-    val transition = rememberInfiniteTransition(label = "sky")
-
-    // --- INFINITE ANIMATORS ---
-    val cloudFraction1 by transition.animateFloat(
+    val isStorm = cond.contains("storm") || cond.contains("thunderstorm")
+    
+    val transition = rememberInfiniteTransition(label = "weather")
+    val cycle by transition.animateFloat(
         initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(45000, easing = LinearEasing), RepeatMode.Restart), label = "cloud1"
-    )
-    val cloudFraction2 by transition.animateFloat(
-        initialValue = 1f, targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(70000, easing = LinearEasing), RepeatMode.Restart), label = "cloud2"
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "cycle"
     )
 
-    // Fast cycle for precipitation (rain/snow)
-    val precipitationFraction by transition.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(if (isSnow) 3000 else 1000, easing = LinearEasing), RepeatMode.Restart), label = "precip"
-    )
-
-    // Twinkling effect for stars
-    val twinklePhase by transition.animateFloat(
-        initialValue = 0f, targetValue = (2 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(4000, easing = LinearEasing)), label = "twinkle"
-    )
-
-    // --- STORM LIGHTNING ENGINE ---
-    var lightningAlpha by remember { mutableFloatStateOf(0f) }
-    if (isStorm) {
-        LaunchedEffect(Unit) {
-            while (isActive) {
-                delay(Random.nextLong(2000, 7000))
-                lightningAlpha = 0.8f
-                delay(50)
-                lightningAlpha = 0.2f
-                delay(50)
-                lightningAlpha = 0.9f
-                delay(100)
-                lightningAlpha = 0f
-            }
-        }
+    // Precomputed particle offsets for performance
+    val particles = remember(isRain, isSnow) {
+        val count = if (isRain) 30 else if (isSnow) 20 else 0
+        List(count) { Offset(Random.nextFloat(), Random.nextFloat()) }
     }
 
-    // --- THEME COLORS ---
-    val skyTop = when {
-        isStorm -> Color(0xFF1E272E)
-        isDay -> Color(0xFF64B5F6)
-        else -> Color(0xFF071426)
-    }
-    val skyBottom = when {
-        isStorm -> Color(0xFF34495E)
-        isFog -> Color(0xFF95A5A6)
-        isDay -> Color(0xFFE3F2FD)
-        else -> Color(0xFF0B1D3A)
-    }
+    val skyTop = if (isDay) Color(0xFF74B9FF) else Color(0xFF0F2027)
+    val skyBottom = if (isDay) Color(0xFFA2D2FF) else Color(0xFF2C5364)
 
-    val baseCloudAlpha = if (isStorm) 0.8f else if (isDay) 0.4f else 0.2f
-    val cloudColor = if (isStorm) Color(0xFF2C3E50) else Color.White
-
-    // --- PRECOMPUTED PARTICLES ---
-    val rainDrops = remember { List(80) { Offset(Random.nextFloat(), Random.nextFloat()) to (Random.nextFloat() * 0.5f + 0.5f) } }
-    val snowflakes = remember { List(60) { Offset(Random.nextFloat(), Random.nextFloat()) to (Random.nextFloat() * 0.5f + 0.2f) } }
-    val stars = remember { List(50) { Offset(Random.nextFloat(), Random.nextFloat()) to (Random.nextFloat() * 2 * PI).toFloat() } }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(colors = listOf(skyTop, skyBottom)))
-    ) {
-
-        Canvas(modifier = Modifier.fillMaxSize()) {
+    Box(modifier.background(Brush.verticalGradient(listOf(skyTop, skyBottom)))) {
+        Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-
-            // 1. LIGHTNING FLASH
-            if (isStorm && lightningAlpha > 0f) {
-                drawRect(color = Color.White.copy(alpha = lightningAlpha))
-            }
-
-            // 2. STARS (Only visible at night with clear skies)
-            if (!isDay && isClear) {
-                stars.forEach { (pos, phase) ->
-                    val alpha = 0.2f + 0.8f * sin(twinklePhase + phase).absoluteValue
-                    drawCircle(
-                        color = Color.White.copy(alpha = alpha),
-                        radius = 2.5f,
-                        center = Offset(pos.x * w, pos.y * h)
-                    )
-                }
-            }
-
-            // 3. CLOUDS
-            if (isCloudy) {
-                val layer1Alpha = baseCloudAlpha * 0.8f
-                translate(left = cloudFraction1 * w) { drawClouds(cloudColor.copy(alpha = layer1Alpha), 1.2f) }
-                translate(left = (cloudFraction1 * w) - w) { drawClouds(cloudColor.copy(alpha = layer1Alpha), 1.2f) }
-
-                translate(left = cloudFraction2 * w) { drawClouds(cloudColor.copy(alpha = baseCloudAlpha), 1.6f) }
-                translate(left = (cloudFraction2 * w) - w) { drawClouds(cloudColor.copy(alpha = baseCloudAlpha), 1.6f) }
-            }
-
-            // 4. RAIN OR THUNDERSTORM
+            
             if (isRain || isStorm) {
-                rainDrops.forEach { (pos, speedMultiplier) ->
-                    val x = pos.x * w
-                    // Modulo ensures they loop endlessly
-                    val y = ((pos.y + precipitationFraction * speedMultiplier) % 1f) * h
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.5f),
-                        start = Offset(x, y),
-                        end = Offset(x + 10f, y + 40f), // Slanted trajectory
-                        strokeWidth = 3f,
-                        cap = StrokeCap.Round
-                    )
+                particles.forEach { p ->
+                    val x = p.x * w
+                    val y = ((p.y + cycle) % 1f) * h
+                    drawLine(Color.White.copy(0.4f), Offset(x, y), Offset(x + 5f, y + 25f), strokeWidth = 2f)
+                }
+            } else if (isSnow) {
+                particles.forEach { p ->
+                    val x = p.x * w + sin(cycle * PI * 2 + p.y * 5).toFloat() * 10f
+                    val y = ((p.y + cycle * 0.5f) % 1f) * h
+                    drawCircle(Color.White.copy(0.6f), radius = 3f, center = Offset(x, y))
                 }
             }
-
-            // 5. SNOW
-            if (isSnow) {
-                snowflakes.forEach { (pos, speedMultiplier) ->
-                    // Adds horizontal sway to the snowflakes using a sine wave
-                    val swayX = sin(precipitationFraction * PI * 4 + pos.y * 10).toFloat() * 25f
-                    val x = (pos.x * w) + swayX
-                    val y = ((pos.y + precipitationFraction * speedMultiplier) % 1f) * h
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.8f),
-                        radius = 4f + (speedMultiplier * 4f),
-                        center = Offset(x, y)
-                    )
-                }
-            }
-
-            // 6. FOG / MIST LAYER
-            if (isFog) {
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.5f)),
-                        startY = h * 0.3f,
-                        endY = h
-                    )
-                )
-            }
-        }
-
-        // Subtle atmospheric foreground haze
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = if (isDay) 0.12f else 0.04f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-    }
-}
-
-private fun DrawScope.drawClouds(color: Color, scale: Float) {
-    drawCircle(
-        color = color,
-        radius = 120f * scale,
-        center = center.copy(x = center.x - 200f)
-    )
-
-    drawCircle(
-        color = color,
-        radius = 160f * scale,
-        center = center.copy(
-            x = center.x + 50f,
-            y = center.y - 120f
-        )
-    )
-
-    drawCircle(
-        color = color,
-        radius = 140f * scale,
-        center = center.copy(
-            x = center.x + 250f,
-            y = center.y + 100f
-        )
-    )
-}
-
-@Composable
-private fun RowScope.BriefStatChip(icon: ImageVector, value: String, label: String, weight: Float, contentColor: Color) {
-    Row(
-        modifier = Modifier
-            .weight(weight)
-            .clip(MaterialTheme.shapes.medium)
-            .background(contentColor.copy(alpha = 0.05f))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, tint = contentColor.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Column {
-            Text(text = label, style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = 0.4f), fontSize = 9.sp, fontWeight = FontWeight.Black)
-            Text(text = value, style = MaterialTheme.typography.titleSmall, color = contentColor.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
         }
     }
 }

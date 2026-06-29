@@ -49,8 +49,8 @@ class FluidVortexView @JvmOverloads constructor(
      * Ensures GPU resources are freed when the user collapses the player.
      */
     override fun onDetachedFromWindow() {
-        // Only release if we are actually shutting down, not just pausing
-        // renderer?.release()
+        // FIXED: Restore the release call to prevent orphan GPU textures/FBOs
+        renderer?.release()
         super.onDetachedFromWindow()
     }
 }

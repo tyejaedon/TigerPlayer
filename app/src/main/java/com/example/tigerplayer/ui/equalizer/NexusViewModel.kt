@@ -156,16 +156,19 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
         }
     }
 
+    @OptIn(UnstableApi::class)
     private fun updateFrequencyResponse(nodes: List<AcousticNode>) {
-        visualsUpdateJob?.cancel() // FIXED: Cancel previous running render jobs
+        visualsUpdateJob?.cancel()
         visualsUpdateJob = viewModelScope.launch(Dispatchers.Default) {
+            val currentSampleRate = adaptiveDspEngine.getSampleRate().toFloat()
+            
             val filterCoeffs = nodes.map { node ->
                 BiquadDesigner.design(
                     type = node.filterType,
                     freq = node.frequency,
                     gainDb = node.gainDb,
                     q = node.qFactor,
-                    sampleRate = 44100f
+                    sampleRate = currentSampleRate
                 )
             }
 
@@ -181,7 +184,7 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
 
                 var totalDbGain = 0f
                 filterCoeffs.forEach { coeff ->
-                    totalDbGain += BiquadDesigner.magnitudeAt(currentFreq, coeff, 44100f)
+                    totalDbGain += BiquadDesigner.magnitudeAt(currentFreq, coeff, currentSampleRate)
                 }
 
                 val normalizedY = -(totalDbGain / 15f).coerceIn(-1f, 1f)

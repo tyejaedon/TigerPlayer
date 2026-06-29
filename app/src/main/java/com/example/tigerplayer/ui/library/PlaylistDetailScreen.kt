@@ -21,16 +21,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -49,6 +50,7 @@ import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @Composable
@@ -85,11 +87,9 @@ fun PlaylistDetailsScreen(
 
     var dominantColor by remember { mutableStateOf(nameHashColor) }
 
-    // Determine the art to display. If the playlist has a custom image, use it.
-    // If not, we do NOT fall back to the first track's art here anymore, we let the UI render the gradient.
+    // Determine the art to display.
     val displayArt = playlistArtworkUri
 
-    // Only extract palette if we actually have an image URL
     LaunchedEffect(displayArt) {
         if (displayArt != null) {
             val loader = ImageLoader(context)
@@ -103,21 +103,39 @@ fun PlaylistDetailsScreen(
                 }
             }
         } else {
-            // Revert to generated hash color if art is cleared
             dominantColor = nameHashColor
         }
     }
+
+    val ambientBrush = rememberTigerAmbientGradient(dominantColor, baseTopAlpha = 0.25f)
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { viewModel.updatePlaylistImage(context, playlistId, it) }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // 1. DYNAMIC PARALLAX BACKGROUND
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(colors = listOf(dominantColor.copy(alpha = 0.25f), Color.Transparent), endY = 1000f))
-        )
+                .background(ambientBrush)
+        ) {
+            if (displayArt != null) {
+                AsyncImage(
+                    model = displayArt,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
+                            translationY = -offset * 0.45f
+                            alpha = 0.4f
+                        }
+                        .blur(64.dp)
+                )
+            }
+        }
 
         LazyColumn(
             state = scrollState,
@@ -237,8 +255,8 @@ fun PlaylistParallaxHeader(
     val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
 
     Box(
-        modifier = Modifier.fillMaxWidth().height(480.dp).padding(top = 60.dp)
-            .graphicsLayer { translationY = offset * 0.45f; alpha = (1f - (offset / 800f)).coerceIn(0f, 1f) },
+        modifier = Modifier.fillMaxWidth().height(440.dp).padding(top = 40.dp)
+            .graphicsLayer { translationY = offset * 0.4f; alpha = (1f - (offset / 700f)).coerceIn(0f, 1f) },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -246,8 +264,8 @@ fun PlaylistParallaxHeader(
             // ARTWORK CONTAINER (ENLARGED)
             Box(
                 modifier = Modifier
-                    .size(240.dp)
-                    .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = accentColor)
+                    .size(260.dp)
+                    .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = accentColor.copy(alpha = 0.6f))
                     .clip(RoundedCornerShape(32.dp))
                     .then(if (isEditMode) Modifier.bounceClick { onChangeCoverClick() } else Modifier),
                 contentAlignment = Alignment.Center
@@ -260,8 +278,6 @@ fun PlaylistParallaxHeader(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    // INDUSTRY STANDARD UI FALLBACK
-                    // A sleek gradient using the hash color generated for this playlist
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -278,42 +294,40 @@ fun PlaylistParallaxHeader(
                         imageVector = if (playlistId == -1L) WitcherIcons.Favorite else WitcherIcons.Playlist,
                         contentDescription = null,
                         tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(64.dp)
+                        modifier = Modifier.size(80.dp)
                     )
                 }
 
                 // Edit Overlay
-                Row{
-                    AnimatedVisibility(visible = isEditMode, enter = fadeIn(), exit = fadeOut()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.5f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Change Cover",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
+                androidx.compose.animation.AnimatedVisibility(visible = isEditMode, enter = fadeIn(), exit = fadeOut()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Change Cover",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
             Text(text = playlistName.uppercase(), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 24.dp))
             Text(text = "$trackCount CHANTS COLLECTED", style = MaterialTheme.typography.labelMedium, color = accentColor, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            val buttonTextColor = if (ColorUtils.calculateLuminance(accentColor.value.toLong().toInt()) > 0.5) Color.Black else Color.White
+            val buttonTextColor = if (ColorUtils.calculateLuminance(accentColor.toArgb()) > 0.5) Color.Black else Color.White
             AnimatedVisibility(visible = !isEditMode) {
                 Button(
-                    onClick = onPlayAll, shape = CircleShape, modifier = Modifier.width(220.dp).height(48.dp).bounceClick { onPlayAll() },
+                    onClick = onPlayAll, shape = CircleShape, modifier = Modifier.width(220.dp).height(54.dp).bounceClick { onPlayAll() },
                     colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                 ) {
-                    Icon(WitcherIcons.Play, null, tint = buttonTextColor, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(WitcherIcons.Play, null, tint = buttonTextColor, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text("COMMENCE RITUAL", fontWeight = FontWeight.Black, color = buttonTextColor, style = MaterialTheme.typography.labelLarge)
                 }
             }

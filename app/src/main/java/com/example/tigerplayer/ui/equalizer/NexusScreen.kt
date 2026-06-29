@@ -164,6 +164,7 @@ private fun NexusSpatialCanvas(
 ) {
     val haptic = LocalHapticFeedback.current
     val reactiveFrame by rememberUpdatedState(audioFrame)
+    val scratchPath = remember { Path() }
 
     BoxWithConstraints(
         modifier = modifier
@@ -192,7 +193,20 @@ private fun NexusSpatialCanvas(
             drawLine(NeonWhite.copy(0.08f), Offset(0f, cy), Offset(widthPx, cy), strokeWidth = 1.8f)
             drawLine(NeonWhite.copy(0.07f), Offset(cx, 0f), Offset(cx, heightPx), strokeWidth = 1.5f)
 
-            drawNeonTubeCurve(points = curvePoints, colorStops = listOf(HotPink, ElectricAmber, ToxicLime, CyberCyan))
+            // OPTIMIZED NEON TUBE RENDER
+            scratchPath.rewind()
+            buildSmoothCurvePath(
+                path = scratchPath,
+                points = curvePoints,
+                width = size.width,
+                centerY = size.height * 0.5f,
+                yScale = size.height * 0.38f
+            )
+            val tubeGradient = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, ToxicLime, CyberCyan))
+            drawPath(scratchPath, tubeGradient, alpha = 0.14f, style = Stroke(42f, cap = StrokeCap.Round))
+            drawPath(scratchPath, tubeGradient, alpha = 0.45f, style = Stroke(18f, cap = StrokeCap.Round))
+            drawPath(scratchPath, tubeGradient, alpha = 0.95f, style = Stroke(6f, cap = StrokeCap.Round))
+            drawPath(scratchPath, NeonWhite, style = Stroke(2.1f, cap = StrokeCap.Round))
 
             val corePulse = (0.72f + reactiveFrame.bass * 0.9f).coerceIn(0.72f, 1.8f)
             drawCircle(
@@ -358,26 +372,36 @@ private fun NebulaBackground(
         label = "nebula_width"
     )
 
+    val cachedPath = remember { Path() }
+
     Canvas(modifier = modifier) {
         if (points.isEmpty()) return@Canvas
 
-        val path = buildSmoothCurvePath(points = points, width = size.width, centerY = size.height * 0.5f, yScale = size.height * 0.42f)
+        cachedPath.rewind()
+        buildSmoothCurvePath(
+            path = cachedPath,
+            points = points,
+            width = size.width,
+            centerY = size.height * 0.5f,
+            yScale = size.height * 0.42f
+        )
+        
         val gradient = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, ToxicLime, CyberCyan))
 
         drawPath(
-            path = path,
+            path = cachedPath,
             brush = gradient,
             style = Stroke(width = energyWidth * 1.95f, cap = StrokeCap.Round),
             alpha = 0.13f + fluxGlow * 0.18f
         )
         drawPath(
-            path = path,
+            path = cachedPath,
             brush = gradient,
             style = Stroke(width = energyWidth, cap = StrokeCap.Round),
             alpha = 0.2f + fluxGlow * 0.42f
         )
         drawPath(
-            path = path,
+            path = cachedPath,
             color = NeonWhite.copy(alpha = 0.72f),
             style = Stroke(width = 2.6f, cap = StrokeCap.Round)
         )
@@ -393,47 +417,15 @@ private fun nodeBandPeak(nodeId: String, frame: AudioReactiveFrame): Float {
     }.coerceIn(0f, 1f)
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawNeonTubeCurve(
-    points: List<Offset>,
-    colorStops: List<Color>
-) {
-    if (points.isEmpty()) return
-    val path = buildSmoothCurvePath(points = points, width = size.width, centerY = size.height * 0.5f, yScale = size.height * 0.38f)
-    val gradient = Brush.horizontalGradient(colorStops)
-
-    drawPath(
-        path = path,
-        brush = gradient,
-        style = Stroke(width = 42f, cap = StrokeCap.Round),
-        alpha = 0.14f
-    )
-    drawPath(
-        path = path,
-        brush = gradient,
-        style = Stroke(width = 18f, cap = StrokeCap.Round),
-        alpha = 0.45f
-    )
-    drawPath(
-        path = path,
-        brush = gradient,
-        style = Stroke(width = 6f, cap = StrokeCap.Round),
-        alpha = 0.95f
-    )
-    drawPath(
-        path = path,
-        color = NeonWhite,
-        style = Stroke(width = 2.1f, cap = StrokeCap.Round)
-    )
-}
 
 private fun buildSmoothCurvePath(
+    path: Path,
     points: List<Offset>,
     width: Float,
     centerY: Float,
     yScale: Float
-): Path {
-    val path = Path()
-    if (points.isEmpty()) return path
+) {
+    if (points.isEmpty()) return
 
     val first = points.first()
     path.moveTo(first.x * width, centerY + first.y * yScale)
@@ -450,5 +442,4 @@ private fun buildSmoothCurvePath(
         val controlX = (prevX + currX) * 0.5f
         path.cubicTo(controlX, prevY, controlX, currY, currX, currY)
     }
-    return path
 }

@@ -1,4 +1,4 @@
-# Sonic Prism
+ # Sonic Prism
 
 `Sonic Prism` is TigerPlayer's local-only stem isolation hub.
 

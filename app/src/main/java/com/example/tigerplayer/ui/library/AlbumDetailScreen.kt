@@ -1,29 +1,35 @@
+@file:SuppressLint("NewApi")
 package com.example.tigerplayer.ui.library
 
+import android.annotation.SuppressLint
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.widget.Toast
 import androidx.annotation.RequiresExtension
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,9 +40,13 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.theme.PremiumGlassCard
+import com.example.tigerplayer.ui.theme.TigerNeonOrange
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import kotlinx.coroutines.launch
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,8 +57,16 @@ fun AlbumDetailsScreen(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val colorScope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsState()
     val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
+
+    val scrollState = rememberLazyListState()
+    val density = LocalDensity.current
+
+    // Derived values for animations
+    val scrollOffset by remember { derivedStateOf { scrollState.firstVisibleItemScrollOffset } }
+    val firstVisibleIndex by remember { derivedStateOf { scrollState.firstVisibleItemIndex } }
 
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
 
@@ -58,14 +76,14 @@ fun AlbumDetailsScreen(
     val firstTrack = albumTracks.firstOrNull()
 
     // --- DYNAMIC COLOR EXTRACTION ---
-    val fallbackColor = MaterialTheme.colorScheme.background
-    var dominantColor by remember { mutableStateOf(fallbackColor) }
+    var dominantColor by remember(albumName, firstTrack?.artworkUri) { mutableStateOf(TigerNeonOrange) }
 
     val animatedDominantColor by animateColorAsState(
         targetValue = dominantColor,
         animationSpec = tween(1000),
         label = "AlbumColorAnimation"
     )
+    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.20f)
 
     val imageRequest = remember(firstTrack?.artworkUri) {
         ImageRequest.Builder(context)
@@ -77,51 +95,61 @@ fun AlbumDetailsScreen(
                     val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                     bitmap?.let { b ->
                         Palette.from(b).generate { palette ->
-                            // RECTIFIED: Priority goes to Vibrant and LightVibrant for readability
                             val colorInt = palette?.vibrantSwatch?.rgb
                                 ?: palette?.lightVibrantSwatch?.rgb
                                 ?: palette?.dominantSwatch?.rgb
-
+                            
                             colorInt?.let { dominantColor = Color(it) }
                         }
                     }
+                },
+                onError = { _, _ ->
+                    dominantColor = TigerNeonOrange
                 }
             )
             .build()
     }
 
-// --- THE CONTRAST RITUAL ---
     val accentColor = remember(dominantColor) {
         val hsl = FloatArray(3)
         androidx.core.graphics.ColorUtils.colorToHSL(dominantColor.toArgb(), hsl)
-
-        // Check Lightness (hsl[2]). If it's below 50%, it's too dark for text on dark backgrounds.
         if (hsl[2] < 0.5f) {
-            hsl[2] = 0.75f // Force it to be bright and punchy
-            hsl[1] = (hsl[1] + 0.15f).coerceAtMost(1f) // Boost saturation for that "Witcher" glow
+            hsl[2] = 0.75f
+            hsl[1] = (hsl[1] + 0.15f).coerceAtMost(1f)
             Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
         } else {
             dominantColor
         }
     }
-    // --- ROOT LAYER ---
-    Box(modifier = Modifier.fillMaxSize()) {
 
-        // 1. DYNAMIC GRADIENT BACKGROUND
+    val topBarAlpha by remember {
+        derivedStateOf {
+            if (firstVisibleIndex > 0) 1f
+            else (scrollOffset / 400f).coerceIn(0f, 1f)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 1. DYNAMIC PARALLAX BACKGROUND
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            animatedDominantColor.copy(alpha = 0.5f),
-                            fallbackColor
-                        ),
-                        startY = 0f,
-                        endY = 1500f
-                    )
-                )
-        )
+                .background(ambientBrush)
+        ) {
+            AsyncImage(
+                model = imageRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val parallaxOffset = if (firstVisibleIndex == 0) scrollOffset * 0.45f else 0f
+                        translationY = -parallaxOffset
+                        alpha = 0.35f
+                    }
+                    .blur(72.dp)
+            )
+        }
 
         // 2. SCROLLABLE CONTENT
         Scaffold(
@@ -129,19 +157,28 @@ fun AlbumDetailsScreen(
                 CenterAlignedTopAppBar(
                     title = {
                         Text(
-                            text = albumName,
+                            text = albumName.uppercase(),
                             fontWeight = FontWeight.Black,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            letterSpacing = 2.sp,
+                            modifier = Modifier.graphicsLayer { alpha = topBarAlpha }
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBackClick) {
+                        IconButton(
+                            onClick = onBackClick,
+                            modifier = Modifier
+                                .background(
+                                    Color.Black.copy(alpha = (0.3f * (1f - topBarAlpha)).coerceAtLeast(0f)),
+                                    CircleShape
+                                )
+                        ) {
                             Icon(WitcherIcons.Back, contentDescription = "Back")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
+                        containerColor = Color.Black.copy(alpha = (topBarAlpha * 0.7f).coerceIn(0f, 0.7f)),
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                     ),
@@ -151,79 +188,110 @@ fun AlbumDetailsScreen(
             containerColor = Color.Transparent
         ) { padding ->
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(bottom = 180.dp) // Extra padding so the last song clears the floating button
+                contentPadding = PaddingValues(bottom = 180.dp)
             ) {
-                // The Hero Image
+                // The Hero Image (Semi-3D Tilt)
                 item {
-                    AsyncImage(
-                        model = imageRequest,
-                        contentDescription = "Cover for $albumName",
+                    val heroAlpha = (1f - (scrollOffset / 800f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (scrollOffset / 2500f)).coerceIn(0.88f, 1f)
+                    val rotationX = (scrollOffset / 40f).coerceIn(0f, 12f)
+
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(300.dp)
-                            .padding(16.dp)
-                            // THE FIX 1: Shadow goes BEFORE clip
-                            .shadow(24.dp, MaterialTheme.shapes.extraLarge)
-                            .clip(MaterialTheme.shapes.extraLarge),
-                        contentScale = ContentScale.Crop
-                    )
+                            .padding(top = 24.dp, start = 32.dp, end = 32.dp, bottom = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AsyncImage(
+                            model = imageRequest,
+                            contentDescription = "Cover for $albumName",
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .aspectRatio(1f)
+                                .graphicsLayer {
+                                    alpha = heroAlpha
+                                    scaleX = heroScale
+                                    scaleY = heroScale
+                                    this.rotationX = rotationX
+                                    cameraDistance = 14f * density.density
+                                }
+                                .shadow(
+                                    48.dp,
+                                    RoundedCornerShape(32.dp),
+                                    spotColor = accentColor.copy(alpha = 0.6f)
+                                )
+                                .clip(RoundedCornerShape(32.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 }
 
                 item {
-                    // THE GLASS BUBBLE HEADER
-                    Column(
+                    // THE SEMI-3D FLOATING HEADER
+                    val headerTranslationY = (scrollOffset * 0.12f).coerceAtMost(30f)
+
+                    PremiumGlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .glassEffect(MaterialTheme.shapes.extraLarge)
-                            .background(
-                                accentColor.copy(alpha = 0.15f),
-                                MaterialTheme.shapes.extraLarge
-                            )
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .graphicsLayer {
+                                translationY = -headerTranslationY
+                            },
+                        shape = MaterialTheme.shapes.extraLarge
                     ) {
-                        Text(
-                            text = albumName,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Black,
-                            textAlign = TextAlign.Center,
-                            letterSpacing = (-1).sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = firstTrack?.artist?.uppercase() ?: "UNKNOWN ARTIST",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = accentColor,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // --- NEW METADATA ROW ---
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    accentColor.copy(alpha = 0.12f),
+                                    MaterialTheme.shapes.extraLarge
+                                )
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            MetadataItem(
-                                label = "CHANTS",
-                                value = albumTracks.size.toString(),
-                                accentColor = accentColor
+                            Text(
+                                text = albumName,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Black,
+                                textAlign = TextAlign.Center,
+                                letterSpacing = (-1).sp
                             )
-                            MetadataItem(
-                                label = "DURATION",
-                                value = formatTotalDuration(albumTracks.sumOf { it.durationMs }),
-                                accentColor = accentColor
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = firstTrack?.artist?.uppercase() ?: "UNKNOWN ARTIST",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = accentColor,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 3.sp
                             )
-                            firstTrack?.year?.let { year ->
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // --- LAYERED METADATA ROW ---
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(20.dp)
+                            ) {
                                 MetadataItem(
-                                    label = "RELEASED",
-                                    value = year,
+                                    label = "CHANTS",
+                                    value = albumTracks.size.toString(),
                                     accentColor = accentColor
                                 )
+                                MetadataItem(
+                                    label = "DURATION",
+                                    value = formatTotalDuration(albumTracks.sumOf { it.durationMs }),
+                                    accentColor = accentColor
+                                )
+                                firstTrack?.year?.let { year ->
+                                    MetadataItem(
+                                        label = "RELEASED",
+                                        value = year,
+                                        accentColor = accentColor
+                                    )
+                                }
                             }
                         }
                     }
@@ -238,14 +306,12 @@ fun AlbumDetailsScreen(
                         track = track.copy(),
                         isCurrentTrack = isCurrentTrack,
                         isPlaying = uiState.isPlaying,
-                        // THE QUEUE FIX: Load the entire album and start from the tapped track index
                         onClick = { viewModel.setPlaylistAndPlay(albumTracks, index) },
-                        // OPTIONS FIX: Correctly pass the selected track
                         onOptionsClick = { trackForOptions = track }
                     )
                 }
             }
-            // --- 3. THE OPTIONS PORTAL ---
+
             trackForOptions?.let { selectedTrack ->
                 SongOptionsSheet(
                     track = selectedTrack,
@@ -273,7 +339,6 @@ fun AlbumDetailsScreen(
             contentAlignment = Alignment.Center
         ) {
             Button(
-                // Use the viewmodel's decoupled wrapper function
                 onClick = { viewModel.setPlaylistAndPlay(albumTracks, 0) },
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = accentColor),

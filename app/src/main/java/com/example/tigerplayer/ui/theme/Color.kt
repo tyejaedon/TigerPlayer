@@ -1,5 +1,7 @@
 package com.example.tigerplayer.ui.theme
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
@@ -65,3 +67,20 @@ val TigerGlassLight = Brush.verticalGradient(
         Color.Transparent
     )
 )
+
+@Composable
+fun rememberTigerAmbientGradient(
+    accent: Color,
+    baseTopAlpha: Float = 0.18f
+): Brush {
+    return remember(accent, baseTopAlpha) {
+        Brush.verticalGradient(
+            colors = listOf(
+                accent.copy(alpha = baseTopAlpha),
+                TigerBlack
+            ),
+            startY = 0f,
+            endY = 1500f
+        )
+    }
+}

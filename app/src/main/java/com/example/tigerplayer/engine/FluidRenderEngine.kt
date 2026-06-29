@@ -17,6 +17,27 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
 /**
+ * CONFIGURATION ARCHIVE: The Physical Laws
+ * Centralizes magic numbers for audio-reactive fluid tuning.
+ */
+object FluidConfig {
+    const val VELOCITY_DISSIPATION = 0.988f // Reduced slightly for more "viscous" feel
+    const val DENSITY_DISSIPATION = 0.980f  // Reduced slightly to feel "heavier"
+    const val VORTICITY_CONFINEMENT = 22.0f // Toned down for smoother swirls
+    
+    // Splat gain constants (tuned for current audio engine calibration)
+    const val BASS_SPLAT_RADIUS_BASE = 0.15f
+    const val BASS_SPLAT_RADIUS_SCALE = 0.28f
+    const val BASS_SPLAT_POWER_SCALE = 32.0f // Boosted for more impact
+    const val SWIRL_FORCE_BASE = 4.0f
+    const val SWIRL_FORCE_SCALE = 12.0f
+    
+    // Bandwidth-optimized formats for scalar fields
+    const val SCALAR_INTERNAL_FORMAT = GLES30.GL_R16F
+    const val SCALAR_FORMAT = GLES30.GL_RED
+}
+
+/**
  * THE SUPREME GPU VORTEX: FluidRenderer
  * Optimized for 16-bit Float precision and high-dynamic range audio reactivity.
  */
@@ -81,12 +102,25 @@ class FluidRenderer @Inject constructor(
         GLES30.glClearColor(0f, 0f, 0f, 0f)
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
 
-        // Initialize high-precision buffers (16-bit Float recommended for Navier-Stokes)
+        // Initialize high-precision buffers
+        // RGBA16F for vectors/colors, R16F for scalar fields to save bandwidth
         velocityRes = PingPongBuffer(simWidth, simHeight)
         densityRes = PingPongBuffer(simWidth, simHeight)
-        pressureRes = PingPongBuffer(simWidth, simHeight)
-        divergenceRes = FrameBuffer(simWidth, simHeight)
-        curlRes = FrameBuffer(simWidth, simHeight)
+        pressureRes = PingPongBuffer(
+            simWidth, simHeight,
+            FluidConfig.SCALAR_INTERNAL_FORMAT,
+            FluidConfig.SCALAR_FORMAT
+        )
+        divergenceRes = FrameBuffer(
+            simWidth, simHeight,
+            FluidConfig.SCALAR_INTERNAL_FORMAT,
+            FluidConfig.SCALAR_FORMAT
+        )
+        curlRes = FrameBuffer(
+            simWidth, simHeight,
+            FluidConfig.SCALAR_INTERNAL_FORMAT,
+            FluidConfig.SCALAR_FORMAT
+        )
 
         advectionShader = Shader(FluidShaders.vert, FluidShaders.advectionFrag)
         curlShader = Shader(FluidShaders.vert, FluidShaders.curlFrag)
@@ -138,7 +172,8 @@ class FluidRenderer @Inject constructor(
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         val currentTime = System.nanoTime()
-        val dt = ((currentTime - lastFrameTime) / 1_000_000_000f).coerceIn(0.001f, 0.033f)
+        // STABILIZATION: Clamp dt to prevent Navier-Stokes explosions while allowing smooth 60fps
+        val dt = ((currentTime - lastFrameTime) / 1_000_000_000f).coerceIn(0.008f, 0.022f)
         lastFrameTime = currentTime
 
         // 2. ACTIVATE THE ENGINE
@@ -159,17 +194,18 @@ class FluidRenderer @Inject constructor(
 
             if (bass > 0.02f) {
                 // PULSE RADIUS: The ball grows based on volume
-                val dynamicRadius = 0.12f + (bass * 0.25f).coerceAtMost(0.3f)
+                val dynamicRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE + 
+                        (bass * FluidConfig.BASS_SPLAT_RADIUS_SCALE).coerceAtMost(0.3f)
 
                 // INTENSITY: More energy = more "White" core (HDR)
-                val power = (bass * 25.0f).coerceIn(2f, 40f)
+                val power = (bass * FluidConfig.BASS_SPLAT_POWER_SCALE).coerceIn(2f, 40f)
 
                 // CORE VORTEX (White/Blue mix)
                 // Center is (0.5, 0.5) - This ensures it stays centered!
                 applySplat(0.5f, 0.5f, dynamicRadius, floatArrayOf(power * 0.5f, power * 0.8f, power * 3.0f), true)
 
                 // VELOCITY SWIRL: Rotates based on the High-Mids
-                val swirlForce = 5.0f + (highMid * 15f)
+                val swirlForce = FluidConfig.SWIRL_FORCE_BASE + (highMid * FluidConfig.SWIRL_FORCE_SCALE)
                 applySplat(0.5f, 0.5f, dynamicRadius * 1.2f, floatArrayOf(swirlForce, -swirlForce, 0f), false)
             }
         }
@@ -211,7 +247,7 @@ class FluidRenderer @Inject constructor(
             // Move Velocity
             bindTexture(1, velocityRes?.readTexture ?: 0)
             shader.setUniform("uSource", 1)
-            shader.setUniform("uDissipation", 0.995f)
+            shader.setUniform("uDissipation", FluidConfig.VELOCITY_DISSIPATION)
             velocityRes?.write(shader, false)
             velocityRes?.swap()
 
@@ -219,7 +255,7 @@ class FluidRenderer @Inject constructor(
             bindTexture(0, velocityRes?.readTexture ?: 0)
             bindTexture(1, densityRes?.readTexture ?: 0)
             shader.setUniform("uSource", 1)
-            shader.setUniform("uDissipation", 0.985f)
+            shader.setUniform("uDissipation", FluidConfig.DENSITY_DISSIPATION)
             densityRes?.write(shader, false)
             densityRes?.swap()
         }
@@ -238,7 +274,7 @@ class FluidRenderer @Inject constructor(
             vortS.setUniform("uVelocity", 0)
             vortS.setUniform("uCurl", 1)
             vortS.setUniform("uDt", dt)
-            vortS.setUniform("uConfinement", 26.0f)
+            vortS.setUniform("uConfinement", FluidConfig.VORTICITY_CONFINEMENT)
             velocityRes?.write(vortS, false)
             velocityRes?.swap()
         }

@@ -2,6 +2,7 @@ package com.example.tigerplayer.ui.prism
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
 import com.example.tigerplayer.engine.AdaptiveDspEngine
 import com.example.tigerplayer.engine.PrismMixLevels
 import com.example.tigerplayer.engine.PrismMode
@@ -25,7 +26,8 @@ data class PrismUiState(
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
-class PrismViewModel @Inject constructor(
+class PrismViewModel @androidx.annotation.OptIn(UnstableApi::class)
+@Inject constructor(
     private val adaptiveDspEngine: AdaptiveDspEngine
 ) : ViewModel() {
 
@@ -81,12 +83,14 @@ class PrismViewModel @Inject constructor(
         }
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     fun disablePrismAndReset() {
         adaptiveDspEngine.updatePrismMix(1f, 1f, 1f)
         adaptiveDspEngine.setPrismMode(PrismMode.BYPASS)
         _uiState.value = _uiState.value.copy(isPrismEnabled = false)
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     override fun onCleared() {
         adaptiveDspEngine.updatePrismMix(1f, 1f, 1f)
         adaptiveDspEngine.setPrismMode(PrismMode.BYPASS)

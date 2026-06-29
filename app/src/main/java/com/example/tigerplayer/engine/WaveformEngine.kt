@@ -10,60 +10,65 @@ import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
 import com.example.tigerplayer.data.model.AudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.random.Random
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 class WaveformEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val tigerDao: TigerDao,
 ) {
-    private val mutex = Mutex()
+    private val activeRequests = ConcurrentHashMap<String, Deferred<List<Float>>>()
 
     /**
      * Retrieves the audio waveform with studio-grade smoothing and scaling.
-     * Uses a Mutex to prevent multiple concurrent hardware decodes, saving system resources.
+     * Uses a Concurrent Map of Deferreds to prevent redundant decodes without global blocking.
      */
-    suspend fun getWaveform(track: AudioTrack): List<Float> = mutex.withLock {
-        withContext(Dispatchers.IO) {
-            val durationSec = (track.durationMs / 1000).toInt()
-            val targetBars = (durationSec / 1.5).toInt().coerceIn(40, 100)
+    suspend fun getWaveform(track: AudioTrack): List<Float> = coroutineScope {
+        val existing = activeRequests[track.id]
+        if (existing != null) return@coroutineScope existing.await()
 
-            // 1. Archive Check
-            val cached = tigerDao.getWaveformCache(track.id)
-            if (cached != null && cached.amplitudes.isNotBlank()) {
-                try {
-                    val amps = cached.amplitudes.split(",").map { it.toFloat() }
-                    if (amps.isNotEmpty()) return@withContext amps
-                } catch (e: Exception) {
-                    Log.e("WaveformEngine", "Archive corruption detected for ${track.title}: ${e.message}")
+        val deferred = async(Dispatchers.IO) {
+            try {
+                // 1. Archive Check
+                val cached = tigerDao.getWaveformCache(track.id)
+                if (cached != null && cached.amplitudesBlob.isNotEmpty()) {
+                    return@async cached.amplitudesBlob.map { (it.toInt() and 0xFF) / 255f }
                 }
+
+                val durationSec = (track.durationMs / 1000).toInt()
+                val targetBars = (durationSec / 1.5).toInt().coerceIn(40, 100)
+
+                // 2. Hardware Extraction Ritual
+                val waveform = if (track.isLocal) {
+                    val raw = extractRealWaveformFast(track, targetBars)
+                    if (raw.isNotEmpty()) processAndSmooth(raw) else emptyList()
+                } else {
+                    emptyList()
+                }
+
+                // 3. Finalization & Fallback
+                val finalWaveform = waveform.ifEmpty {
+                    generateDeterministicWaveform(track.id, targetBars, track.durationMs)
+                }
+
+                val blob = finalWaveform.map { (it * 255).toInt().toByte() }.toByteArray()
+                tigerDao.insertWaveformCache(WaveformCacheEntity(track.id, blob))
+
+                return@async finalWaveform
+            } finally {
+                activeRequests.remove(track.id)
             }
-
-            // 2. Hardware Extraction Ritual
-            val waveform = if (track.isLocal) {
-                val raw = extractRealWaveformFast(track, targetBars)
-                if (raw.isNotEmpty()) processAndSmooth(raw) else emptyList()
-            } else {
-                emptyList()
-            }
-
-            // 3. Finalization & Fallback
-            val finalWaveform = waveform.ifEmpty {
-                generateDeterministicWaveform(track.id, targetBars, track.durationMs)
-            }
-
-            tigerDao.insertWaveformCache(
-                WaveformCacheEntity(track.id, finalWaveform.joinToString(","))
-            )
-
-            return@withContext finalWaveform
         }
+
+        activeRequests[track.id] = deferred
+        return@coroutineScope deferred.await()
     }
 
     /**
@@ -87,13 +92,23 @@ class WaveformEngine @Inject constructor(
             extractor.selectTrack(audioTrackIndex)
             val format = extractor.getTrackFormat(audioTrackIndex)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: return emptyList()
+            val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 1)
 
-            codec = MediaCodec.createDecoderByType(mime)
+            // Attempt hardware, fall back to software to prevent codec exhaustion
+            codec = try {
+                MediaCodec.createDecoderByType(mime)
+            } catch (e: Exception) {
+                // c2.android.* and OMX.google.* are typical software decoders
+                val swMime = if (mime.contains("mp3")) "audio/mpeg" else mime
+                try { MediaCodec.createByCodecName("c2.android.${swMime.substringAfter("/")}.decoder") }
+                catch (e2: Exception) { MediaCodec.createDecoderByType(mime) }
+            }
+            
             codec.configure(format, null, null, 0)
             codec.start()
 
             val info = MediaCodec.BufferInfo()
-            val timeoutUs = 2000L
+            val timeoutUs = 1500L
             val numSeeks = 8
             val durationUs = track.durationMs * 1000L
             val samplesPerSeek = 16384 // Decode a significant chunk at each point
@@ -121,15 +136,30 @@ class WaveformEngine @Inject constructor(
                             outBuffer.order(ByteOrder.nativeOrder())
                             val shortBuffer = outBuffer.asShortBuffer()
                             
-                            // Peek at every 16th sample to build the profile quickly
+                            // Peek with average pooling for better transient preservation
                             var peak = 0f
                             while (shortBuffer.hasRemaining()) {
-                                val sample = abs(shortBuffer.get().toFloat() / Short.MAX_VALUE)
+                                // CHANNEL AVERAGING (Stereo Mosh-Pit protection)
+                                var sum = 0f
+                                var actualSamples = 0
+                                for (c in 0 until channels) {
+                                    if (shortBuffer.hasRemaining()) {
+                                        sum += abs(shortBuffer.get().toFloat() / Short.MAX_VALUE)
+                                        actualSamples++
+                                        decodedInThisSeek++
+                                    }
+                                }
+                                val sample = if (actualSamples > 0) sum / actualSamples else 0f
                                 if (sample > peak) peak = sample
-                                decodedInThisSeek++
+                                
+                                // Efficient Skip logic
                                 if (shortBuffer.hasRemaining()) {
                                     val skip = (shortBuffer.remaining() / 16).coerceAtLeast(1)
-                                    shortBuffer.position(shortBuffer.position() + skip)
+                                    // Ensure we skip in multiples of channels to maintain phase
+                                    val channelAwareSkip = (skip / channels) * channels
+                                    if (channelAwareSkip > 0) {
+                                        shortBuffer.position((shortBuffer.position() + channelAwareSkip).coerceAtMost(shortBuffer.limit()))
+                                    }
                                 }
                             }
                             rawAmplitudes.add(peak)
@@ -150,10 +180,16 @@ class WaveformEngine @Inject constructor(
 
         if (rawAmplitudes.isEmpty()) return emptyList()
 
-        // Interpolate/Downsample to targetBars
+        // AVERAGE POOLING: Downsample to targetBars with better transient preservation
         val step = rawAmplitudes.size.toFloat() / targetBars
         return List(targetBars) { i ->
-            rawAmplitudes[(i * step).toInt().coerceIn(rawAmplitudes.indices)]
+            val start = (i * step).toInt()
+            val end = ((i + 1) * step).toInt().coerceIn(rawAmplitudes.indices)
+            if (start < end) {
+                rawAmplitudes.subList(start, end).maxOrNull() ?: 0f
+            } else {
+                rawAmplitudes.getOrElse(start) { 0f }
+            }
         }
     }
 

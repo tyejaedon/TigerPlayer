@@ -112,6 +112,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[RESUME_ON_WIRED_CONNECT] = enabled }
     }
 
+    suspend fun resetToDefaults() {
+        dataStore.edit { it.clear() }
+    }
+
     private inline fun <reified T : Enum<T>> enumOrDefault(value: String?, default: T): T {
         if (value.isNullOrBlank()) return default
         return runCatching { enumValueOf<T>(value) }.getOrDefault(default)

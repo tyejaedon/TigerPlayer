@@ -12,6 +12,7 @@ import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.engine.LibraryEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +52,8 @@ class SettingsViewModel @Inject constructor(
 
     private val _libraryRescanState = MutableStateFlow(LibraryRescanState())
     val libraryRescanState: StateFlow<LibraryRescanState> = _libraryRescanState.asStateFlow()
+
+    private var rescanJob: Job? = null
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { settingsDataStore.setThemeMode(mode) }
@@ -92,8 +95,16 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setResumeOnWiredHeadsetConnect(enabled) }
     }
 
-    fun triggerLibraryRescan() {
+    fun resetToDefaults() {
         viewModelScope.launch {
+            settingsDataStore.resetToDefaults()
+        }
+    }
+
+    fun triggerLibraryRescan() {
+        if (rescanJob?.isActive == true) return
+        
+        rescanJob = viewModelScope.launch {
             libraryEngine.getLocalAudioScanFlow(forceRefresh = true).collect { status ->
                 when (status) {
                     is LocalAudioDataSource.ScanStatus.Started -> {

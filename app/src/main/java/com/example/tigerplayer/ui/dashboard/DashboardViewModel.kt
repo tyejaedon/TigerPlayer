@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.dashboard
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tigerplayer.data.model.AudioTrack
@@ -11,6 +12,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 
@@ -32,6 +34,10 @@ class DashboardViewModel @Inject constructor(
                 limit = DAYLIST_SIZE
             )
         }
+        .catch { e -> 
+            Log.e("DashboardVM", "Error fetching daylist", e)
+            emit(emptyList()) 
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -44,6 +50,10 @@ class DashboardViewModel @Inject constructor(
                 staleBeforeMs = now - DISCOVERY_STALE_MS,
                 limit = DISCOVERY_SIZE
             )
+        }
+        .catch { e -> 
+            Log.e("DashboardVM", "Error fetching discovery", e)
+            emit(emptyList())
         }
         .stateIn(
             scope = viewModelScope,
@@ -75,4 +85,3 @@ class DashboardViewModel @Inject constructor(
         const val DISCOVERY_STALE_MS = 180L * 24L * 60L * 60L * 1_000L
     }
 }
-

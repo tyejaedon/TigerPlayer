@@ -274,9 +274,17 @@ class MediaControllerManager @Inject constructor(
         positionJob?.cancel()
         positionJob = managerScope.launch {
             while (isActive) {
-                mediaController?.let {
-                    _currentPosition.value = it.currentPosition
-                    maybeStartFlowStateFadeOut(it)
+                mediaController?.let { controller ->
+                    _currentPosition.value = controller.currentPosition
+                    
+                    // OPTIMIZATION: Only perform heavy FlowState checks in the final 20 seconds
+                    val duration = controller.duration
+                    if (duration != C.TIME_UNSET && duration > 0) {
+                        val remaining = duration - controller.currentPosition
+                        if (remaining < 20_000L) {
+                            maybeStartFlowStateFadeOut(controller)
+                        }
+                    }
                 }
                 delay(250)
             }
@@ -398,19 +406,20 @@ class MediaControllerManager @Inject constructor(
         activeFlowStateMediaId = sourceMediaId
         activeOverlapSession = OverlapSession(sourceMediaId = sourceMediaId, targetMediaId = targetMediaId)
 
-        val warmPlayer = MediaPlayer()
+        val warmPlayer = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+        }
         overlapPlayer = warmPlayer
 
-        warmPlayer.setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build()
-        )
-
-        warmPlayer.setOnErrorListener { _, _, _ ->
+        warmPlayer.setOnErrorListener { _, what, extra ->
+            Log.e("MediaManager", "OverlapPlayer error: $what, $extra")
             resetFlowStatePipeline(restoreFullVolume = true)
-            false
+            true // Indicate error was handled
         }
 
         warmPlayer.setOnPreparedListener { preparedPlayer ->
@@ -621,7 +630,12 @@ class MediaControllerManager @Inject constructor(
             if (queueIds.isEmpty()) return@launch
 
             val allTracks = audioRepository.getLocalTracks().firstOrNull() ?: emptyList()
-            val restored = queueIds.mapNotNull { id -> allTracks.find { it.id == id } }
+            
+            // OPTIMIZATION: Use an O(1) Map for ID lookup on Dispatchers.Default
+            val restored = withContext(Dispatchers.Default) {
+                val trackMap = allTracks.associateBy { it.id }
+                queueIds.mapNotNull { id -> trackMap[id] }
+            }
 
             if (restored.isEmpty()) return@launch
 

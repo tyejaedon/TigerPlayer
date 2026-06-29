@@ -36,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlin.math.pow
@@ -54,7 +55,7 @@ class AudioPlayerService : MediaSessionService() {
     @Inject lateinit var adaptiveDspEngine: AdaptiveDspEngine
     @Inject lateinit var playbackPrefs: PlaybackPrefs
 
-    private var isBitPerfectMode = true
+    private var isBitPerfectMode = false // Initial state to ensure first call triggers
     private var currentProfile: PeqProfile? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -126,6 +127,7 @@ class AudioPlayerService : MediaSessionService() {
 
     @OptIn(UnstableApi::class)
     private fun setAudioOffloadEnabled(enabled: Boolean) {
+        if (isBitPerfectMode == enabled) return
         isBitPerfectMode = enabled
 
         val offloadMode = if (enabled) {
@@ -134,32 +136,52 @@ class AudioPlayerService : MediaSessionService() {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
         }
 
-        // 🔥 THE FIX 2: Gracefully shutdown the player before hot-swapping Audio Offload.
-        // This forces ExoPlayer to clear the AudioSink hardware, preventing PTS Discontinuity.
-        val wasPlaying = player.isPlaying
-        val currentPosition = player.currentPosition
+        serviceScope.launch {
+            val wasPlaying = player.isPlaying
+            val currentPosition = player.currentPosition
+            val startVolume = player.volume
 
-        player.stop()
+            // FADED SWAP: Ramp down before hardware reset to hide the click/pop
+            if (wasPlaying) {
+                val steps = 5
+                for (i in 1..steps) {
+                    player.volume = startVolume * (1f - i.toFloat() / steps)
+                    delay(30)
+                }
+            }
 
-        player.trackSelectionParameters = player.trackSelectionParameters
-            .buildUpon()
-            .setAudioOffloadPreferences(
-                AudioOffloadPreferences.Builder()
-                    .setAudioOffloadMode(offloadMode)
-                    .build()
-            )
-            .build()
+            player.stop()
 
-        if (enabled) {
-            player.volume = 1f
-        } else {
-            currentProfile?.let { applyProfileToDsp(it) }
-        }
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon()
+                .setAudioOffloadPreferences(
+                    AudioOffloadPreferences.Builder()
+                        .setAudioOffloadMode(offloadMode)
+                        .build()
+                )
+                .build()
 
-        player.seekTo(currentPosition)
-        player.prepare()
-        if (wasPlaying) {
-            player.play()
+            if (enabled) {
+                player.volume = 1f
+            } else {
+                currentProfile?.let { applyProfileToDsp(it) }
+            }
+
+            player.seekTo(currentPosition)
+            player.prepare()
+            
+            if (wasPlaying) {
+                player.play()
+                // Ramp back up smoothly
+                val targetVolume = player.volume
+                player.volume = 0f
+                val steps = 8
+                for (i in 1..steps) {
+                    player.volume = targetVolume * (i.toFloat() / steps)
+                    delay(40)
+                }
+                player.volume = targetVolume
+            }
         }
     }
 

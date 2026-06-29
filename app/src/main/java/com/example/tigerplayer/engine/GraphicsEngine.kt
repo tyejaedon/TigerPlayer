@@ -10,7 +10,12 @@ import java.nio.FloatBuffer
  * 📦 FRAMEBUFFER (FBO)
  * Manages off-screen rendering surfaces.
  */
-class FrameBuffer(val width: Int, val height: Int) {
+class FrameBuffer(
+    val width: Int,
+    val height: Int,
+    private val internalFormat: Int = GLES30.GL_RGBA16F,
+    private val format: Int = GLES30.GL_RGBA
+) {
     val texture: Int
     val fbo: Int
 
@@ -20,8 +25,18 @@ class FrameBuffer(val width: Int, val height: Int) {
         texture = textures[0]
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
 
-        // RGBA16F is essential for the Navier-Stokes velocity field
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, width, height, 0, GLES30.GL_RGBA, GLES30.GL_HALF_FLOAT, null)
+        // Optimized texture format allocation to save bandwidth
+        GLES30.glTexImage2D(
+            GLES30.GL_TEXTURE_2D,
+            0,
+            internalFormat,
+            width,
+            height,
+            0,
+            format,
+            GLES30.GL_HALF_FLOAT,
+            null
+        )
 
         // Use LINEAR filtering for smooth fluid advection
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
@@ -71,9 +86,14 @@ class FrameBuffer(val width: Int, val height: Int) {
  * Essential for simulations where the next state depends on the previous state.
  */
 
-class PingPongBuffer(val width: Int, val height: Int) {
-    private var primary = FrameBuffer(width, height)
-    private var secondary = FrameBuffer(width, height)
+class PingPongBuffer(
+    val width: Int,
+    val height: Int,
+    internalFormat: Int = GLES30.GL_RGBA16F,
+    format: Int = GLES30.GL_RGBA
+) {
+    private var primary = FrameBuffer(width, height, internalFormat, format)
+    private var secondary = FrameBuffer(width, height, internalFormat, format)
 
     val readTexture get() = primary.texture
     val writeFbo get() = secondary.fbo

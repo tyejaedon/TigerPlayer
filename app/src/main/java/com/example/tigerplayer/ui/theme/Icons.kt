@@ -65,6 +65,7 @@ object WitcherIcons {
     val Close = Icons.Rounded.Close
     val Check = Icons.Rounded.CheckCircle
     val Refresh = Icons.Rounded.Refresh
+    val Sort = Icons.AutoMirrored.Rounded.Sort
 
     // --- SYSTEM & STATUS: The Bestiary ---
     val VolumeUp = Icons.AutoMirrored.Rounded.VolumeUp

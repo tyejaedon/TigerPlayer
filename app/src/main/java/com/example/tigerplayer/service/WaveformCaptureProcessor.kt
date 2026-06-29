@@ -47,6 +47,7 @@ class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
     private fun processWaveform(buffer: java.nio.ByteBuffer) {
         val numBins = 64
         val amplitudes = FloatArray(numBins)
+        val channelCount = inputAudioFormat.channelCount.coerceAtLeast(1)
 
         if (inputAudioFormat.encoding == androidx.media3.common.C.ENCODING_PCM_FLOAT) {
             val floatBuffer = buffer.asFloatBuffer()
@@ -57,10 +58,14 @@ class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
             for (i in 0 until numBins) {
                 var maxVal = 0f
                 for (j in 0 until chunkSize) {
-                    val index = i * chunkSize + j
-                    if (index < samplesSize) {
-                        val sample = abs(floatBuffer.get(index))
-                        if (sample > maxVal) maxVal = sample
+                    val baseIndex = i * chunkSize + j
+                    // STEREO AWARENESS: Consider all channels in this sample position
+                    for (c in 0 until channelCount) {
+                        val index = baseIndex + c
+                        if (index < samplesSize) {
+                            val sample = abs(floatBuffer.get(index))
+                            if (sample > maxVal) maxVal = sample
+                        }
                     }
                 }
                 amplitudes[i] = maxVal.coerceIn(0f, 1f)
@@ -74,21 +79,24 @@ class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
             for (i in 0 until numBins) {
                 var maxVal = 0f
                 for (j in 0 until chunkSize) {
-                    val index = i * chunkSize + j
-                    if (index < samplesSize) {
-                        val sample = abs(shortBuffer.get(index).toFloat())
-                        if (sample > maxVal) maxVal = sample
+                    val baseIndex = i * chunkSize + j
+                    for (c in 0 until channelCount) {
+                        val index = baseIndex + c
+                        if (index < samplesSize) {
+                            val sample = abs(shortBuffer.get(index).toFloat())
+                            if (sample > maxVal) maxVal = sample
+                        }
                     }
                 }
                 amplitudes[i] = (maxVal / 32768f).coerceIn(0f, 1f)
             }
         }
 
-        // SMOOTHING logic
+        // SMOOTHING: High-integration factor (0.75) to prevent visual jitter
         val prev = _waveform.value
         val smoothed = List(numBins) { i ->
             val p = prev.getOrNull(i) ?: 0f
-            (p * 0.6f + amplitudes[i] * 0.4f)
+            (p * 0.75f + amplitudes[i] * 0.25f)
         }
 
         _waveform.value = smoothed

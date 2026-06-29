@@ -57,6 +57,8 @@ class AcousticEnvironmentViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AcousticEnvironmentUiState())
     val uiState: StateFlow<AcousticEnvironmentUiState> = _uiState.asStateFlow()
 
+    val audioReactiveFrame = adaptiveDspEngine.audioReactiveFrame
+
     init {
         viewModelScope.launch {
             playbackPrefs.acousticEnvironmentMode.collect { savedName ->

@@ -125,36 +125,53 @@ fun SonicPrismHub(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Row(
+            PrismInlineMixer(
+                state = state,
+                onVocalsChange = viewModel::updateVocals,
+                onBeatsChange = viewModel::updateBeats,
+                onInstrumentsChange = viewModel::updateInstruments,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .clip(RoundedCornerShape(28.dp))
                     .background(PrismPanel)
-                    .padding(horizontal = 18.dp, vertical = 24.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PrismFader(
-                    label = "VOCALS",
-                    value = state.vocals,
-                    activeColor = TigerNeonOrange,
-                    onValueChange = viewModel::updateVocals
-                )
-                PrismFader(
-                    label = "BEATS",
-                    value = state.beats,
-                    activeColor = TigerCyberCyan,
-                    onValueChange = viewModel::updateBeats
-                )
-                PrismFader(
-                    label = "MELODY",
-                    value = state.instruments,
-                    activeColor = TigerToxicLime,
-                    onValueChange = viewModel::updateInstruments
-                )
-            }
+                    .padding(horizontal = 18.dp, vertical = 24.dp)
+            )
         }
+    }
+}
+
+@Composable
+fun PrismInlineMixer(
+    state: PrismUiState,
+    onVocalsChange: (Float) -> Unit,
+    onBeatsChange: (Float) -> Unit,
+    onInstrumentsChange: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PrismFader(
+            label = "VOCALS",
+            value = state.vocals,
+            activeColor = TigerNeonOrange,
+            onValueChange = onVocalsChange
+        )
+        PrismFader(
+            label = "BEATS",
+            value = state.beats,
+            activeColor = TigerCyberCyan,
+            onValueChange = onBeatsChange
+        )
+        PrismFader(
+            label = "MELODY",
+            value = state.instruments,
+            activeColor = TigerToxicLime,
+            onValueChange = onInstrumentsChange
+        )
     }
 }
 

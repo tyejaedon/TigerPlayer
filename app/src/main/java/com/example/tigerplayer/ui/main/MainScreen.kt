@@ -31,6 +31,8 @@ import com.example.tigerplayer.ui.home.HomeScreen
 import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.library.LibraryScreen
 import com.example.tigerplayer.ui.library.ScanningOverlay
+import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
+import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
 import com.example.tigerplayer.ui.player.PlayerViewModel
@@ -57,6 +59,16 @@ fun MainScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToQueue: () -> Unit
 ) {
+    val windowState = rememberCoverScreenWindowState()
+    
+    if (windowState.isCoverScreen) {
+        CoverScreenMiniHub(
+            playerViewModel = playerViewModel,
+            windowState = windowState
+        )
+        return
+    }
+
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
 
