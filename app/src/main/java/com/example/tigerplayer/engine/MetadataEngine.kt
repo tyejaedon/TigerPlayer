@@ -33,18 +33,16 @@ class MetadataEngine @Inject constructor(
     suspend fun fetchTrackMetadata(track: AudioTrack) {
         val normalizedKey = ArtistUtils.getBaseArtist(track.artist).lowercase().trim()
 
-        kotlinx.coroutines.coroutineScope {
-            // Fetch Artist Info (Persistent collection for real-time DB updates)
+        coroutineScope {
             launch {
-                mediaDataRepository.getArtistDetails(track.artist).collect { details ->
+                mediaDataRepository.getArtistDetails(track.artist).take(1).collect { details ->
                     _artistDetails.update { it + (normalizedKey to details) }
                     _currentArtistImageUrl.value = details.imageUrl
                 }
             }
 
-            // Fetch Lyrics (Persistent collection for real-time DB updates)
             launch {
-                lyricsRepository.getLyrics(track).collect { lyrics ->
+                lyricsRepository.getLyrics(track).take(1).collect { lyrics ->
                     _currentLyrics.value = lyrics
                 }
             }

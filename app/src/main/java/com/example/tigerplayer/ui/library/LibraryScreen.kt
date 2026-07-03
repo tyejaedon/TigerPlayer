@@ -65,6 +65,7 @@ import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.ensureVisibleOn
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.CoroutineScope
@@ -343,6 +344,11 @@ fun SortRow(
     options: List<LibraryEngine.SortOrder>
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val menuBackground = MaterialTheme.colorScheme.surface
+    val safeLabelColor = MaterialTheme.colorScheme.onSurface
+        .copy(alpha = 0.7f)
+        .ensureVisibleOn(menuBackground, minContrast = 3.6)
+    val safeAccent = MaterialTheme.aardBlue.ensureVisibleOn(menuBackground, minContrast = 3.0)
 
     Row(
         modifier = Modifier
@@ -354,9 +360,9 @@ fun SortRow(
         Box {
             TextButton(
                 onClick = { expanded = true },
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                colors = ButtonDefaults.textButtonColors(contentColor = safeLabelColor)
             ) {
-                Icon(WitcherIcons.Sort, null, modifier = Modifier.size(18.dp))
+                Icon(WitcherIcons.Sort, null, tint = safeLabelColor, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = currentOrder.name.replace("_", " "),
@@ -369,7 +375,7 @@ fun SortRow(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                modifier = Modifier.background(menuBackground)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -378,7 +384,7 @@ fun SortRow(
                                 option.name.replace("_", " "),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (option == currentOrder) FontWeight.Bold else FontWeight.Normal,
-                                color = if (option == currentOrder) MaterialTheme.aardBlue else MaterialTheme.colorScheme.onSurface
+                                color = if (option == currentOrder) safeAccent else safeLabelColor
                             )
                         },
                         onClick = {

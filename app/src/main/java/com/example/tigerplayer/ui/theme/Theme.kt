@@ -5,6 +5,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.example.tigerplayer.data.local.TigerAccentStyle
@@ -15,32 +16,43 @@ import com.example.tigerplayer.data.local.TigerAccentStyle
 private val DarkColorScheme = darkColorScheme(
     primary = TigerNeonOrange,
     secondary = TigerElectricAmber,
+    tertiary = Color(0xFFFFD0A6),
 
-    // Use the updated, slightly lighter greys
     background = TigerBlack,
     surface = TigerDeepGrey,
     surfaceVariant = TigerSurfaceCharcoal,
+    primaryContainer = Color(0xFF4A2410),
+    secondaryContainer = Color(0xFF4D3318),
+    onPrimary = Color(0xFF2A1307),
+    onSecondary = Color(0xFF2A1605),
+    onPrimaryContainer = Color(0xFFFFDFC5),
 
     onBackground = TigerTextHigh,
     onSurface = TigerTextHigh,
+    onSurfaceVariant = TigerTextMed,
 )
 
 // Extension for elevated surfaces in your Theme.kt
 val MaterialTheme.elevatedSurface: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) TigerSurfaceCharcoal else TigerMutedSilk
+    get() = if (this.colorScheme.background.luminance() < 0.5f) TigerSurfaceCharcoal else TigerMutedSilk
 private val LightColorScheme = lightColorScheme(
     primary = TigerNeonOrange,
     secondary = TigerElectricAmber,
-    tertiary = TigerSpectralViolet,
+    tertiary = Color(0xFFB75517),
 
     background = TigerIvory,
     surface = TigerPaper,
     surfaceVariant = TigerMutedSilk,
+    primaryContainer = Color(0xFFFFE2C7),
+    secondaryContainer = Color(0xFFFFEBCF),
+    onPrimary = Color(0xFF3A1D0D),
+    onSecondary = Color(0xFF3D230B),
+    onPrimaryContainer = Color(0xFF4A2410),
 
     onBackground = TigerTextInverse,
     onSurface = TigerTextInverse,
-    onSurfaceVariant = Color(0xFF555555),
+    onSurfaceVariant = Color(0xFF6D5A49),
 )
 
 // ------------------------------
@@ -96,9 +108,9 @@ fun TigerPlayerTheme(
 // ------------------------------
 val MaterialTheme.aardBlue: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) AardBlueDark else AardBlueLight
+    get() = if (this.colorScheme.background.luminance() < 0.5f) AardBlueDark else AardBlueLight
 
 val MaterialTheme.igniRed: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) IgniRedDark else IgniRedLight
+    get() = if (this.colorScheme.background.luminance() < 0.5f) IgniRedDark else IgniRedLight
 

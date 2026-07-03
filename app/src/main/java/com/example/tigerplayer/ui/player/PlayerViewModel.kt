@@ -59,6 +59,7 @@ data class PlayerUiState(
     val artistImageUrl: String? = null,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val allTracks: List<AudioTrack> = emptyList(),
     val tracks: List<AudioTrack> = emptyList(),
     val artists: List<LibraryArtist> = emptyList(),
     val albums: List<LibraryEngine.LibraryAlbum> = emptyList(),
@@ -70,6 +71,7 @@ data class PlayerUiState(
     val scanProgress: Int = 0,
     val totalFilesToScan: Int = 0,
     val queue: List<AudioTrack> = emptyList(),
+    val currentQueueIndex: Int = -1,
     val visualMode: PlayerVisualMode = PlayerVisualMode.ARTWORK,
     val currentWaveform: List<Float> = emptyList(),
     val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame(),
@@ -98,6 +100,7 @@ class PlayerViewModel @Inject constructor(
     val trackColor: StateFlow<Color> = _trackColor.asStateFlow()
 
     private var scanJob: Job? = null
+    private var metadataJob: Job? = null
     private val libraryRefreshTrigger = MutableStateFlow(0)
     private var preferredDefaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D
 
@@ -165,6 +168,12 @@ class PlayerViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            mediaControllerManager.currentMediaItemIndex.collect { index ->
+                _uiState.update { it.copy(currentQueueIndex = index) }
+            }
+        }
+
+        viewModelScope.launch {
             adaptiveDspEngine.audioReactiveFrame.collect { frame ->
                 _uiState.update { it.copy(audioReactiveFrame = frame) }
             }
@@ -179,6 +188,7 @@ class PlayerViewModel @Inject constructor(
             ).collect { aggregation ->
                 _uiState.update {
                     it.copy(
+                        allTracks = aggregation.tracks,
                         tracks = aggregation.filteredTracks,
                         artists = aggregation.artists,
                         albums = aggregation.albums
@@ -206,12 +216,8 @@ class PlayerViewModel @Inject constructor(
 
         // --- 3. QUEUE SYNCHRONIZATION ---
         viewModelScope.launch {
-            _uiState.map { it.tracks }.distinctUntilChanged().collectLatest { tracks ->
-                if (tracks.isNotEmpty()) {
-                    playbackEngine.getQueueFlow(tracks).collect { resolvedQueue ->
-                        _uiState.update { it.copy(queue = resolvedQueue) }
-                    }
-                }
+            playbackEngine.getQueueFlow().collect { resolvedQueue ->
+                _uiState.update { it.copy(queue = resolvedQueue) }
             }
         }
 
@@ -231,13 +237,21 @@ class PlayerViewModel @Inject constructor(
         // --- 5. THE TRACK TRANSITION RITUAL ---
         viewModelScope.launch {
             combine(
+                mediaControllerManager.currentMediaItemIndex,
                 mediaControllerManager.currentMediaId,
-                _uiState.map { it.tracks }.distinctUntilChanged()
-            ) { mediaId, allTracks ->
-                allTracks.find { it.id == mediaId }
-            }.filterNotNull()
-             .distinctUntilChanged { old, new -> old.id == new.id }
-             .collectLatest { track ->
+                _uiState.map { it.queue }.distinctUntilChanged(),
+                _uiState.map { it.allTracks }.distinctUntilChanged()
+            ) { queueIndex, mediaId, queue, allTracks ->
+                val resolvedTrack = queue.getOrNull(queueIndex)
+                    ?: queue.firstOrNull { it.id == mediaId }
+                    ?: allTracks.find { it.id == mediaId }
+                queueIndex to resolvedTrack
+            }.filter { (_, track) -> track != null }
+             .distinctUntilChanged { old, new ->
+                 old.first == new.first && old.second?.id == new.second?.id
+             }
+             .collectLatest { (_, resolvedTrack) ->
+                val track = resolvedTrack ?: return@collectLatest
                 _uiState.update {
                     it.copy(
                         currentTrack = track,
@@ -248,7 +262,10 @@ class PlayerViewModel @Inject constructor(
                 }
 
                 metadataEngine.clearTrackMetadata()
-                metadataEngine.fetchTrackMetadata(track)
+                metadataJob?.cancel()
+                metadataJob = viewModelScope.launch(Dispatchers.IO) {
+                    metadataEngine.fetchTrackMetadata(track)
+                }
                 statsEngine.recordPlaybackHistory(track)
 
                 if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
@@ -325,8 +342,8 @@ class PlayerViewModel @Inject constructor(
         playbackEngine.playNext(track)
     }
 
-    fun removeFromQueue(track: AudioTrack) {
-        playbackEngine.removeFromQueue(track)
+    fun removeFromQueue(index: Int) {
+        playbackEngine.removeFromQueue(index)
     }
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
@@ -346,7 +363,7 @@ class PlayerViewModel @Inject constructor(
     // ==========================================
 
     fun getPlaylistTracks(playlistId: Long): Flow<List<AudioTrack>> {
-        return libraryEngine.getPlaylistTracks(playlistId, _uiState.value.tracks)
+        return libraryEngine.getPlaylistTracks(playlistId, _uiState.value.allTracks)
     }
 
     fun createPlaylist(name: String) {

@@ -39,7 +39,12 @@ private fun parseLrc(lrc: String?): List<LyricLine> {
 }
 
 @Composable
-fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Color) {
+fun LyricsDisplay(
+    lyrics: String?,
+    currentPosition: Long,
+    textColor: Color,
+    activeColor: Color = MaterialTheme.igniRed
+) {
     if (lyrics.isNullOrBlank()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             Text(
@@ -80,7 +85,7 @@ fun LyricsDisplay(lyrics: String?, currentPosition: Long, textColor: Color) {
 
                 Text(
                     text = line.text.ifBlank { "•••" },
-                    color = if (isActive) MaterialTheme.igniRed else textColor.copy(0.4f),
+                    color = if (isActive) activeColor else textColor.copy(0.4f),
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Black,
                         fontSize = if (isActive) 24.sp else 20.sp

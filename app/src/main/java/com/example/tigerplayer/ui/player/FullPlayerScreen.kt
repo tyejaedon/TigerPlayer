@@ -8,7 +8,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -43,7 +42,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.ColorUtils
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -54,10 +52,10 @@ import com.example.tigerplayer.ui.library.SongOptionsSheet
 import com.example.tigerplayer.ui.prism.PrismUiState
 import com.example.tigerplayer.ui.prism.PrismViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.ensureVisibleOn
 import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.igniRed
+import com.example.tigerplayer.ui.theme.withSafeAlpha
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration.Companion.seconds
@@ -88,14 +86,16 @@ fun FullPlayerScreen(
     }
 
     val themeSurface = MaterialTheme.colorScheme.surface
+    val themePrimary = MaterialTheme.colorScheme.primary
     var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
     var dynamicTextColor by remember { mutableStateOf(Color(0xFFF5F5F5)) }
+    var dynamicAccentColor by remember(themePrimary) { mutableStateOf(themePrimary) }
 
     val backgroundArtModel = remember(currentTrack.artworkUri, uiState.artistImageUrl) {
         uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: currentTrack.artworkUri
     }
 
-    val imageRequest = remember(backgroundArtModel) {
+    val imageRequest = remember(backgroundArtModel, themePrimary) {
         ImageRequest.Builder(context)
             .data(backgroundArtModel)
             .crossfade(true)
@@ -104,11 +104,25 @@ fun FullPlayerScreen(
                 val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
                 bitmap?.let { b ->
                     androidx.palette.graphics.Palette.from(b).generate { palette ->
-                        val extractedColor = palette?.dominantSwatch?.rgb?.let { Color(it) } ?: Color(0xFF121212)
-                        dominantBgColor = extractedColor
-                        viewModel.updateTrackColor(extractedColor)
-                        val luminance = ColorUtils.calculateLuminance(extractedColor.toArgb())
-                        dynamicTextColor = if (luminance > 0.5) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)
+                        val extractedColor = palette?.vibrantSwatch?.rgb
+                            ?: palette?.mutedSwatch?.rgb
+                            ?: palette?.dominantSwatch?.rgb
+                            ?: themeSurface.toArgb()
+
+                        val resolvedBackground = Color(extractedColor)
+                        val resolvedText = Color(0xFFF5F5F5).ensureVisibleOn(
+                            background = resolvedBackground,
+                            minContrast = 4.5
+                        )
+                        val resolvedAccent = themePrimary.ensureVisibleOn(
+                            background = resolvedBackground,
+                            minContrast = 3.2
+                        )
+
+                        dominantBgColor = resolvedBackground
+                        dynamicTextColor = resolvedText
+                        dynamicAccentColor = resolvedAccent
+                        viewModel.updateTrackColor(resolvedAccent)
                     }
                 }
             })
@@ -147,6 +161,8 @@ fun FullPlayerScreen(
         ) {
             HeaderRitual(
                 dynamicTextColor = dynamicTextColor,
+                backgroundColor = dominantBgColor,
+                accentColor = dynamicAccentColor,
                 onCollapse = onCollapse,
                 mainViewState = uiState.mainViewState,
                 onSetMainViewState = viewModel::setMainViewState,
@@ -173,6 +189,7 @@ fun FullPlayerScreen(
                         prismState = prismState,
                         prismViewModel = prismViewModel,
                         dynamicTextColor = dynamicTextColor,
+                        dynamicAccentColor = dynamicAccentColor,
                         dominantBgColor = dominantBgColor
                     )
                 }
@@ -210,6 +227,7 @@ fun FullPlayerScreen(
                         prismState = prismState,
                         prismViewModel = prismViewModel,
                         dynamicTextColor = dynamicTextColor,
+                        dynamicAccentColor = dynamicAccentColor,
                         dominantBgColor = dominantBgColor
                     )
                 }
@@ -259,6 +277,7 @@ private fun PlayerMainContent(
     prismState: PrismUiState,
     prismViewModel: PrismViewModel,
     dynamicTextColor: Color,
+    dynamicAccentColor: Color,
     dominantBgColor: Color
 ) {
     AnimatedContent(
@@ -275,10 +294,12 @@ private fun PlayerMainContent(
                 QueueDisplay(
                     queue = uiState.queue,
                     currentTrackId = currentTrack.id,
+                    currentQueueIndex = uiState.currentQueueIndex,
                     isPlaying = uiState.isPlaying,
                     shuffleModeEnabled = uiState.isShuffleEnabled,
                     repeatMode = uiState.repeatMode,
                     dynamicTextColor = dynamicTextColor,
+                    accentColor = dynamicAccentColor,
                     onTrackClick = { viewModel.playQueueItem(it) },
                     onRemoveFromQueue = { viewModel.removeFromQueue(it) },
                     onMoveItem = { from, to -> viewModel.moveQueueItem(from, to) }
@@ -294,7 +315,8 @@ private fun PlayerMainContent(
                 LyricsDisplay(
                     lyrics = uiState.currentLyrics,
                     currentPosition = uiState.currentPosition,
-                    textColor = dynamicTextColor
+                    textColor = dynamicTextColor,
+                    activeColor = dynamicAccentColor
                 )
             }
             MainViewState.ARTWORK -> {
@@ -450,6 +472,8 @@ private fun PlayerControlsContent(
 @Composable
 fun HeaderRitual(
     dynamicTextColor: Color,
+    backgroundColor: Color,
+    accentColor: Color,
     onCollapse: () -> Unit,
     mainViewState: MainViewState,
     onSetMainViewState: (MainViewState) -> Unit,
@@ -481,23 +505,35 @@ fun HeaderRitual(
                     icon = WitcherIcons.Cloud,
                     active = mainViewState == MainViewState.YOUTUBE_VIEWPORT,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.YOUTUBE_VIEWPORT) MainViewState.ARTWORK else MainViewState.YOUTUBE_VIEWPORT) },
-                    color = dynamicTextColor
+                    color = dynamicTextColor,
+                    backgroundColor = backgroundColor,
+                    accentColor = accentColor
                 )
                 HeaderButton(
                     icon = Icons.AutoMirrored.Rounded.Subject,
                     active = mainViewState == MainViewState.LYRICS,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.LYRICS) MainViewState.ARTWORK else MainViewState.LYRICS) },
-                    color = dynamicTextColor
+                    color = dynamicTextColor,
+                    backgroundColor = backgroundColor,
+                    accentColor = accentColor
                 )
                 HeaderButton(
                     icon = Icons.AutoMirrored.Rounded.QueueMusic,
                     active = mainViewState == MainViewState.QUEUE,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.QUEUE) MainViewState.ARTWORK else MainViewState.QUEUE) },
                     onLongClick = onOpenQueueScreen,
-                    color = dynamicTextColor
+                    color = dynamicTextColor,
+                    backgroundColor = backgroundColor,
+                    accentColor = accentColor
                 )
                 IconButton(onClick = onShowOptions) {
-                    Icon(WitcherIcons.Options, null, tint = dynamicTextColor.copy(alpha = 0.8f))
+                    Icon(
+                        WitcherIcons.Options,
+                        null,
+                        tint = dynamicTextColor
+                            .ensureVisibleOn(backgroundColor, minContrast = 4.0)
+                            .withSafeAlpha(0.88f)
+                    )
                 }
             }
         }
@@ -537,8 +573,13 @@ private fun HeaderButton(
     active: Boolean,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
-    color: Color
+    color: Color,
+    backgroundColor: Color,
+    accentColor: Color
 ) {
+    val inactiveColor = color.ensureVisibleOn(backgroundColor, minContrast = 4.0).withSafeAlpha(0.88f)
+    val activeColor = accentColor.ensureVisibleOn(backgroundColor, minContrast = 3.2)
+
     IconButton(
         onClick = onClick,
         modifier = Modifier
@@ -546,8 +587,8 @@ private fun HeaderButton(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .background(if (active) MaterialTheme.aardBlue.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+            .background(if (active) activeColor.withSafeAlpha(0.24f) else Color.Transparent, CircleShape)
     ) {
-        Icon(icon, null, tint = if (active) MaterialTheme.aardBlue else color.copy(alpha = 0.8f))
+        Icon(icon, null, tint = if (active) activeColor else inactiveColor)
     }
 }

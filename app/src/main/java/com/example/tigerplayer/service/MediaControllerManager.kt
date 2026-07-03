@@ -1,11 +1,21 @@
 package com.example.tigerplayer.service
 
+import android.bluetooth.BluetoothA2dp
+import android.bluetooth.BluetoothProfile
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Bundle
+import android.os.Build
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
@@ -45,6 +55,22 @@ class MediaControllerManager @Inject constructor(
         private const val FLOW_STATE_MAX_VOLUME = 1.0f
         private const val FLOW_STATE_STEP_MS = 90L
         private const val FLOW_STATE_FADE_IN_MS = 2_200L
+        private const val QUEUE_ITEM_SEPARATOR = "\u001F"
+        private const val QUEUE_FIELD_SEPARATOR = "\u001E"
+
+        // Metadata keys embedded in MediaItem extras so queue resolution does not depend on library flows.
+        const val META_IS_LOCAL = "tp_meta_is_local"
+        const val META_IS_REMOTE = "tp_meta_is_remote"
+        const val META_DURATION_MS = "tp_meta_duration_ms"
+        const val META_MIME_TYPE = "tp_meta_mime_type"
+        const val META_BITRATE = "tp_meta_bitrate"
+        const val META_SAMPLE_RATE = "tp_meta_sample_rate"
+        const val META_TRACK_NUMBER = "tp_meta_track_number"
+        const val META_SERVER_PATH = "tp_meta_server_path"
+        const val META_YEAR = "tp_meta_year"
+        const val META_DATE_ADDED = "tp_meta_date_added"
+        const val META_IS_LIKED = "tp_meta_is_liked"
+        const val META_PATH = "tp_meta_path"
     }
 
     private data class OverlapSession(
@@ -63,6 +89,9 @@ class MediaControllerManager @Inject constructor(
 
     private val _currentMediaId = MutableStateFlow("")
     val currentMediaId: StateFlow<String> = _currentMediaId
+
+    private val _currentMediaItemIndex = MutableStateFlow(-1)
+    val currentMediaItemIndex: StateFlow<Int> = _currentMediaItemIndex
 
     private val _shuffleModeEnabled = MutableStateFlow(false)
     val shuffleModeEnabled: StateFlow<Boolean> = _shuffleModeEnabled
@@ -84,6 +113,8 @@ class MediaControllerManager @Inject constructor(
     private var pendingFlowStateFadeIn = false
     private var overlapPlayer: MediaPlayer? = null
     private var activeOverlapSession: OverlapSession? = null
+    private var isRouteReceiverRegistered = false
+    private val seenRouteActions = mutableSetOf<String>()
 
     @Volatile private var flowStateEnabled = true
     @Volatile private var flowStateWindowMs = FLOW_STATE_DEFAULT_WINDOW_MS
@@ -93,12 +124,38 @@ class MediaControllerManager @Inject constructor(
     @Volatile private var resumeOnBluetoothConnect = true
     @Volatile private var resumeOnWiredHeadsetConnect = false
 
+    private val audioRouteReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+
+            // Ignore the first broadcast per action to prevent startup auto-resume from sticky snapshots.
+            if (seenRouteActions.add(action)) return
+
+            when (action) {
+                Intent.ACTION_HEADSET_PLUG -> {
+                    val state = intent.getIntExtra("state", 0)
+                    if (state == 1 && resumeOnWiredHeadsetConnect) {
+                        maybeResumeOnRouteConnect("wired")
+                    }
+                }
+
+                BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1)
+                    if (state == BluetoothProfile.STATE_CONNECTED && resumeOnBluetoothConnect) {
+                        maybeResumeOnRouteConnect("bluetooth")
+                    }
+                }
+            }
+        }
+    }
+
     private val infiniteLookAhead = 1
     private val infiniteBatchSize = 12
 
     init {
         observeFlowStatePreferences()
         observeControlMatrixSettings()
+        registerAudioRouteReceiver()
         initializeController()
     }
 
@@ -119,14 +176,14 @@ class MediaControllerManager @Inject constructor(
                 val crossfadeWindowMs = (settings.crossfadeDurationSec * 1_000L)
                     .coerceIn(FLOW_STATE_MIN_WINDOW_MS, FLOW_STATE_MAX_WINDOW_MS)
 
-                flowStateEnabled = settings.crossfadeDurationSec > 0
+                flowStateEnabled = settings.crossfadeDurationSec > 0 && settings.gaplessPlayback
                 flowStateWindowMs = crossfadeWindowMs
                 gaplessPlaybackEnabled = settings.gaplessPlayback
                 audioReactiveHapticsEnabled = settings.audioReactiveHaptics
                 resumeOnBluetoothConnect = settings.resumeOnBluetoothConnect
                 resumeOnWiredHeadsetConnect = settings.resumeOnWiredHeadsetConnect
 
-                if (!flowStateEnabled) {
+                if (!flowStateEnabled || !gaplessPlaybackEnabled) {
                     resetFlowStatePipeline(restoreFullVolume = true)
                 }
             }
@@ -154,6 +211,7 @@ class MediaControllerManager @Inject constructor(
                 _shuffleModeEnabled.value = controller.shuffleModeEnabled
                 _repeatMode.value = controller.repeatMode
                 _currentMediaId.value = controller.currentMediaItem?.mediaId ?: ""
+                _currentMediaItemIndex.value = controller.currentMediaItemIndex
 
                 setupPlayerListener(controller)
                 restorePlaybackState(controller)
@@ -200,7 +258,9 @@ class MediaControllerManager @Inject constructor(
 
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 _currentMediaId.value = item?.mediaId ?: ""
+                _currentMediaItemIndex.value = controller.currentMediaItemIndex
                 _currentPosition.value = 0L
+                maybeEmitTransitionHaptic()
                 flowStateFadeOutJob?.cancel()
                 activeFlowStateMediaId = null
 
@@ -219,6 +279,7 @@ class MediaControllerManager @Inject constructor(
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                _currentMediaItemIndex.value = controller.currentMediaItemIndex
                 _mediaControllerState.tryEmit(Unit)
             }
         })
@@ -239,7 +300,7 @@ class MediaControllerManager @Inject constructor(
         infinitePlayJob?.cancel()
         infinitePlayJob = managerScope.launch(Dispatchers.IO) {
             val currentTrack = audioRepository
-                .getLocalTracks()
+                .getCachedLocalTracks()
                 .firstOrNull()
                 .orEmpty()
                 .firstOrNull { it.id == resolvedAnchorId }
@@ -292,7 +353,7 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun maybeStartFlowStateFadeOut(controller: MediaController) {
-        if (!flowStateEnabled) return
+        if (!flowStateEnabled || !gaplessPlaybackEnabled) return
         if (!controller.isPlaying || controller.playbackState != Player.STATE_READY) return
         if (controller.mediaItemCount <= 1) return
 
@@ -495,6 +556,66 @@ class MediaControllerManager @Inject constructor(
         activeOverlapSession = null
     }
 
+    private fun registerAudioRouteReceiver() {
+        if (isRouteReceiverRegistered) return
+
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_HEADSET_PLUG)
+            addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+        }
+
+        runCatching {
+            context.registerReceiver(audioRouteReceiver, filter)
+            isRouteReceiverRegistered = true
+        }.onFailure {
+            Log.w("MediaManager", "Failed to register audio route receiver: ${it.message}")
+        }
+    }
+
+    private fun unregisterAudioRouteReceiver() {
+        if (!isRouteReceiverRegistered) return
+
+        runCatching {
+            context.unregisterReceiver(audioRouteReceiver)
+        }
+        isRouteReceiverRegistered = false
+        seenRouteActions.clear()
+    }
+
+    private fun maybeResumeOnRouteConnect(route: String) {
+        val controller = mediaController ?: return
+        if (controller.isPlaying || controller.mediaItemCount == 0) return
+
+        controller.play()
+        Log.d("MediaManager", "Auto-resumed playback on $route route connection")
+    }
+
+    private fun maybeEmitTransitionHaptic() {
+        if (!audioReactiveHapticsEnabled) return
+
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibrator = context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+                vibrator?.let(::emitShortHaptic)
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                vibrator?.let(::emitShortHaptic)
+            }
+        }
+    }
+
+    private fun emitShortHaptic(vibrator: Vibrator) {
+        if (!vibrator.hasVibrator()) return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(12L, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(12L)
+        }
+    }
+
     private fun resetFlowStatePipeline(restoreFullVolume: Boolean) {
         flowStateFadeOutJob?.cancel()
         flowStateFadeInJob?.cancel()
@@ -533,9 +654,27 @@ class MediaControllerManager @Inject constructor(
                     .setArtist(track.artist)
                     .setAlbumTitle(track.album)
                     .setArtworkUri(track.artworkUri)
+                    .setExtras(buildQueueMetadataExtras(track))
                     .build()
             )
             .build()
+    }
+
+    private fun buildQueueMetadataExtras(track: AudioTrack): Bundle {
+        return Bundle().apply {
+            putBoolean(META_IS_LOCAL, track.isLocal)
+            putBoolean(META_IS_REMOTE, track.isRemote)
+            putLong(META_DURATION_MS, track.durationMs)
+            putString(META_MIME_TYPE, track.mimeType)
+            putInt(META_BITRATE, track.bitrate)
+            putInt(META_SAMPLE_RATE, track.sampleRate)
+            putInt(META_TRACK_NUMBER, track.trackNumber)
+            putString(META_SERVER_PATH, track.serverPath)
+            putString(META_YEAR, track.year)
+            putLong(META_DATE_ADDED, track.dateAdded)
+            putBoolean(META_IS_LIKED, track.isLiked)
+            putString(META_PATH, track.path)
+        }
     }
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
@@ -555,11 +694,19 @@ class MediaControllerManager @Inject constructor(
         val controller = mediaController ?: return
         for (i in 0 until controller.mediaItemCount) {
             if (controller.getMediaItemAt(i).mediaId == trackId) {
-                controller.removeMediaItem(i)
-                saveCurrentState()
+                removeFromQueueAt(i)
                 break
             }
         }
+    }
+
+    fun removeFromQueueAt(index: Int) {
+        val controller = mediaController ?: return
+        if (index !in 0 until controller.mediaItemCount) return
+
+        controller.removeMediaItem(index)
+        _currentMediaItemIndex.value = controller.currentMediaItemIndex
+        saveCurrentState()
     }
 
     fun playNext(track: AudioTrack) {
@@ -609,14 +756,97 @@ class MediaControllerManager @Inject constructor(
             val controller = mediaController ?: return@launch
             if (controller.mediaItemCount == 0) return@launch
 
-            val queueIds = getCurrentQueue().map { it.mediaId }
+            val queue = getCurrentQueue()
+            val queueIds = queue.map { it.mediaId }
             playbackPrefs.savePlaybackState(
                 controller.currentMediaItem?.mediaId,
                 controller.currentPosition,
                 queueIds,
-                queueIds // We no longer need to maintain separate 'original' lists for custom shuffle
+                queueIds, // We no longer need to maintain separate 'original' lists for custom shuffle
+                queueSnapshot = serializeQueueSnapshot(queue)
             )
         }
+    }
+
+    private fun serializeQueueSnapshot(queue: List<MediaItem>): String {
+        return queue.joinToString(QUEUE_ITEM_SEPARATOR) { item ->
+            val metadata = item.mediaMetadata
+            val extras = metadata.extras
+            listOf(
+                Uri.encode(item.mediaId),
+                Uri.encode(item.localConfiguration?.uri?.toString().orEmpty()),
+                Uri.encode(metadata.title?.toString().orEmpty()),
+                Uri.encode(metadata.artist?.toString().orEmpty()),
+                Uri.encode(metadata.albumTitle?.toString().orEmpty()),
+                Uri.encode(metadata.artworkUri?.toString().orEmpty()),
+                Uri.encode((extras?.getBoolean(META_IS_LOCAL, false) ?: false).toString()),
+                Uri.encode((extras?.getBoolean(META_IS_REMOTE, false) ?: false).toString()),
+                Uri.encode((extras?.getLong(META_DURATION_MS, 0L) ?: 0L).toString()),
+                Uri.encode(extras?.getString(META_MIME_TYPE).orEmpty()),
+                Uri.encode((extras?.getInt(META_BITRATE, 0) ?: 0).toString()),
+                Uri.encode((extras?.getInt(META_SAMPLE_RATE, 0) ?: 0).toString()),
+                Uri.encode((extras?.getInt(META_TRACK_NUMBER, 0) ?: 0).toString()),
+                Uri.encode(extras?.getString(META_SERVER_PATH).orEmpty()),
+                Uri.encode(extras?.getString(META_YEAR).orEmpty()),
+                Uri.encode((extras?.getLong(META_DATE_ADDED, 0L) ?: 0L).toString()),
+                Uri.encode((extras?.getBoolean(META_IS_LIKED, false) ?: false).toString()),
+                Uri.encode(extras?.getString(META_PATH).orEmpty())
+            ).joinToString(QUEUE_FIELD_SEPARATOR)
+        }
+    }
+
+    private fun deserializeQueueSnapshot(snapshot: String?): List<AudioTrack> {
+        if (snapshot.isNullOrBlank()) return emptyList()
+
+        return snapshot.split(QUEUE_ITEM_SEPARATOR)
+            .filter { it.isNotBlank() }
+            .mapNotNull { encodedItem ->
+                val fields = encodedItem.split(QUEUE_FIELD_SEPARATOR)
+                if (fields.size < 6) return@mapNotNull null
+
+                val id = Uri.decode(fields[0]).orEmpty()
+                if (id.isBlank()) return@mapNotNull null
+
+                val uriString = Uri.decode(fields[1]).orEmpty()
+                val title = Uri.decode(fields[2]).orEmpty().ifBlank { "Unknown" }
+                val artist = Uri.decode(fields[3]).orEmpty().ifBlank { "Unknown Artist" }
+                val album = Uri.decode(fields[4]).orEmpty().ifBlank { "Unknown Album" }
+                val artworkString = Uri.decode(fields[5]).orEmpty()
+                val isLocal = fields.getOrNull(6)?.let(Uri::decode)?.toBooleanStrictOrNull() ?: false
+                val isRemote = fields.getOrNull(7)?.let(Uri::decode)?.toBooleanStrictOrNull()
+                    ?: uriString.isNotBlank()
+                val durationMs = fields.getOrNull(8)?.let(Uri::decode)?.toLongOrNull() ?: 0L
+                val mimeType = fields.getOrNull(9)?.let(Uri::decode).orEmpty().ifBlank { "audio/unknown" }
+                val bitrate = fields.getOrNull(10)?.let(Uri::decode)?.toIntOrNull() ?: 0
+                val sampleRate = fields.getOrNull(11)?.let(Uri::decode)?.toIntOrNull() ?: 0
+                val trackNumber = fields.getOrNull(12)?.let(Uri::decode)?.toIntOrNull() ?: 0
+                val serverPath = fields.getOrNull(13)?.let(Uri::decode)?.ifBlank { null }
+                val year = fields.getOrNull(14)?.let(Uri::decode)?.ifBlank { null }
+                val dateAdded = fields.getOrNull(15)?.let(Uri::decode)?.toLongOrNull() ?: 0L
+                val isLiked = fields.getOrNull(16)?.let(Uri::decode)?.toBooleanStrictOrNull() ?: false
+                val path = fields.getOrNull(17)?.let(Uri::decode)?.ifBlank { null }
+
+                AudioTrack(
+                    id = id,
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    uri = uriString.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY,
+                    artworkUri = artworkString.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY,
+                    durationMs = durationMs,
+                    mimeType = mimeType,
+                    isLocal = isLocal,
+                    isRemote = isRemote,
+                    bitrate = bitrate,
+                    sampleRate = sampleRate,
+                    trackNumber = trackNumber,
+                    serverPath = serverPath,
+                    year = year,
+                    dateAdded = dateAdded,
+                    isLiked = isLiked,
+                    path = path
+                )
+            }
     }
 
     private fun restorePlaybackState(controller: MediaController) {
@@ -624,17 +854,28 @@ class MediaControllerManager @Inject constructor(
             val lastId = playbackPrefs.lastTrackId.firstOrNull() ?: return@launch
             val lastPos = playbackPrefs.lastPosition.firstOrNull() ?: 0L
             val queueIds = playbackPrefs.lastQueueIds.firstOrNull() ?: emptyList()
+            val queueSnapshot = playbackPrefs.lastQueueSnapshot.firstOrNull()
             val savedShuffle = playbackPrefs.shuffleMode.firstOrNull() ?: false
             val savedRepeat = playbackPrefs.repeatMode.firstOrNull() ?: Player.REPEAT_MODE_OFF
 
             if (queueIds.isEmpty()) return@launch
 
-            val allTracks = audioRepository.getLocalTracks().firstOrNull() ?: emptyList()
-            
-            // OPTIMIZATION: Use an O(1) Map for ID lookup on Dispatchers.Default
+            val allTracks = audioRepository.getCachedLocalTracks().firstOrNull() ?: emptyList()
+            val snapshotTracks = deserializeQueueSnapshot(queueSnapshot)
+
+            // Prefer snapshot ordering/data for mixed-source queues, enrich with local tracks when available.
             val restored = withContext(Dispatchers.Default) {
                 val trackMap = allTracks.associateBy { it.id }
-                queueIds.mapNotNull { id -> trackMap[id] }
+                queueIds.mapIndexedNotNull { index, id ->
+                    val snapshotTrack = snapshotTracks.getOrNull(index)?.takeIf { it.id == id }
+                    val localTrack = trackMap[id]
+
+                    when {
+                        localTrack != null -> localTrack
+                        snapshotTrack != null -> snapshotTrack
+                        else -> null
+                    }
+                }
             }
 
             if (restored.isEmpty()) return@launch
@@ -700,6 +941,7 @@ class MediaControllerManager @Inject constructor(
         positionJob?.cancel()
         infinitePlayJob?.cancel()
         resetFlowStatePipeline(restoreFullVolume = false)
+        unregisterAudioRouteReceiver()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         mediaController = null
         managerScope.cancel()

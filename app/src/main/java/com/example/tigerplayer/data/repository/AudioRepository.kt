@@ -1,24 +1,24 @@
 package com.example.tigerplayer.data.repository
 
 import android.net.Uri
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresExtension
 import androidx.core.net.toUri
 import com.example.tigerplayer.data.local.dao.PlaylistDao
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.CachedTrackEntity
 import com.example.tigerplayer.data.local.entity.PlaylistEntity
-import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.remote.api.RemoteTrack
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.utils.NavidromeSecurity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,6 +31,8 @@ class AudioRepository @Inject constructor(
 ) {
 
     private var remoteCache: List<AudioTrack> = emptyList()
+    private val hasPrimedLocalScan = AtomicBoolean(false)
+    private val localScanMutex = Mutex()
 
     /**
      * THE MASTER ARCHIVE
@@ -101,29 +103,19 @@ class AudioRepository @Inject constructor(
      * LOCAL CACHE LOGIC
      * retrieves bit-perfect local files from the internal vault.
      */
-    fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = channelFlow {
-        // Observe DB (Fast Path)
-        launch {
-            tigerDao.getCachedTracks().collect { entities ->
-                send(entities.map { it.toDomainModel() })
-            }
+    fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = flow {
+        val shouldScan = forceRefresh || hasPrimedLocalScan.compareAndSet(false, true)
+        if (shouldScan) {
+            refreshLocalCache(forceRefresh = forceRefresh)
         }
 
-        // Silent Patrol
-        launch {
-            localAudioDataSource.getLocalAudioFiles().collect { status ->
-                if (status is LocalAudioDataSource.ScanStatus.Complete) {
-                    val freshTracks = status.tracks
-                    val currentCacheCount = tigerDao.getCachedTracksSync().size
+        emitAll(getCachedLocalTracks())
+    }.flowOn(Dispatchers.IO)
 
-                    // Only update DB if size differs or force requested to avoid UI flicker
-                    if (forceRefresh || currentCacheCount != freshTracks.size) {
-                        tigerDao.insertCachedTracks(freshTracks.map { it.toEntity() })
-                    }
-                }
-            }
+    fun getCachedLocalTracks(): Flow<List<AudioTrack>> =
+        tigerDao.getCachedTracks().map { entities ->
+            entities.map { it.toDomainModel() }
         }
-    }
     /**
      * Used specifically when the UI needs to display the ScanningOverlay.
      */
@@ -141,6 +133,7 @@ class AudioRepository @Inject constructor(
 
             if (status is LocalAudioDataSource.ScanStatus.Complete) {
                 val freshTracks = status.tracks
+                hasPrimedLocalScan.set(true)
                 val isArchiveOutdated = forceRefresh ||
                         cachedTracks.size != freshTracks.size ||
                         cachedTracks != freshTracks
@@ -151,6 +144,27 @@ class AudioRepository @Inject constructor(
                         tigerDao.insertCachedTracks(freshTracks.map { it.toEntity() })
                     }
                 }
+            }
+        }
+    }
+
+    private suspend fun refreshLocalCache(forceRefresh: Boolean) {
+        localScanMutex.withLock {
+            var freshTracks: List<AudioTrack>? = null
+            localAudioDataSource.getLocalAudioFiles().collect { status ->
+                if (status is LocalAudioDataSource.ScanStatus.Complete) {
+                    freshTracks = status.tracks
+                }
+            }
+
+            val scannedTracks = freshTracks ?: return
+            val cachedTracks = tigerDao.getCachedTracksSync().map { it.toDomainModel() }
+            val isArchiveOutdated = forceRefresh ||
+                cachedTracks.size != scannedTracks.size ||
+                cachedTracks != scannedTracks
+
+            if (isArchiveOutdated) {
+                tigerDao.insertCachedTracks(scannedTracks.map { it.toEntity() })
             }
         }
     }
@@ -223,7 +237,7 @@ class AudioRepository @Inject constructor(
     }
 
     fun getTracksForPlaylist(playlistId: Long): Flow<List<AudioTrack>> {
-        return getLocalTracks().combine(playlistDao.getTrackIdsForPlaylist(playlistId)) { allTracks, trackIds ->
+        return getCachedLocalTracks().combine(playlistDao.getTrackIdsForPlaylist(playlistId)) { allTracks, trackIds ->
             trackIds.mapNotNull { id -> allTracks.find { it.id == id } }
         }
     }

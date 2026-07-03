@@ -77,6 +77,12 @@ class StatsEngine @Inject constructor(
     }
 
     suspend fun recordPlaybackHistory(track: AudioTrack) {
+        val source = when {
+            track.id.startsWith("spotify:", ignoreCase = true) -> MediaSource.SPOTIFY
+            track.id.startsWith("navidrome:", ignoreCase = true) -> MediaSource.NAVIDROME
+            else -> MediaSource.LOCAL
+        }
+
         historyRepository.addTrackToHistory(
             trackId = track.id,
             title = track.title,
@@ -84,7 +90,7 @@ class StatsEngine @Inject constructor(
             album = track.album,
             imageUrl = track.artworkUri.toString(),
             durationMs = track.durationMs,
-            source = MediaSource.LOCAL
+            source = source
         )
     }
 

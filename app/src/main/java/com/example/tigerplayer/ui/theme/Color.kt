@@ -8,30 +8,29 @@ import androidx.compose.ui.graphics.Color
 // ------------------------------
 // CORE AMOLED SURFACES
 // ------------------------------
-val TigerBlack = Color(0xFF101012)        // Softened background
-val TigerDeepGrey = Color(0xFF18181A)     // Cards / Containers
-val TigerSurfaceCharcoal = Color(0xFF202022) // Elevated sheets
-val TigerSurfaceElevated = Color(0xFF2C2C2E) // Modals / Inputs
-val TigerSurfaceFloating = Color(0xFF3A3A3C) // Active states
+val TigerBlack = Color(0xFF0E0C0A)
+val TigerDeepGrey = Color(0xFF171311)
+val TigerSurfaceCharcoal = Color(0xFF211A16)
+val TigerSurfaceElevated = Color(0xFF2D241E)
+val TigerSurfaceFloating = Color(0xFF3B2F26)
 
-// Brighten the text slightly so it's not harsh white on deep grey
-val TigerTextHigh = Color(0xFFEBEBF0)
-val TigerTextMed = Color(0xFFB8B8C0)
-val TigerTextLow = Color(0xFF767680)
+val TigerTextHigh = Color(0xFFF7F2ED)
+val TigerTextMed = Color(0xFFCDBFB1)
+val TigerTextLow = Color(0xFF8B7A6C)
 // ------------------------------
 // LIGHT MODE BASE
 // ------------------------------
-val TigerIvory = Color(0xFFFFFBF5)
+val TigerIvory = Color(0xFFFFF8F0)
 val TigerPaper = Color(0xFFFFFFFF)
-val TigerMutedSilk = Color(0xFFF2F0EA)
+val TigerMutedSilk = Color(0xFFF4EDE4)
 
 // ------------------------------
 // ACCENTS (Samsung-style “clean neon”)
 // ------------------------------
-val TigerNeonOrange = Color(0xFFFF6A00)
+val TigerNeonOrange = Color(0xFFFF7A1A)
 val TigerCyberCyan = Color(0xFF00E5FF)
 val TigerToxicLime = Color(0xFF39FF14)
-val TigerElectricAmber = Color(0xFFFFB300)
+val TigerElectricAmber = Color(0xFFFFB347)
 val TigerSpectralViolet = Color(0xFF6C5CE7)
 
 val SpotifyGreen = Color(0xFF1DB954)
@@ -40,24 +39,24 @@ val SpotifyGreen = Color(0xFF1DB954)
 // TEXT TOKENS
 // ------------------------------
 
-val TigerTextInverse = Color(0xFF121212)
+val TigerTextInverse = Color(0xFF1C120A)
 
 // ------------------------------
 // ADAPTIVE COLORS (Samsung-like system tinting)
 // ------------------------------
-val AardBlueLight = Color(0xFF0077FF)
-val AardBlueDark = Color(0xFF4FC3F7)
+val AardBlueLight = Color(0xFFE86A12)
+val AardBlueDark = Color(0xFFFF9C42)
 
-val IgniRedLight = Color(0xFFD93025)
-val IgniRedDark = Color(0xFFFF5252)
+val IgniRedLight = Color(0xFFB64A16)
+val IgniRedDark = Color(0xFFFF7F3A)
 
 // ------------------------------
 // BACKGROUND GRADIENT SYSTEM (NEW)
 // ------------------------------
 val TigerAmbientGradient = Brush.verticalGradient(
     listOf(
-        Color(0xFF0B0B0B),
-        Color(0xFF050505)
+        Color(0xFF120D09),
+        Color(0xFF090705)
     )
 )
 

@@ -102,13 +102,13 @@ fun QueueScreen(
             QueueTrackRow(
                 track = current,
                 isPinned = true,
-                onClick = { viewModel.playTrack(current) }
+                onClick = { viewModel.playTrackAt(uiState.currentIndex) }
             )
             Spacer(modifier = Modifier.height(14.dp))
         }
 
         Text(
-            text = "UPCOMING",
+            text = if (uiState.isShuffleEnabled) "QUEUE (SHUFFLED)" else "UPCOMING",
             color = Color.White.copy(alpha = 0.7f),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Black,
@@ -116,56 +116,69 @@ fun QueueScreen(
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
 
+        if (uiState.isShuffleEnabled) {
+            Text(
+                text = "Reorder is disabled while shuffle is enabled",
+                color = Color.White.copy(alpha = 0.55f),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(localUpcoming, key = { _, track -> track.id }) { index, track ->
+            itemsIndexed(localUpcoming, key = { index, track -> "${index}_${track.id}" }) { index, track ->
                 val isDragging = dragCurrentIndex == index && dragStartIndex != -1
                 val latestIndex by rememberUpdatedState(index)
-                val dragHandleModifier = Modifier.pointerInput(track.id) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            dragStartIndex = latestIndex
-                            dragCurrentIndex = latestIndex
-                            draggedDistance = 0f
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                        onDragEnd = {
-                            if (dragStartIndex >= 0 && dragCurrentIndex >= 0 && dragStartIndex != dragCurrentIndex) {
-                                viewModel.moveUpcomingItem(dragStartIndex, dragCurrentIndex)
-                            }
-                            dragStartIndex = -1
-                            dragCurrentIndex = -1
-                            draggedDistance = 0f
-                        },
-                        onDragCancel = {
-                            localUpcoming = uiState.upcomingTracks
-                            dragStartIndex = -1
-                            dragCurrentIndex = -1
-                            draggedDistance = 0f
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            draggedDistance += dragAmount.y
-                            val itemHeight = 84.dp.toPx()
-                            val offsetInt = (draggedDistance / itemHeight).toInt()
+                val dragHandleModifier = if (uiState.isShuffleEnabled) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(index, track.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                dragStartIndex = latestIndex
+                                dragCurrentIndex = latestIndex
+                                draggedDistance = 0f
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onDragEnd = {
+                                if (dragStartIndex >= 0 && dragCurrentIndex >= 0 && dragStartIndex != dragCurrentIndex) {
+                                    viewModel.moveUpcomingItem(dragStartIndex, dragCurrentIndex)
+                                }
+                                dragStartIndex = -1
+                                dragCurrentIndex = -1
+                                draggedDistance = 0f
+                            },
+                            onDragCancel = {
+                                localUpcoming = uiState.upcomingTracks
+                                dragStartIndex = -1
+                                dragCurrentIndex = -1
+                                draggedDistance = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                draggedDistance += dragAmount.y
+                                val itemHeight = 84.dp.toPx()
+                                val offsetInt = (draggedDistance / itemHeight).toInt()
 
-                            if (offsetInt != 0) {
-                                val newIndex = (dragCurrentIndex + offsetInt).coerceIn(0, localUpcoming.lastIndex)
-                                if (newIndex != dragCurrentIndex) {
-                                    val mutable = localUpcoming.toMutableList()
-                                    val item = mutable.removeAt(dragCurrentIndex)
-                                    mutable.add(newIndex, item)
-                                    localUpcoming = mutable
-                                    dragCurrentIndex = newIndex
-                                    draggedDistance -= offsetInt * itemHeight
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (offsetInt != 0) {
+                                    val newIndex = (dragCurrentIndex + offsetInt).coerceIn(0, localUpcoming.lastIndex)
+                                    if (newIndex != dragCurrentIndex) {
+                                        val mutable = localUpcoming.toMutableList()
+                                        val item = mutable.removeAt(dragCurrentIndex)
+                                        mutable.add(newIndex, item)
+                                        localUpcoming = mutable
+                                        dragCurrentIndex = newIndex
+                                        draggedDistance -= offsetInt * itemHeight
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
 
                 QueueTrackRow(
@@ -173,7 +186,10 @@ fun QueueScreen(
                     isPinned = false,
                     isDragging = isDragging,
                     dragHandleModifier = dragHandleModifier,
-                    onClick = { viewModel.playTrack(track) }
+                    onClick = {
+                        val anchor = (uiState.currentIndex + 1).coerceAtLeast(0)
+                        viewModel.playTrackAt(anchor + index)
+                    }
                 )
             }
         }

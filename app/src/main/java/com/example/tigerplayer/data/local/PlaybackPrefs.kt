@@ -24,6 +24,7 @@ class PlaybackPrefs @Inject constructor(
         val SHUFFLE_MODE = booleanPreferencesKey("shuffle_mode")
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
         val ORIGINAL_QUEUE_IDS = stringPreferencesKey("original_queue_ids")
+        val LAST_QUEUE_SNAPSHOT = stringPreferencesKey("last_queue_snapshot")
         val EQ_NODES_DATA = stringPreferencesKey("eq_nodes_data")
         val CURRENT_MOOD = stringPreferencesKey("current_mood")
         val ACOUSTIC_ENVIRONMENT_MODE = stringPreferencesKey("acoustic_environment_mode")
@@ -42,6 +43,7 @@ class PlaybackPrefs @Inject constructor(
     val originalQueueIds: Flow<List<String>> = dataStore.data.map {
         it[ORIGINAL_QUEUE_IDS]?.split(",")?.filter { id -> id.isNotEmpty() } ?: emptyList()
     }
+    val lastQueueSnapshot: Flow<String?> = dataStore.data.map { it[LAST_QUEUE_SNAPSHOT] }
     val eqNodesData: Flow<String?> = dataStore.data.map { it[EQ_NODES_DATA] }
     val currentMood: Flow<String?> = dataStore.data.map { it[CURRENT_MOOD] }
     val acousticEnvironmentMode: Flow<String> = dataStore.data.map {
@@ -92,7 +94,8 @@ class PlaybackPrefs @Inject constructor(
         trackId: String?,
         position: Long,
         queueIds: List<String>,
-        originalQueueIds: List<String>? = null
+        originalQueueIds: List<String>? = null,
+        queueSnapshot: String? = null
     ) {
         dataStore.edit { prefs ->
             if (trackId != null) prefs[LAST_TRACK_ID] = trackId
@@ -100,6 +103,9 @@ class PlaybackPrefs @Inject constructor(
             prefs[LAST_QUEUE_IDS] = queueIds.joinToString(",")
             originalQueueIds?.let {
                 prefs[ORIGINAL_QUEUE_IDS] = it.joinToString(",")
+            }
+            queueSnapshot?.let {
+                prefs[LAST_QUEUE_SNAPSHOT] = it
             }
         }
     }

@@ -246,7 +246,7 @@ class MediaDataRepository @Inject constructor(
         anchorTrack: AudioTrack,
         limit: Int = 12
     ): List<AudioTrack> = withContext(Dispatchers.IO) {
-        val localTracks = audioRepository.getLocalTracks().firstOrNull().orEmpty()
+        val localTracks = audioRepository.getCachedLocalTracks().firstOrNull().orEmpty()
         if (localTracks.isEmpty()) return@withContext emptyList()
 
         val trackLookup = localTracks.associateBy {

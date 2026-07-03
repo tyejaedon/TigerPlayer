@@ -2,12 +2,11 @@ package com.example.tigerplayer.engine
 
 import android.net.Uri
 import android.util.Log
+import androidx.media3.common.MediaItem
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.SpotifyRepository
 import com.example.tigerplayer.service.MediaControllerManager
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class PlaybackEngine @Inject constructor(
@@ -21,23 +20,45 @@ class PlaybackEngine @Inject constructor(
     val shuffleModeEnabled: Flow<Boolean> = mediaControllerManager.shuffleModeEnabled
     val repeatMode: Flow<Int> = mediaControllerManager.repeatMode
 
-    // Resolves the queue from the media controller with O(1) Time Complexity mappings
-    fun getQueueFlow(libraryTracks: List<AudioTrack>): Flow<List<AudioTrack>> {
+    // Resolve queue directly from MediaController so queue state is not coupled to library filtering.
+    fun getQueueFlow(): Flow<List<AudioTrack>> {
         return mediaControllerManager.mediaControllerState
             .onStart { emit(Unit) }
             .map {
-                val trackMap = withContext(Dispatchers.Default) {
-                    libraryTracks.associateBy { it.id }
-                }
-
-                withContext(Dispatchers.Main) {
-                    val controller = mediaControllerManager.mediaController ?: return@withContext emptyList()
-                    (0 until controller.mediaItemCount).mapNotNull { i ->
-                        val mediaId = controller.getMediaItemAt(i).mediaId
-                        trackMap[mediaId]
-                    }
+                val controller = mediaControllerManager.mediaController ?: return@map emptyList()
+                List(controller.mediaItemCount) { i ->
+                    fallbackTrackFromMediaItem(controller.getMediaItemAt(i))
                 }
             }
+    }
+
+    private fun fallbackTrackFromMediaItem(mediaItem: MediaItem): AudioTrack {
+        val metadata = mediaItem.mediaMetadata
+        val extras = metadata.extras
+        val fallbackUri = mediaItem.localConfiguration?.uri ?: Uri.EMPTY
+        val mimeType = extras?.getString(MediaControllerManager.META_MIME_TYPE).orEmpty()
+
+        return AudioTrack(
+            id = mediaItem.mediaId,
+            title = metadata.title?.toString() ?: "Unknown",
+            artist = metadata.artist?.toString() ?: "Unknown Artist",
+            album = metadata.albumTitle?.toString() ?: "Unknown Album",
+            uri = fallbackUri,
+            artworkUri = metadata.artworkUri ?: Uri.EMPTY,
+            durationMs = extras?.getLong(MediaControllerManager.META_DURATION_MS, 0L) ?: 0L,
+            mimeType = mimeType.ifBlank { "audio/unknown" },
+            isLocal = extras?.getBoolean(MediaControllerManager.META_IS_LOCAL, false) ?: false,
+            isRemote = extras?.getBoolean(MediaControllerManager.META_IS_REMOTE, fallbackUri != Uri.EMPTY)
+                ?: (fallbackUri != Uri.EMPTY),
+            bitrate = extras?.getInt(MediaControllerManager.META_BITRATE, 0) ?: 0,
+            sampleRate = extras?.getInt(MediaControllerManager.META_SAMPLE_RATE, 0) ?: 0,
+            trackNumber = extras?.getInt(MediaControllerManager.META_TRACK_NUMBER, 0) ?: 0,
+            serverPath = extras?.getString(MediaControllerManager.META_SERVER_PATH),
+            path = extras?.getString(MediaControllerManager.META_PATH),
+            year = extras?.getString(MediaControllerManager.META_YEAR),
+            dateAdded = extras?.getLong(MediaControllerManager.META_DATE_ADDED, 0L) ?: 0L,
+            isLiked = extras?.getBoolean(MediaControllerManager.META_IS_LIKED, false) ?: false
+        )
     }
 
     val spotifyRemoteTrack: Flow<AudioTrack?> = spotifyRepository.currentSpotifyTrack.map { spotifyInfo ->
@@ -75,7 +96,7 @@ class PlaybackEngine @Inject constructor(
             spotifyRepository.playUri(track.id)
         } else {
             spotifyRepository.pause()
-            val startIndex = libraryTracks.indexOf(track).coerceAtLeast(0)
+            val startIndex = libraryTracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
             mediaControllerManager.setPlaylistAndPlay(
                 libraryTracks,
                 startIndex
@@ -116,11 +137,7 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
-        val controller = mediaControllerManager.mediaController ?: return
-        val mediaItems = tracks.map { mediaControllerManager.createMediaItem(it) }
-        controller.setMediaItems(mediaItems, startIndex, androidx.media3.common.C.TIME_UNSET)
-        controller.prepare()
-        controller.play()
+        mediaControllerManager.setPlaylistAndPlay(tracks, startIndex)
     }
 
     fun skipToNext(currentTrack: AudioTrack?) {
@@ -151,8 +168,8 @@ class PlaybackEngine @Inject constructor(
         }
     }
 
-    fun removeFromQueue(track: AudioTrack) {
-        mediaControllerManager.removeFromQueue(track.id)
+    fun removeFromQueue(index: Int) {
+        mediaControllerManager.removeFromQueueAt(index)
     }
 
     fun playQueueItem(index: Int) {

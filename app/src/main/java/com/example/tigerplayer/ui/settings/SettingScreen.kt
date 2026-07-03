@@ -1,7 +1,6 @@
 package com.example.tigerplayer.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -63,7 +61,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +70,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.tigerplayer.data.local.DefaultPlayerView
 import com.example.tigerplayer.data.local.SkipShortAudio
+import com.example.tigerplayer.data.local.ThemeMode
 import com.example.tigerplayer.data.local.TigerAccentStyle
 import com.example.tigerplayer.ui.theme.PremiumGlassCard
 import com.example.tigerplayer.ui.theme.TigerCyberCyan
@@ -135,6 +133,29 @@ fun SettingsScreen(
             
             // --- APPEARANCE SECTION ---
             MatrixSection(title = "Core Visuals", icon = Icons.Rounded.Palette, accent = accent) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("THEME MODE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ThemeMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = settings.themeMode == mode,
+                                onClick = { viewModel.setThemeMode(mode) },
+                                label = { Text(mode.name.replace("_", " ")) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+
                 ListItem(
                     headlineContent = { Text("AMOLED BLACK", fontWeight = FontWeight.Bold) },
                     supportingContent = { Text("Force pure #000000 surfaces") },
@@ -169,6 +190,29 @@ fun SettingsScreen(
                                     )
                                     .then(if (selected) Modifier.tigerGlow(swatch) else Modifier)
                                     .bounceClick { viewModel.setAccentStyle(style) }
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("DEFAULT PLAYER VIEW", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DefaultPlayerView.entries.forEach { view ->
+                            FilterChip(
+                                selected = settings.defaultPlayerView == view,
+                                onClick = { viewModel.setDefaultPlayerView(view) },
+                                label = { Text(view.name.replace("_", " ")) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
                             )
                         }
                     }
@@ -273,6 +317,45 @@ fun SettingsScreen(
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
+
+                ListItem(
+                    headlineContent = { Text("WIRED RESUME", fontWeight = FontWeight.Bold) },
+                    leadingContent = { Icon(Icons.Rounded.Headset, null, tint = accent) },
+                    trailingContent = {
+                        Switch(checked = settings.resumeOnWiredHeadsetConnect, onCheckedChange = viewModel::setResumeOnWiredHeadsetConnect)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("SKIP SHORT AUDIO", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SkipShortAudio.entries.forEach { option ->
+                            FilterChip(
+                                selected = settings.skipShortAudio == option,
+                                onClick = { viewModel.setSkipShortAudio(option) },
+                                label = {
+                                    val label = when (option) {
+                                        SkipShortAudio.OFF -> "OFF"
+                                        SkipShortAudio.BELOW_30_SECONDS -> "< 30s"
+                                        SkipShortAudio.BELOW_60_SECONDS -> "< 60s"
+                                    }
+                                    Text(label)
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

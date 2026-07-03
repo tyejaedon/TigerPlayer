@@ -31,12 +31,14 @@ import com.example.tigerplayer.ui.theme.bounceClick
 fun QueueDisplay(
     queue: List<AudioTrack>,
     currentTrackId: String?,
+    currentQueueIndex: Int,
     isPlaying: Boolean,
     shuffleModeEnabled: Boolean,
     repeatMode: Int,
     dynamicTextColor: Color,
+    accentColor: Color,
     onTrackClick: (Int) -> Unit, // Use index for playQueueItem
-    onRemoveFromQueue: (AudioTrack) -> Unit,
+    onRemoveFromQueue: (Int) -> Unit,
     onMoveItem: (fromIndex: Int, toIndex: Int) -> Unit
 ) {
     if (queue.isEmpty()) {
@@ -59,8 +61,19 @@ fun QueueDisplay(
     var dragCurrentIndex by remember { mutableIntStateOf(-1) }
     var draggedDistance by remember { mutableFloatStateOf(0f) }
 
-    val currentIndex = remember(localQueue, currentTrackId) {
-        localQueue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0)
+    // Reconcile optimistic queue immediately after drag settles, even if move fails upstream.
+    LaunchedEffect(queue, dragStartIndex) {
+        if (dragStartIndex == -1) {
+            localQueue = queue
+        }
+    }
+
+    val currentIndex = remember(currentQueueIndex, localQueue.size, currentTrackId) {
+        if (currentQueueIndex in localQueue.indices) {
+            currentQueueIndex
+        } else {
+            localQueue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0)
+        }
     }
 
     LaunchedEffect(currentTrackId) {
@@ -90,13 +103,13 @@ fun QueueDisplay(
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (shuffleModeEnabled) {
-                    Icon(WitcherIcons.Shuffle, null, tint = dynamicTextColor, modifier = Modifier.size(16.dp))
+                    Icon(WitcherIcons.Shuffle, null, tint = accentColor, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                 }
                 Icon(
                     if (repeatMode == 1) WitcherIcons.RepeatOne else WitcherIcons.Repeat,
                     null,
-                    tint = if (repeatMode != 0) dynamicTextColor else dynamicTextColor.copy(alpha = 0.3f),
+                    tint = if (repeatMode != 0) accentColor else dynamicTextColor.copy(alpha = 0.3f),
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -110,12 +123,12 @@ fun QueueDisplay(
         ) {
             itemsIndexed(
                 items = localQueue,
-                key = { _, track -> track.id } // STABLE IDS
+                key = { index, track -> "${index}_${track.id}" }
             ) { index, track ->
-                val isActive = track.id == currentTrackId
+                val isActive = index == currentIndex
                 val isDragging = dragCurrentIndex == index && dragStartIndex != -1
                 val latestIndex by rememberUpdatedState(index)
-                val dragHandleModifier = Modifier.pointerInput(track.id) {
+                val dragHandleModifier = Modifier.pointerInput(index, track.id) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = {
                             dragStartIndex = latestIndex
@@ -216,7 +229,7 @@ fun QueueDisplay(
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (!isActive) {
-                                    IconButton(onClick = { onRemoveFromQueue(track) }) {
+                                    IconButton(onClick = { onRemoveFromQueue(index) }) {
                                         Icon(WitcherIcons.Close, contentDescription = null, tint = dynamicTextColor.copy(0.4f), modifier = Modifier.size(18.dp))
                                     }
                                 }

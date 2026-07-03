@@ -16,11 +16,13 @@ class NavidromeRepository @Inject constructor(
 ) {
     // Cache the payload in memory so we don't recalculate MD5s constantly
     private var cachedAuthMap: Map<String, String>? = null
-    private var currentUsername: String? = null
+    private var currentCredentialFingerprint: Int? = null
 
     private fun getAuthMap(username: String, pass: String): Map<String, String> {
-        // Return cache if it exists for this user
-        if (cachedAuthMap != null && currentUsername == username) {
+        val credentialFingerprint = 31 * username.hashCode() + pass.hashCode()
+
+        // Return cache only when both username and password fingerprint match.
+        if (cachedAuthMap != null && currentCredentialFingerprint == credentialFingerprint) {
             return cachedAuthMap!!
         }
 
@@ -33,7 +35,7 @@ class NavidromeRepository @Inject constructor(
             "c" to payload.c,
             "f" to "json"
         )
-        currentUsername = username
+        currentCredentialFingerprint = credentialFingerprint
         return cachedAuthMap!!
     }
 
