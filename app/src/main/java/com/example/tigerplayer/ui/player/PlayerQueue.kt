@@ -114,52 +114,53 @@ fun QueueDisplay(
             ) { index, track ->
                 val isActive = track.id == currentTrackId
                 val isDragging = dragCurrentIndex == index && dragStartIndex != -1
+                val latestIndex by rememberUpdatedState(index)
+                val dragHandleModifier = Modifier.pointerInput(track.id) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            dragStartIndex = latestIndex
+                            dragCurrentIndex = latestIndex
+                            draggedDistance = 0f
+                        },
+                        onDragEnd = {
+                            if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
+                                onMoveItem(dragStartIndex, dragCurrentIndex)
+                            }
+                            dragStartIndex = -1
+                            dragCurrentIndex = -1
+                            draggedDistance = 0f
+                        },
+                        onDragCancel = {
+                            localQueue = queue
+                            dragStartIndex = -1
+                            dragCurrentIndex = -1
+                            draggedDistance = 0f
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            draggedDistance += dragAmount.y
+                            val itemHeight = 72.dp.toPx()
+                            val offsetInt = (draggedDistance / itemHeight).toInt()
+
+                            if (offsetInt != 0) {
+                                val newIndex = (dragCurrentIndex + offsetInt).coerceIn(0, localQueue.lastIndex)
+                                if (newIndex != dragCurrentIndex) {
+                                    val mutable = localQueue.toMutableList()
+                                    val item = mutable.removeAt(dragCurrentIndex)
+                                    mutable.add(newIndex, item)
+                                    localQueue = mutable
+                                    dragCurrentIndex = newIndex
+                                    draggedDistance -= (offsetInt * itemHeight)
+                                }
+                            }
+                        }
+                    )
+                }
 
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .animateItem()
-                        .pointerInput(localQueue) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = {
-                                    dragStartIndex = index
-                                    dragCurrentIndex = index
-                                    draggedDistance = 0f
-                                },
-                                onDragEnd = {
-                                    if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
-                                        onMoveItem(dragStartIndex, dragCurrentIndex)
-                                    }
-                                    dragStartIndex = -1
-                                    dragCurrentIndex = -1
-                                    draggedDistance = 0f
-                                },
-                                onDragCancel = {
-                                    localQueue = queue
-                                    dragStartIndex = -1
-                                    dragCurrentIndex = -1
-                                    draggedDistance = 0f
-                                },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    draggedDistance += dragAmount.y
-                                    val itemHeight = 72.dp.toPx()
-                                    val offsetInt = (draggedDistance / itemHeight).toInt()
-
-                                    if (offsetInt != 0) {
-                                        val newIndex = (dragCurrentIndex + offsetInt).coerceIn(0, localQueue.lastIndex)
-                                        if (newIndex != dragCurrentIndex) {
-                                            val mutable = localQueue.toMutableList()
-                                            val item = mutable.removeAt(dragCurrentIndex)
-                                            mutable.add(newIndex, item)
-                                            localQueue = mutable
-                                            dragCurrentIndex = newIndex
-                                            draggedDistance -= (offsetInt * itemHeight)
-                                        }
-                                    }
-                                }
-                            )
-                        }
                         .bounceClick { onTrackClick(index) },
                     color = Color.Transparent,
                     shape = RoundedCornerShape(16.dp)
@@ -213,9 +214,27 @@ fun QueueDisplay(
                                     maxLines = 1
                                 )
                             }
-                            if (!isActive) {
-                                IconButton(onClick = { onRemoveFromQueue(track) }) {
-                                    Icon(WitcherIcons.Close, contentDescription = null, tint = dynamicTextColor.copy(0.4f), modifier = Modifier.size(18.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (!isActive) {
+                                    IconButton(onClick = { onRemoveFromQueue(track) }) {
+                                        Icon(WitcherIcons.Close, contentDescription = null, tint = dynamicTextColor.copy(0.4f), modifier = Modifier.size(18.dp))
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .padding(start = 4.dp)
+                                        .size(24.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = if (isDragging) 0.14f else 0.08f))
+                                        .then(dragHandleModifier),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "≡",
+                                        color = dynamicTextColor.copy(alpha = if (isDragging) 0.9f else 0.65f),
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
