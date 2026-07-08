@@ -36,7 +36,7 @@ data class SpatialNode(
     companion object {
         private const val MIN_FREQ = 20f
         private const val MAX_FREQ = 20_000f
-        private const val MAX_GAIN_DB = 15f
+        private const val MAX_GAIN_DB = 12f
     }
 
     fun toAcousticNode(): AcousticNode {

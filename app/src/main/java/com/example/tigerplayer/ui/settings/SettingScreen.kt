@@ -257,6 +257,19 @@ fun SettingsScreen(
                 )
 
                 ListItem(
+                    headlineContent = { Text("SYSTEM DECODER / DSP", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Route audio through Android offload path") },
+                    leadingContent = { Icon(Icons.Rounded.BluetoothAudio, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.routeToSystemDecoderDsp,
+                            onCheckedChange = viewModel::setRouteToSystemDecoderDsp
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                ListItem(
                     headlineContent = { Text("HAPTIC RESONANCE", fontWeight = FontWeight.Bold) },
                     supportingContent = { Text("Kick-drum mechanical feedback") },
                     leadingContent = { Icon(Icons.Rounded.Vibration, null, tint = accent) },

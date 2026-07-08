@@ -36,6 +36,9 @@ class AdaptiveDspEngine @Inject constructor(
         private const val PCM_FLOAT = 32768f
         private const val PCM_MAX_INT = 32767
         private const val PCM_MIN_INT = -32768
+        private const val LOOK_AHEAD_BUFFER_SIZE = 512
+        private const val LIMITER_THRESHOLD = 0.82f
+        private const val OUTPUT_CEILING = 0.995f
     }
 
     private var isActive = true
@@ -55,11 +58,11 @@ class AdaptiveDspEngine @Inject constructor(
     private var agcAttackCoef = 0.01f
     private var agcReleaseCoef = 0.00005f
 
-    // LOOK-AHEAD BUFFER: 5ms at 48kHz is ~240 samples
-    private val lookAheadBufferL = FloatArray(512)
-    private val lookAheadBufferR = FloatArray(512)
+    // LOOK-AHEAD BUFFER: delay is sample-rate aware, buffer remains fixed-size for perf.
+    private val lookAheadBufferL = FloatArray(LOOK_AHEAD_BUFFER_SIZE)
+    private val lookAheadBufferR = FloatArray(LOOK_AHEAD_BUFFER_SIZE)
     private var lookAheadIndex = 0
-    private val lookAheadDelay = 240 // ~5ms at 48kHz
+    private var lookAheadDelaySamples = 240
 
     // TPDF DITHER SEEDS
     private var ditherSeed1 = 0x12345678
@@ -130,15 +133,15 @@ class AdaptiveDspEngine @Inject constructor(
         vinylWowIndex = (vinylWowIndex + 1) % 1024
 
         // 2. SATURATION (Non-linear)
-        val drive = 1.18f
-        val drivenL = (wowL * drive).coerceIn(-1.2f, 1.2f)
+        val drive = 1.08f
+        val drivenL = (wowL * drive).coerceIn(-1.05f, 1.05f)
         val softL = drivenL - ((drivenL * drivenL * drivenL) / 3f)
         
-        val drivenR = (wowR * drive).coerceIn(-1.2f, 1.2f)
+        val drivenR = (wowR * drive).coerceIn(-1.05f, 1.05f)
         val softR = drivenR - ((drivenR * drivenR * drivenR) / 3f)
 
         // 3. NOISE & HISS
-        val rawNoise = nextNoise() * 0.0018f
+        val rawNoise = nextNoise() * 0.0012f
         vinylNoiseDc += (rawNoise - vinylNoiseDc) * 0.004f
         val hiss = rawNoise - vinylNoiseDc
 
@@ -147,8 +150,8 @@ class AdaptiveDspEngine @Inject constructor(
             vinylShelf = StateVariableFilter(FilterType.LOW_SHELF, sampleRate, 350f, 2.5f, 0.5f)
         }
         
-        var outL = (wowL * 0.82f + softL * 0.15f + hiss).coerceIn(-1.15f, 1.15f)
-        var outR = (wowR * 0.82f + softR * 0.15f + hiss).coerceIn(-1.15f, 1.15f)
+        var outL = (wowL * 0.86f + softL * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
+        var outR = (wowR * 0.86f + softR * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
         
         outL = vinylShelf!!.process(outL, 0)
         if (channels == 2) outR = vinylShelf!!.process(outR, 1)
@@ -230,6 +233,9 @@ class AdaptiveDspEngine @Inject constructor(
         this.inputAudioFormat = inputAudioFormat
         this.outputAudioFormat = inputAudioFormat
         detectAndApplyDeviceProfile()
+        lookAheadDelaySamples = (inputAudioFormat.sampleRate * 0.0045f)
+            .roundToInt()
+            .coerceIn(24, LOOK_AHEAD_BUFFER_SIZE - 1)
         hallProcessor.configure(inputAudioFormat.sampleRate.coerceAtLeast(8000))
         prismIsolator.configure(inputAudioFormat.sampleRate.coerceAtLeast(8000))
 
@@ -243,6 +249,11 @@ class AdaptiveDspEngine @Inject constructor(
     }
 
     override fun isActive(): Boolean = isActive
+
+    private fun softClip(sample: Float): Float {
+        val clipped = tanh(sample * 1.35f) / tanh(1.35f)
+        return clipped.coerceIn(-OUTPUT_CEILING, OUTPUT_CEILING)
+    }
 
     private fun replaceOutputBuffer(count: Int): ByteBuffer {
         if (buffer.capacity() < count) {
@@ -289,20 +300,16 @@ class AdaptiveDspEngine @Inject constructor(
             var sampleL = shortBuffer.get().toFloat() / PCM_FLOAT
             var sampleR = if (channels == 2) shortBuffer.get().toFloat() / PCM_FLOAT else sampleL
 
-            // 1. INPUT LOOK-AHEAD WRITE
-            lookAheadBufferL[lookAheadIndex] = sampleL
-            lookAheadBufferR[lookAheadIndex] = sampleR
-
-            // 2. HEADPHONE WIDENING
+            // 1. HEADPHONE WIDENING
             if (isHeadphones && channels == 2) {
                 val mid = (sampleL + sampleR) * 0.5f
                 val side = (sampleL - sampleR) * 0.5f
-                val widenedSide = side * 1.15f
+                val widenedSide = side * 1.05f
                 sampleL = mid + widenedSide
                 sampleR = mid - widenedSide
             }
 
-            // 3. APPLY FILTERS (SVF)
+            // 2. APPLY FILTERS (SVF)
             for (i in localDeviceFilters.indices) {
                 sampleL = localDeviceFilters[i].process(sampleL, 0)
                 if (channels == 2) sampleR = localDeviceFilters[i].process(sampleR, 1)
@@ -313,7 +320,7 @@ class AdaptiveDspEngine @Inject constructor(
                 if (channels == 2) sampleR = localActiveFilters[i].process(sampleR, 1)
             }
 
-            // 4. ACOUSTIC ENVIRONMENTS
+            // 3. ACOUSTIC ENVIRONMENTS
             when (localEnvironmentMode) {
                 AcousticEnvironmentMode.STUDIO -> Unit
                 AcousticEnvironmentMode.VINYL_WARMTH -> {
@@ -328,7 +335,7 @@ class AdaptiveDspEngine @Inject constructor(
                 }
             }
 
-            // 5. PRISM ISOLATION (Linkwitz-Riley)
+            // 4. PRISM ISOLATION (Linkwitz-Riley)
             if (localPrismMode == PrismMode.ISOLATION) {
                 prismCurrentVocals += (localPrismTargetMix.vocals - prismCurrentVocals) * prismMixSmoothing
                 prismCurrentBeats += (localPrismTargetMix.beats - prismCurrentBeats) * prismMixSmoothing
@@ -346,10 +353,14 @@ class AdaptiveDspEngine @Inject constructor(
                 sampleR = prismFrame.right
             }
 
-            // 6. AGC / LIMITER (Look-ahead + Exponential Release)
-            val delayedL = lookAheadBufferL[(lookAheadIndex - lookAheadDelay + 512) % 512]
-            val delayedR = lookAheadBufferR[(lookAheadIndex - lookAheadDelay + 512) % 512]
-            lookAheadIndex = (lookAheadIndex + 1) % 512
+            // 5. AGC / LIMITER (sample-rate aware look-ahead + smooth release)
+            val delayedIndex = (lookAheadIndex - lookAheadDelaySamples + LOOK_AHEAD_BUFFER_SIZE) % LOOK_AHEAD_BUFFER_SIZE
+            val delayedL = lookAheadBufferL[delayedIndex]
+            val delayedR = lookAheadBufferR[delayedIndex]
+
+            lookAheadBufferL[lookAheadIndex] = sampleL
+            lookAheadBufferR[lookAheadIndex] = sampleR
+            lookAheadIndex = (lookAheadIndex + 1) % LOOK_AHEAD_BUFFER_SIZE
 
             val currentPeak = max(abs(sampleL), abs(sampleR))
             if (currentPeak > agcEnvelope) {
@@ -358,18 +369,11 @@ class AdaptiveDspEngine @Inject constructor(
                 agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
             }
 
-            val reduction = if (agcEnvelope > 0.85f) 0.85f / agcEnvelope else 1f
-            sampleL = delayedL * reduction
-            sampleR = delayedR * reduction
+            val reduction = if (agcEnvelope > LIMITER_THRESHOLD) LIMITER_THRESHOLD / agcEnvelope else 1f
+            sampleL = softClip(delayedL * reduction)
+            sampleR = softClip(delayedR * reduction)
 
-            // Soft-clipping saturation function
-            val clampL = sampleL.coerceIn(-1.25f, 1.25f)
-            sampleL = if (abs(clampL) > 1f) sign(clampL) else clampL - ((clampL * clampL * clampL) / 3f)
-
-            val clampR = sampleR.coerceIn(-1.25f, 1.25f)
-            sampleR = if (abs(clampR) > 1f) sign(clampR) else clampR - ((clampR * clampR * clampR) / 3f)
-
-            // 7. REAL-TIME ANALYSIS (Envelope Followers)
+            // 6. REAL-TIME ANALYSIS (Envelope Followers)
             val mono = (sampleL + sampleR) * 0.5f
             lpBass += (if (abs(mono) > lpBass) bassCoefA else bassCoefR) * (abs(mono) - lpBass)
             lpMid += (if (abs(mono) > lpMid) midCoefA else midCoefR) * (abs(mono) - lpMid)
@@ -414,7 +418,7 @@ class AdaptiveDspEngine @Inject constructor(
                 energyAccumulator = 0f
             }
 
-            // 8. TPDF DITHERING (Final 16-bit Stage)
+            // 7. TPDF DITHERING (Final 16-bit Stage)
             ditherSeed1 = ditherSeed1 * 1664525 + 1013904223
             ditherSeed2 = ditherSeed2 * 1664525 + 1013904223
             val rand1 = (ditherSeed1 shr 8 and 0x00FFFFFF) / 16777215f
@@ -567,8 +571,8 @@ private class SchroederHallProcessor {
             allPassIndexR
         )
 
-        outL = (inputL * 0.74f + earlyL * 0.10f + tailL * 0.30f).coerceIn(-1.25f, 1.25f)
-        outR = (stereoR * 0.74f + earlyR * 0.10f + tailR * 0.30f).coerceIn(-1.25f, 1.25f)
+        outL = (inputL * 0.70f + earlyL * 0.10f + tailL * 0.20f).coerceIn(-1.0f, 1.0f)
+        outR = (stereoR * 0.70f + earlyR * 0.10f + tailR * 0.20f).coerceIn(-1.0f, 1.0f)
     }
 
     fun reset() {
@@ -809,8 +813,8 @@ internal class PrismIsolator {
         val outMid = vocals * vocalsGain + low * beatsGain
         val outSide = instruments * instrumentsGain
 
-        val outL = (outMid + outSide).coerceIn(-1.2f, 1.2f)
-        val outR = if (channels == 2) (outMid - outSide).coerceIn(-1.2f, 1.2f) else outL
+        val outL = (outMid + outSide).coerceIn(-1.0f, 1.0f)
+        val outR = if (channels == 2) (outMid - outSide).coerceIn(-1.0f, 1.0f) else outL
 
         return StereoFrame(outL, outR)
     }

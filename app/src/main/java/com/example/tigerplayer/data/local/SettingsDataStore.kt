@@ -48,6 +48,7 @@ data class TigerSettingsState(
     val gaplessPlayback: Boolean = true,
     val audioReactiveHaptics: Boolean = false,
     val skipShortAudio: SkipShortAudio = SkipShortAudio.OFF,
+    val routeToSystemDecoderDsp: Boolean = true,
     val resumeOnBluetoothConnect: Boolean = true,
     val resumeOnWiredHeadsetConnect: Boolean = false
 )
@@ -67,6 +68,7 @@ class SettingsDataStore @Inject constructor(
             gaplessPlayback = prefs[GAPLESS_PLAYBACK] ?: true,
             audioReactiveHaptics = prefs[AUDIO_REACTIVE_HAPTICS] ?: false,
             skipShortAudio = enumOrDefault(prefs[SKIP_SHORT_AUDIO], SkipShortAudio.OFF),
+            routeToSystemDecoderDsp = prefs[ROUTE_TO_SYSTEM_DECODER_DSP] ?: true,
             resumeOnBluetoothConnect = prefs[RESUME_ON_BLUETOOTH_CONNECT] ?: true,
             resumeOnWiredHeadsetConnect = prefs[RESUME_ON_WIRED_CONNECT] ?: false
         )
@@ -104,6 +106,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[SKIP_SHORT_AUDIO] = option.name }
     }
 
+    suspend fun setRouteToSystemDecoderDsp(enabled: Boolean) {
+        dataStore.edit { it[ROUTE_TO_SYSTEM_DECODER_DSP] = enabled }
+    }
+
     suspend fun setResumeOnBluetoothConnect(enabled: Boolean) {
         dataStore.edit { it[RESUME_ON_BLUETOOTH_CONNECT] = enabled }
     }
@@ -130,6 +136,7 @@ class SettingsDataStore @Inject constructor(
         val GAPLESS_PLAYBACK = booleanPreferencesKey("gapless_playback")
         val AUDIO_REACTIVE_HAPTICS = booleanPreferencesKey("audio_reactive_haptics")
         val SKIP_SHORT_AUDIO = stringPreferencesKey("skip_short_audio")
+        val ROUTE_TO_SYSTEM_DECODER_DSP = booleanPreferencesKey("route_to_system_decoder_dsp")
         val RESUME_ON_BLUETOOTH_CONNECT = booleanPreferencesKey("resume_on_bluetooth_connect")
         val RESUME_ON_WIRED_CONNECT = booleanPreferencesKey("resume_on_wired_connect")
     }

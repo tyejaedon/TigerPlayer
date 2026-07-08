@@ -61,6 +61,12 @@ class ConstellationDataEngine @Inject constructor(
             // 🔥 FIX: Prioritize live Lore metadata over historical snapshot
             val lore = artistLore[normalized]
             val liveImageUrl = lore?.imageUrl
+            val localFallbackImageUrl = tracksByArtist[normalized]
+                .orEmpty()
+                .asSequence()
+                .mapNotNull { track -> track.artworkUri.toString().takeIf { it.isNotBlank() } }
+                .firstOrNull()
+            val resolvedImageUrl = liveImageUrl?.takeIf { it.isNotBlank() } ?: localFallbackImageUrl
 
             val mass = log10(max(1f, artist.playCount.toFloat() + 1f))
 
@@ -69,7 +75,7 @@ class ConstellationDataEngine @Inject constructor(
                 label = artist.artistName,
                 type = NodeType.ARTIST,
                 playCount = artist.playCount,
-                imageUrl = liveImageUrl, // Updated to use live URL
+                imageUrl = resolvedImageUrl,
                 parentId = coreId,
                 importance = mass,
                 audioEnergyBias = mass * 0.6f

@@ -87,6 +87,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setSkipShortAudio(option) }
     }
 
+    fun setRouteToSystemDecoderDsp(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setRouteToSystemDecoderDsp(enabled) }
+    }
+
     fun setResumeOnBluetoothConnect(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setResumeOnBluetoothConnect(enabled) }
     }

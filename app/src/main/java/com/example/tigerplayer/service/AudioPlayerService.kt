@@ -22,6 +22,7 @@ import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.example.tigerplayer.data.local.PlaybackPrefs
+import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.MainActivity
 import com.example.tigerplayer.R
 import com.example.tigerplayer.engine.AcousticNode
@@ -37,7 +38,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.pow
 
@@ -54,8 +57,10 @@ class AudioPlayerService : MediaSessionService() {
 
     @Inject lateinit var adaptiveDspEngine: AdaptiveDspEngine
     @Inject lateinit var playbackPrefs: PlaybackPrefs
+    @Inject lateinit var settingsDataStore: SettingsDataStore
 
     private var isBitPerfectMode = false // Initial state to ensure first call triggers
+    private var routeToSystemDecoderDsp = false
     private var currentProfile: PeqProfile? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -107,7 +112,16 @@ class AudioPlayerService : MediaSessionService() {
             adaptiveDspEngine.setAcousticEnvironmentMode(savedMode)
         }
 
-        setAudioOffloadEnabled(true)
+        serviceScope.launch {
+            settingsDataStore.settingsFlow
+                .map { it.routeToSystemDecoderDsp }
+                .distinctUntilChanged()
+                .collect { routeToSystem ->
+                    routeToSystemDecoderDsp = routeToSystem
+                    setAudioOffloadEnabled(routeToSystem)
+                    invalidateCustomLayout()
+                }
+        }
 
         player.addListener(object : Player.Listener {
             override fun onRepeatModeChanged(repeatMode: Int) = invalidateCustomLayout()
@@ -188,7 +202,8 @@ class AudioPlayerService : MediaSessionService() {
     private fun applyProfileToDsp(profile: PeqProfile) {
         if (isBitPerfectMode) return
 
-        player.volume = 10.0.pow(profile.preamp / 20.0).toFloat()
+        val safePreampDb = profile.preamp.coerceAtMost(0f)
+        player.volume = 10.0.pow(safePreampDb / 20.0).toFloat().coerceIn(0.05f, 1.0f)
 
         val acousticNodes = profile.bands.mapIndexed { index, band ->
             val type = when (band.type.uppercase()) {
@@ -199,7 +214,9 @@ class AudioPlayerService : MediaSessionService() {
 
             AcousticNode(
                 id = "band_$index", label = "Band $index", filterType = type,
-                frequency = band.frequency, gainDb = band.gain, qFactor = band.q
+                frequency = band.frequency.coerceIn(20f, 20_000f),
+                gainDb = band.gain.coerceIn(-12f, 12f),
+                qFactor = band.q.coerceIn(0.2f, 8f)
             )
         }
 
@@ -208,6 +225,10 @@ class AudioPlayerService : MediaSessionService() {
 
     fun loadAutoEqPreset(rawText: String, profileName: String) {
         currentProfile = AutoEqParser.parse(rawText, profileName)
+        if (routeToSystemDecoderDsp) {
+            Log.i("AudioPlayerService", "System decoder route enabled; storing PEQ profile without activating app DSP")
+            return
+        }
         setAudioOffloadEnabled(false)
     }
 
@@ -266,8 +287,9 @@ class AudioPlayerService : MediaSessionService() {
                     }
                 }
                 ACTION_TOGGLE_DSP -> {
-                    setAudioOffloadEnabled(!isBitPerfectMode)
-                    invalidateCustomLayout()
+                    serviceScope.launch {
+                        settingsDataStore.setRouteToSystemDecoderDsp(!routeToSystemDecoderDsp)
+                    }
                 }
                 ACTION_LOAD_PEQ -> {
                     val rawText = args.getString("peq_raw_text") ?: ""

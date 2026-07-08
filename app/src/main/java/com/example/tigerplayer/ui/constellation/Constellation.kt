@@ -263,23 +263,44 @@ private fun calculatePosition(node: PositionedNode, time: Float, allNodes: Map<S
 @Composable
 fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () -> Unit) {
     val shape = if (node.type == NodeType.ALBUM) RoundedCornerShape(20) else CircleShape
+    val nodeImage = node.imageUrl?.takeIf { it.isNotBlank() }
 
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         // Star Core Image
-        AsyncImage(
-            model = node.imageUrl,
-            contentDescription = node.label,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize(0.75f)
-                .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = node.color)
-                .clip(shape)
-                .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, node.color.copy(alpha = 0.8f), shape)
-                .bounceClick { onClick() }
-        )
+        if (nodeImage != null) {
+            AsyncImage(
+                model = nodeImage,
+                contentDescription = node.label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize(0.75f)
+                    .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = node.color)
+                    .clip(shape)
+                    .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, node.color.copy(alpha = 0.8f), shape)
+                    .bounceClick { onClick() }
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(0.75f)
+                    .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = node.color)
+                    .clip(shape)
+                    .background(Brush.radialGradient(listOf(node.color.copy(alpha = 0.7f), Color(0xFF0B0D10))))
+                    .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, node.color.copy(alpha = 0.8f), shape)
+                    .bounceClick { onClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
 
         // Floating Data Badge (Planets/Albums)
         if (node.type == NodeType.ALBUM && visualScale > 0.8f) {
