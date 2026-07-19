@@ -3,9 +3,7 @@ package com.example.tigerplayer.engine
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresExtension
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
@@ -21,7 +19,6 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
-import java.util.Calendar
 import kotlin.random.Random
 
 class LibraryEngine @Inject constructor(
@@ -148,7 +145,7 @@ class LibraryEngine @Inject constructor(
             historyRepository.recentTracks,
             historyRepository.totalListeningTime,
             historyRepository.listeningTimeToday,
-            historyRepository.getTopArtist(getStartOfWeek()),
+            historyRepository.topArtistThisWeek,
             allTracksFlow.distinctUntilChanged(),
             recommendationTicker
         ) { args: Array<Any?> ->
@@ -159,9 +156,11 @@ class LibraryEngine @Inject constructor(
             val allTracks = args[4] as List<AudioTrack>
             val seed = args[5] as Long
 
-            val totalHours = totalMs / (1000 * 60 * 60)
-            val todayHours = todayMs / (1000 * 60 * 60)
-            val todayMinutes = (todayMs / (1000 * 60)) % 60
+            val resolvedTotalMs = totalMs
+            val resolvedTodayMs = todayMs
+            val totalHours = resolvedTotalMs / (1000 * 60 * 60)
+            val todayHours = resolvedTodayMs / (1000 * 60 * 60)
+            val todayMinutes = (resolvedTodayMs / (1000 * 60)) % 60
             val random = Random(seed)
 
             val recommended = if (allTracks.isNotEmpty()) {
@@ -178,7 +177,7 @@ class LibraryEngine @Inject constructor(
             HomeUiState(
                 statistics = UserStatistics(
                     listeningTimeToday = "${todayHours}h ${todayMinutes}m",
-                    listeningTimeTodayMs = todayMs,
+                    listeningTimeTodayMs = resolvedTodayMs,
                     topArtistThisWeek = topArtist ?: "New Recruit",
                     totalTracksCount = allTracks.size,
                     totalListeningTimeHours = totalHours.toInt()
@@ -269,17 +268,5 @@ class LibraryEngine @Inject constructor(
             audioRepository.createPlaylist("Liked Songs", id = LIKED_SONGS_ID)
             audioRepository.getCustomPlaylists().first { list -> list.any { it.id == LIKED_SONGS_ID } }
         }
-    }
-
-    private fun getStartOfWeek(): Long {
-        val calendar = Calendar.getInstance().apply {
-            firstDayOfWeek = Calendar.MONDAY
-            set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        return calendar.timeInMillis
     }
 }

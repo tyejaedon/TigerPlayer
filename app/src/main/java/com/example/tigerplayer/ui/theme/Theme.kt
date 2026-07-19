@@ -8,49 +8,61 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.example.tigerplayer.data.local.TigerAccentStyle
 
 // ------------------------------
 // DARK / LIGHT SYSTEM SCHEMES
 // ------------------------------
 private val DarkColorScheme = darkColorScheme(
-    primary = TigerCyberCyan,
-    secondary = TigerNeonOrange,
-    tertiary = TigerHotPink,
+    primary = TigerNeonOrange,
+    secondary = TigerElectricAmber,
+    tertiary = AardBlueDark,
 
     background = TigerBlack,
     surface = TigerDeepGrey,
     surfaceVariant = TigerSurfaceCharcoal,
-    surfaceTint = TigerCyberCyan,
-
-    onPrimary = Color(0xFF041014),
-    onSecondary = Color(0xFF160700),
-    onTertiary = Color(0xFF18000B),
+    primaryContainer = Color(0xFF4A2410),
+    secondaryContainer = Color(0xFF4D3318),
+    onPrimary = Color(0xFF2A1307),
+    onSecondary = Color(0xFF2A1605),
+    onPrimaryContainer = Color(0xFFFFDFC5),
 
     onBackground = TigerTextHigh,
     onSurface = TigerTextHigh,
     onSurfaceVariant = TigerTextMed,
-    outline = TigerRgbBlue.copy(alpha = 0.65f),
-    outlineVariant = TigerHotPink.copy(alpha = 0.45f)
+    error = IgniRedDark
 )
 
 // Extension for elevated surfaces in your Theme.kt
 val MaterialTheme.elevatedSurface: Color
     @Composable
-    get() = if (colorScheme.background.luminance() < 0.5f) TigerSurfaceCharcoal else TigerMutedSilk
+    get() = if (this.colorScheme.background.luminance() < 0.5f) TigerSurfaceCharcoal else Color(0xFFEFF3FA)
+
 private val LightColorScheme = lightColorScheme(
-    primary = TigerCyberCyan,
-    secondary = TigerNeonOrange,
-    tertiary = TigerSpectralViolet,
+    primary = TigerNeonOrange,
+    secondary = TigerElectricAmber,
+    tertiary = AardBlueLight,
 
     background = TigerIvory,
     surface = TigerPaper,
     surfaceVariant = TigerMutedSilk,
+    primaryContainer = Color(0xFFFFE3CC),
+    secondaryContainer = Color(0xFFFFEFD8),
+    tertiaryContainer = Color(0xFFFFDCCD),
+    onPrimary = Color(0xFFFFFFFF),
+    onSecondary = Color(0xFF2F1809),
+    onPrimaryContainer = Color(0xFF3A1B0A),
+    onTertiary = Color(0xFFFFFFFF),
+    onTertiaryContainer = Color(0xFF3A1A0C),
 
     onBackground = TigerTextInverse,
     onSurface = TigerTextInverse,
-    onSurfaceVariant = Color(0xFF555555),
-    outline = TigerRgbBlue.copy(alpha = 0.55f),
-    outlineVariant = TigerHotPink.copy(alpha = 0.35f)
+    onSurfaceVariant = Color(0xFF4B5563),
+    outline = Color(0xFF8E98A7),
+    outlineVariant = Color(0xFFC8D0DC),
+    surfaceTint = TigerNeonOrange,
+    error = IgniRedLight,
+    onError = Color.White
 )
 
 // ------------------------------
@@ -59,11 +71,29 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun TigerPlayerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    neonContrastMode: NeonContrastMode = NeonContrastMode.BALANCED,
-    neonIntensityMode: NeonIntensityMode = NeonIntensityMode.BALANCED,
+    pureAmoledBlack: Boolean = false,
+    accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_ORANGE,
     content: @Composable () -> Unit
 ) {
-    val scheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val accent = when (accentStyle) {
+        TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
+        TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
+        TigerAccentStyle.TOXIC_LIME -> TigerToxicLime
+        TigerAccentStyle.SPECTRAL_VIOLET -> TigerSpectralViolet
+    }
+
+    val scheme = if (darkTheme) {
+        DarkColorScheme.copy(
+            primary = accent,
+            secondary = accent.copy(alpha = 0.82f),
+            background = if (pureAmoledBlack) Color.Black else TigerBlack
+        )
+    } else {
+        LightColorScheme.copy(
+            primary = accent,
+            secondary = accent.copy(alpha = 0.82f)
+        )
+    }
     val view = LocalView.current
 
     if (!view.isInEditMode) {
@@ -75,27 +105,22 @@ fun TigerPlayerTheme(
         }
     }
 
-    CompositionLocalProvider(
-        LocalTigerNeonContrastMode provides neonContrastMode,
-        LocalTigerNeonIntensityMode provides neonIntensityMode
-    ) {
-        MaterialTheme(
-            colorScheme = scheme,
-            typography = Typography,
-            shapes = ModernShapes,
-            content = content
-        )
-    }
+    MaterialTheme(
+        colorScheme = scheme,
+        typography = Typography,
+        shapes = ModernShapes,
+        content = content
+    )
 }
 
 // ------------------------------
-// SAMSUNG-STYLE EXTENSIONS
+// SAMSUNG-STYLE EXTENSIONS (Mapped Semantically)
 // ------------------------------
 val MaterialTheme.aardBlue: Color
     @Composable
-    get() = if (colorScheme.background.luminance() < 0.5f) AardBlueDark else AardBlueLight
+    get() = this.colorScheme.tertiary
 
 val MaterialTheme.igniRed: Color
     @Composable
-    get() = if (colorScheme.background.luminance() < 0.5f) IgniRedDark else IgniRedLight
+    get() = this.colorScheme.error
 

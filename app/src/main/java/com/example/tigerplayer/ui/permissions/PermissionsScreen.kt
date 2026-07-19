@@ -1,26 +1,38 @@
 package com.example.tigerplayer.ui.permissions
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
+
+private data class PermissionRequirement(
+    val icon: ImageVector,
+    val title: String,
+    val description: String,
+    val permissions: List<String>
+)
 
 /**
  * THE SYSTEM OVERRIDE
@@ -30,6 +42,7 @@ import com.example.tigerplayer.ui.theme.bounceClick
 @Composable
 fun PermissionScreen(onPermissionGranted: () -> Unit) {
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
 
     // 1. THE PERMISSION ARRAY (OS VERSION SAFE)
     val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -38,28 +51,86 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    // We also include Post Notifications for Android 13+ to ensure media services aren't killed
-    val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        listOf(Manifest.permission.POST_NOTIFICATIONS)
-    } else {
-        emptyList()
-    }
-
-    val permissionsToRequest = (listOf(
+    val runtimePermissions = mutableListOf(
         audioPermission,
         Manifest.permission.ACCESS_COARSE_LOCATION,
         Manifest.permission.ACCESS_FINE_LOCATION
-    ) + notificationPermission).toTypedArray()
+    ).apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            add(Manifest.permission.BLUETOOTH_CONNECT)
+            add(Manifest.permission.BLUETOOTH_SCAN)
+        }
+    }
+
+    val missingPermissions = runtimePermissions.filter { permission ->
+        ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+    }
+
+    val permissionRequirements = buildList {
+        add(
+            PermissionRequirement(
+                icon = WitcherIcons.Library,
+                title = "LOCAL ARCHIVES",
+                description = "Required to scan and play high-fidelity FLAC and MP3 files.",
+                permissions = listOf(audioPermission)
+            )
+        )
+        add(
+            PermissionRequirement(
+                icon = Icons.Rounded.LocationOn,
+                title = "ATMOSPHERIC INTEL",
+                description = "Required to sync live weather and wind data to your location.",
+                permissions = listOf(
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                )
+            )
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(
+                PermissionRequirement(
+                    icon = Icons.Rounded.Notifications,
+                    title = "MISSION ALERTS",
+                    description = "Needed for playback notifications and lock-screen controls.",
+                    permissions = listOf(Manifest.permission.POST_NOTIFICATIONS)
+                )
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            add(
+                PermissionRequirement(
+                    icon = Icons.Rounded.Bluetooth,
+                    title = "WIRELESS LINK",
+                    description = "Needed to detect and manage Bluetooth playback devices.",
+                    permissions = listOf(
+                        Manifest.permission.BLUETOOTH_CONNECT,
+                        Manifest.permission.BLUETOOTH_SCAN
+                    )
+                )
+            )
+        }
+    }
 
     // 2. THE MULTI-LAUNCHER
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // We check if the critical audio permission was granted.
-        // Location is treated as an optional enhancement for the weather widget.
-        val isAudioGranted = permissions[audioPermission] == true
+        val isAudioGranted = permissions[audioPermission] == true ||
+            ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
+        val isBluetoothGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val connectGranted = permissions[Manifest.permission.BLUETOOTH_CONNECT] == true ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            val scanGranted = permissions[Manifest.permission.BLUETOOTH_SCAN] == true ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+            connectGranted && scanGranted
+        } else {
+            true
+        }
 
-        if (isAudioGranted) {
+        if (isAudioGranted && isBluetoothGranted) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onPermissionGranted()
         }
@@ -113,17 +184,20 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
 
         // --- THE TACTICAL BRIEFING ---
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            PermissionRequirementRow(
-                icon = WitcherIcons.Library,
-                title = "LOCAL ARCHIVES",
-                description = "Required to scan and play high-fidelity FLAC and MP3 files."
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            PermissionRequirementRow(
-                icon = Icons.Rounded.LocationOn,
-                title = "ATMOSPHERIC INTEL",
-                description = "Required to sync live weather and wind data to your location."
-            )
+            permissionRequirements.forEachIndexed { index, requirement ->
+                val isGranted = requirement.permissions.all { permission ->
+                    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+                }
+                PermissionRequirementRow(
+                    icon = requirement.icon,
+                    title = requirement.title,
+                    description = requirement.description,
+                    isGranted = isGranted
+                )
+                if (index != permissionRequirements.lastIndex) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(48.dp))
@@ -132,7 +206,20 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
         Button(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                permissionLauncher.launch(permissionsToRequest)
+                val hasAllCriticalPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val btConnectGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+                    val btScanGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+                    val audioGranted = ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
+                    audioGranted && btConnectGranted && btScanGranted
+                } else {
+                    ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
+                }
+
+                if (missingPermissions.isEmpty() && hasAllCriticalPermissions) {
+                    onPermissionGranted()
+                } else {
+                    permissionLauncher.launch(missingPermissions.toTypedArray())
+                }
             },
             shape = MaterialTheme.shapes.small,
             colors = ButtonDefaults.buttonColors(
@@ -144,7 +231,7 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
                 .bounceClick { }
         ) {
             Text(
-                text = "GRANT ACCESS",
+                text = if (missingPermissions.isEmpty()) "CONTINUE" else "GRANT ACCESS",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Bold
@@ -154,7 +241,24 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
 }
 
 @Composable
-private fun PermissionRequirementRow(icon: ImageVector, title: String, description: String) {
+private fun PermissionRequirementRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    isGranted: Boolean
+) {
+    val statusText = if (isGranted) "Granted" else "Missing"
+    val statusContainerColor = if (isGranted) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.errorContainer
+    }
+    val statusContentColor = if (isGranted) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onErrorContainer
+    }
+
     Row(verticalAlignment = Alignment.Top) {
         Icon(
             imageVector = icon,
@@ -164,13 +268,27 @@ private fun PermissionRequirementRow(icon: ImageVector, title: String, descripti
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    color = statusContainerColor,
+                    contentColor = statusContentColor,
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = description,

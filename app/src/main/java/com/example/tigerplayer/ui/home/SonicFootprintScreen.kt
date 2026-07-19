@@ -1,185 +1,175 @@
 package com.example.tigerplayer.ui.home
 
+import androidx.compose.ui.platform.testTag
 import android.graphics.BlurMaskFilter
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.tigerplayer.ui.theme.PremiumGlassCard
 import com.example.tigerplayer.ui.theme.TigerCyberCyan
 import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.bounceClick
+import com.example.tigerplayer.ui.theme.glassEffect
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SonicFootprintScreen(
-    onBackClick: () -> Unit,
+    onClose: () -> Unit,
     viewModel: SonicFootprintViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val horizontalFilterScroll = rememberScrollState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(20.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBackClick) {
-                Icon(imageVector = WitcherIcons.Back, contentDescription = "Back")
-            }
-            Column {
-                Text(
-                    text = "SONIC FOOTPRINT",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.2.sp
-                )
-                Text(
-                    text = "Your local listening DNA",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(horizontalFilterScroll),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            viewModel.availableFilters.forEach { filter ->
-                val selected = filter == uiState.selectedFilter
-                Surface(
-                    modifier = Modifier,
-                    shape = RoundedCornerShape(999.dp),
-                    color = if (selected) {
-                        TigerNeonOrange.copy(alpha = 0.2f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                    },
-                    tonalElevation = if (selected) 3.dp else 0.dp,
-                    onClick = { viewModel.setFilter(filter) }
-                ) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
                     Text(
-                        text = filter.label,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        color = if (selected) TigerNeonOrange else MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
+                        text = "SONIC FOOTPRINT",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.5.sp
                     )
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onClose()
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier.glassEffect(RectangleShape)
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Text(
+                    text = "Your digital listening DNA, distilled from your local archives.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
+            item {
+                TimeRangeSelector(
+                    selectedRange = state.timeRange,
+                    onRangeSelected = viewModel::setTimeRange
+                )
+            }
+
+            item {
+                PremiumGlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    borderWidth = 1.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f))
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        RadarChart(
+                            values = state.axisValues,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp)
+                                .testTag("radar_chart")
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = "LIFETIME LISTENING: ${"%.1f".format(state.totalListeningHours)}H",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = TigerNeonOrange,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(
-                    brush = Brush.verticalGradient(
-                        listOf(
-                            TigerCyberCyan.copy(alpha = 0.08f),
-                            TigerNeonOrange.copy(alpha = 0.07f),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                )
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            if (uiState.isEmpty) {
+            item {
                 Text(
-                    text = "No listening history yet.\nPlay a few tracks to forge your footprint.",
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                SonicRadarChart(
-                    axes = uiState.axes,
-                    modifier = Modifier.fillMaxSize()
+                    text = "NEURAL GENRE TAGS",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TigerCyberCyan,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp,
+                    modifier = Modifier.padding(top = 12.dp)
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "Total plays analyzed: ${uiState.totalPlays}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Text(
-            text = String.format(
-                "%s listening: %d min (%.1f%% of lifetime %d min)",
-                uiState.selectedFilter.label,
-                uiState.selectedMinutes,
-                uiState.globalListeningSharePercent,
-                uiState.lifetimeMinutes
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = TigerCyberCyan
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            uiState.axes.forEach { axis ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(
-                                if (axis.label == "Acoustic" || axis.label == "Vocal") TigerNeonOrange else TigerCyberCyan,
-                                CircleShape
-                            )
+            items(state.topTags) { (genre, minutes) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f))
+                        .border(1.dp, TigerNeonOrange.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 18.dp, vertical = 14.dp)
+                        .testTag("genre_tag_$genre"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = genre.uppercase(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.5.sp
                     )
                     Text(
-                        text = "  ${axis.label}: ${(axis.value * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "${minutes.toInt()} MIN",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TigerNeonOrange,
+                        fontWeight = FontWeight.Black
                     )
                 }
             }
@@ -188,102 +178,173 @@ fun SonicFootprintScreen(
 }
 
 @Composable
-private fun SonicRadarChart(
-    axes: List<SonicFootprintAxis>,
+private fun TimeRangeSelector(
+    selectedRange: FootprintTimeRange,
+    onRangeSelected: (FootprintTimeRange) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        FootprintTimeRange.entries.forEach { range ->
+            val isSelected = range == selectedRange
+            val bgColor by animateColorAsState(
+                targetValue = if (isSelected) TigerCyberCyan else Color.White.copy(alpha = 0.05f),
+                label = "range_bg"
+            )
+            val textColor by animateColorAsState(
+                targetValue = if (isSelected) Color.Black else Color.White.copy(alpha = 0.8f),
+                label = "range_text"
+            )
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(CircleShape)
+                    .background(bgColor)
+                    .border(1.dp, if (isSelected) Color.Transparent else Color.White.copy(alpha = 0.1f), CircleShape)
+                    .bounceClick { onRangeSelected(range) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = range.label.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = textColor,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RadarChart(
+    values: Map<SonicAxis, Float>,
     modifier: Modifier = Modifier
 ) {
+    val axes = SonicAxis.entries
+    val density = LocalDensity.current
+    
+    // Smooth growth animation on entry
+    var animateEntry by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animateEntry = true }
+    
+    val entryScale by animateFloatAsState(
+        targetValue = if (animateEntry) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 120f),
+        label = "radar_growth"
+    )
+
+    val cachedPath = remember { Path() }
+    val labelTextSize = with(density) { 11.sp.toPx() }
+
     Canvas(modifier = modifier) {
-        if (axes.isEmpty()) return@Canvas
-
         val center = Offset(size.width / 2f, size.height / 2f)
-        val radius = (size.minDimension * 0.34f)
-        val levels = 5
-        val angleStep = (Math.PI * 2f / axes.size).toFloat()
+        val radius = size.minDimension * 0.35f
+        val rings = 5
 
-        fun pointAt(axisIndex: Int, factor: Float): Offset {
-            val angle = -Math.PI.toFloat() / 2f + axisIndex * angleStep
-            return Offset(
-                x = center.x + kotlin.math.cos(angle) * radius * factor,
-                y = center.y + kotlin.math.sin(angle) * radius * factor
-            )
-        }
-
-        repeat(levels) { level ->
-            val levelFactor = (level + 1) / levels.toFloat()
-            val web = Path().apply {
-                axes.indices.forEach { i ->
-                    val p = pointAt(i, levelFactor)
-                    if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
-                }
-                close()
-            }
-            drawPath(
-                path = web,
-                color = TigerCyberCyan.copy(alpha = 0.16f),
-                style = Stroke(width = 1.2f)
-            )
-        }
-
-        axes.indices.forEach { i ->
-            drawLine(
-                color = TigerCyberCyan.copy(alpha = 0.24f),
-                start = center,
-                end = pointAt(i, 1f),
-                strokeWidth = 1.2f
-            )
-        }
-
-        val dataPath = Path().apply {
-            axes.forEachIndexed { i, axis ->
-                val p = pointAt(i, axis.value.coerceIn(0f, 1f))
-                if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
-            }
-            close()
-        }
-
-        drawPath(
-            path = dataPath,
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    TigerNeonOrange.copy(alpha = 0.44f),
-                    TigerCyberCyan.copy(alpha = 0.28f),
-                    Color.Transparent
-                ),
+        // 1. Draw Static Rings
+        repeat(rings) { ringIndex ->
+            val ratio = (ringIndex + 1) / rings.toFloat()
+            drawCircle(
+                color = TigerCyberCyan.copy(alpha = 0.08f + ratio * 0.04f),
+                radius = radius * ratio,
                 center = center,
-                radius = radius
+                style = Stroke(width = 1f)
             )
-        )
-
-        drawPath(
-            path = dataPath,
-            color = TigerNeonOrange,
-            style = Stroke(width = 4f, cap = StrokeCap.Round)
-        )
-
-        drawContext.canvas.nativeCanvas.apply {
-            val glowPaint = android.graphics.Paint().apply {
-                color = TigerCyberCyan.toArgb()
-                style = android.graphics.Paint.Style.STROKE
-                strokeWidth = 7f
-                isAntiAlias = true
-                maskFilter = BlurMaskFilter(16f, BlurMaskFilter.Blur.NORMAL)
-            }
-            drawPath(dataPath.asAndroidPath(), glowPaint)
         }
 
-        axes.forEachIndexed { i, axis ->
-            val labelPoint = pointAt(i, 1.12f)
-            drawContext.canvas.nativeCanvas.apply {
-                val labelPaint = android.graphics.Paint().apply {
-                    color = if (i % 2 == 0) TigerNeonOrange.toArgb() else TigerCyberCyan.toArgb()
-                    textSize = 30f
+        // 2. Draw Axis Spokes and Labels
+        axes.forEachIndexed { index, axis ->
+            val angle = ((2.0 * PI) / axes.size) * index - PI / 2.0
+            val axisPoint = Offset(
+                x = center.x + cos(angle).toFloat() * radius,
+                y = center.y + sin(angle).toFloat() * radius
+            )
+
+            drawLine(
+                color = TigerCyberCyan.copy(alpha = 0.25f),
+                start = center,
+                end = axisPoint,
+                strokeWidth = 1f,
+                cap = StrokeCap.Round
+            )
+
+            drawIntoCanvas { canvas ->
+                val textPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE
+                    alpha = 140
+                    textSize = labelTextSize
                     textAlign = android.graphics.Paint.Align.CENTER
-                    isFakeBoldText = true
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
                     isAntiAlias = true
                 }
-                drawText(axis.label.uppercase(), labelPoint.x, labelPoint.y, labelPaint)
+                val labelRadius = radius + 32f
+                val lx = center.x + cos(angle).toFloat() * labelRadius
+                val ly = center.y + sin(angle).toFloat() * labelRadius + (labelTextSize / 3f)
+                
+                canvas.nativeCanvas.drawText(axis.label, lx, ly, textPaint)
             }
         }
+
+        // 3. Compute Footprint Polygon
+        val footprintPoints = axes.mapIndexed { index, axis ->
+            val value = ((values[axis] ?: 0f) * entryScale).coerceIn(0f, 1f)
+            val angle = ((2.0 * PI) / axes.size) * index - PI / 2.0
+            Offset(
+                x = center.x + cos(angle).toFloat() * radius * value,
+                y = center.y + sin(angle).toFloat() * radius * value
+            )
+        }
+
+        if (footprintPoints.isNotEmpty()) {
+            cachedPath.rewind()
+            cachedPath.moveTo(footprintPoints.first().x, footprintPoints.first().y)
+            for (i in 1 until footprintPoints.size) {
+                cachedPath.lineTo(footprintPoints[i].x, footprintPoints[i].y)
+            }
+            cachedPath.close()
+
+            // 4. Draw Polygon Fill & Glow
+            drawPath(
+                path = cachedPath,
+                color = TigerNeonOrange.copy(alpha = 0.15f)
+            )
+
+            drawIntoCanvas { canvas ->
+                val glowPaint = Paint().apply {
+                    color = TigerNeonOrange.copy(alpha = 0.4f)
+                    style = PaintingStyle.Stroke
+                    strokeWidth = 10f
+                    asFrameworkPaint().maskFilter = BlurMaskFilter(15f, BlurMaskFilter.Blur.NORMAL)
+                }
+                canvas.drawPath(cachedPath, glowPaint)
+            }
+
+            drawPath(
+                path = cachedPath,
+                color = TigerNeonOrange,
+                style = Stroke(width = 2.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+
+            // 5. Draw Vertices
+            footprintPoints.forEach { point ->
+                drawCircle(color = TigerNeonOrange, radius = 5f, center = point)
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.5f),
+                    radius = 8f,
+                    center = point,
+                    style = Stroke(width = 1f)
+                )
+            }
+        }
+
+        // Center hub
+        drawCircle(color = TigerCyberCyan, radius = 4f, center = center)
     }
 }
 

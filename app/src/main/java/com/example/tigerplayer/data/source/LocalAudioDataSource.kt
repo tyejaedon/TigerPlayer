@@ -67,6 +67,8 @@ class LocalAudioDataSource @Inject constructor(
             val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
             val yearCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
             val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+            val bitrateCol = cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE)
+            val sampleRateCol = cursor.getColumnIndex(MediaStore.Audio.Media.SAMPLERATE)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
@@ -93,8 +95,8 @@ class LocalAudioDataSource @Inject constructor(
                     path = cursor.getString(dataCol),
                     year = if (year != 0) year.toString() else null,
                     dateAdded = dateAdded,
-                    bitrate = cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE).coerceAtLeast(0)),
-                    sampleRate = cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.SAMPLERATE).coerceAtLeast(0)),
+                    bitrate = if (bitrateCol >= 0) cursor.getInt(bitrateCol) else 0,
+                    sampleRate = if (sampleRateCol >= 0) cursor.getInt(sampleRateCol) else 0,
                     serverPath = null
                 ))
 

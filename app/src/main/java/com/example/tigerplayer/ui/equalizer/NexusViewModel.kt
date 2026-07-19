@@ -21,9 +21,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.pow
-import kotlin.math.sqrt
 
 data class SpatialNode(
     val id: String,
@@ -33,29 +33,37 @@ data class SpatialNode(
     var spatialPos: Offset, // Normalized X,Y (-1f to 1f)
     val color: Color
 ) {
+    companion object {
+        private const val MIN_FREQ = 20f
+        private const val MAX_FREQ = 20_000f
+        private const val MAX_GAIN_DB = 12f
+    }
+
     fun toAcousticNode(): AcousticNode {
         val clampedX = spatialPos.x.coerceIn(-1f, 1f)
         val clampedY = spatialPos.y.coerceIn(-1f, 1f)
 
-        // Exact log mapping from 20Hz -> 20kHz across X in [-1, 1].
-        val normalizedX = (clampedX + 1f) * 0.5f
-        val dynamicFreq = (20f * 1000f.pow(normalizedX)).coerceIn(20f, 20000f)
+        // Exact logarithmic mapping from 20Hz..20kHz across the X axis.
+        val t = (clampedX + 1f) * 0.5f
+        val frequency = MIN_FREQ * (MAX_FREQ / MIN_FREQ).pow(t)
 
-        // Exact gain mapping: top is +15dB, center is 0dB, bottom is -15dB.
-        val gain = (-clampedY * 15f).coerceIn(-15f, 15f)
+        // Strict +15dB..-15dB mapping where top is positive gain.
+        val gain = (-clampedY) * MAX_GAIN_DB
 
-        val distance = sqrt(clampedX.pow(2) + clampedY.pow(2))
-        val q = (0.7f + (distance * 2.3f)).coerceIn(0.7f, 4.2f)
+        val radial = (abs(clampedX) + abs(clampedY)) * 0.5f
+        val q = when (type) {
+            FilterType.LOW_SHELF, FilterType.HIGH_SHELF -> 0.65f + radial * 0.9f
+            FilterType.PEAKING -> 0.9f + (1f - abs(clampedY)) * 3.1f
+        }.coerceIn(0.5f, 4.6f)
 
-        return AcousticNode(id, label, type, dynamicFreq, gain, q)
+        return AcousticNode(id, label, type, frequency, gain, q)
     }
 }
 
 data class AuralNexusState(
     val nodes: List<SpatialNode> = emptyList(),
     val currentMood: String = "Neural Adaptive",
-    val frequencyResponseCurve: List<Offset> = emptyList(),
-    val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame()
+    val frequencyResponseCurve: List<Offset> = emptyList()
 )
 
 @HiltViewModel
@@ -70,22 +78,17 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
     private var dspUpdateJob: Job? = null
     private var visualsUpdateJob: Job? = null // FIXED: Prevent visual computation thread leaks
 
+    val audioReactiveFrame: StateFlow<AudioReactiveFrame> = adaptiveDspEngine.audioReactiveFrame
+
     init {
         val defaultNodes = listOf(
-            SpatialNode("sub", "Sub-Bass", FilterType.LOW_SHELF, 60f, Offset(-0.6f, 0.2f), Color(0xFFFFD500)),
-            SpatialNode("warmth", "Warmth", FilterType.PEAKING, 250f, Offset(-0.3f, -0.1f), Color(0xFFFF007F)),
-            SpatialNode("vocal", "Presence", FilterType.PEAKING, 3500f, Offset(0.3f, -0.4f), Color(0xFF00E5FF)),
-            SpatialNode("air", "Air", FilterType.HIGH_SHELF, 12000f, Offset(0.6f, -0.2f), Color(0xFF39FF14))
+            SpatialNode("sub", "Sub", FilterType.LOW_SHELF, 60f, Offset(-0.75f, -0.20f), Color(0xFFFF007F)),
+            SpatialNode("warmth", "Body", FilterType.PEAKING, 220f, Offset(-0.30f, 0.05f), Color(0xFFFFD500)),
+            SpatialNode("presence", "Presence", FilterType.PEAKING, 3600f, Offset(0.28f, -0.30f), Color(0xFF39FF14)),
+            SpatialNode("air", "Air", FilterType.HIGH_SHELF, 12_000f, Offset(0.72f, -0.16f), Color(0xFF00E5FF))
         )
 
         _uiState.value = AuralNexusState(nodes = defaultNodes)
-
-        viewModelScope.launch {
-            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
-                _uiState.value = _uiState.value.copy(audioReactiveFrame = frame)
-            }
-        }
-
         updateDspAndVisuals()
     }
 
@@ -94,7 +97,7 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
 
         val newNodes = _uiState.value.nodes.map { node ->
             if (node.id == "sub" && hasHeavyBassGenre) {
-                node.copy(spatialPos = node.spatialPos.copy(y = -0.5f))
+                node.copy(spatialPos = node.spatialPos.copy(y = -0.45f))
             } else node
         }
 
@@ -115,7 +118,7 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
             }
             "Pure Vocal" -> nodes.map { n ->
                 when (n.id) {
-                    "vocal" -> n.copy(spatialPos = Offset(0.2f, -0.7f))
+                    "presence" -> n.copy(spatialPos = Offset(0.2f, -0.7f))
                     "sub" -> n.copy(spatialPos = Offset(-0.6f, 0.3f))
                     else -> n
                 }
@@ -130,10 +133,7 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
     }
 
     fun moveNode(nodeId: String, newSpatialPos: Offset) {
-        val clamped = Offset(
-            x = newSpatialPos.x.coerceIn(-1f, 1f),
-            y = newSpatialPos.y.coerceIn(-1f, 1f)
-        )
+        val clamped = Offset(newSpatialPos.x.coerceIn(-1f, 1f), newSpatialPos.y.coerceIn(-1f, 1f))
         val updatedNodes = _uiState.value.nodes.map {
             if (it.id == nodeId) it.copy(spatialPos = clamped) else it
         }
@@ -156,21 +156,24 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
         }
     }
 
+    @OptIn(UnstableApi::class)
     private fun updateFrequencyResponse(nodes: List<AcousticNode>) {
-        visualsUpdateJob?.cancel() // FIXED: Cancel previous running render jobs
+        visualsUpdateJob?.cancel()
         visualsUpdateJob = viewModelScope.launch(Dispatchers.Default) {
+            val currentSampleRate = adaptiveDspEngine.getSampleRate().toFloat()
+            
             val filterCoeffs = nodes.map { node ->
                 BiquadDesigner.design(
                     type = node.filterType,
                     freq = node.frequency,
                     gainDb = node.gainDb,
                     q = node.qFactor,
-                    sampleRate = 44100f
+                    sampleRate = currentSampleRate
                 )
             }
 
             val points = mutableListOf<Offset>()
-            val numPoints = 120
+            val numPoints = 168
             val minFreqLog = log10(20.0)
             val maxFreqLog = log10(20000.0)
             val rangeLog = maxFreqLog - minFreqLog
@@ -181,7 +184,7 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
 
                 var totalDbGain = 0f
                 filterCoeffs.forEach { coeff ->
-                    totalDbGain += BiquadDesigner.magnitudeAt(currentFreq, coeff, 44100f)
+                    totalDbGain += BiquadDesigner.magnitudeAt(currentFreq, coeff, currentSampleRate)
                 }
 
                 val normalizedY = -(totalDbGain / 15f).coerceIn(-1f, 1f)

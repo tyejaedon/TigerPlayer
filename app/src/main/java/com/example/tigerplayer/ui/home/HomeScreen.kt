@@ -14,11 +14,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,7 +27,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImage
 import com.example.tigerplayer.R
@@ -47,9 +47,12 @@ import com.example.tigerplayer.ui.components.DiscoverCarousel
 import com.example.tigerplayer.ui.components.RecentlyPlayedRow
 import com.example.tigerplayer.ui.constellation.ConstellationScreen
 import com.example.tigerplayer.ui.constellation.ConstellationViewModel
+import com.example.tigerplayer.ui.dashboard.DashboardViewModel
 import com.example.tigerplayer.ui.extras.NowBriefWidgetWrapper
 import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.prism.PrismInlineMixer
+import com.example.tigerplayer.ui.prism.PrismViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -60,7 +63,8 @@ import kotlin.math.absoluteValue
 private val AardBlue = Color(0xFF4FC3F7)
 private val IgniRed = Color(0xFFFF5252)
 private val SpotifyGreen = Color(0xFF1DB954)
-private val NeuralPurple = Color(0xFFB388FF) // 🔥 NEW CONSTANT
+private val NeuralPurple = Color(0xFFB388FF)
+private val SonicCyan = Color(0xFF00E5FF)
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
@@ -71,28 +75,29 @@ fun HomeScreen(
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigatetoArtist: (String) -> Unit,
+    onNavigateToDaylist: () -> Unit,
+    onNavigateToDiscoverWeekly: () -> Unit,
     homeViewModel: HomeViewModel,
+    prismViewModel: PrismViewModel,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val homeState by viewModel.homeUiState.collectAsState()
-
-    val artistDetails by viewModel.artistDetails.collectAsState()
-    val dashboardViewModel: DashboardViewModel = hiltViewModel()
-    val dashboardState by dashboardViewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val homeState by viewModel.homeUiState.collectAsStateWithLifecycle()
+    val artistDetails by viewModel.artistDetails.collectAsStateWithLifecycle()
 
     var isStatsExpanded by remember { mutableStateOf(false) }
     var isSearchActive by remember { mutableStateOf(false) }
     val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
 
-
-    // 🔥 NEW: Constellation Integration State
     var showConstellation by remember { mutableStateOf(false) }
+    var showSonicFootprint by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
-
 
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
-    val weatherUiState by homeViewModel.weatherUiState.collectAsState()
+    val weatherUiState by homeViewModel.weatherUiState.collectAsStateWithLifecycle()
+    val dashboardViewModel: DashboardViewModel = hiltViewModel()
+    val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
+    val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsStateWithLifecycle()
 
     val firstVisibleItem by remember { derivedStateOf { listState.firstVisibleItemIndex } }
 
@@ -100,8 +105,9 @@ fun HomeScreen(
         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation) {
-        if (showConstellation) showConstellation = false
+    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint) {
+        if (showSonicFootprint) showSonicFootprint = false
+        else if (showConstellation) showConstellation = false
         else if (isStatsExpanded) isStatsExpanded = false
         else if (isSearchActive) {
             isSearchActive = false
@@ -158,10 +164,10 @@ fun HomeScreen(
                     matchedAlbums = matchedAlbums,
                     onNavigateToAlbum = onNavigateToAlbum,
                     onNavigatetoArtist = onNavigatetoArtist,
-                    artistDetails = artistDetails
+                    artistDetails = artistDetails,
+                    onOptionsClick = { track -> searchTrackForOptions = track }
                 )
             } else {
-
                 item {
                     NowBriefWidgetWrapper(
                         uiState = weatherUiState,
@@ -172,22 +178,52 @@ fun HomeScreen(
                     )
                 }
 
-                item { UserStatisticsHeader(statistics = homeState.statistics, onClick = { isStatsExpanded = true }) }
-
                 item {
-                    DashboardContainersSection(
-                        state = dashboardState,
-                        onTrackClick = { viewModel.playTrack(it) },
-                        onRefresh = { dashboardViewModel.refresh() }
+                    UserStatisticsHeader(
+                        statistics = homeState.statistics,
+                        onClick = { isStatsExpanded = true }
                     )
                 }
 
-                // 🔥 NEW: Constellation Gateway Portal
+                if (uiState.connectedBluetoothDevice.isConnected) {
+                    item {
+                        BluetoothNexusCard(deviceInfo = uiState.connectedBluetoothDevice)
+                    }
+                }
+
                 item {
-                    ConstellationGatewayCard(onClick = { showConstellation = true })
+                    SectionTitle("THE NEXUS")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        NexusGatewayCard(
+                            modifier = Modifier.weight(1f),
+                            title = "FOOTPRINT",
+                            subtitle = "Listening DNA",
+                            color = SonicCyan,
+                            icon = Icons.Rounded.Timeline,
+                            onClick = { showSonicFootprint = true }
+                        )
+                        NexusGatewayCard(
+                            modifier = Modifier.weight(1f),
+                            title = "COSMOS",
+                            subtitle = "Neural Map",
+                            color = NeuralPurple,
+                            icon = Icons.Rounded.GraphicEq,
+                            onClick = { showConstellation = true }
+                        )
+                    }
+                }
+
+                item {
+                    SonicPrismHubCard(viewModel = prismViewModel)
                 }
 
                 if (homeState.discoverTracks.isNotEmpty()) {
+                    item { SectionTitle("VANGUARD DISCOVERY") }
                     item { DiscoverCarousel(tracks = homeState.discoverTracks, onTrackClick = { viewModel.playTrack(it) }) }
                 }
 
@@ -201,7 +237,35 @@ fun HomeScreen(
                     }
                 }
 
+                if (daylistTracks.isNotEmpty() || discoveryWeeklyTracks.isNotEmpty()) {
+                    item { SectionTitle("NEURAL CURATIONS") }
+                    item {
+                        Column(
+                            modifier = Modifier.padding(bottom = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (daylistTracks.isNotEmpty()) {
+                                CurationRow(
+                                    title = "DAY LIST",
+                                    count = daylistTracks.size,
+                                    color = AardBlue,
+                                    onClick = onNavigateToDaylist
+                                )
+                            }
+                            if (discoveryWeeklyTracks.isNotEmpty()) {
+                                CurationRow(
+                                    title = "DISCOVERY WEEKLY",
+                                    count = discoveryWeeklyTracks.size,
+                                    color = SpotifyGreen,
+                                    onClick = onNavigateToDiscoverWeekly
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (homeState.recentlyPlayedTracks.isNotEmpty()) {
+                    item { SectionTitle("RECENT RITUALS") }
                     item {
                         RecentlyPlayedRow(
                             tracks = homeState.recentlyPlayedTracks,
@@ -221,7 +285,18 @@ fun HomeScreen(
             ExpandedStatsScreen(viewModel = viewModel, onClose = { isStatsExpanded = false })
         }
 
-        // 🔥 NEW: Constellation Full-Screen Overlay Launch
+        AnimatedVisibility(
+            visible = showSonicFootprint,
+            enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.95f, animationSpec = tween(500)),
+            exit = fadeOut(tween(280)) + scaleOut(targetScale = 0.95f)
+        ) {
+            val sonicFootprintViewModel: SonicFootprintViewModel = hiltViewModel()
+            SonicFootprintScreen(
+                viewModel = sonicFootprintViewModel,
+                onClose = { showSonicFootprint = false }
+            )
+        }
+
         AnimatedVisibility(
             visible = showConstellation,
             enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.9f, animationSpec = tween(500)),
@@ -234,101 +309,171 @@ fun HomeScreen(
             )
         }
     }
-    // --- SEARCH RESULTS OPTIONS PORTAL ---
-    // ==========================================
-    // --- SEARCH RESULTS OPTIONS PORTAL ---
-    // ==========================================
+
     searchTrackForOptions?.let { selectedTrack ->
         SongOptionsSheet(
             track = selectedTrack,
             playlists = playlists,
             onDismiss = {
-                // Clear state and perform subtle haptic feedback
                 hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 searchTrackForOptions = null
             },
             onPlayNext = {
                 viewModel.addNextToQueue(selectedTrack)
-                searchTrackForOptions = null // Close after action
+                searchTrackForOptions = null
             },
             onAddToPlaylist = { playlistId ->
                 viewModel.addTrackToPlaylist(playlistId, selectedTrack)
-                // Keep open or close based on UX preference - usually close for clean flow
                 searchTrackForOptions = null
             },
             onGoToAlbum = { albumName ->
-                // Ensure search is deactivated when navigating deep into the library
                 isSearchActive = false
                 viewModel.clearSearch()
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
+            },
+            onCreatePlaylist = { name ->
+                viewModel.createPlaylist(name)
             }
         )
     }
 }
 
-// ==========================================
-// --- RECTIFIED COMPONENTS ---
-// ==========================================
-
-// 🔥 NEW: The Premium Entry Portal for the Constellation
 @Composable
-fun ConstellationGatewayCard(onClick: () -> Unit) {
+fun NexusGatewayCard(
+    title: String,
+    subtitle: String,
+    color: Color,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 8.dp)
-            .shadow(16.dp, MaterialTheme.shapes.extraLarge, spotColor = NeuralPurple.copy(alpha = 0.3f))
+        modifier = modifier
+            .height(110.dp)
             .clip(MaterialTheme.shapes.extraLarge)
-            .glassEffect(MaterialTheme.shapes.extraLarge)
-            .background(Brush.linearGradient(listOf(Color(0xFF1E103C), Color(0xFF120B24))))
-            .border(1.dp, NeuralPurple.copy(alpha = 0.2f), MaterialTheme.shapes.extraLarge)
+            .background(Brush.linearGradient(listOf(color.copy(alpha = 0.56f), Color.Transparent)))
+            .border(1.dp, color.copy(alpha = 0.15f), MaterialTheme.shapes.extraLarge)
             .bounceClick { onClick() }
+            .padding(18.dp)
     ) {
-        // Glowing Orb background effect
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .offset(x = 30.dp, y = (-20).dp)
-                .size(120.dp)
-                .background(
-                    Brush.radialGradient(listOf(NeuralPurple.copy(alpha = 0.4f), Color.Transparent)),
-                    CircleShape
-                )
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                Text(
-                    text = "COGNITIVE CONSTELLATION",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NeuralPurple,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Explore your neural music map in a fully interactive galaxy.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f),
-                    lineHeight = 16.sp
-                )
-            }
-
+        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .background(NeuralPurple.copy(alpha = 0.2f), CircleShape)
-                    .border(1.dp, NeuralPurple.copy(alpha = 0.5f), CircleShape),
+                    .size(36.dp)
+                    .background(color.copy(alpha = 0.2f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.GraphicEq, contentDescription = null, tint = NeuralPurple)
+                Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+            }
+            Column {
+                Text(text = title, style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
             }
         }
+    }
+}
+
+@Composable
+fun SonicPrismHubCard(viewModel: PrismViewModel) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(MaterialTheme.colorScheme.background)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), MaterialTheme.shapes.extraLarge)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .shadow(4.dp, CircleShape, ambientColor = Color.Transparent, spotColor = SonicCyan.copy(alpha = 0.2f))
+                        .border(1.dp, SonicCyan.copy(alpha = 0.2f), CircleShape)
+                        .background(SonicCyan.copy(alpha = 0.55f),CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.GraphicEq, null, tint = SonicCyan, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text("SONIC PRISM", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground)
+                    Text("Real-time isolation hub", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f))
+                }
+            }
+
+            Switch(
+                checked = state.isPrismEnabled,
+                onCheckedChange = viewModel::setPrismEnabled,
+                colors = SwitchDefaults.colors(checkedThumbColor = SonicCyan, checkedTrackColor = SonicCyan.copy(alpha = 0.3f))
+            )
+        }
+
+        AnimatedVisibility(visible = state.isPrismEnabled) {
+            Column {
+                Spacer(modifier = Modifier.height(24.dp))
+                PrismInlineMixer(
+                    state = state,
+                    onVocalsChange = viewModel::updateVocals,
+                    onBeatsChange = viewModel::updateBeats,
+                    onInstrumentsChange = viewModel::updateInstruments,
+                    onEnabledChange = viewModel::setPrismEnabled,
+                    onPresetSelected = viewModel::applyPreset,
+                    onResetRequested = viewModel::resetMixToBalanced,
+                    onSpectralAnalysisChange = viewModel::setSpectralAnalysis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(MaterialTheme.shapes.large)
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f))
+                        .padding(vertical = 12.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CurationRow(
+    title: String,
+    count: Int,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .height(72.dp)
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .border(1.dp, color.copy(alpha = 0.1f), MaterialTheme.shapes.large)
+            .bounceClick { onClick() }
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(color.copy(alpha = 0.2f), MaterialTheme.shapes.medium),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(WitcherIcons.Radio, null, tint = color, modifier = Modifier.size(22.dp))
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground)
+            Text("$count Chants Manifested", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground)
+        }
+        Icon(WitcherIcons.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f))
     }
 }
 
@@ -441,7 +586,7 @@ fun UserStatisticsHeader(statistics: UserStatistics, onClick: () -> Unit) {
             .padding(horizontal = 24.dp, vertical = 8.dp)
             .shadow(4.dp, MaterialTheme.shapes.extraLarge, ambientColor = Color.Transparent, spotColor = AardBlue.copy(alpha = 0.1f))
             .clip(MaterialTheme.shapes.extraLarge)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) // Clean surface, NO blur
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
             .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), MaterialTheme.shapes.extraLarge)
             .bounceClick { onClick() }
             .padding(20.dp)
@@ -453,7 +598,7 @@ fun UserStatisticsHeader(statistics: UserStatistics, onClick: () -> Unit) {
         ) {
             Column {
                 Text("ARCHIVE ANALYTICS", style = MaterialTheme.typography.labelMedium, color = AardBlue, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
-                Text("Your sessional wisdom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text("Your sessional wisdom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f))
             }
             Icon(WitcherIcons.Expand, null, tint = AardBlue.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
         }
@@ -464,10 +609,6 @@ fun UserStatisticsHeader(statistics: UserStatistics, onClick: () -> Unit) {
             StatGlassWidget(modifier = Modifier.weight(1f), title = "CHANTED TODAY", value = statistics.listeningTimeToday, icon = WitcherIcons.Duration, accentColor = AardBlue)
             StatGlassWidget(modifier = Modifier.weight(1f), title = "ARCHIVE SIZE", value = "${statistics.totalTracksCount}", icon = WitcherIcons.Library, accentColor = IgniRed)
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        StatGlassWidget(modifier = Modifier.fillMaxWidth(), title = "PREVAILED ARTIST (THIS WEEK)", value = statistics.topArtistThisWeek.uppercase(), icon = WitcherIcons.Artist, accentColor = SpotifyGreen, isFullWidth = true)
     }
 }
 
@@ -498,7 +639,7 @@ fun StatGlassWidget(
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(verticalArrangement = Arrangement.Center) {
-                Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, maxLines = 1)
+                Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, maxLines = 1)
                 Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -508,12 +649,12 @@ fun StatGlassWidget(
 @Composable
 fun SectionTitle(title: String) {
     Text(
-        text = title.uppercase(),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
         fontWeight = FontWeight.Black,
-        letterSpacing = 1.5.sp,
-        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 12.dp)
+        letterSpacing = 2.sp,
+        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 30.dp, bottom = 14.dp)
     )
 }
 
@@ -529,7 +670,7 @@ fun HomeHeader(
             .fillMaxWidth()
             .statusBarsPadding()
             .padding(horizontal = 24.dp, vertical = 12.dp)
-            .height(56.dp),
+            .height(60.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
 
@@ -557,12 +698,10 @@ fun HomeHeader(
                 (fadeIn(tween(300)) + slideInHorizontally { it / 2 }).togetherWith(
                     fadeOut(tween(200)) + slideOutHorizontally { it / 2 }
                 )
-            }
-
-        ) {searchactive->
+            }, label = "HeaderSearchAnimation"
+        ) { searchactive ->
             if (searchactive) {
-
-                OutlinedTextField(
+                androidx.compose.material3.OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     placeholder = {
@@ -599,7 +738,7 @@ fun HomeHeader(
                         }
                     }
                 )
-            } else{
+            } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSearchToggle() },
@@ -624,6 +763,5 @@ fun HomeHeader(
                 }
             }
         }
-
-            }
     }
+}

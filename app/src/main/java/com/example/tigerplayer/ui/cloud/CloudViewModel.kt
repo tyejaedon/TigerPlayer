@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tigerplayer.data.remote.model.SpotifyTrack
+import com.example.tigerplayer.engine.PlaybackEngine
 import com.example.tigerplayer.data.repository.SpotifyRepository
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,13 +17,15 @@ import javax.inject.Inject
 @HiltViewModel
 class CloudViewModel @Inject constructor(
     private val spotifyRepository: SpotifyRepository,
-    private val authManager: SpotifyAuthManager
+    private val authManager: SpotifyAuthManager,
+    private val playbackEngine: PlaybackEngine
 ) : ViewModel() {
 
     // --- THE CLOUD ARCHIVES ---
     val userAlbums = spotifyRepository.userAlbums
     val userPlaylists = spotifyRepository.userPlaylists
-    val isSpotifyConnected = spotifyRepository.isConnected
+    val isSpotifyAuthenticated = spotifyRepository.isAuthenticated
+    val isSpotifyRemoteConnected = spotifyRepository.isConnected
 
     private val _currentPlaylistTracks = MutableStateFlow<List<SpotifyTrack>>(emptyList())
     val currentPlaylistTracks = _currentPlaylistTracks.asStateFlow()
@@ -167,10 +170,7 @@ class CloudViewModel @Inject constructor(
 
     fun playSpotifyUri(uri: String) {
         viewModelScope.launch {
-            if (!isSpotifyConnected.value) {
-                spotifyRepository.connect()
-            }
-            spotifyRepository.playUri(uri)
+            playbackEngine.playSpotifyUri(uri)
         }
     }
 

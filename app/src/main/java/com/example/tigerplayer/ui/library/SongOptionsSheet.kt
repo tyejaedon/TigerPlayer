@@ -39,6 +39,7 @@ import com.example.tigerplayer.ui.theme.igniRed
 fun SongOptionsSheet(
     track: AudioTrack,
     playlists: List<Playlist>,
+    iconTintOverride: Color? = null,
     onDismiss: () -> Unit,
     onPlayNext: () -> Unit,
     onAddToPlaylist: (Long) -> Unit,
@@ -126,7 +127,8 @@ fun SongOptionsSheet(
                     SheetActionRow(
                         icon = WitcherIcons.Play,
                         text = "Play Next",
-                        accentColor = MaterialTheme.aardBlue
+                        accentColor = MaterialTheme.aardBlue,
+                        iconTintOverride = iconTintOverride
                     ) {
                         onPlayNext()
                         onDismiss()
@@ -135,7 +137,8 @@ fun SongOptionsSheet(
                     SheetActionRow(
                         icon = WitcherIcons.Add,
                         text = "Add to Playlist",
-                        accentColor = MaterialTheme.aardBlue
+                        accentColor = MaterialTheme.aardBlue,
+                        iconTintOverride = iconTintOverride
                     ) {
                         showPlaylistSelector = true
                     }
@@ -143,7 +146,8 @@ fun SongOptionsSheet(
                     SheetActionRow(
                         icon = WitcherIcons.Album,
                         text = "Go to Album",
-                        accentColor = MaterialTheme.igniRed
+                        accentColor = MaterialTheme.igniRed,
+                        iconTintOverride = iconTintOverride
                     ) {
                         onGoToAlbum(track.album)
                         onDismiss()
@@ -182,7 +186,10 @@ fun SongOptionsSheet(
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(playlists, key = { it.id }) { playlist ->
-                                PlaylistSelectionRow(playlist) {
+                                PlaylistSelectionRow(
+                                    playlist = playlist,
+                                    iconTintOverride = iconTintOverride
+                                ) {
                                     onAddToPlaylist(playlist.id)
                                     onDismiss()
                                 }
@@ -200,8 +207,11 @@ private fun SheetActionRow(
     icon: ImageVector,
     text: String,
     accentColor: Color,
+    iconTintOverride: Color? = null,
     onClick: () -> Unit
 ) {
+    val iconTint = iconTintOverride ?: accentColor
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -218,7 +228,7 @@ private fun SheetActionRow(
                 .border(1.dp, accentColor.copy(alpha = 0.2f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = accentColor, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = iconTint, modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Text(
@@ -231,7 +241,13 @@ private fun SheetActionRow(
 }
 
 @Composable
-private fun PlaylistSelectionRow(playlist: Playlist, onClick: () -> Unit) {
+private fun PlaylistSelectionRow(
+    playlist: Playlist,
+    iconTintOverride: Color? = null,
+    onClick: () -> Unit
+) {
+    val iconTint = iconTintOverride ?: MaterialTheme.aardBlue
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -241,7 +257,7 @@ private fun PlaylistSelectionRow(playlist: Playlist, onClick: () -> Unit) {
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(WitcherIcons.Playlist, null, tint = MaterialTheme.aardBlue)
+        Icon(WitcherIcons.Playlist, null, tint = iconTint)
         Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = playlist.name,

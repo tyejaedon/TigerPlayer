@@ -1,8 +1,8 @@
 package com.example.tigerplayer.data.repository
 
 import com.example.tigerplayer.data.local.MediaSource
+import com.example.tigerplayer.data.local.dao.GenreFootprintStat
 import com.example.tigerplayer.data.local.dao.ArtistStats
-import com.example.tigerplayer.data.local.dao.SonicFootprintStats
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
@@ -15,28 +15,44 @@ import javax.inject.Singleton
 class HistoryRepository @Inject constructor(
     private val tigerDao: TigerDao
 ) {
-    // Local midnight anchor used by home stats chips.
+    // Correctly snap to local midnight
     private fun getStartOfToday(): Long {
-        return Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
+    }
+
+    private fun getStartOfWeek(): Long {
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
+    }
+
+    fun getTimestampDaysAgo(days: Int): Long {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, -days)
+        return calendar.timeInMillis
     }
 
     // --- 1. RECENT CHANTS ---
     val recentTracks: Flow<List<PlaybackHistoryEntity>> = tigerDao.getRecentTracks()
 
     // --- 2. AGGREGATE POWER ---
-    val totalListeningTime: Flow<Long?> = tigerDao.getTotalListeningTimeMs()
+    val totalListeningTime: Flow<Long?> = tigerDao.getTotalListeningTimeMs(0L)
 
     // Today's stats refreshed automatically
     val listeningTimeToday: Flow<Long?> = tigerDao.getTotalListeningTimeMs(getStartOfToday())
 
-    // --- 3. ANALYTICAL QUERIES ---
+    val topArtistThisWeek: Flow<String?> = tigerDao.getTopArtist(getStartOfWeek())
 
-    // Top Artist for the current day/week/month
+    // --- 3. ANALYTICAL QUERIES ---
     fun getTopArtist(startTime: Long = 0L): Flow<String?> = tigerDao.getTopArtist(startTime)
 
 
@@ -45,12 +61,14 @@ class HistoryRepository @Inject constructor(
     fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>> =
         tigerDao.getTopArtists(startTime, limit)
 
+    fun getTopGenreFootprint(startTime: Long, limit: Int): Flow<List<GenreFootprintStat>> =
+        tigerDao.getTopGenreFootprint(startTime, limit)
+
     fun getAllTracksStats(): Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
-    val getAllTracks: Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
 
     /**
      * Records a manifestation.
-     * Optimization: If listened duration is < 7s, skip recording to avoid polluting stats with accidental transitions.
+     * Optimization: If duration is < 5s, we skip recording to avoid polluting stats with "skips".
      */
     suspend fun addTrackToHistory(
         trackId: String,
@@ -58,10 +76,10 @@ class HistoryRepository @Inject constructor(
         artist: String,
         album: String,
         imageUrl: String?,
-        listenedDurationMs: Long,
+        durationMs: Long,
         source: MediaSource
     ) {
-        if (listenedDurationMs < 7000L) return // Ignore micro-skips and accidental transitions.
+        if (durationMs < 5000) return // Ignore brief skips
 
         val historyEntry = PlaybackHistoryEntity(
             trackId = trackId,
@@ -69,7 +87,7 @@ class HistoryRepository @Inject constructor(
             artist = artist,
             album = album,
             imageUrl = imageUrl,
-            durationListenedMs = listenedDurationMs,
+            durationListenedMs = durationMs,
             source = source,
             timestamp = System.currentTimeMillis()
         )
@@ -78,7 +96,4 @@ class HistoryRepository @Inject constructor(
 
     fun getTotalListeningTime(startTime: Long): Flow<Long?> =
         tigerDao.getTotalListeningTimeMs(startTime)
-
-    fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats> =
-        tigerDao.getSonicFootprintStats(startTime)
 }

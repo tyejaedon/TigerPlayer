@@ -1,516 +1,548 @@
 package com.example.tigerplayer.ui.settings
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.Code
-import androidx.compose.material.icons.rounded.ColorLens
-import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BluetoothAudio
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headset
+import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.tigerplayer.ui.equalizer.AuralNexusScreen
-import com.example.tigerplayer.ui.equalizer.AuralNexusViewModel
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.BuildConfig
+import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.example.tigerplayer.data.local.DefaultPlayerView
+import com.example.tigerplayer.data.local.SkipShortAudio
+import com.example.tigerplayer.data.local.ThemeMode
+import com.example.tigerplayer.data.local.TigerAccentStyle
+import com.example.tigerplayer.service.HapticsDebugEvent
+import com.example.tigerplayer.service.HapticsDebugState
+import com.example.tigerplayer.ui.theme.PremiumGlassCard
+import com.example.tigerplayer.ui.theme.TigerCyberCyan
+import com.example.tigerplayer.ui.theme.TigerNeonOrange
+import com.example.tigerplayer.ui.theme.TigerSpectralViolet
+import com.example.tigerplayer.ui.theme.TigerToxicLime
 import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.engine.AcousticEnvironmentMode
-import com.example.tigerplayer.ui.theme.NeonContrastMode
-import com.example.tigerplayer.ui.theme.NeonIntensityMode
-
-private val IgniRed = Color(0xFFF11F1A)
-private val AardBlue = Color(0xFF4FC3F7)
-private val BitPerfectGold = Color(0xFFFFD700)
+import com.example.tigerplayer.ui.theme.glassEffect
+import com.example.tigerplayer.ui.theme.tigerGlow
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
-    onBackClick: () -> Unit,
-    onOpenSonicFootprint: () -> Unit = {}
+    onBackClick: () -> Unit
 ) {
-    // Collect variables safely conforming to the lifecycles of background service environments
-    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
-    val cacheSize by viewModel.cacheSizeFormatted.collectAsStateWithLifecycle()
-    val isBp by viewModel.isBitPerfect.collectAsStateWithLifecycle()
-    val acousticEnvironmentMode by viewModel.acousticEnvironmentMode.collectAsStateWithLifecycle()
-    val flowStateCrossfadeEnabled by viewModel.flowStateCrossfadeEnabled.collectAsStateWithLifecycle()
-    val neonContrastMode by viewModel.neonContrastMode.collectAsStateWithLifecycle()
-    val neonIntensityMode by viewModel.neonIntensityMode.collectAsStateWithLifecycle()
+    val settings by viewModel.settingsState.collectAsStateWithLifecycle()
+    val rescan by viewModel.libraryRescanState.collectAsStateWithLifecycle()
+    val hapticsDebug by viewModel.hapticsDebugState.collectAsStateWithLifecycle()
+    val accent = accentColor(settings.accentStyle)
+    
+    var crossfadeSlider by remember(settings.crossfadeDurationSec) {
+        mutableFloatStateOf(settings.crossfadeDurationSec.toFloat())
+    }
 
-    var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
-    var showAuralNexusScreen by remember { mutableStateOf(false) }
-    var showAcousticEnvironmentScreen by remember { mutableStateOf(false) }
-    var showSpotifyLogoutConfirm by remember { mutableStateOf(false) } // Safety confirmation state
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = "CONTROL MATRIX",
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = viewModel::resetToDefaults) {
+                        Icon(Icons.Rounded.Restore, contentDescription = "Reset Defaults")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier.glassEffect(RectangleShape)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            
+            // --- APPEARANCE SECTION ---
+            MatrixSection(title = "Core Visuals", icon = Icons.Rounded.Palette, accent = accent) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("THEME MODE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ThemeMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = settings.themeMode == mode,
+                                onClick = { viewModel.setThemeMode(mode) },
+                                label = { Text(mode.name.replace("_", " ")) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
 
-    val scrollState = rememberScrollState()
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            text = "ARCHIVE PREFERENCES",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
+                ListItem(
+                    headlineContent = { Text("AMOLED BLACK", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Force pure #000000 surfaces") },
+                    leadingContent = { Icon(Icons.Rounded.AutoAwesome, null, tint = accent) },
+                    trailingContent = {
+                        Switch(checked = settings.pureAmoledBlack, onCheckedChange = viewModel::setPureAmoledBlack)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("NEON ACCENT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        TigerAccentStyle.entries.forEach { style ->
+                            val selected = style == settings.accentStyle
+                            val swatch = accentColor(style)
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(swatch)
+                                    .border(
+                                        width = if (selected) 2.5.dp else 1.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                                        shape = CircleShape
+                                    )
+                                    .then(if (selected) Modifier.tigerGlow(swatch) else Modifier)
+                                    .bounceClick { viewModel.setAccentStyle(style) }
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("DEFAULT PLAYER VIEW", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DefaultPlayerView.entries
+                            .filter { it != DefaultPlayerView.SONIC_PRISM }
+                            .forEach { view ->
+                            FilterChip(
+                                selected = settings.defaultPlayerView == view,
+                                onClick = { viewModel.setDefaultPlayerView(view) },
+                                label = { Text(view.name.replace("_", " ")) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- AUDIO ENGINE SECTION ---
+            MatrixSection(title = "Neural DSP", icon = Icons.Rounded.GraphicEq, accent = accent) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Timer, null, tint = accent, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("CROSSFADE", fontWeight = FontWeight.Bold)
+                        }
+                        Text("${crossfadeSlider.roundToInt()}s", color = accent, fontWeight = FontWeight.Black)
+                    }
+                    Slider(
+                        value = crossfadeSlider,
+                        onValueChange = { crossfadeSlider = it },
+                        onValueChangeFinished = { viewModel.setCrossfadeDuration(crossfadeSlider.roundToInt()) },
+                        valueRange = 0f..12f,
+                        steps = 11,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                ListItem(
+                    headlineContent = { Text("GAPLESS FLOW", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Zero-latency track transitions") },
+                    leadingContent = { Icon(Icons.Rounded.Memory, null, tint = accent) },
+                    trailingContent = {
+                        Switch(checked = settings.gaplessPlayback, onCheckedChange = viewModel::setGaplessPlayback)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                ListItem(
+                    headlineContent = { Text("SYSTEM DECODER / DSP", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Route audio through Android offload path") },
+                    leadingContent = { Icon(Icons.Rounded.BluetoothAudio, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.routeToSystemDecoderDsp,
+                            onCheckedChange = viewModel::setRouteToSystemDecoderDsp
                         )
                     },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
-                    )
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
-            },
-            containerColor = MaterialTheme.colorScheme.background
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 20.dp)
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                Spacer(modifier = Modifier.height(8.dp))
 
-                // --- SECTION: APPEARANCE ---
-                SettingsSection(title = "THE LOOK", icon = Icons.Rounded.ColorLens) {
-                    ThemePreferenceSelector(
-                        currentMode = themeMode,
-                        onModeSelected = { viewModel.setThemeMode(it) }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    NeonContrastSelector(
-                        currentMode = neonContrastMode,
-                        onModeSelected = viewModel::setNeonContrastMode
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    NeonIntensitySelector(
-                        currentMode = neonIntensityMode,
-                        onModeSelected = viewModel::setNeonIntensityMode
-                    )
-                }
+                ListItem(
+                    headlineContent = { Text("HAPTIC RESONANCE", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Kick-drum mechanical feedback (uses app DSP route)") },
+                    leadingContent = { Icon(Icons.Rounded.Vibration, null, tint = accent) },
+                    trailingContent = {
+                        Switch(checked = settings.audioReactiveHaptics, onCheckedChange = viewModel::setAudioReactiveHaptics)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
 
-                SettingsSection(title = "SONIC FOOTPRINT", icon = Icons.Rounded.Tune) {
-                    PreferenceRow(
-                        title = "On-Device Wrapped",
-                        subtitle = "Radar profile of your listening DNA",
-                        action = {
-                            TextButton(onClick = onOpenSonicFootprint) {
-                                Text("OPEN", fontWeight = FontWeight.Black)
-                            }
-                        }
-                    )
-                }
-
-                // --- SECTION: ACOUSTIC RESONANCE ---
-                SettingsSection(title = "ACOUSTIC RESONANCE", icon = Icons.Rounded.Audiotrack) {
-                    val primaryColor = if (isBp) BitPerfectGold else AardBlue
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.large)
-                            .background(Brush.linearGradient(listOf(primaryColor.copy(alpha = 0.1f), Color.Transparent)))
-                            .border(1.dp, primaryColor.copy(alpha = 0.2f), MaterialTheme.shapes.large)
-                            .padding(20.dp)
-                    ) {
+                AnimatedVisibility(
+                    visible = settings.audioReactiveHaptics,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        Text(
+                            text = "HAPTIC INTENSITY",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = accent,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                                Text(
-                                    text = "AUDIO ENGINE",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = primaryColor
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = if (isBp) "Bit-Perfect Output Active\nBypassing Android Mixer"
-                                    else "Aural Nexus Active\nSpatial DSP Engine",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    lineHeight = 16.sp
+                            AudioReactiveHapticsProfile.entries.forEach { profile ->
+                                FilterChip(
+                                    selected = settings.audioReactiveHapticsProfile == profile,
+                                    onClick = { viewModel.setAudioReactiveHapticsProfile(profile) },
+                                    label = {
+                                        val label = when (profile) {
+                                            AudioReactiveHapticsProfile.SUBTLE -> "SUBTLE"
+                                            AudioReactiveHapticsProfile.BALANCED -> "BALANCED"
+                                            AudioReactiveHapticsProfile.AGGRESSIVE -> "AGGRESSIVE"
+                                        }
+                                        Text(label)
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = accent.copy(alpha = 0.2f),
+                                        selectedLabelColor = accent
+                                    )
                                 )
                             }
+                        }
+                    }
+                }
 
-                            Switch(
-                                checked = isBp,
-                                onCheckedChange = { viewModel.toggleBitPerfect() },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.Black,
-                                    checkedTrackColor = BitPerfectGold,
-                                    uncheckedThumbColor = Color.White,
-                                    uncheckedTrackColor = Color.White.copy(alpha = 0.2f)
-                                )
-                            )
+                if (BuildConfig.DEBUG) {
+                    HorizontalDivider(
+                        Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                    )
+                    HapticsDebugPanel(
+                        debugState = hapticsDebug,
+                        accent = accent
+                    )
+                }
+            }
 
-                            // FIXED: Added horizontal transitions to avoid Row layout shifts and height jumps
+            // --- LIBRARY UTILITIES ---
+            MatrixSection(title = "Archive Protocol", icon = Icons.Rounded.Refresh, accent = accent) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(accent.copy(alpha = 0.08f))
+                        .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                        .bounceClick { viewModel.triggerLibraryRescan() }
+                        .padding(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(accent.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.Refresh, null, tint = accent, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("SCAN ARCHIVES", fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
                             AnimatedVisibility(
-                                visible = !isBp,
-                                enter = expandHorizontally() + fadeIn(),
-                                exit = shrinkHorizontally() + fadeOut()
+                                visible = rescan.isRunning,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
                             ) {
-                                Row {
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(CircleShape)
-                                            .background(primaryColor.copy(alpha = 0.15f))
-                                            .bounceClick { showAuralNexusScreen = true },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Rounded.Tune, contentDescription = "Tune", tint = primaryColor)
-                                    }
-                                }
+                                Text(
+                                    text = "PROCESSING ${rescan.current} / ${rescan.total}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = accent.copy(alpha = 0.8f),
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
+                        Spacer(modifier = Modifier.weight(1f))
+                        Icon(Icons.Rounded.Bolt, null, tint = accent.copy(alpha = 0.5f))
                     }
+                }
+                
+                ListItem(
+                    headlineContent = { Text("BLUETOOTH RESUME", fontWeight = FontWeight.Bold) },
+                    leadingContent = { Icon(Icons.Rounded.BluetoothAudio, null, tint = accent) },
+                    trailingContent = {
+                        Switch(checked = settings.resumeOnBluetoothConnect, onCheckedChange = viewModel::setResumeOnBluetoothConnect)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
 
+                ListItem(
+                    headlineContent = { Text("WIRED RESUME", fontWeight = FontWeight.Bold) },
+                    leadingContent = { Icon(Icons.Rounded.Headset, null, tint = accent) },
+                    trailingContent = {
+                        Switch(checked = settings.resumeOnWiredHeadsetConnect, onCheckedChange = viewModel::setResumeOnWiredHeadsetConnect)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("SKIP SHORT AUDIO", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
                     Spacer(modifier = Modifier.height(12.dp))
-
-                    PreferenceRow(
-                        title = "Acoustic Environment",
-                        subtitle = when (acousticEnvironmentMode) {
-                            AcousticEnvironmentMode.OFF -> "Neutral"
-                            AcousticEnvironmentMode.VINYL_WARMTH -> "Vinyl Warmth"
-                            AcousticEnvironmentMode.CONCERT_HALL -> "Concert Hall"
-                        },
-                        action = {
-                            TextButton(onClick = { showAcousticEnvironmentScreen = true }) {
-                                Text("OPEN", fontWeight = FontWeight.Black)
-                            }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    PreferenceRow(
-                        title = "Flow State Crossfade",
-                        subtitle = if (flowStateCrossfadeEnabled) {
-                            "Enabled - dynamic 7s tail fade"
-                        } else {
-                            "Disabled - instant full-volume transitions"
-                        },
-                        action = {
-                            Switch(
-                                checked = flowStateCrossfadeEnabled,
-                                onCheckedChange = viewModel::setFlowStateCrossfadeEnabled
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SkipShortAudio.entries.forEach { option ->
+                            FilterChip(
+                                selected = settings.skipShortAudio == option,
+                                onClick = { viewModel.setSkipShortAudio(option) },
+                                label = {
+                                    val label = when (option) {
+                                        SkipShortAudio.OFF -> "OFF"
+                                        SkipShortAudio.BELOW_30_SECONDS -> "< 30s"
+                                        SkipShortAudio.BELOW_60_SECONDS -> "< 60s"
+                                    }
+                                    Text(label)
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
                             )
                         }
-                    )
+                    }
                 }
-
-                // --- SECTION: REMOTE SERVICES ---
-                SettingsSection(title = "CONTRACTS", icon = Icons.Rounded.CloudOff) {
-                    PreferenceRow(
-                        title = "Spotify Connection",
-                        subtitle = "Sever the link with the cloud oracle",
-                        action = {
-                            TextButton(onClick = { showSpotifyLogoutConfirm = true }) {
-                                Text("LOGOUT", color = IgniRed, fontWeight = FontWeight.Black)
-                            }
-                        }
-                    )
-                }
-
-                // --- SECTION: LOCAL STORAGE ---
-                SettingsSection(title = "STORAGE", icon = Icons.Rounded.DeleteSweep) {
-                    PreferenceRow(
-                        title = "Purge Temporary Archives",
-                        subtitle = cacheClearedMessage ?: "Currently utilizing $cacheSize of space",
-                        action = {
-                            OutlinedButton(
-                                onClick = { viewModel.clearTotalCache { cacheClearedMessage = "Archives purged successfully." } },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Text("PURGE", fontWeight = FontWeight.Black)
-                            }
-                        }
-                    )
-                }
-
-                // --- SECTION: THE CREATOR ---
-                SettingsSection(title = "THE ARCHIVIST", icon = Icons.Rounded.Code) {
-                    AboutMeSection()
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
             }
-        }
 
-        // --- FULL SCREEN OVERLAY: AURAL NEXUS ---
-        AnimatedVisibility(
-            visible = showAuralNexusScreen,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            val auralNexusViewModel: AuralNexusViewModel = hiltViewModel()
-            AuralNexusScreen(
-                viewModel = auralNexusViewModel,
-                onClose = { showAuralNexusScreen = false }
-            )
-        }
-
-        AnimatedVisibility(
-            visible = showAcousticEnvironmentScreen,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            AcousticEnvironmentScreen(
-                selectedMode = acousticEnvironmentMode,
-                onModeSelected = viewModel::setAcousticEnvironmentMode,
-                onBack = { showAcousticEnvironmentScreen = false }
-            )
-        }
-
-        // --- SAFETY CONFIRMATION DIALOG ---
-        if (showSpotifyLogoutConfirm) {
-            AlertDialog(
-                onDismissRequest = { showSpotifyLogoutConfirm = false },
-                title = { Text("SEVER CONNECTION", fontWeight = FontWeight.Black, color = Color.White) },
-                text = { Text("Are you certain you wish to sever the link with the cloud oracle? This will sign you out of Spotify.", color = Color.White.copy(alpha = 0.7f)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.logoutSpotify()
-                            showSpotifyLogoutConfirm = false
-                        }
-                    ) {
-                        Text("SEVER", color = IgniRed, fontWeight = FontWeight.Black)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showSpotifyLogoutConfirm = false }) {
-                        Text("CANCEL", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                },
-                containerColor = Color(0xFF151515),
-                shape = MaterialTheme.shapes.large
-            )
-        }
-    }
-}
-
-@Composable
-fun SettingsSection(title: String, icon: ImageVector, content: @Composable () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-        }
-        content()
-    }
-}
-
-@Composable
-fun ThemePreferenceSelector(currentMode: ThemeMode, onModeSelected: (ThemeMode) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassEffect(shape = MaterialTheme.shapes.large)
-            .padding(20.dp)
-    ) {
-        Text("Visual Resonance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Dictate the application's ambient lighting", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeOption("Light", currentMode == ThemeMode.LIGHT, { onModeSelected(ThemeMode.LIGHT) }, Modifier.weight(1f))
-            ThemeOption("Dark", currentMode == ThemeMode.DARK, { onModeSelected(ThemeMode.DARK) }, Modifier.weight(1f))
-            ThemeOption("System", currentMode == ThemeMode.SYSTEM, { onModeSelected(ThemeMode.SYSTEM) }, Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-fun NeonContrastSelector(
-    currentMode: NeonContrastMode,
-    onModeSelected: (NeonContrastMode) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassEffect(shape = MaterialTheme.shapes.large)
-            .padding(20.dp)
-    ) {
-        Text("Neon Contrast", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "Balanced keeps clean readability. High amplifies glow and neon edge intensity.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeOption(
-                label = "Balanced",
-                isSelected = currentMode == NeonContrastMode.BALANCED,
-                onClick = { onModeSelected(NeonContrastMode.BALANCED) },
-                modifier = Modifier.weight(1f)
-            )
-            ThemeOption(
-                label = "High",
-                isSelected = currentMode == NeonContrastMode.HIGH,
-                onClick = { onModeSelected(NeonContrastMode.HIGH) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-fun NeonIntensitySelector(
-    currentMode: NeonIntensityMode,
-    onModeSelected: (NeonIntensityMode) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassEffect(shape = MaterialTheme.shapes.large)
-            .padding(20.dp)
-    ) {
-        Text("Neon Intensity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "Soft tones down glow, Balanced is default, High boosts ambient and fluid tint power.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeOption(
-                label = "Soft",
-                isSelected = currentMode == NeonIntensityMode.SOFT,
-                onClick = { onModeSelected(NeonIntensityMode.SOFT) },
-                modifier = Modifier.weight(1f)
-            )
-            ThemeOption(
-                label = "Balanced",
-                isSelected = currentMode == NeonIntensityMode.BALANCED,
-                onClick = { onModeSelected(NeonIntensityMode.BALANCED) },
-                modifier = Modifier.weight(1f)
-            )
-            ThemeOption(
-                label = "High",
-                isSelected = currentMode == NeonIntensityMode.HIGH,
-                onClick = { onModeSelected(NeonIntensityMode.HIGH) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-fun ThemeOption(label: String, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = modifier.height(40.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Text(text = label, style = MaterialTheme.typography.labelMedium, fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun PreferenceRow(title: String, subtitle: String, action: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassEffect(shape = MaterialTheme.shapes.large)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
-        }
-        action()
-    }
-}
-
-@Composable
-fun AboutMeSection() {
-    val uriHandler = LocalUriHandler.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassEffect(shape = MaterialTheme.shapes.extraLarge)
-            .padding(24.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            TextButton(
+                onClick = viewModel::resetToDefaults,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Text("TY", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                Text("RESTORE PROTOCOL DEFAULTS", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text("Jaedon", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                Text("Forged in Nairobi, Kenya", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            "Strathmore University student, Android alchemist, and high-fidelity audio archivist. Passionate about crafting clean architectures, exploring cybersecurity, and ensuring every FLAC track plays with absolute precision.",
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 22.sp
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-            SocialLink("GitHub") { uriHandler.openUri("[https://github.com/tyejaedon](https://github.com/tyejaedon)") }
-            SocialLink("LinkedIn") { uriHandler.openUri("[https://linkedin.com/in/tyejaedon](https://linkedin.com/in/tyejaedon)") }
-            SocialLink("Instagram") { uriHandler.openUri("[https://instagram.com/tyjaedon](https://instagram.com/tyjaedon)") }
+            
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
 
 @Composable
-fun SocialLink(label: String, onClick: () -> Unit) {
-    Surface(color = Color.Transparent, shape = CircleShape, modifier = Modifier.bounceClick { onClick() }) {
-        Text(label.uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+private fun HapticsDebugPanel(
+    debugState: HapticsDebugState,
+    accent: Color
+) {
+    val eventLabel = when (debugState.event) {
+        HapticsDebugEvent.IDLE -> "IDLE"
+        HapticsDebugEvent.STATUS -> "STATUS"
+        HapticsDebugEvent.SKIP -> "SKIP"
+        HapticsDebugEvent.FIRE -> "FIRE"
+    }
+
+    val reason = debugState.reason.ifBlank { "none" }
+
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(
+            text = "HAPTICS DEBUG",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Black,
+            color = accent,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "event=$eventLabel reason=$reason",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "enabled=${debugState.enabled} playing=${debugState.isPlaying} profile=${debugState.profile.name}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "routeToSystem=${debugState.routeToSystemDecoderDsp} bitPerfect=${debugState.isBitPerfectMode} cooldownLeft=${debugState.cooldownRemainingMs}ms",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "raw=${"%.3f".format(debugState.rawScore)} smooth=${"%.3f".format(debugState.smoothedScore)} min=${"%.3f".format(debugState.minScore)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "bass=${"%.3f".format(debugState.bass)} energy=${"%.3f".format(debugState.energy)} flux=${"%.3f".format(debugState.flux)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "pulses=${debugState.pulseCount} amp=${debugState.amplitude} dur=${debugState.durationMs}ms",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+    }
+}
+
+@Composable
+private fun MatrixSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    PremiumGlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        borderWidth = 1.dp
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(accent.copy(alpha = 0.05f))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = accent,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun accentColor(accentStyle: TigerAccentStyle): Color {
+    return when (accentStyle) {
+        TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
+        TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
+        TigerAccentStyle.TOXIC_LIME -> TigerToxicLime
+        TigerAccentStyle.SPECTRAL_VIOLET -> TigerSpectralViolet
     }
 }

@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.constellation
 
+import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.FilterCenterFocus
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,12 +26,16 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.tigerplayer.constellation.NodeType
 import com.example.tigerplayer.constellation.PositionedNode
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -225,6 +231,7 @@ fun ConstellationScreen(
                 ConstellationOverlay(
                     insight = state.insightMessage,
                     onClose = onClose,
+                    onRefresh = { viewModel.refreshUniverse() },
                     onRecenter = {
                         scope.launch {
                             cameraScale.animateTo(0.15f, spring(stiffness = Spring.StiffnessLow))
@@ -263,23 +270,73 @@ private fun calculatePosition(node: PositionedNode, time: Float, allNodes: Map<S
 @Composable
 fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () -> Unit) {
     val shape = if (node.type == NodeType.ALBUM) RoundedCornerShape(20) else CircleShape
+    val nodeImage = node.imageUrl?.takeIf { it.isNotBlank() }
+    val context = LocalContext.current
+    var extractedImageColor by remember(node.id, nodeImage) { mutableStateOf<Color?>(null) }
+    val accentColor = extractedImageColor ?: node.color
+    val imageRequest = remember(nodeImage, node.type, context) {
+        if (nodeImage == null || node.type != NodeType.ARTIST) {
+            null
+        } else {
+            ImageRequest.Builder(context)
+                .data(nodeImage)
+                .crossfade(800)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .allowHardware(false)
+                .listener(onSuccess = { _, result ->
+                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                    bitmap?.let { b ->
+                        Palette.from(b).generate { palette ->
+                            val colorInt = palette?.vibrantSwatch?.rgb
+                                ?: palette?.dominantSwatch?.rgb
+                                ?: palette?.mutedSwatch?.rgb
+                            if (colorInt != null) {
+                                extractedImageColor = Color(colorInt)
+                            }
+                        }
+                    }
+                })
+                .build()
+        }
+    }
 
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         // Star Core Image
-        AsyncImage(
-            model = node.imageUrl,
-            contentDescription = node.label,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize(0.75f)
-                .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = node.color)
-                .clip(shape)
-                .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, node.color.copy(alpha = 0.8f), shape)
-                .bounceClick { onClick() }
-        )
+        if (nodeImage != null) {
+            AsyncImage(
+                model = imageRequest ?: nodeImage,
+                contentDescription = node.label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize(0.75f)
+                    .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = accentColor)
+                    .clip(shape)
+                    .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, accentColor.copy(alpha = 0.8f), shape)
+                    .bounceClick { onClick() }
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(0.75f)
+                    .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = accentColor)
+                    .clip(shape)
+                    .background(Brush.radialGradient(listOf(accentColor.copy(alpha = 0.7f), Color(0xFF0B0D10))))
+                    .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, accentColor.copy(alpha = 0.8f), shape)
+                    .bounceClick { onClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
 
         // Floating Data Badge (Planets/Albums)
         if (node.type == NodeType.ALBUM && visualScale > 0.8f) {
@@ -322,7 +379,12 @@ fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () 
 }
 
 @Composable
-fun ConstellationOverlay(insight: String, onClose: () -> Unit, onRecenter: () -> Unit) {
+fun ConstellationOverlay(
+    insight: String,
+    onClose: () -> Unit,
+    onRefresh: () -> Unit,
+    onRecenter: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxSize().statusBarsPadding().padding(24.dp)
     ) {
@@ -331,9 +393,13 @@ fun ConstellationOverlay(insight: String, onClose: () -> Unit, onRecenter: () ->
                 Icon(Icons.Default.Close, "Close", tint = Color.White)
             }
             Text("COGNITIVE GALAXY", color = Color.White.copy(alpha = 0.5f), letterSpacing = 2.sp, fontWeight = FontWeight.Black)
-
-            IconButton(onClick = onRecenter, modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape)) {
-                Icon(Icons.Rounded.FilterCenterFocus, "Recenter", tint = Color.White)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(onClick = onRefresh, modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape)) {
+                    Icon(Icons.Rounded.Refresh, "Refresh", tint = Color.White)
+                }
+                IconButton(onClick = onRecenter, modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape)) {
+                    Icon(Icons.Rounded.FilterCenterFocus, "Recenter", tint = Color.White)
+                }
             }
         }
 

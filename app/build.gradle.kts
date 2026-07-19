@@ -15,14 +15,9 @@ if (secretsFile.exists()) {
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
-    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
-}
-kotlin {
-    jvmToolchain(17)
 }
 
 // 🔥 THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
@@ -33,9 +28,10 @@ configure<ApplicationExtension> {
     defaultConfig {
         applicationId = "com.example.tigerplayer"
         minSdk = 29
+        //noinspection OldTargetApi
         targetSdk = 36
         versionCode = 1
-        versionName = "2.5"
+        versionName = "2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Spotify Manifest Placeholders
@@ -61,7 +57,8 @@ configure<ApplicationExtension> {
 
     buildTypes {
         getByName("release") { // Safely scoped inside the new extension
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -89,6 +86,8 @@ configure<ApplicationExtension> {
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/LICENSE-notice.md"
         }
     }
 }
@@ -118,6 +117,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.glance)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.window)
 
     // Remote Compose (The Alpha Library)
     implementation(libs.androidx.compose.remote.creation.compose)
@@ -136,6 +136,7 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.gson)
+    implementation(libs.jtransforms)
 
     implementation(libs.kotlin.youtubeextractor)
     // --- Room (The Vault) ---
@@ -164,8 +165,19 @@ dependencies {
 
     // --- Testing ---
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.mockk.android)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.benchmark.macro.junit4)
+    androidTestImplementation(libs.androidx.uiautomator)
+
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.leakcanary.android)
 }
 
 // =========================================================================

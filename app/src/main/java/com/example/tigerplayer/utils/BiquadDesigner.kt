@@ -22,11 +22,11 @@ object BiquadDesigner {
         q: Float,
         sampleRate: Float
     ): Coefficients {
-        // Coerce inputs to safe mathematical bounds (avoiding Nyquist limit and negative parameters)
-        val f0 = freq.coerceIn(20f, (sampleRate / 2f) - 100f).toDouble()
-        val g = gainDb.coerceIn(-24f, 24f).toDouble()
-        val qVal = q.coerceIn(0.1f, 10f).toDouble()
-        val sr = sampleRate.toDouble()
+        // Coerce inputs to safe mathematical bounds
+        val sr = sampleRate.toDouble().coerceAtLeast(8000.0)
+        val f0 = freq.toDouble().coerceIn(20.0, (sr / 2.0) * 0.95)
+        val g = gainDb.toDouble().coerceIn(-24.0, 24.0)
+        val qVal = q.toDouble().coerceIn(0.1, 10.0)
 
         val omega = 2.0 * PI * f0 / sr
         val cosOmega = cos(omega)
@@ -69,9 +69,10 @@ object BiquadDesigner {
 
     /**
      * Computes the magnitude response (in dB) of a biquad filter at any given frequency.
+     * Optimized for high-performance UI rendering.
      */
     fun magnitudeAt(freq: Float, coeffs: Coefficients, sampleRate: Float): Float {
-        val f = freq.coerceIn(20f, (sampleRate / 2f) - 100f).toDouble()
+        val f = freq.toDouble().coerceIn(20.0, (sampleRate.toDouble() / 2.0) * 0.95)
         val phi = 2.0 * PI * f / sampleRate.toDouble()
         val cos1 = cos(phi)
         val cos2 = cos(2.0 * phi)
@@ -86,10 +87,10 @@ object BiquadDesigner {
         val numMagSq = numReal * numReal + numImag * numImag
         val denMagSq = denReal * denReal + denImag * denImag
 
-        if (denMagSq < 1e-15) return 0f // Protect from division by zero
+        if (denMagSq < 1e-18) return 0f
 
         val magnitude = sqrt(numMagSq / denMagSq)
-        val magnitudeDb = 20.0 * log10(magnitude.coerceAtLeast(1e-10))
+        val magnitudeDb = 20.0 * log10(magnitude.coerceAtLeast(1e-12))
         return magnitudeDb.toFloat()
     }
 }

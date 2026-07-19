@@ -11,6 +11,7 @@ import com.example.tigerplayer.constellation.PositionedNode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
@@ -38,7 +39,7 @@ sealed class ConstellationState {
 
 @HiltViewModel
 class ConstellationViewModel @Inject constructor(
-    dataEngine: ConstellationDataEngine,
+    private val dataEngine: ConstellationDataEngine,
     private val layoutEngine: OrbitalLayoutEngine,
 ) : ViewModel() {
 
@@ -107,7 +108,8 @@ class ConstellationViewModel @Inject constructor(
      * manual re-triggers if needed for animation seeds.
      */
     fun refreshUniverse() {
-        // In a reactive Flow-based architecture, this would typically 
-        // trigger a refresh in the DataRepository or DataEngine.
+        viewModelScope.launch {
+            dataEngine.refreshGraphData()
+        }
     }
 }

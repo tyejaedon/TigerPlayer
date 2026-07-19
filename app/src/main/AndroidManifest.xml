@@ -22,7 +22,24 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <attribution
+        android:tag="bluetooth_device_management"
+        android:label="@string/attr_bluetooth_device_management" />
+
+    <attribution
+        android:tag="weather_location"
+        android:label="@string/attr_weather_location" />
+
+    <attribution
+        android:tag="player_motion_sensor"
+        android:label="@string/attr_player_motion_sensor" />
 
     <application
         android:name=".TigerPlayerApplication"
@@ -36,12 +53,36 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.TigerPlayer">
 
+
+        <profileable
+            android:shell="true"
+             />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|density|uiMode"
             android:theme="@style/Theme.TigerPlayer">
+
+            <!-- Vendor-specific hints for outer-cover display eligibility. Unknown keys are safely ignored on unsupported devices. -->
+            <meta-data
+                android:name="com.samsung.android.app.magicinfo"
+                android:value="true" />
+            <meta-data
+                android:name="com.samsung.android.foldable.cover_screen.support"
+                android:value="true" />
+            <meta-data
+                android:name="com.samsung.android.multiwindow.support"
+                android:value="true" />
+            <meta-data
+                android:name="com.motorola.android.externaldisplay.enabled"
+                android:value="true" />
+            <meta-data
+                android:name="com.motorola.android.externaldisplay.category"
+                android:value="media" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

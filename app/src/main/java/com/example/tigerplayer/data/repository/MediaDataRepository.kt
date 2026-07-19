@@ -4,16 +4,19 @@ import android.util.Log
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
 import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.remote.api.LastFmApi
 import com.example.tigerplayer.data.remote.api.SpotifyApiService
 import com.example.tigerplayer.data.remote.model.LastFmImage
 import com.example.tigerplayer.data.remote.model.SpotifyArtistDetail
+import com.example.tigerplayer.data.remote.model.SpotifyTrack
 import com.example.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,7 +28,9 @@ data class ArtistDetails(
     val genres: List<String> = emptyList(),
     val localPlayCount: Int = 0,
     val popularity: Int = 0,
-    val minutesListened: Int = 0
+    val minutesListened: Int = 0,
+    // Local library popularity share: artist minutes / lifetime minutes * 100.
+    val listeningSharePercent: Float = 0f
 )
 
 @Singleton
@@ -33,7 +38,8 @@ class MediaDataRepository @Inject constructor(
     private val tigerDao: TigerDao,
     private val spotifyApiService: SpotifyApiService,
     private val authManager: SpotifyAuthManager,
-    private val lastFmApi: LastFmApi
+    private val lastFmApi: LastFmApi,
+    private val audioRepository: AudioRepository
 ) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -50,6 +56,13 @@ class MediaDataRepository @Inject constructor(
                 // Gather temporal stats directly from the local records
                 val localCount = tigerDao.getArtistPlayCount(cleanArtist)
                 val localMinutes = tigerDao.getArtistMinutesListened(cleanArtist)
+                val lifetimeMinutes = (tigerDao.getTotalListeningTimeMs().first() / 60_000L)
+                    .toInt()
+                    .coerceAtLeast(0)
+                val listeningSharePercent = calculateListeningSharePercent(
+                    artistMinutes = localMinutes,
+                    lifetimeMinutes = lifetimeMinutes
+                )
 
                 if (cachedData != null) {
                     emit(ArtistDetails(
@@ -58,7 +71,8 @@ class MediaDataRepository @Inject constructor(
                         bio = cachedData.bio,
                         genres = cachedData.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
                         localPlayCount = localCount,
-                        minutesListened = localMinutes
+                        minutesListened = localMinutes,
+                        listeningSharePercent = listeningSharePercent
                     ))
                 }
 
@@ -105,7 +119,8 @@ class MediaDataRepository @Inject constructor(
                                     genres = genreList,
                                     popularity = spotifyDetail?.popularity ?: 0,
                                     localPlayCount = localCount,
-                                    minutesListened = localMinutes
+                                    minutesListened = localMinutes,
+                                    listeningSharePercent = listeningSharePercent
                                 )
 
                                 tigerDao.insertArtistCache(
@@ -132,7 +147,8 @@ class MediaDataRepository @Inject constructor(
                                     imageUrl = null,
                                     bio = voidBio,
                                     localPlayCount = localCount,
-                                    minutesListened = localMinutes
+                                    minutesListened = localMinutes,
+                                    listeningSharePercent = listeningSharePercent
                                 )
                             } else null
                         }
@@ -144,6 +160,12 @@ class MediaDataRepository @Inject constructor(
                 }
             }
         }.distinctUntilChanged().flowOn(Dispatchers.IO)
+    }
+
+    private fun calculateListeningSharePercent(artistMinutes: Int, lifetimeMinutes: Int): Float {
+        if (artistMinutes <= 0 || lifetimeMinutes <= 0) return 0f
+        return ((artistMinutes.toFloat() / lifetimeMinutes.toFloat()) * 100f)
+            .coerceIn(0f, 100f)
     }
 
     private fun List<LastFmImage>.getBestImage(): String? {
@@ -222,7 +244,7 @@ class MediaDataRepository @Inject constructor(
                         val fbMatchArtist = fallbackTrack?.artists?.any { it.name.equals(cleanArtist, ignoreCase = true) } == true
 
                         if (fbMatchTitle && fbMatchArtist) {
-                            fallbackTrack?.album?.images?.firstOrNull()?.url
+                            fallbackTrack.album?.images?.firstOrNull()?.url
                         } else null
                     } else null
                 }
@@ -237,6 +259,102 @@ class MediaDataRepository @Inject constructor(
 
         emit(highResUrl)
     }.flowOn(Dispatchers.IO)
+
+    suspend fun getInfinitePlayRecommendations(
+        anchorTrack: AudioTrack,
+        limit: Int = 12
+    ): List<AudioTrack> = withContext(Dispatchers.IO) {
+        val localTracks = audioRepository.getCachedLocalTracks().firstOrNull().orEmpty()
+        if (localTracks.isEmpty()) return@withContext emptyList()
+
+        val trackLookup = localTracks.associateBy {
+            recommendationKey(it.title, it.artist)
+        }
+
+        val spotifyCandidates = mutableListOf<SpotifyTrack>()
+
+        try {
+            val token = authManager.getValidToken()
+            if (token.isNotBlank()) {
+                val bearer = "Bearer $token"
+                val query = "track:\"${cleanSearchTerm(anchorTrack.title)}\" artist:\"${cleanSearchTerm(anchorTrack.artist)}\""
+                val seedResponse = spotifyApiService.searchTrack(
+                    token = bearer,
+                    query = query,
+                    limit = 1
+                )
+
+                val seedTrack = seedResponse.body()?.tracks?.items?.firstOrNull()
+                val seedArtistId = seedTrack?.artists?.firstOrNull()?.id
+                    ?: spotifyApiService
+                        .searchArtist(token = bearer, query = cleanSearchTerm(anchorTrack.artist), limit = 1)
+                        .body()?.artists?.items?.firstOrNull()?.id
+
+                val recommendationsResponse = spotifyApiService.getRecommendations(
+                    bearerToken = bearer,
+                    seedTracks = seedTrack?.id,
+                    seedArtists = if (seedTrack == null) seedArtistId else null,
+                    limit = (limit * 2).coerceAtMost(50)
+                )
+                spotifyCandidates += recommendationsResponse.body()?.tracks.orEmpty()
+
+                if (spotifyCandidates.isEmpty() && seedArtistId != null) {
+                    spotifyCandidates += spotifyApiService
+                        .getArtistTopTracks(bearerToken = bearer, artistId = seedArtistId)
+                        .body()?.tracks
+                        .orEmpty()
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w("MediaRepo", "Infinite Play Spotify fetch failed: ${e.message}")
+        }
+
+        val mappedSpotify = spotifyCandidates
+            .mapNotNull { trackLookup[recommendationKey(it.name, it.artists.firstOrNull()?.name.orEmpty())] }
+            .filterNot { it.id == anchorTrack.id }
+            .distinctBy { it.id }
+
+        if (mappedSpotify.isNotEmpty()) {
+            return@withContext mappedSpotify.take(limit)
+        }
+
+        val lastFmMapped = try {
+            lastFmApi.getSimilarTracks(
+                trackName = cleanSearchTerm(anchorTrack.title),
+                artistName = ArtistUtils.getBaseArtist(anchorTrack.artist),
+                limit = (limit * 3).coerceAtMost(100)
+            ).body()?.similarTracks?.track.orEmpty()
+                .mapNotNull { similar ->
+                    trackLookup[recommendationKey(similar.name.orEmpty(), similar.artist?.name.orEmpty())]
+                }
+                .filterNot { it.id == anchorTrack.id }
+                .distinctBy { it.id }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w("MediaRepo", "Infinite Play Last.fm fetch failed: ${e.message}")
+            emptyList()
+        }
+
+        if (lastFmMapped.isNotEmpty()) {
+            lastFmMapped.take(limit)
+        } else {
+            // Final fallback: random nearby local catalog from same artist family.
+            localTracks
+                .asSequence()
+                .filterNot { it.id == anchorTrack.id }
+                .filter { ArtistUtils.getBaseArtist(it.artist).equals(ArtistUtils.getBaseArtist(anchorTrack.artist), ignoreCase = true) }
+                .shuffled()
+                .take(limit)
+                .toList()
+        }
+    }
+
+    private fun recommendationKey(title: String, artist: String): String {
+        val cleanTitle = cleanSearchTerm(title).lowercase().trim()
+        val cleanArtist = ArtistUtils.getBaseArtist(artist).lowercase().trim()
+        return "$cleanArtist::$cleanTitle"
+    }
     // ==========================================
     // --- GRIMOIRE MANAGEMENT (Playlists) ---
     // ==========================================

@@ -1,29 +1,21 @@
 package com.example.tigerplayer.ui.settings
 
-
-import android.content.Context
-import android.os.Bundle
-import androidx.annotation.OptIn
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.SessionCommand
-import com.example.tigerplayer.engine.AcousticEnvironmentMode
-import com.example.tigerplayer.data.repository.LyricsRepository
-import com.example.tigerplayer.data.repository.MediaDataRepository
-import com.example.tigerplayer.data.repository.SpotifyAuthManager
-import com.example.tigerplayer.service.AudioPlayerService
-import com.example.tigerplayer.service.MediaControllerManager
-import com.example.tigerplayer.ui.theme.NeonContrastMode
-import com.example.tigerplayer.ui.theme.NeonIntensityMode
+import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.example.tigerplayer.data.local.DefaultPlayerView
+import com.example.tigerplayer.data.local.SettingsDataStore
+import com.example.tigerplayer.data.local.SkipShortAudio
+import com.example.tigerplayer.data.local.ThemeMode
+import com.example.tigerplayer.data.local.TigerAccentStyle
+import com.example.tigerplayer.data.local.TigerSettingsState
+import com.example.tigerplayer.data.source.LocalAudioDataSource
+import com.example.tigerplayer.engine.LibraryEngine
+import com.example.tigerplayer.service.HapticsDebugMonitor
+import com.example.tigerplayer.service.HapticsDebugState
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
+import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,222 +23,139 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.File
-import javax.inject.Inject
 
-enum class ThemeMode {
-    LIGHT, DARK, SYSTEM
-}
+data class LibraryRescanState(
+    val isRunning: Boolean = false,
+    val current: Int = 0,
+    val total: Int = 0,
+    val lastRunCompletedAtMs: Long? = null
+)
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val dataStore: DataStore<Preferences>,
-    @ApplicationContext private val context: Context,
-    private val spotifyAuthManager: SpotifyAuthManager,
-    private val lyricsRepository: LyricsRepository,
-    private val mediaDataRepository: MediaDataRepository,
-    private val mediaControllerManager: MediaControllerManager
+    private val settingsDataStore: SettingsDataStore,
+    private val libraryEngine: LibraryEngine,
+    private val hapticsDebugMonitor: HapticsDebugMonitor
 ) : ViewModel() {
 
-    private val _cacheSizeFormatted = MutableStateFlow("Calculating...")
-    val cacheSizeFormatted = _cacheSizeFormatted.asStateFlow()
-
-    // --- AUDIO FIDELITY STATE ---
-    val isBitPerfect: StateFlow<Boolean> = dataStore.data
-        .map { it[BIT_PERFECT_KEY] ?: true }
+    val settingsState: StateFlow<TigerSettingsState> = settingsDataStore.settingsFlow
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = true
+            started = SharingStarted.WhileSubscribed(5_000L),
+            initialValue = TigerSettingsState()
         )
 
-    val acousticEnvironmentMode: StateFlow<AcousticEnvironmentMode> = dataStore.data
-        .map { pref ->
-            val raw = pref[ACOUSTIC_ENVIRONMENT_KEY] ?: AcousticEnvironmentMode.OFF.name
-            runCatching { AcousticEnvironmentMode.valueOf(raw) }
-                .getOrDefault(AcousticEnvironmentMode.OFF)
-        }
+    // Backward-compatible theme stream consumed by MainActivity.
+    val themeMode: StateFlow<ThemeMode> = settingsState
+        .map { it.themeMode }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = AcousticEnvironmentMode.OFF
-        )
-
-    val flowStateCrossfadeEnabled: StateFlow<Boolean> = dataStore.data
-        .map { pref -> pref[FLOW_STATE_CROSSFADE_KEY] ?: true }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = true
-        )
-
-    val neonContrastMode: StateFlow<NeonContrastMode> = dataStore.data
-        .map { preferences ->
-            val modeName = preferences[NEON_CONTRAST_MODE_KEY] ?: NeonContrastMode.BALANCED.name
-            runCatching { NeonContrastMode.valueOf(modeName) }
-                .getOrDefault(NeonContrastMode.BALANCED)
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = NeonContrastMode.BALANCED
-        )
-
-    val neonIntensityMode: StateFlow<NeonIntensityMode> = dataStore.data
-        .map { preferences ->
-            val modeName = preferences[NEON_INTENSITY_MODE_KEY] ?: NeonIntensityMode.BALANCED.name
-            runCatching { NeonIntensityMode.valueOf(modeName) }
-                .getOrDefault(NeonIntensityMode.BALANCED)
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = NeonIntensityMode.BALANCED
-        )
-
-    @OptIn(UnstableApi::class)
-    fun toggleBitPerfect() {
-        viewModelScope.launch {
-            val current = isBitPerfect.value
-            dataStore.edit { it[BIT_PERFECT_KEY] = !current }
-
-            // Dispatch command instantly to the player service
-            mediaControllerManager.mediaController?.sendCustomCommand(
-                SessionCommand(AudioPlayerService.ACTION_TOGGLE_DSP, Bundle.EMPTY),
-                Bundle.EMPTY
-            )
-        }
-    }
-
-    @OptIn(UnstableApi::class)
-    fun setAcousticEnvironmentMode(mode: AcousticEnvironmentMode) {
-        viewModelScope.launch {
-            dataStore.edit { pref ->
-                pref[ACOUSTIC_ENVIRONMENT_KEY] = mode.name
-            }
-
-            val args = Bundle().apply {
-                putString(AudioPlayerService.EXTRA_ACOUSTIC_ENVIRONMENT_MODE, mode.name)
-            }
-
-            mediaControllerManager.mediaController?.sendCustomCommand(
-                SessionCommand(AudioPlayerService.ACTION_SET_ACOUSTIC_ENVIRONMENT, Bundle.EMPTY),
-                args
-            )
-        }
-    }
-
-    fun setFlowStateCrossfadeEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            dataStore.edit { pref ->
-                pref[FLOW_STATE_CROSSFADE_KEY] = enabled
-            }
-            mediaControllerManager.setFlowStateCrossfadeEnabled(enabled)
-        }
-    }
-
-    // --- APPEARANCE STATEFLOW (Optimized to avoid resource leak) ---
-    val themeMode: StateFlow<ThemeMode> = dataStore.data
-        .map { preferences ->
-            val modeName = preferences[THEME_MODE_KEY] ?: ThemeMode.SYSTEM.name
-            try {
-                ThemeMode.valueOf(modeName)
-            } catch (e: Exception) {
-                ThemeMode.SYSTEM
-            }
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.WhileSubscribed(5_000L),
             initialValue = ThemeMode.SYSTEM
         )
 
+    private val _libraryRescanState = MutableStateFlow(LibraryRescanState())
+    val libraryRescanState: StateFlow<LibraryRescanState> = _libraryRescanState.asStateFlow()
+
+    val hapticsDebugState: StateFlow<HapticsDebugState> = hapticsDebugMonitor.state
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000L),
+            initialValue = HapticsDebugState()
+        )
+
+    private var rescanJob: Job? = null
+
     fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { settingsDataStore.setThemeMode(mode) }
+    }
+
+    fun setPureAmoledBlack(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setPureAmoledBlack(enabled) }
+    }
+
+    fun setAccentStyle(style: TigerAccentStyle) {
+        viewModelScope.launch { settingsDataStore.setAccentStyle(style) }
+    }
+
+    fun setDefaultPlayerView(view: DefaultPlayerView) {
+        viewModelScope.launch { settingsDataStore.setDefaultPlayerView(view) }
+    }
+
+    fun setCrossfadeDuration(seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setCrossfadeDurationSec(seconds) }
+    }
+
+    fun setGaplessPlayback(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setGaplessPlayback(enabled) }
+    }
+
+    fun setAudioReactiveHaptics(enabled: Boolean) {
         viewModelScope.launch {
-            dataStore.edit { preferences ->
-                preferences[THEME_MODE_KEY] = mode.name
+            if (enabled) {
+                // Kick-reactive haptics depend on the app DSP analysis path.
+                settingsDataStore.setRouteToSystemDecoderDsp(false)
             }
+            settingsDataStore.setAudioReactiveHaptics(enabled)
         }
     }
 
-    fun setNeonContrastMode(mode: NeonContrastMode) {
+    fun setAudioReactiveHapticsProfile(profile: AudioReactiveHapticsProfile) {
+        viewModelScope.launch { settingsDataStore.setAudioReactiveHapticsProfile(profile) }
+    }
+
+    fun setSkipShortAudio(option: SkipShortAudio) {
+        viewModelScope.launch { settingsDataStore.setSkipShortAudio(option) }
+    }
+
+    fun setRouteToSystemDecoderDsp(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setRouteToSystemDecoderDsp(enabled) }
+    }
+
+    fun setResumeOnBluetoothConnect(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setResumeOnBluetoothConnect(enabled) }
+    }
+
+    fun setResumeOnWiredHeadsetConnect(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setResumeOnWiredHeadsetConnect(enabled) }
+    }
+
+    fun resetToDefaults() {
         viewModelScope.launch {
-            dataStore.edit { preferences ->
-                preferences[NEON_CONTRAST_MODE_KEY] = mode.name
+            settingsDataStore.resetToDefaults()
+        }
+    }
+
+    fun triggerLibraryRescan() {
+        if (rescanJob?.isActive == true) return
+        
+        rescanJob = viewModelScope.launch {
+            libraryEngine.getLocalAudioScanFlow(forceRefresh = true).collect { status ->
+                when (status) {
+                    is LocalAudioDataSource.ScanStatus.Started -> {
+                        _libraryRescanState.value = LibraryRescanState(
+                            isRunning = true,
+                            current = 0,
+                            total = status.total,
+                            lastRunCompletedAtMs = _libraryRescanState.value.lastRunCompletedAtMs
+                        )
+                    }
+                    is LocalAudioDataSource.ScanStatus.InProgress -> {
+                        _libraryRescanState.value = _libraryRescanState.value.copy(
+                            isRunning = true,
+                            current = status.current,
+                            total = status.total
+                        )
+                    }
+                    is LocalAudioDataSource.ScanStatus.Complete -> {
+                        _libraryRescanState.value = _libraryRescanState.value.copy(
+                            isRunning = false,
+                            current = _libraryRescanState.value.total,
+                            lastRunCompletedAtMs = System.currentTimeMillis()
+                        )
+                    }
+                }
             }
         }
-    }
-
-    fun setNeonIntensityMode(mode: NeonIntensityMode) {
-        viewModelScope.launch {
-            dataStore.edit { preferences ->
-                preferences[NEON_INTENSITY_MODE_KEY] = mode.name
-            }
-        }
-    }
-
-    // --- CACHE & STORAGE ---
-    init {
-        calculateTotalCache()
-        viewModelScope.launch {
-            flowStateCrossfadeEnabled.collect { enabled ->
-                mediaControllerManager.setFlowStateCrossfadeEnabled(enabled)
-            }
-        }
-    }
-
-    private fun calculateTotalCache() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val internalCache = getDirSize(context.cacheDir)
-            val externalCache = getDirSize(context.externalCacheDir)
-            val totalBytes = internalCache + externalCache
-
-            val kb = totalBytes / 1024f
-            val mb = kb / 1024f
-
-            val formatted = when {
-                mb >= 1.0f -> String.format("%.2f MB", mb)
-                kb > 0f -> String.format("%.2f KB", kb)
-                else -> "0.00 KB"
-            }
-            _cacheSizeFormatted.value = formatted
-        }
-    }
-
-    private fun getDirSize(dir: File?): Long {
-        if (dir == null || !dir.exists()) return 0
-        var size = 0L
-        dir.listFiles()?.forEach { file ->
-            size += if (file.isDirectory) getDirSize(file) else file.length()
-        }
-        return size
-    }
-
-    // --- PURGE ACTIONS ---
-    fun clearTotalCache(onComplete: () -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            lyricsRepository.clearLyricsCache()
-            mediaDataRepository.clearArtistCache()
-            calculateTotalCache()
-
-            launch(Dispatchers.Main) {
-                onComplete()
-            }
-        }
-    }
-
-    fun logoutSpotify() {
-        viewModelScope.launch {
-            spotifyAuthManager.logout()
-        }
-    }
-
-    companion object {
-        private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
-        private val NEON_CONTRAST_MODE_KEY = stringPreferencesKey("neon_contrast_mode")
-        private val NEON_INTENSITY_MODE_KEY = stringPreferencesKey("neon_intensity_mode")
-        private val BIT_PERFECT_KEY = booleanPreferencesKey("bit_perfect_mode")
-        private val ACOUSTIC_ENVIRONMENT_KEY = stringPreferencesKey("acoustic_environment_mode")
-        private val FLOW_STATE_CROSSFADE_KEY = booleanPreferencesKey("flow_state_crossfade_enabled")
     }
 }

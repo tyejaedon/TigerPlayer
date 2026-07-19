@@ -11,13 +11,32 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import androidx.core.net.toUri
+import com.example.tigerplayer.data.local.dao.TigerDao
+import javax.inject.Singleton
+import kotlin.time.Duration.Companion.milliseconds
 
+@Singleton
 class MetadataEngine @Inject constructor(
     private val mediaDataRepository: MediaDataRepository,
-    private val lyricsRepository: LyricsRepository
+    private val lyricsRepository: LyricsRepository,
+    private val tigerDao: TigerDao
 ) {
-    private val _artistDetails = MutableStateFlow<Map<String, ArtistDetails>>(emptyMap())
-    val artistDetails: StateFlow<Map<String, ArtistDetails>> = _artistDetails.asStateFlow()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // 🔥 THE FIX: artistDetails is now reactive to the database ground truth.
+    // This ensures that images fetched on the Artist Screen appear in the Constellation instantly.
+    val artistDetails: StateFlow<Map<String, ArtistDetails>> = tigerDao.getAllArtistCache()
+        .map { list ->
+            list.associate { entity ->
+                entity.artistName to ArtistDetails(
+                    name = entity.artistName,
+                    imageUrl = entity.imageUrl,
+                    bio = entity.bio,
+                    genres = entity.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+                )
+            }
+        }
+        .stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
     private val _currentLyrics = MutableStateFlow<String?>(null)
     val currentLyrics: StateFlow<String?> = _currentLyrics.asStateFlow()
@@ -30,21 +49,28 @@ class MetadataEngine @Inject constructor(
         _currentArtistImageUrl.value = null
     }
 
+    @OptIn(FlowPreview::class)
     suspend fun fetchTrackMetadata(track: AudioTrack) {
-        val normalizedKey = ArtistUtils.getBaseArtist(track.artist).lowercase().trim()
-
-        kotlinx.coroutines.coroutineScope {
-            // Fetch Artist Info (Persistent collection for real-time DB updates)
+        coroutineScope {
             launch {
-                mediaDataRepository.getArtistDetails(track.artist).collect { details ->
-                    _artistDetails.update { it + (normalizedKey to details) }
-                    _currentArtistImageUrl.value = details.imageUrl
-                }
+                // Observe for at least one emission that has an image, or time out.
+                mediaDataRepository.getArtistDetails(track.artist)
+                    .filter { it.imageUrl != null }
+                    .take(1)
+                    .timeout(3000.milliseconds)
+                    .catch { 
+                        // If timeout or no image, take whatever the first emission was (cache)
+                        try {
+                            emit(mediaDataRepository.getArtistDetails(track.artist).first())
+                        } catch (e: Exception) { /* Silent fail */ }
+                    }
+                    .collect { details ->
+                        _currentArtistImageUrl.value = details.imageUrl
+                    }
             }
 
-            // Fetch Lyrics (Persistent collection for real-time DB updates)
             launch {
-                lyricsRepository.getLyrics(track).collect { lyrics ->
+                lyricsRepository.getLyrics(track).take(1).collect { lyrics ->
                     _currentLyrics.value = lyrics
                 }
             }
@@ -52,24 +78,46 @@ class MetadataEngine @Inject constructor(
     }
 
     suspend fun fetchArtistProfile(artistName: String) {
-        val baseName = ArtistUtils.getBaseArtist(artistName).trim()
-        val cacheKey = baseName.lowercase()
+        // We don't need to update a manual map anymore, the DB observer handles it.
+        mediaDataRepository.getArtistDetails(artistName).take(2).collect()
+    }
 
-        if (_artistDetails.value.containsKey(cacheKey)) return
+    /**
+     * 🔥 THE FIX 2: Non-destructive refresh.
+     * We no longer clear the whole cache. We just trigger fresh fetches for requested artists.
+     */
+    @OptIn(FlowPreview::class)
+    suspend fun forceRefreshArtistProfiles(artistNames: List<String>) {
+        val normalizedNames = artistNames
+            .map { ArtistUtils.getBaseArtist(it).trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
 
-        mediaDataRepository.getArtistDetails(artistName).collect { details ->
-            _artistDetails.update { currentMap ->
-                currentMap + (cacheKey to details)
+        if (normalizedNames.isEmpty()) return
+
+        // Fetch in parallel for better constellation performance
+        coroutineScope {
+            normalizedNames.forEach { name ->
+                launch {
+                    mediaDataRepository.getArtistDetails(name)
+                        .filter { it.imageUrl != null }
+                        .take(1)
+                        .timeout(4000.milliseconds)
+                        .catch { 
+                            try {
+                                emit(mediaDataRepository.getArtistDetails(name).first())
+                            } catch (e: Exception) { /* Silent fail */ }
+                        }
+                        .collect()
+                }
             }
         }
     }
 
-    suspend fun fetchSpotifyHighResArt(title: String, artist: String,album:String): Uri? {
+    suspend fun fetchSpotifyHighResArt(title: String, artist: String, album: String): Uri? {
         var highResUrl: String? = null
         try {
-            // 🔥 THE FIX: We use collect instead of firstOrNull() to prevent the Coroutine system
-            // from throwing an AbortFlowException and crashing the Repository's try/catch block.
-            mediaDataRepository.getHighResAlbumArt(title, artist,album).collect { url ->
+            mediaDataRepository.getHighResAlbumArt(title, artist, album).collect { url ->
                 if (highResUrl == null) highResUrl = url
             }
         } catch (e: Exception) {
@@ -78,24 +126,24 @@ class MetadataEngine @Inject constructor(
         return highResUrl?.toUri()
     }
 
-    @Suppress("unused")
+    @OptIn(FlowPreview::class)
     suspend fun preSeedArtistCache(tracks: List<AudioTrack>) {
         if (tracks.isEmpty()) return
         val uniqueArtists = tracks.map { ArtistUtils.getBaseArtist(it.artist).trim() }.distinct()
 
-        uniqueArtists.forEach { name ->
-            val cacheKey = name.lowercase()
-
-            if (!_artistDetails.value.containsKey(cacheKey)) {
-                try {
-                    // We only take the first emission (cache or network) for pre-seeding
-                    mediaDataRepository.getArtistDetails(name).take(1).collect { d ->
-                        if (d.imageUrl != null) {
-                            _artistDetails.update { it + (cacheKey to d) }
-                        }
+        coroutineScope {
+            uniqueArtists.forEach { name ->
+                launch {
+                    try {
+                        // Just trigger the flow, DB updates will propagate via artistDetails StateFlow
+                        mediaDataRepository.getArtistDetails(name)
+                            .filter { it.imageUrl != null }
+                            .take(1)
+                            .timeout(2000.milliseconds)
+                            .collect()
+                    } catch (e: Exception) {
+                        Log.w("MetadataEngine", "Pre-seed failed for $name: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    Log.w("MetadataEngine", "Pre-seed failed for $name: ${e.message}")
                 }
             }
         }

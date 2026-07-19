@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.tigerplayer.data.remote.api.YouTubeTrack
@@ -34,6 +34,8 @@ fun YouTubeSearchScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedVideoId by remember { mutableStateOf<String?>(null) }
+    val embeddedIconTint = if (isEmbedded) Color.White else TigerTextMed
+    val placeholderIconTint = if (isEmbedded) Color.White else TigerSurfaceElevated
 
     val content = @Composable { padding: PaddingValues ->
         Box(
@@ -61,7 +63,8 @@ fun YouTubeSearchScreen(
                     is YouTubeSearchUiState.Idle -> {
                         YouTubeSearchPlaceholder(
                             icon = Icons.Default.Search,
-                            message = "Search for your favorite music on YouTube"
+                            message = "Search for your favorite music on YouTube",
+                            iconTint = placeholderIconTint
                         )
                     }
                     is YouTubeSearchUiState.Loading -> {
@@ -74,7 +77,8 @@ fun YouTubeSearchScreen(
                         if (state.tracks.isEmpty()) {
                             YouTubeSearchPlaceholder(
                                 icon = Icons.Default.Search,
-                                message = "No results found"
+                                message = "No results found",
+                                iconTint = placeholderIconTint
                             )
                         } else {
                             LazyColumn(
@@ -110,7 +114,8 @@ fun YouTubeSearchScreen(
                 onQueryChange = viewModel::onSearchQueryChanged,
                 onClearClick = viewModel::clearSearch,
                 onBackClick = onBackClick,
-                isEmbedded = true
+                isEmbedded = true,
+                iconTint = embeddedIconTint
             )
             content(PaddingValues(0.dp))
         }
@@ -122,7 +127,8 @@ fun YouTubeSearchScreen(
                     query = searchQuery,
                     onQueryChange = viewModel::onSearchQueryChanged,
                     onClearClick = viewModel::clearSearch,
-                    onBackClick = onBackClick
+                    onBackClick = onBackClick,
+                    iconTint = embeddedIconTint
                 )
             }
         ) { padding ->
@@ -138,7 +144,8 @@ private fun YouTubeSearchBar(
     onQueryChange: (String) -> Unit,
     onClearClick: () -> Unit,
     onBackClick: () -> Unit,
-    isEmbedded: Boolean = false
+    isEmbedded: Boolean = false,
+    iconTint: Color = TigerTextMed
 ) {
     Surface(
         color = if (isEmbedded) Color.Transparent else Color.Black,
@@ -158,14 +165,14 @@ private fun YouTubeSearchBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = TigerTextMed
+                        tint = iconTint
                     )
                 }
             },
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = onClearClick) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TigerTextMed)
+                        Icon(Icons.Default.Clear, contentDescription = "Clear", tint = iconTint)
                     }
                 }
             },
@@ -236,7 +243,8 @@ private fun YouTubeTrackItem(
 @Composable
 private fun YouTubeSearchPlaceholder(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    message: String
+    message: String,
+    iconTint: Color = TigerSurfaceElevated
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -247,7 +255,7 @@ private fun YouTubeSearchPlaceholder(
             imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = TigerSurfaceElevated
+            tint = iconTint
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(

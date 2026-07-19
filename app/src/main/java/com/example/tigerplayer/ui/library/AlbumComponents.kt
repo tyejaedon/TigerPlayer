@@ -111,12 +111,12 @@ fun AlbumGridCard(
                         .align(Alignment.TopEnd)
                         .padding(12.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = year,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = Color.White,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Black,
                         fontSize = 10.sp

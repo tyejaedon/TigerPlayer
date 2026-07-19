@@ -29,34 +29,22 @@ class StatsEngine @Inject constructor(
     ): Flow<DetailedStatsUiState> {
         return _statsFilter.flatMapLatest { filter ->
             val startTime = calculateStartTimeForFilter(filter)
-            val listeningWindowFlow = combine(
-                historyRepository.getTotalListeningTime(startTime),
-                historyRepository.getTotalListeningTime(0L)
-            ) { selectedMs, lifetimeMs ->
-                Pair(selectedMs, lifetimeMs)
-            }
-
             combine(
-                listeningWindowFlow,
+                historyRepository.getTotalListeningTime(startTime),
                 // 🔥 FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
                 historyRepository.getTopArtists(startTime, limit = 50),
                 historyRepository.getTopTracks(startTime, limit = 50),
                 allTracksFlow,
                 artistDetailsMapFlow
-            ) { listeningMs, topArtistsDb, topTracksDb, allTracks, artistDetailsMap ->
-                val totalTimeMs = listeningMs.first
-                val lifetimeTimeMs = listeningMs.second
+            ) { totalTimeMs, topArtistsDb, topTracksDb, allTracks, artistDetailsMap ->
                 val totalSeconds = (totalTimeMs ?: 0L) / 1000
                 val hours = (totalSeconds / 3600).toInt()
                 val minutes = ((totalSeconds % 3600) / 60).toInt()
-                val lifetime = (lifetimeTimeMs ?: 0L).coerceAtLeast(1L)
-                val sharePercent = (((totalTimeMs ?: 0L).toFloat() / lifetime.toFloat()) * 100f).coerceIn(0f, 100f)
 
                 DetailedStatsUiState(
                     selectedFilter = filter,
                     totalListeningHours = hours,
                     totalListeningMinutes = minutes,
-                    globalListeningSharePercent = sharePercent,
                     topArtists = topArtistsDb.map { artist ->
                         // 🔥 FIX 2: Normalize the key to safely extract the High-Res API image
                         val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
@@ -65,13 +53,11 @@ class StatsEngine @Inject constructor(
                         val cachedImg = artistDetailsMap[normalizedKey]?.imageUrl
                             ?: allTracks.firstOrNull { ArtistUtils.getBaseArtist(it.artist).equals(artist.artistName, ignoreCase = true) }?.artworkUri?.toString()
 
-                        val listenedMinutes = (artist.totalListeningMs / 60_000L).toInt()
-
                         StatItem(
                             id = artist.artistName,
                             name = artist.artistName,
                             playCount = artist.playCount,
-                            secondaryText = "${listenedMinutes}m listened",
+                            secondaryText = "Artist",
                             imageUrl = cachedImg
                         )
                     },
@@ -90,16 +76,21 @@ class StatsEngine @Inject constructor(
         }
     }
 
-    suspend fun recordPlaybackHistory(track: AudioTrack, listenedDurationMs: Long) {
-        if (listenedDurationMs <= 0L) return
+    suspend fun recordPlaybackHistory(track: AudioTrack) {
+        val source = when {
+            track.id.startsWith("spotify:", ignoreCase = true) -> MediaSource.SPOTIFY
+            track.id.startsWith("navidrome:", ignoreCase = true) -> MediaSource.NAVIDROME
+            else -> MediaSource.LOCAL
+        }
+
         historyRepository.addTrackToHistory(
             trackId = track.id,
             title = track.title,
             artist = track.artist,
             album = track.album,
             imageUrl = track.artworkUri.toString(),
-            listenedDurationMs = listenedDurationMs,
-            source = MediaSource.LOCAL
+            durationMs = track.durationMs,
+            source = source
         )
     }
 
@@ -122,24 +113,8 @@ class StatsEngine @Inject constructor(
                 calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
                 calendar.timeInMillis
             }
-            "Last 7 Days" -> {
-                calendar.add(Calendar.DAY_OF_YEAR, -7)
-                calendar.timeInMillis
-            }
             "This Month" -> {
                 calendar.set(Calendar.DAY_OF_MONTH, 1)
-                calendar.timeInMillis
-            }
-            "Last 30 Days" -> {
-                calendar.add(Calendar.DAY_OF_YEAR, -30)
-                calendar.timeInMillis
-            }
-            "Last 90 Days" -> {
-                calendar.add(Calendar.DAY_OF_YEAR, -90)
-                calendar.timeInMillis
-            }
-            "This Year" -> {
-                calendar.set(Calendar.DAY_OF_YEAR, 1)
                 calendar.timeInMillis
             }
             "Lifetime" -> 0L // Captures everything

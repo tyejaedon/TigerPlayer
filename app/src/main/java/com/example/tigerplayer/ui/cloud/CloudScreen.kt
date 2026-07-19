@@ -48,7 +48,8 @@ fun CloudScreen(
     val query by viewModel.searchQuery.collectAsState()
     val playlists by viewModel.filteredPlaylists.collectAsState()
     val albums by viewModel.filteredAlbums.collectAsState()
-    val isConnected by viewModel.isSpotifyConnected.collectAsState()
+    val isAuthenticated by viewModel.isSpotifyAuthenticated.collectAsState()
+    val isRemoteConnected by viewModel.isSpotifyRemoteConnected.collectAsState()
 
     val uiError by viewModel.uiError.collectAsState()
     val isLoadingTracks by viewModel.isLoadingTracks.collectAsState()
@@ -76,7 +77,7 @@ fun CloudScreen(
     }
 
     AnimatedContent(
-        targetState = isConnected,
+        targetState = isAuthenticated,
         transitionSpec = { fadeIn(tween(600)) togetherWith fadeOut(tween(600)) },
         label = "CloudConnectionRitual"
     ) { connected ->
@@ -91,6 +92,17 @@ fun CloudScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
             ) {
+                if (!isRemoteConnected) {
+                    Text(
+                        text = "Spotify playback remote is reconnecting...",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+
                 CloudHeader(
                     query = query,
                     onQueryChange = { viewModel.onSearchQueryChange(it) },
