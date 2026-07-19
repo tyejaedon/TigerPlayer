@@ -165,11 +165,3 @@ data class SpotifyTokenResponse(
 typealias SpotifyPlaylistResponse = SpotifyPaging<SpotifyPlaylist>
 typealias SpotifySavedAlbumResponse = SpotifyPaging<SavedAlbumItem>
 typealias SpotifyTrackListResponse = SpotifyPaging<SpotifyTrack>
-
-data class SpotifyRecommendationsResponse(
-    @SerializedName("tracks") val tracks: List<SpotifyTrack>
-)
-
-data class SpotifyTopTracksResponse(
-    @SerializedName("tracks") val tracks: List<SpotifyTrack>
-)

@@ -1193,8 +1193,7 @@ fun LazyListScope.renderSearchResults(
     matchedAlbums: List<AudioTrack>,
     onNavigateToAlbum: (String) -> Unit,
     onNavigatetoArtist: (String) -> Unit,
-    artistDetails: Map<String, ArtistDetails>,
-    onOptionsClick: ((AudioTrack) -> Unit)? = null
+    artistDetails: Map<String, ArtistDetails>
 ) {
     if (matchedArtists.isNotEmpty()) {
         item {
@@ -1301,8 +1300,7 @@ fun LazyListScope.renderSearchResults(
             SongItem(
                 track = track,
                 isActive = uiState.currentTrack?.id == track.id,
-                onClick = { viewModel.playTrack(track) },
-                onOptionsClick = onOptionsClick?.let { callback -> { callback(track) } }
+                onClick = { viewModel.playTrack(track) }
             )
         }
     }

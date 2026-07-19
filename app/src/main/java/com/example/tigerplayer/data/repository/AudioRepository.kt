@@ -207,24 +207,6 @@ class AudioRepository @Inject constructor(
         return tigerDao.getHeavyRotation(since)
         }
 
-    fun getDaylistTracks(
-        historyStartMs: Long,
-        bucketStartHour: Int,
-        bucketEndHour: Int,
-        limit: Int = 20
-    ): Flow<List<AudioTrack>> {
-        return tigerDao.getDaylistTracks(historyStartMs, bucketStartHour, bucketEndHour, limit)
-            .map { entities -> entities.map { it.toDomainModel() } }
-    }
-
-    fun getDiscoveryWeeklyTracks(
-        staleBeforeMs: Long,
-        limit: Int = 30
-    ): Flow<List<AudioTrack>> {
-        return tigerDao.getDiscoveryWeeklyTracks(staleBeforeMs, limit)
-            .map { entities -> entities.map { it.toDomainModel() } }
-    }
-
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
         // AudioRepository.kt line 211
@@ -238,6 +220,29 @@ class AudioRepository @Inject constructor(
             trackIds.mapNotNull { id -> allTracks.find { it.id == id } }
         }
     }
+
+    fun getNeonDaylistTracks(
+        segment: String,
+        sinceMillis: Long,
+        limit: Int = 15
+    ): Flow<List<AudioTrack>> {
+        return tigerDao.getNeonDaylistTracks(
+            segment = segment,
+            sinceMillis = sinceMillis,
+            limit = limit
+        ).map { entities -> entities.map { it.toDomainModel() } }
+    }
+
+    fun getVaultDiscoveryTracks(
+        sinceMillis: Long,
+        limit: Int = 15
+    ): Flow<List<AudioTrack>> {
+        return tigerDao.getVaultDiscoveryTracks(
+            sinceMillis = sinceMillis,
+            limit = limit
+        ).map { entities -> entities.map { it.toDomainModel() } }
+    }
+
     fun getArtistCacheFlow(): Flow<Map<String, String?>> =
         tigerDao.getAllArtistCache().map { entities ->
             entities.associate { it.artistName to it.imageUrl }
