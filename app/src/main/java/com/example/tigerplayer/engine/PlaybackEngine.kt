@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.media3.common.MediaItem
 import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.data.repository.SpotifyPlaybackState
 import com.example.tigerplayer.data.repository.SpotifyRepository
 import com.example.tigerplayer.service.MediaControllerManager
 import kotlinx.coroutines.flow.*
@@ -19,6 +20,7 @@ class PlaybackEngine @Inject constructor(
     val currentMediaId: Flow<String> = mediaControllerManager.currentMediaId
     val shuffleModeEnabled: Flow<Boolean> = mediaControllerManager.shuffleModeEnabled
     val repeatMode: Flow<Int> = mediaControllerManager.repeatMode
+    val spotifyPlaybackState: Flow<SpotifyPlaybackState?> = spotifyRepository.spotifyPlaybackState
 
     // Resolve queue directly from MediaController so queue state is not coupled to library filtering.
     fun getQueueFlow(): Flow<List<AudioTrack>> {
@@ -61,33 +63,7 @@ class PlaybackEngine @Inject constructor(
         )
     }
 
-    val spotifyRemoteTrack: Flow<AudioTrack?> = spotifyRepository.currentSpotifyTrack.map { spotifyInfo ->
-        if (!spotifyInfo.isNullOrBlank() && spotifyInfo != "Not Playing" && spotifyInfo != "Paused / Stopped") {
-            val parts = spotifyInfo.split(" • ")
-            val title = parts.getOrNull(0) ?: "Unknown"
-            val artist = parts.getOrNull(1) ?: "Spotify Cloud"
-
-            AudioTrack(
-                id = "spotify:remote",
-                title = title,
-                artist = artist,
-                album = "Spotify Archive",
-                durationMs = 0L,
-                uri = Uri.EMPTY,
-                trackNumber = 0,
-                artworkUri = Uri.EMPTY,
-                mimeType = "audio/spotify",
-                isLocal = false,
-                isRemote = true,
-                bitrate = 0,
-                sampleRate = 0,
-                serverPath = null,
-                path = null
-            )
-        } else {
-            null
-        }
-    }
+    val spotifyRemoteTrack: Flow<AudioTrack?> = spotifyPlaybackState.map { it?.track }
 
     fun playTrack(track: AudioTrack, libraryTracks: List<AudioTrack>) {
         val isSpotifyTrack = track.id.startsWith("spotify:")
@@ -102,6 +78,11 @@ class PlaybackEngine @Inject constructor(
                 startIndex
             )
         }
+    }
+
+    fun playSpotifyUri(uri: String) {
+        mediaControllerManager.pause()
+        spotifyRepository.playUri(uri)
     }
 
     fun togglePlayPause(currentTrack: AudioTrack?, isCurrentlyPlaying: Boolean) {

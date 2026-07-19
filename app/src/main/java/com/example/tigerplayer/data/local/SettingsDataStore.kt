@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import javax.inject.Inject
@@ -39,6 +40,17 @@ enum class SkipShortAudio {
         }
 }
 
+enum class PrismSpectralAnalysis {
+    BANDPASS,
+    FFT
+}
+
+enum class AudioReactiveHapticsProfile {
+    SUBTLE,
+    BALANCED,
+    AGGRESSIVE
+}
+
 data class TigerSettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pureAmoledBlack: Boolean = false,
@@ -47,10 +59,16 @@ data class TigerSettingsState(
     val crossfadeDurationSec: Int = 0,
     val gaplessPlayback: Boolean = true,
     val audioReactiveHaptics: Boolean = false,
+    val audioReactiveHapticsProfile: AudioReactiveHapticsProfile = AudioReactiveHapticsProfile.BALANCED,
     val skipShortAudio: SkipShortAudio = SkipShortAudio.OFF,
     val routeToSystemDecoderDsp: Boolean = true,
     val resumeOnBluetoothConnect: Boolean = true,
-    val resumeOnWiredHeadsetConnect: Boolean = false
+    val resumeOnWiredHeadsetConnect: Boolean = false,
+    val prismEnabled: Boolean = false,
+    val prismVocals: Float = 1f,
+    val prismBeats: Float = 1f,
+    val prismInstruments: Float = 1f,
+    val prismSpectralAnalysis: PrismSpectralAnalysis = PrismSpectralAnalysis.FFT
 )
 
 @Singleton
@@ -67,10 +85,19 @@ class SettingsDataStore @Inject constructor(
             crossfadeDurationSec = (prefs[CROSSFADE_DURATION_SEC] ?: 0).coerceIn(0, 12),
             gaplessPlayback = prefs[GAPLESS_PLAYBACK] ?: true,
             audioReactiveHaptics = prefs[AUDIO_REACTIVE_HAPTICS] ?: false,
+            audioReactiveHapticsProfile = enumOrDefault(
+                prefs[AUDIO_REACTIVE_HAPTICS_PROFILE],
+                AudioReactiveHapticsProfile.BALANCED
+            ),
             skipShortAudio = enumOrDefault(prefs[SKIP_SHORT_AUDIO], SkipShortAudio.OFF),
             routeToSystemDecoderDsp = prefs[ROUTE_TO_SYSTEM_DECODER_DSP] ?: true,
             resumeOnBluetoothConnect = prefs[RESUME_ON_BLUETOOTH_CONNECT] ?: true,
-            resumeOnWiredHeadsetConnect = prefs[RESUME_ON_WIRED_CONNECT] ?: false
+            resumeOnWiredHeadsetConnect = prefs[RESUME_ON_WIRED_CONNECT] ?: false,
+            prismEnabled = prefs[PRISM_ENABLED] ?: false,
+            prismVocals = (prefs[PRISM_VOCALS] ?: 1f).coerceIn(0f, 1f),
+            prismBeats = (prefs[PRISM_BEATS] ?: 1f).coerceIn(0f, 1f),
+            prismInstruments = (prefs[PRISM_INSTRUMENTS] ?: 1f).coerceIn(0f, 1f),
+            prismSpectralAnalysis = enumOrDefault(prefs[PRISM_SPECTRAL_ANALYSIS], PrismSpectralAnalysis.FFT)
         )
     }
 
@@ -102,6 +129,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[AUDIO_REACTIVE_HAPTICS] = enabled }
     }
 
+    suspend fun setAudioReactiveHapticsProfile(profile: AudioReactiveHapticsProfile) {
+        dataStore.edit { it[AUDIO_REACTIVE_HAPTICS_PROFILE] = profile.name }
+    }
+
     suspend fun setSkipShortAudio(option: SkipShortAudio) {
         dataStore.edit { it[SKIP_SHORT_AUDIO] = option.name }
     }
@@ -116,6 +147,22 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setResumeOnWiredHeadsetConnect(enabled: Boolean) {
         dataStore.edit { it[RESUME_ON_WIRED_CONNECT] = enabled }
+    }
+
+    suspend fun setPrismEnabled(enabled: Boolean) {
+        dataStore.edit { it[PRISM_ENABLED] = enabled }
+    }
+
+    suspend fun setPrismMix(vocals: Float, beats: Float, instruments: Float) {
+        dataStore.edit {
+            it[PRISM_VOCALS] = vocals.coerceIn(0f, 1f)
+            it[PRISM_BEATS] = beats.coerceIn(0f, 1f)
+            it[PRISM_INSTRUMENTS] = instruments.coerceIn(0f, 1f)
+        }
+    }
+
+    suspend fun setPrismSpectralAnalysis(mode: PrismSpectralAnalysis) {
+        dataStore.edit { it[PRISM_SPECTRAL_ANALYSIS] = mode.name }
     }
 
     suspend fun resetToDefaults() {
@@ -135,10 +182,16 @@ class SettingsDataStore @Inject constructor(
         val CROSSFADE_DURATION_SEC = intPreferencesKey("crossfade_duration_sec")
         val GAPLESS_PLAYBACK = booleanPreferencesKey("gapless_playback")
         val AUDIO_REACTIVE_HAPTICS = booleanPreferencesKey("audio_reactive_haptics")
+        val AUDIO_REACTIVE_HAPTICS_PROFILE = stringPreferencesKey("audio_reactive_haptics_profile")
         val SKIP_SHORT_AUDIO = stringPreferencesKey("skip_short_audio")
         val ROUTE_TO_SYSTEM_DECODER_DSP = booleanPreferencesKey("route_to_system_decoder_dsp")
         val RESUME_ON_BLUETOOTH_CONNECT = booleanPreferencesKey("resume_on_bluetooth_connect")
         val RESUME_ON_WIRED_CONNECT = booleanPreferencesKey("resume_on_wired_connect")
+        val PRISM_ENABLED = booleanPreferencesKey("prism_enabled")
+        val PRISM_VOCALS = floatPreferencesKey("prism_vocals")
+        val PRISM_BEATS = floatPreferencesKey("prism_beats")
+        val PRISM_INSTRUMENTS = floatPreferencesKey("prism_instruments")
+        val PRISM_SPECTRAL_ANALYSIS = stringPreferencesKey("prism_spectral_analysis")
     }
 }
 

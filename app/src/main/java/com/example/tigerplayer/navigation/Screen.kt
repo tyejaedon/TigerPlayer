@@ -22,6 +22,13 @@ sealed class Screen(val route: String) {
     // --- Settings & Global Routes ---
     object Settings : Screen("settings")
     object Queue : Screen("queue")
+    object DaylistDetail : Screen("daylist_detail?origin={origin}") {
+        fun createRoute(origin: String = "home") = "daylist_detail?origin=${Uri.encode(origin)}"
+    }
+
+    object DiscoverWeeklyDetail : Screen("discover_weekly_detail?origin={origin}") {
+        fun createRoute(origin: String = "home") = "discover_weekly_detail?origin=${Uri.encode(origin)}"
+    }
 
     // --- Global Detail Routes (These will cover the Bottom Bar) ---
 

@@ -63,3 +63,9 @@
 -dontwarn com.fasterxml.jackson.databind.**
 -dontwarn com.spotify.base.annotations.**
 -dontwarn com.spotify.protocol.mappers.jackson.**
+
+# --- JTransforms / JLargeArrays optional JDK internals ---
+# JLargeArrays may reference sun.misc.Cleaner on non-Android runtimes.
+-dontwarn sun.misc.Cleaner
+-dontwarn pl.edu.icm.jlargearrays.**
+

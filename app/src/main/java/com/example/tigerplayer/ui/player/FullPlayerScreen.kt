@@ -8,6 +8,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.Subject
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -32,33 +34,40 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.library.SongOptionsSheet
-import com.example.tigerplayer.ui.prism.PrismUiState
-import com.example.tigerplayer.ui.prism.PrismViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.ensureVisibleOn
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.withSafeAlpha
+import com.example.tigerplayer.utils.AttributionTags
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration.Companion.seconds
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,35 +76,44 @@ fun FullPlayerScreen(
     onCollapse: () -> Unit,
     onOpenQueueScreen: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
-    prismViewModel: PrismViewModel = hiltViewModel(),
 ) {
     val windowState = rememberCoverScreenWindowState()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentTrack = uiState.currentTrack ?: return
-    val prismState by prismViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
-
-    LaunchedEffect(uiState.visualMode, uiState.mainViewState) {
-        val shouldEnablePrism = uiState.mainViewState == MainViewState.ARTWORK && 
-                               uiState.visualMode == PlayerVisualMode.SONIC_PRISM
-        prismViewModel.setPrismEnabled(shouldEnablePrism)
-    }
+    var useUnifiedFlexLyrics by rememberSaveable { mutableStateOf(true) }
+    var albumClarityMode by rememberSaveable { mutableStateOf(false) }
 
     val themeSurface = MaterialTheme.colorScheme.surface
     val themePrimary = MaterialTheme.colorScheme.primary
+    val themeOnSurface = MaterialTheme.colorScheme.onSurface
+    val isLightTheme = MaterialTheme.colorScheme.background.luminance() > 0.5f
     var dominantBgColor by remember(themeSurface) { mutableStateOf(themeSurface) }
-    var dynamicTextColor by remember { mutableStateOf(Color(0xFFF5F5F5)) }
+    var dynamicTextColor by remember(themeSurface, themeOnSurface) {
+        mutableStateOf(themeOnSurface.ensureVisibleOn(background = themeSurface, minContrast = 4.5))
+    }
+
     var dynamicAccentColor by remember(themePrimary) { mutableStateOf(themePrimary) }
+    val readableTextColor = remember(dynamicTextColor, dominantBgColor) {
+        dynamicTextColor.ensureVisibleOn(background = dominantBgColor, minContrast = 7.0)
+    }
+    val readableSecondaryTextColor = remember(readableTextColor, dominantBgColor) {
+        readableTextColor
+            .withSafeAlpha(0.9f)
+            .ensureVisibleOn(background = dominantBgColor, minContrast = 4.8)
+    }
+    val readableAccentColor = remember(dynamicAccentColor, dominantBgColor) {
+        dynamicAccentColor.ensureVisibleOn(background = dominantBgColor, minContrast = 4.5)
+    }
 
     val backgroundArtModel = remember(currentTrack.artworkUri, uiState.artistImageUrl) {
         uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: currentTrack.artworkUri
     }
-
-    val imageRequest = remember(backgroundArtModel, themePrimary) {
+    val imageRequest = remember(backgroundArtModel, themePrimary, themeOnSurface) {
         ImageRequest.Builder(context)
             .data(backgroundArtModel)
             .crossfade(true)
@@ -110,13 +128,13 @@ fun FullPlayerScreen(
                             ?: themeSurface.toArgb()
 
                         val resolvedBackground = Color(extractedColor)
-                        val resolvedText = Color(0xFFF5F5F5).ensureVisibleOn(
+                        val resolvedText = themeOnSurface.ensureVisibleOn(
                             background = resolvedBackground,
-                            minContrast = 4.5
+                            minContrast = 7.0
                         )
                         val resolvedAccent = themePrimary.ensureVisibleOn(
                             background = resolvedBackground,
-                            minContrast = 3.2
+                            minContrast = 4.5
                         )
 
                         dominantBgColor = resolvedBackground
@@ -128,28 +146,35 @@ fun FullPlayerScreen(
             })
             .build()
     }
+    val shouldUseUnifiedLyricsLayout =
+        windowState.hasSeparatingHinge && uiState.mainViewState == MainViewState.LYRICS && useUnifiedFlexLyrics
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = Modifier.fillMaxSize()) {
         // --- 1. CINEMATIC BACKGROUND (Banding Correction) ---
-        AsyncImage(
-            model = imageRequest,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().alpha(0.35f)
-        )
+       CinematicZoomImage(model = imageRequest)
 
+        // --- BACKGROUND SCRIM (Visual Anchor) ---
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.5f to Color.Black.copy(0.4f),
-                        0.8f to Color.Black.copy(0.85f),
-                        1.0f to Color.Black
+                        colors = listOf(
+                            if (albumClarityMode) {
+                                if (isLightTheme) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.22f)
+                            } else {
+                                if (isLightTheme) Color.White.copy(alpha = 0.30f) else Color.Black.copy(alpha = 0.45f)
+                            },
+                            if (albumClarityMode) {
+                                if (isLightTheme) Color.Black.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.42f)
+                            } else {
+                                if (isLightTheme) Color.Black.copy(alpha = 0.40f) else Color.Black.copy(alpha = 0.85f)
+                            }
+                        )
                     )
                 )
         )
+
 
         // --- 2. FOREGROUND CORE CONTENT ---
         Column(
@@ -160,9 +185,10 @@ fun FullPlayerScreen(
                 .navigationBarsPadding()
         ) {
             HeaderRitual(
-                dynamicTextColor = dynamicTextColor,
+                dynamicTextColor = Color.White,
+                dynamicSecondaryTextColor = readableSecondaryTextColor,
                 backgroundColor = dominantBgColor,
-                accentColor = dynamicAccentColor,
+                accentColor = readableAccentColor,
                 onCollapse = onCollapse,
                 mainViewState = uiState.mainViewState,
                 onSetMainViewState = viewModel::setMainViewState,
@@ -171,10 +197,15 @@ fun FullPlayerScreen(
                     trackForOptions = currentTrack
                     showOptionsSheet = true
                 },
+                isFlexMode = windowState.hasSeparatingHinge,
+                isFlexLyricsUnified = useUnifiedFlexLyrics,
+                onToggleFlexLyricsUnified = { useUnifiedFlexLyrics = !useUnifiedFlexLyrics },
+                isAlbumClarityMode = albumClarityMode,
+                onToggleAlbumClarityMode = { albumClarityMode = !albumClarityMode },
                 track = currentTrack
             )
 
-            if (windowState.hasSeparatingHinge) {
+            if (windowState.hasSeparatingHinge && !shouldUseUnifiedLyricsLayout) {
                 // FLEX MODE: Visuals on TOP, Controls on BOTTOM
                 Box(
                     modifier = Modifier
@@ -186,11 +217,11 @@ fun FullPlayerScreen(
                         uiState = uiState,
                         currentTrack = currentTrack,
                         viewModel = viewModel,
-                        prismState = prismState,
-                        prismViewModel = prismViewModel,
-                        dynamicTextColor = dynamicTextColor,
-                        dynamicAccentColor = dynamicAccentColor,
-                        dominantBgColor = dominantBgColor
+                        dynamicTextColor = Color.White,
+                        dynamicAccentColor = readableAccentColor,
+                        dominantBgColor = dominantBgColor,
+                        isLightTheme = isLightTheme,
+                        isAlbumClarityMode = albumClarityMode
                     )
                 }
 
@@ -205,7 +236,8 @@ fun FullPlayerScreen(
                 ) {
                     PlayerControlsContent(
                         currentTrack = currentTrack,
-                        dynamicTextColor = dynamicTextColor,
+                        dynamicTextColor = Color.White,
+                        secondaryTextColor = readableSecondaryTextColor,
                         uiState = uiState,
                         viewModel = viewModel,
                         showTechnicalInfo = showTechnicalInfo,
@@ -224,18 +256,19 @@ fun FullPlayerScreen(
                         uiState = uiState,
                         currentTrack = currentTrack,
                         viewModel = viewModel,
-                        prismState = prismState,
-                        prismViewModel = prismViewModel,
-                        dynamicTextColor = dynamicTextColor,
-                        dynamicAccentColor = dynamicAccentColor,
-                        dominantBgColor = dominantBgColor
+                        dynamicTextColor = Color.White,
+                        dynamicAccentColor = readableAccentColor,
+                        dominantBgColor = dominantBgColor,
+                        isLightTheme = isLightTheme,
+                        isAlbumClarityMode = albumClarityMode
                     )
                 }
 
                 // --- DOCK GLASS ---
                 PlayerControlsContent(
                     currentTrack = currentTrack,
-                    dynamicTextColor = dynamicTextColor,
+                    dynamicTextColor = Color.White,
+                    secondaryTextColor = readableSecondaryTextColor,
                     uiState = uiState,
                     viewModel = viewModel,
                     showTechnicalInfo = showTechnicalInfo,
@@ -250,6 +283,7 @@ fun FullPlayerScreen(
                 SongOptionsSheet(
                     track = selectedTrack,
                     playlists = uiState.customPlaylists,
+                    iconTintOverride = Color.White,
                     onDismiss = {
                         trackForOptions = null
                         showOptionsSheet = false
@@ -268,17 +302,40 @@ fun FullPlayerScreen(
         }
     }
 }
+@Composable
+fun CinematicZoomImage(model: Any) {
+    val transition = rememberInfiniteTransition(label = "CinematicZoom")
 
+    // Slowly loop between 1.0 and 1.1 every 10 seconds
+    val scale by transition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(10000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Scale"
+    )
+
+    AsyncImage(
+        model = model,
+        contentDescription = null,
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer(scaleX = scale, scaleY = scale),
+        contentScale = ContentScale.Crop
+    )
+}
 @Composable
 private fun PlayerMainContent(
     uiState: PlayerUiState,
     currentTrack: AudioTrack,
     viewModel: PlayerViewModel,
-    prismState: PrismUiState,
-    prismViewModel: PrismViewModel,
     dynamicTextColor: Color,
     dynamicAccentColor: Color,
-    dominantBgColor: Color
+    dominantBgColor: Color,
+    isLightTheme: Boolean,
+    isAlbumClarityMode: Boolean
 ) {
     AnimatedContent(
         targetState = uiState.mainViewState,
@@ -324,14 +381,24 @@ private fun PlayerMainContent(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val density = LocalDensity.current.density
                     val context = LocalContext.current
+                    val sensorContext = remember(context) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            context.createAttributionContext(AttributionTags.PLAYER_MOTION_SENSOR)
+                        } else {
+                            context
+                        }
+                    }
+
 
                     var sensorTiltX by remember { mutableFloatStateOf(0f) }
                     var sensorTiltY by remember { mutableFloatStateOf(0f) }
                     var touchTiltX by remember { mutableFloatStateOf(0f) }
                     var touchTiltY by remember { mutableFloatStateOf(0f) }
 
-                    val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-                    DisposableEffect(Unit) {
+
+                    val sensorManager = sensorContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    DisposableEffect(lifecycleOwner) {
                         val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
                         val listener = object : SensorEventListener {
                             override fun onSensorChanged(event: SensorEvent?) {
@@ -342,8 +409,27 @@ private fun PlayerMainContent(
                             }
                             override fun onAccuracyChanged(s: Sensor?, a: Int) {}
                         }
-                        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
-                        onDispose { sensorManager.unregisterListener(listener) }
+
+                        val observer = LifecycleEventObserver { _, event ->
+                            when (event) {
+                                Lifecycle.Event.ON_RESUME -> {
+                                    sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+                                }
+                                Lifecycle.Event.ON_PAUSE -> {
+                                    sensorManager.unregisterListener(listener)
+                                    // Reset tilt to flat when backgrounded so it looks right upon return
+                                    sensorTiltX = 0f
+                                    sensorTiltY = 0f
+                                }
+                                else -> {}
+                            }
+                        }
+
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
+                            sensorManager.unregisterListener(listener)
+                        }
                     }
 
                     val animatedTiltX by animateFloatAsState(targetValue = sensorTiltX + touchTiltX, label = "TiltX")
@@ -369,7 +455,11 @@ private fun PlayerMainContent(
                                 rotationY = animatedTiltY
                                 cameraDistance = 16f * density
                             }
-                            .shadow(48.dp, RoundedCornerShape(32.dp), spotColor = dominantBgColor)
+                            .shadow(
+                                elevation = if (isLightTheme) 24.dp else 48.dp,
+                                shape = RoundedCornerShape(32.dp),
+                                spotColor = if (isLightTheme) Color.Black.copy(alpha = 0.22f) else dominantBgColor
+                            )
                             .clip(RoundedCornerShape(32.dp))
                             .pointerInput(Unit) {
                                 detectTapGestures(onTap = { viewModel.toggleVisualMode() })
@@ -384,7 +474,7 @@ private fun PlayerMainContent(
                         )
 
                         // Overlays
-                        AnimatedVisibility(visible = uiState.visualMode == PlayerVisualMode.VORTEX) {
+                        AnimatedVisibility(visible = !isAlbumClarityMode && uiState.visualMode == PlayerVisualMode.VORTEX) {
                             FluidVortexRenderer(
                                 isPlaying = uiState.isPlaying,
                                 amplitudes = uiState.currentWaveform,
@@ -394,9 +484,9 @@ private fun PlayerMainContent(
                             )
                         }
 
-                        AnimatedVisibility(visible = uiState.visualMode == PlayerVisualMode.WAVEFORM) {
+                        AnimatedVisibility(visible = !isAlbumClarityMode && uiState.visualMode == PlayerVisualMode.WAVEFORM) {
                             Box(
-                                modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.6f)),
+                                modifier = Modifier.fillMaxSize().background(if (isLightTheme) Color.Black.copy(0.42f) else Color.Black.copy(0.6f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 SmoothWaveform(
@@ -409,18 +499,24 @@ private fun PlayerMainContent(
                             }
                         }
 
-                        AnimatedVisibility(visible = uiState.visualMode == PlayerVisualMode.SONIC_PRISM) {
-                            PrismInlineMixer(
+                      /*  AnimatedVisibility(visible = !isAlbumClarityMode && uiState.visualMode == PlayerVisualMode.SONIC_PRISM) {
+                            com.example.tigerplayer.ui.prism.PrismInlineMixer(
                                 state = prismState,
                                 onVocalsChange = prismViewModel::updateVocals,
                                 onBeatsChange = prismViewModel::updateBeats,
                                 onInstrumentsChange = prismViewModel::updateInstruments,
+                                onEnabledChange = prismViewModel::setPrismEnabled,
+                                onPresetSelected = prismViewModel::applyPreset,
+                                onResetRequested = prismViewModel::resetMixToBalanced,
+                                onSpectralAnalysisChange = prismViewModel::setSpectralAnalysis,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.78f))
+                                    .background(if (isLightTheme) Color.Black.copy(alpha = 0.68f) else Color.Black.copy(alpha = 0.78f))
                                     .padding(18.dp)
                             )
                         }
+
+                       */
                     }
                 }
             }
@@ -432,6 +528,7 @@ private fun PlayerMainContent(
 private fun PlayerControlsContent(
     currentTrack: AudioTrack,
     dynamicTextColor: Color,
+    secondaryTextColor: Color,
     uiState: PlayerUiState,
     viewModel: PlayerViewModel,
     showTechnicalInfo: Boolean,
@@ -443,19 +540,23 @@ private fun PlayerControlsContent(
             .padding(bottom = 24.dp)
             .clip(RoundedCornerShape(36.dp))
             .glassEffect(RoundedCornerShape(36.dp))
-            .background(Color.White.copy(0.05f))
-            .padding(24.dp)
+            .padding(vertical = 24.dp)
     ) {
-        TrackInfoCard(
-            currentTrack,
-            dynamicTextColor,
-            dynamicTextColor.copy(0.7f),
-            showTechnicalInfo,
-            onShowTechnicalInfoChange,
-            { viewModel.toggleTrackLikeStatus(currentTrack) }
-        )
+        Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+            TrackInfoCard(
+                track = currentTrack,
+                textColor = dynamicTextColor,
+                secondaryTextColor = secondaryTextColor,
+                showTechnicalInfo = showTechnicalInfo,
+                bluetoothDevice = uiState.connectedBluetoothDevice,
+                onToggleTechInfo = onShowTechnicalInfoChange,
+                onToggleLike = { viewModel.toggleTrackLikeStatus(currentTrack) }
+            )
+        }
         Spacer(modifier = Modifier.height(20.dp))
-        FieryWavySeeker(uiState, currentTrack, viewModel::seekTo, dynamicTextColor)
+        Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+            FieryWavySeeker(uiState, currentTrack, viewModel::seekTo, dynamicTextColor)
+        }
         Spacer(modifier = Modifier.height(16.dp))
         PlaybackControls(
             uiState = uiState,
@@ -472,6 +573,7 @@ private fun PlayerControlsContent(
 @Composable
 fun HeaderRitual(
     dynamicTextColor: Color,
+    dynamicSecondaryTextColor: Color,
     backgroundColor: Color,
     accentColor: Color,
     onCollapse: () -> Unit,
@@ -479,12 +581,27 @@ fun HeaderRitual(
     onSetMainViewState: (MainViewState) -> Unit,
     onOpenQueueScreen: () -> Unit,
     onShowOptions: () -> Unit,
+    isFlexMode: Boolean,
+    isFlexLyricsUnified: Boolean,
+    onToggleFlexLyricsUnified: () -> Unit,
+    isAlbumClarityMode: Boolean,
+    onToggleAlbumClarityMode: () -> Unit,
     track: AudioTrack
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        val buttonBg = if (backgroundColor.luminance() > 0.5f) {
+            Color.Black.copy(alpha = 0.18f)
+        } else {
+            Color.White.copy(alpha = 0.14f)
+        }
+        val buttonBorder = if (backgroundColor.luminance() > 0.5f) {
+            Color.Black.copy(alpha = 0.26f)
+        } else {
+            Color.White.copy(alpha = 0.24f)
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -494,10 +611,10 @@ fun HeaderRitual(
                 onClick = onCollapse,
                 modifier = Modifier
                     .bounceClick { onCollapse() }
-                    .background(Color.White.copy(alpha = 0.1f), CircleShape)
-                    .border(0.5.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                    .background(buttonBg, CircleShape)
+                    .border(0.75.dp, buttonBorder, CircleShape)
             ) {
-                Icon(WitcherIcons.Collapse, "Collapse", tint = dynamicTextColor)
+                Icon(WitcherIcons.Collapse, "Collapse", tint = Color.White)
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -505,48 +622,42 @@ fun HeaderRitual(
                     icon = WitcherIcons.Cloud,
                     active = mainViewState == MainViewState.YOUTUBE_VIEWPORT,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.YOUTUBE_VIEWPORT) MainViewState.ARTWORK else MainViewState.YOUTUBE_VIEWPORT) },
-                    color = dynamicTextColor,
-                    backgroundColor = backgroundColor,
-                    accentColor = accentColor
+                    contentDescription = "Toggle cloud view",
+                    testTag = "header_cloud_button"
                 )
                 HeaderButton(
                     icon = Icons.AutoMirrored.Rounded.Subject,
                     active = mainViewState == MainViewState.LYRICS,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.LYRICS) MainViewState.ARTWORK else MainViewState.LYRICS) },
-                    color = dynamicTextColor,
-                    backgroundColor = backgroundColor,
-                    accentColor = accentColor
+                    contentDescription = "Toggle lyrics view",
+                    testTag = "header_lyrics_button"
                 )
                 HeaderButton(
                     icon = Icons.AutoMirrored.Rounded.QueueMusic,
                     active = mainViewState == MainViewState.QUEUE,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.QUEUE) MainViewState.ARTWORK else MainViewState.QUEUE) },
                     onLongClick = onOpenQueueScreen,
-                    color = dynamicTextColor,
-                    backgroundColor = backgroundColor,
-                    accentColor = accentColor
+                    contentDescription = "Open queue view",
+                    testTag = "header_queue_button"
                 )
                 IconButton(onClick = onShowOptions) {
-                    Icon(
-                        WitcherIcons.Options,
-                        null,
-                        tint = dynamicTextColor
-                            .ensureVisibleOn(backgroundColor, minContrast = 4.0)
-                            .withSafeAlpha(0.88f)
-                    )
+                    Icon(WitcherIcons.Options, null, tint = Color.White)
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-
+        val lifecycleOwner = LocalLifecycleOwner.current
         var showAlbumTitle by remember { mutableStateOf(false) }
-        LaunchedEffect(track.id) {
+        LaunchedEffect(track.id, lifecycleOwner) {
             showAlbumTitle = false
-            while (isActive) {
-                delay(5.seconds)
-                if (track.album.isNotBlank() && !track.album.contains("Unknown", ignoreCase = true)) {
-                    showAlbumTitle = !showAlbumTitle
+
+            if (track.album.isNotBlank() && !track.album.contains("Unknown", ignoreCase = true)) {
+                lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    while (isActive) {
+                        delay(5000.milliseconds) // 5.seconds
+                        showAlbumTitle = !showAlbumTitle
+                    }
                 }
             }
         }
@@ -558,9 +669,28 @@ fun HeaderRitual(
         ) { text ->
             Text(
                 text = text, style = MaterialTheme.typography.labelLarge,
-                color = dynamicTextColor.copy(alpha = 0.6f), fontWeight = FontWeight.Black,
+                color = Color.White, fontWeight = FontWeight.Black,
                 letterSpacing = 2.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isFlexMode) {
+                FilterChip(
+                    selected = isFlexLyricsUnified,
+                    onClick = onToggleFlexLyricsUnified,
+                    label = { Text("Flex Lyrics Full") }
+                )
+            }
+            FilterChip(
+                selected = isAlbumClarityMode,
+                onClick = onToggleAlbumClarityMode,
+                label = { Text("Clear Album") }
             )
         }
     }
@@ -573,22 +703,25 @@ private fun HeaderButton(
     active: Boolean,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
-    color: Color,
-    backgroundColor: Color,
-    accentColor: Color
+    contentDescription: String,
+    testTag: String? = null
 ) {
-    val inactiveColor = color.ensureVisibleOn(backgroundColor, minContrast = 4.0).withSafeAlpha(0.88f)
-    val activeColor = accentColor.ensureVisibleOn(backgroundColor, minContrast = 3.2)
+    val iconTint = Color.White
 
-    IconButton(
-        onClick = onClick,
+    // FIX: Replaced IconButton with Box to prevent conflicting clickable modifiers
+    Box(
         modifier = Modifier
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+            .clip(CircleShape)
+            .background(if (active) Color.White.withSafeAlpha(0.24f) else Color.Transparent)
+            .semantics { this.contentDescription = contentDescription }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .background(if (active) activeColor.withSafeAlpha(0.24f) else Color.Transparent, CircleShape)
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(icon, null, tint = if (active) activeColor else inactiveColor)
+        Icon(icon, contentDescription = null, tint = iconTint)
     }
 }

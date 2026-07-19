@@ -2,7 +2,6 @@ package com.example.tigerplayer
 
 import android.app.Application
 import android.os.StrictMode
-import com.example.tigerplayer.debug.LeakCanaryInitializer
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -12,7 +11,6 @@ class TigerPlayerApplication : Application() {
 		super.onCreate()
 		if (BuildConfig.DEBUG) {
 			installStrictMode()
-			LeakCanaryInitializer.install(this)
 		}
 	}
 

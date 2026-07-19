@@ -2,6 +2,7 @@ package com.example.tigerplayer.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.example.tigerplayer.data.local.DefaultPlayerView
 import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.local.SkipShortAudio
@@ -10,6 +11,8 @@ import com.example.tigerplayer.data.local.TigerAccentStyle
 import com.example.tigerplayer.data.local.TigerSettingsState
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.engine.LibraryEngine
+import com.example.tigerplayer.service.HapticsDebugMonitor
+import com.example.tigerplayer.service.HapticsDebugState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -31,7 +34,8 @@ data class LibraryRescanState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
-    private val libraryEngine: LibraryEngine
+    private val libraryEngine: LibraryEngine,
+    private val hapticsDebugMonitor: HapticsDebugMonitor
 ) : ViewModel() {
 
     val settingsState: StateFlow<TigerSettingsState> = settingsDataStore.settingsFlow
@@ -52,6 +56,13 @@ class SettingsViewModel @Inject constructor(
 
     private val _libraryRescanState = MutableStateFlow(LibraryRescanState())
     val libraryRescanState: StateFlow<LibraryRescanState> = _libraryRescanState.asStateFlow()
+
+    val hapticsDebugState: StateFlow<HapticsDebugState> = hapticsDebugMonitor.state
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000L),
+            initialValue = HapticsDebugState()
+        )
 
     private var rescanJob: Job? = null
 
@@ -80,7 +91,17 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAudioReactiveHaptics(enabled: Boolean) {
-        viewModelScope.launch { settingsDataStore.setAudioReactiveHaptics(enabled) }
+        viewModelScope.launch {
+            if (enabled) {
+                // Kick-reactive haptics depend on the app DSP analysis path.
+                settingsDataStore.setRouteToSystemDecoderDsp(false)
+            }
+            settingsDataStore.setAudioReactiveHaptics(enabled)
+        }
+    }
+
+    fun setAudioReactiveHapticsProfile(profile: AudioReactiveHapticsProfile) {
+        viewModelScope.launch { settingsDataStore.setAudioReactiveHapticsProfile(profile) }
     }
 
     fun setSkipShortAudio(option: SkipShortAudio) {

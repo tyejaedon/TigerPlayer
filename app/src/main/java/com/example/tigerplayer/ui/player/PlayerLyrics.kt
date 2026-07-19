@@ -1,6 +1,7 @@
 package com.example.tigerplayer.ui.player
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tigerplayer.ui.theme.igniRed
+import kotlin.math.abs
 
 data class LyricLine(val timeMs: Long, val text: String)
 
@@ -43,7 +45,7 @@ fun LyricsDisplay(
     lyrics: String?,
     currentPosition: Long,
     textColor: Color,
-    activeColor: Color = MaterialTheme.igniRed
+    activeColor: Color = Color.Red
 ) {
     if (lyrics.isNullOrBlank()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -61,43 +63,59 @@ fun LyricsDisplay(
             parsed.indexOfLast { it.timeMs <= currentPosition }.coerceAtLeast(0)
         }
 
-        LaunchedEffect(activeIndex) {
+        LaunchedEffect(activeIndex, parsed.size) {
             if (parsed.isNotEmpty()) {
                 listState.animateScrollToItem(activeIndex)
+
+                // Keep the active lyric visually centered so it is never clipped by lower UI chrome.
+                val layoutInfo = listState.layoutInfo
+                val activeItemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIndex }
+                if (activeItemInfo != null) {
+                    val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+                    val itemCenter = activeItemInfo.offset + (activeItemInfo.size / 2)
+                    val delta = (itemCenter - viewportCenter).toFloat()
+                    if (abs(delta) > 1f) {
+                        listState.animateScrollBy(delta)
+                    }
+                }
             }
         }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 200.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            itemsIndexed(
-                items = parsed,
-                key = { index, line -> "lyric_${line.timeMs}_$index" }
-            ) { index, line ->
-                val isActive = index == activeIndex
-                val scale by animateFloatAsState(
-                    targetValue = if (isActive) 1.1f else 1f,
-                    label = "LyricScale"
-                )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val edgePadding = maxHeight / 2
 
-                Text(
-                    text = line.text.ifBlank { "•••" },
-                    color = if (isActive) activeColor else textColor.copy(0.4f),
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Black,
-                        fontSize = if (isActive) 24.sp else 20.sp
-                    ),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .padding(vertical = 12.dp, horizontal = 24.dp)
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                        }
-                )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = edgePadding),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                itemsIndexed(
+                    items = parsed,
+                    key = { index, line -> "lyric_${line.timeMs}_$index" }
+                ) { index, line ->
+                    val isActive = index == activeIndex
+                    val scale by animateFloatAsState(
+                        targetValue = if (isActive) 1.1f else 1f,
+                        label = "LyricScale"
+                    )
+
+                    Text(
+                        text = line.text.ifBlank { "•••" },
+                        color = if (isActive) activeColor else textColor.copy(0.4f),
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Black,
+                            fontSize = if (isActive) 24.sp else 20.sp
+                        ),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .padding(vertical = 12.dp, horizontal = 24.dp)
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                    )
+                }
             }
         }
     }

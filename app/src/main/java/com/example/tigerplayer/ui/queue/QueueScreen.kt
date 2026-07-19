@@ -130,13 +130,17 @@ fun QueueScreen(
             contentPadding = PaddingValues(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(localUpcoming, key = { index, track -> "${index}_${track.id}" }) { index, track ->
+            // FIX 1: Remove 'index' from the LazyColumn key. Only rely on the immutable track.id.
+            itemsIndexed(localUpcoming, key = { _, track -> track.id }) { index, track ->
                 val isDragging = dragCurrentIndex == index && dragStartIndex != -1
                 val latestIndex by rememberUpdatedState(index)
+
                 val dragHandleModifier = if (uiState.isShuffleEnabled) {
                     Modifier
                 } else {
-                    Modifier.pointerInput(index, track.id) {
+                    // FIX 2: Remove 'index' from pointerInput.
+                    // 'latestIndex' inside the block guarantees we always have the right index.
+                    Modifier.pointerInput(track.id) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
                                 dragStartIndex = latestIndex
@@ -187,8 +191,10 @@ fun QueueScreen(
                     isDragging = isDragging,
                     dragHandleModifier = dragHandleModifier,
                     onClick = {
-                        val anchor = (uiState.currentIndex + 1).coerceAtLeast(0)
-                        viewModel.playTrackAt(anchor + index)
+                        val absoluteIndex = uiState.fullQueue.indexOfFirst { it.id == track.id }
+                        if (absoluteIndex >= 0) {
+                            viewModel.playTrackAt(absoluteIndex)
+                        }
                     }
                 )
             }

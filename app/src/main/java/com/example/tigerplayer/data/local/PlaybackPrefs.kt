@@ -31,6 +31,7 @@ class PlaybackPrefs @Inject constructor(
         val FLOW_STATE_ENABLED = booleanPreferencesKey("flow_state_enabled")
         val FLOW_STATE_WINDOW_MS = longPreferencesKey("flow_state_window_ms")
         val FLOW_STATE_TRUE_OVERLAP = booleanPreferencesKey("flow_state_true_overlap")
+        val FULL_PLAYER_ACTIVE = booleanPreferencesKey("full_player_active")
     }
 
     val lastTrackId: Flow<String?> = dataStore.data.map { it[LAST_TRACK_ID] }
@@ -57,6 +58,17 @@ class PlaybackPrefs @Inject constructor(
     }
     val flowStateTrueOverlap: Flow<Boolean> = dataStore.data.map {
         it[FLOW_STATE_TRUE_OVERLAP] ?: true
+    }
+    val fullPlayerActive: Flow<Boolean> = dataStore.data.map {
+        it[FULL_PLAYER_ACTIVE] ?: false
+    }
+
+    fun getBtListeningTime(address: String): Flow<Long> = dataStore.data.map {
+        it[longPreferencesKey("bt_time_$address")] ?: 0L
+    }
+
+    suspend fun saveBtListeningTime(address: String, timeMs: Long) {
+        dataStore.edit { it[longPreferencesKey("bt_time_$address")] = timeMs }
     }
 
     suspend fun saveEqState(nodesData: String, mood: String) {
@@ -90,6 +102,12 @@ class PlaybackPrefs @Inject constructor(
         }
     }
 
+    suspend fun saveFullPlayerActive(active: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[FULL_PLAYER_ACTIVE] = active
+        }
+    }
+
     suspend fun savePlaybackState(
         trackId: String?,
         position: Long,
@@ -98,15 +116,33 @@ class PlaybackPrefs @Inject constructor(
         queueSnapshot: String? = null
     ) {
         dataStore.edit { prefs ->
-            if (trackId != null) prefs[LAST_TRACK_ID] = trackId
+            if (trackId != null) {
+                prefs[LAST_TRACK_ID] = trackId
+            } else {
+                prefs.remove(LAST_TRACK_ID)
+            }
             prefs[LAST_POSITION] = position
             prefs[LAST_QUEUE_IDS] = queueIds.joinToString(",")
-            originalQueueIds?.let {
-                prefs[ORIGINAL_QUEUE_IDS] = it.joinToString(",")
+            if (originalQueueIds != null) {
+                prefs[ORIGINAL_QUEUE_IDS] = originalQueueIds.joinToString(",")
+            } else {
+                prefs.remove(ORIGINAL_QUEUE_IDS)
             }
-            queueSnapshot?.let {
-                prefs[LAST_QUEUE_SNAPSHOT] = it
+            if (queueSnapshot != null) {
+                prefs[LAST_QUEUE_SNAPSHOT] = queueSnapshot
+            } else {
+                prefs.remove(LAST_QUEUE_SNAPSHOT)
             }
+        }
+    }
+
+    suspend fun clearPlaybackState() {
+        dataStore.edit { prefs ->
+            prefs.remove(LAST_TRACK_ID)
+            prefs[LAST_POSITION] = 0L
+            prefs[LAST_QUEUE_IDS] = ""
+            prefs.remove(ORIGINAL_QUEUE_IDS)
+            prefs.remove(LAST_QUEUE_SNAPSHOT)
         }
     }
 

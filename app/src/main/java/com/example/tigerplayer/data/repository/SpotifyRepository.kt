@@ -1,7 +1,10 @@
 package com.example.tigerplayer.data.repository
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
+import com.example.tigerplayer.BuildConfig
+import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.remote.api.SpotifyApiService
 import com.example.tigerplayer.data.remote.model.SpotifyAlbum
 import com.example.tigerplayer.data.remote.model.SpotifyPlaylist
@@ -12,6 +15,7 @@ import com.spotify.android.appremote.api.SpotifyAppRemote
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,25 +26,41 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class SpotifyPlaybackState(
+    val track: AudioTrack,
+    val isPlaying: Boolean,
+    val positionMs: Long
+)
+
 @Singleton
 class SpotifyRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val spotifyApiService: SpotifyApiService,
     val authManager: SpotifyAuthManager
 ) {
-    private val clientId = "3a9ef0f202a04e6290cf0cb3b32dd3ab"
+    private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
     private val redirectUri = "tigerplayer://callback"
     private var spotifyAppRemote: SpotifyAppRemote? = null
+    private var pendingUriToPlay: String? = null
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // --- 1. CONNECTION STREAMS ---
 
     private val _isRemoteConnected = MutableStateFlow(false)
-    private val _currentSpotifyTrack = MutableStateFlow<String?>("Not Playing")
-    val currentSpotifyTrack: StateFlow<String?> = _currentSpotifyTrack.asStateFlow()
+    val isConnected: StateFlow<Boolean> = _isRemoteConnected.asStateFlow()
 
-    val isConnected: StateFlow<Boolean> = authManager.token
+    val isAuthenticated: StateFlow<Boolean> = authManager.token
         .map { it.isNotEmpty() }
-        .stateIn(CoroutineScope(Dispatchers.IO), SharingStarted.Eagerly, false)
+        .stateIn(repositoryScope, SharingStarted.Eagerly, false)
+
+    private val _spotifyPlaybackState = MutableStateFlow<SpotifyPlaybackState?>(null)
+    val spotifyPlaybackState: StateFlow<SpotifyPlaybackState?> = _spotifyPlaybackState.asStateFlow()
+
+    val currentSpotifyTrack: StateFlow<String?> = _spotifyPlaybackState
+        .map { state ->
+            state?.track?.let { "${it.title} • ${it.artist}" } ?: "Not Playing"
+        }
+        .stateIn(repositoryScope, SharingStarted.Eagerly, "Not Playing")
 
     // --- 2. THE ARCHIVE VAULTS ---
 
@@ -140,6 +160,12 @@ class SpotifyRepository @Inject constructor(
                     spotifyAppRemote = appRemote
                     _isRemoteConnected.value = true
                     subscribeToPlayerState()
+
+                    pendingUriToPlay?.let { uri ->
+                        appRemote.playerApi.play(uri)
+                        publishOptimisticPlayback(uri)
+                        pendingUriToPlay = null
+                    }
                 }
 
                 override fun onFailure(throwable: Throwable) {
@@ -153,21 +179,37 @@ class SpotifyRepository @Inject constructor(
     }
 
     fun playUri(uri: String) {
+        pendingUriToPlay = uri
+        publishOptimisticPlayback(uri)
+
         val remote = spotifyAppRemote
         if (_isRemoteConnected.value && remote != null) {
             remote.playerApi.play(uri)
+            pendingUriToPlay = null
         } else {
             _isRemoteConnected.value = false
             connect()
-            // In a true flagship, you'd enqueue this URI. For now, connection recovery is triggered.
         }
     }
 
-    fun pause() = spotifyAppRemote?.playerApi?.pause()
-    fun resume() = spotifyAppRemote?.playerApi?.resume()
+    fun pause() {
+        spotifyAppRemote?.playerApi?.pause()
+        _spotifyPlaybackState.value = _spotifyPlaybackState.value?.copy(isPlaying = false)
+    }
+
+    fun resume() {
+        spotifyAppRemote?.playerApi?.resume()
+        _spotifyPlaybackState.value = _spotifyPlaybackState.value?.copy(isPlaying = true)
+    }
+
     fun skipNext() = spotifyAppRemote?.playerApi?.skipNext()
     fun skipPrevious() = spotifyAppRemote?.playerApi?.skipPrevious()
-    fun seekTo(positionMs: Long) = spotifyAppRemote?.playerApi?.seekTo(positionMs)
+
+    fun seekTo(positionMs: Long) {
+        spotifyAppRemote?.playerApi?.seekTo(positionMs)
+        _spotifyPlaybackState.value = _spotifyPlaybackState.value?.copy(positionMs = positionMs)
+    }
+
     fun toggleShuffle() = spotifyAppRemote?.playerApi?.toggleShuffle()
     fun toggleRepeat() = spotifyAppRemote?.playerApi?.toggleRepeat()
 
@@ -180,6 +222,8 @@ class SpotifyRepository @Inject constructor(
         } finally {
             _isRemoteConnected.value = false
             spotifyAppRemote = null
+            pendingUriToPlay = null
+            _spotifyPlaybackState.value = null
             Log.d("SpotifyRepo", "Disconnected from Spotify App Remote.")
         }
     }
@@ -188,14 +232,63 @@ class SpotifyRepository @Inject constructor(
         try {
             spotifyAppRemote?.playerApi?.subscribeToPlayerState()?.setEventCallback { playerState ->
                 val track = playerState.track
-                if (track != null) {
-                    _currentSpotifyTrack.value = "${track.name} • ${track.artist.name}"
-                } else {
-                    _currentSpotifyTrack.value = "Paused / Stopped"
+                if (track == null) {
+                    _spotifyPlaybackState.value = null
+                    return@setEventCallback
                 }
+
+                val resolvedTrack = AudioTrack(
+                    id = track.uri,
+                    title = track.name,
+                    artist = track.artist.name,
+                    album = "Spotify",
+                    uri = Uri.EMPTY,
+                    artworkUri = Uri.EMPTY,
+                    durationMs = track.duration.toLong(),
+                    mimeType = "audio/spotify",
+                    isLocal = false,
+                    isRemote = true,
+                    serverPath = null,
+                    path = track.uri
+                )
+
+                _spotifyPlaybackState.value = SpotifyPlaybackState(
+                    track = resolvedTrack,
+                    isPlaying = !playerState.isPaused,
+                    positionMs = playerState.playbackPosition
+                )
             }
         } catch (e: Exception) {
             Log.e("SpotifyRepo", "Failed to subscribe to player state", e)
         }
+    }
+
+    private fun publishOptimisticPlayback(uri: String) {
+        _spotifyPlaybackState.value = SpotifyPlaybackState(
+            track = audioTrackFromUri(uri),
+            isPlaying = true,
+            positionMs = 0L
+        )
+    }
+
+    private fun audioTrackFromUri(uri: String): AudioTrack {
+        val titleSeed = uri.substringAfterLast(":", "Spotify")
+            .replace('-', ' ')
+            .ifBlank { "Spotify" }
+
+        return AudioTrack(
+            id = uri,
+            title = titleSeed,
+            artist = "Spotify",
+            album = "Spotify",
+            uri = Uri.EMPTY,
+            artworkUri = Uri.EMPTY,
+            durationMs = 0L,
+            mimeType = "audio/spotify",
+            isLocal = false,
+            isRemote = true,
+            serverPath = null,
+            path = uri
+        )
     }
 }

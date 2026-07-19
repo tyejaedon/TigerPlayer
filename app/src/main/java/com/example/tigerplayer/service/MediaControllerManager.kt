@@ -7,12 +7,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.os.Looper
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -31,6 +31,7 @@ import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.AudioRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
+import com.example.tigerplayer.utils.BluetoothDeviceManager
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
@@ -44,7 +45,8 @@ class MediaControllerManager @Inject constructor(
     private val playbackPrefs: PlaybackPrefs,
     private val settingsDataStore: SettingsDataStore,
     private val audioRepository: AudioRepository,
-    private val mediaDataRepository: MediaDataRepository
+    private val mediaDataRepository: MediaDataRepository,
+    private val bluetoothDeviceManager: BluetoothDeviceManager
 ) {
 
     companion object {
@@ -72,11 +74,6 @@ class MediaControllerManager @Inject constructor(
         const val META_IS_LIKED = "tp_meta_is_liked"
         const val META_PATH = "tp_meta_path"
     }
-
-    private data class OverlapSession(
-        val sourceMediaId: String,
-        val targetMediaId: String
-    )
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     var mediaController: MediaController? = null
@@ -107,18 +104,19 @@ class MediaControllerManager @Inject constructor(
     private var infinitePlayJob: Job? = null
     private var flowStateFadeOutJob: Job? = null
     private var flowStateFadeInJob: Job? = null
-    private var overlapCrossfadeJob: Job? = null
     private var lastInfiniteAnchorId: String? = null
     private var activeFlowStateMediaId: String? = null
     private var pendingFlowStateFadeIn = false
-    private var overlapPlayer: MediaPlayer? = null
-    private var activeOverlapSession: OverlapSession? = null
     private var isRouteReceiverRegistered = false
-    private val seenRouteActions = mutableSetOf<String>()
+    private var routeReceiverRegisteredAtMs = 0L
+    private val lastRouteActionHandledAt = mutableMapOf<String, Long>()
+
+    private val routeStickyGraceMs = 1_500L
+    private val routeEventDebounceMs = 1_200L
 
     @Volatile private var flowStateEnabled = true
     @Volatile private var flowStateWindowMs = FLOW_STATE_DEFAULT_WINDOW_MS
-    @Volatile private var flowStateTrueOverlap = true
+    @Volatile private var flowStateTrueOverlap = false
     @Volatile private var gaplessPlaybackEnabled = true
     @Volatile private var audioReactiveHapticsEnabled = false
     @Volatile private var resumeOnBluetoothConnect = true
@@ -127,9 +125,15 @@ class MediaControllerManager @Inject constructor(
     private val audioRouteReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
+            val now = SystemClock.elapsedRealtime()
 
-            // Ignore the first broadcast per action to prevent startup auto-resume from sticky snapshots.
-            if (seenRouteActions.add(action)) return
+            // Ignore startup sticky broadcasts right after receiver registration.
+            if (now - routeReceiverRegisteredAtMs <= routeStickyGraceMs) return
+
+            // Debounce duplicate route broadcasts that arrive in rapid succession.
+            val lastHandledAt = lastRouteActionHandledAt[action] ?: 0L
+            if (now - lastHandledAt <= routeEventDebounceMs) return
+            lastRouteActionHandledAt[action] = now
 
             when (action) {
                 Intent.ACTION_HEADSET_PLUG -> {
@@ -140,6 +144,7 @@ class MediaControllerManager @Inject constructor(
                 }
 
                 BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
+                    bluetoothDeviceManager.refreshConnectedDevice()
                     val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1)
                     if (state == BluetoothProfile.STATE_CONNECTED && resumeOnBluetoothConnect) {
                         maybeResumeOnRouteConnect("bluetooth")
@@ -160,14 +165,7 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun observeFlowStatePreferences() {
-        managerScope.launch {
-            playbackPrefs.flowStateTrueOverlap.collect { overlapEnabled ->
-                flowStateTrueOverlap = overlapEnabled
-                if (!overlapEnabled) {
-                    releaseOverlapSession()
-                }
-            }
-        }
+        // Preference observation kept for UI compatibility, but logic is disabled in audio path
     }
 
     private fun observeControlMatrixSettings() {
@@ -175,15 +173,16 @@ class MediaControllerManager @Inject constructor(
             settingsDataStore.settingsFlow.collect { settings ->
                 val crossfadeWindowMs = (settings.crossfadeDurationSec * 1_000L)
                     .coerceIn(FLOW_STATE_MIN_WINDOW_MS, FLOW_STATE_MAX_WINDOW_MS)
+                val isCrossfadeEnabled = settings.crossfadeDurationSec > 0
 
-                flowStateEnabled = settings.crossfadeDurationSec > 0 && settings.gaplessPlayback
+                flowStateEnabled = isCrossfadeEnabled && settings.gaplessPlayback
                 flowStateWindowMs = crossfadeWindowMs
                 gaplessPlaybackEnabled = settings.gaplessPlayback
                 audioReactiveHapticsEnabled = settings.audioReactiveHaptics
                 resumeOnBluetoothConnect = settings.resumeOnBluetoothConnect
                 resumeOnWiredHeadsetConnect = settings.resumeOnWiredHeadsetConnect
 
-                if (!flowStateEnabled || !gaplessPlaybackEnabled) {
+                if (!flowStateEnabled) {
                     resetFlowStatePipeline(restoreFullVolume = true)
                 }
             }
@@ -216,7 +215,10 @@ class MediaControllerManager @Inject constructor(
                 setupPlayerListener(controller)
                 restorePlaybackState(controller)
 
-                if (controller.isPlaying) startPositionTicker()
+                if (controller.isPlaying) {
+                    startPositionTicker()
+                    bluetoothDeviceManager.startTrackingListeningTime()
+                }
 
             } catch (e: Exception) {
                 Log.e("MediaManager", "Controller init failed", e)
@@ -236,11 +238,14 @@ class MediaControllerManager @Inject constructor(
                 _isPlaying.value = isPlaying
                 if (isPlaying) {
                     startPositionTicker()
+                    bluetoothDeviceManager.startTrackingListeningTime()
                     maybeStartFlowStateFadeOut(controller)
                     maybeScheduleInfinitePlay(controller.currentMediaItem?.mediaId)
                 } else {
                     positionJob?.cancel()
-                    resetFlowStatePipeline(restoreFullVolume = false)
+                    bluetoothDeviceManager.stopTrackingListeningTime()
+                    // Ensure we never resume from an attenuated crossfade volume.
+                    resetFlowStatePipeline(restoreFullVolume = true)
                     // Save position safely to disk only when paused to prevent I/O overload
                     managerScope.launch { playbackPrefs.savePosition(controller.currentPosition) }
                 }
@@ -264,10 +269,7 @@ class MediaControllerManager @Inject constructor(
                 flowStateFadeOutJob?.cancel()
                 activeFlowStateMediaId = null
 
-                val overlapHandled = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
-                    handleOverlapTransition(controller, item?.mediaId)
-
-                if (!overlapHandled && pendingFlowStateFadeIn && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                if (pendingFlowStateFadeIn && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     startFlowStateFadeIn(item?.mediaId)
                 } else {
                     pendingFlowStateFadeIn = false
@@ -367,10 +369,16 @@ class MediaControllerManager @Inject constructor(
         if (remainingMs > flowStateWindowMs || remainingMs <= 0L) return
 
         val mediaId = controller.currentMediaItem?.mediaId ?: return
+        
+        // AUDIOPHILE DECISION: Disable True Overlap Crossfade via MediaPlayer.
+        // It bypasses the High-Resolution DSP chain and compromises bit-depth during transitions.
+        // Standard Media3 gapless transitions are preserved for bit-perfect timing.
+        /*
         if (flowStateTrueOverlap) {
             val overlapStarted = maybeStartTrueOverlapCrossfade(controller, mediaId, remainingMs)
             if (overlapStarted) return
         }
+        */
 
         if (flowStateFadeOutJob?.isActive == true && activeFlowStateMediaId == mediaId) return
 
@@ -378,7 +386,6 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun startFlowStateFadeOut(controller: MediaController, mediaId: String, remainingMs: Long) {
-        releaseOverlapSession()
         flowStateFadeInJob?.cancel()
         flowStateFadeOutJob?.cancel()
 
@@ -409,7 +416,7 @@ class MediaControllerManager @Inject constructor(
 
     private fun startFlowStateFadeIn(mediaId: String?) {
         val targetId = mediaId ?: return
-        if (!flowStateEnabled || flowStateTrueOverlap) return
+        if (!flowStateEnabled) return
 
         flowStateFadeInJob?.cancel()
         flowStateFadeInJob = managerScope.launch {
@@ -435,127 +442,6 @@ class MediaControllerManager @Inject constructor(
         }
     }
 
-    private fun maybeStartTrueOverlapCrossfade(
-        controller: MediaController,
-        sourceMediaId: String,
-        remainingMs: Long
-    ): Boolean {
-        val currentIndex = controller.currentMediaItemIndex
-        if (currentIndex < 0 || currentIndex >= controller.mediaItemCount - 1) return false
-
-        val nextItem = controller.getMediaItemAt(currentIndex + 1)
-        val targetMediaId = nextItem.mediaId
-        val targetUri = nextItem.localConfiguration?.uri ?: return false
-
-        if (targetMediaId.isBlank()) return false
-        if (activeOverlapSession?.sourceMediaId == sourceMediaId) return true
-
-        startTrueOverlapCrossfade(controller, sourceMediaId, targetMediaId, targetUri, remainingMs)
-        return true
-    }
-
-    private fun startTrueOverlapCrossfade(
-        controller: MediaController,
-        sourceMediaId: String,
-        targetMediaId: String,
-        targetUri: Uri,
-        remainingMs: Long
-    ) {
-        resetFlowStatePipeline(restoreFullVolume = false)
-
-        pendingFlowStateFadeIn = false
-        activeFlowStateMediaId = sourceMediaId
-        activeOverlapSession = OverlapSession(sourceMediaId = sourceMediaId, targetMediaId = targetMediaId)
-
-        val warmPlayer = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-        }
-        overlapPlayer = warmPlayer
-
-        warmPlayer.setOnErrorListener { _, what, extra ->
-            Log.e("MediaManager", "OverlapPlayer error: $what, $extra")
-            resetFlowStatePipeline(restoreFullVolume = true)
-            true // Indicate error was handled
-        }
-
-        warmPlayer.setOnPreparedListener { preparedPlayer ->
-            preparedPlayer.setVolume(0f, 0f)
-            preparedPlayer.start()
-
-            val startVolume = controller.volume.coerceIn(FLOW_STATE_MIN_VOLUME, FLOW_STATE_MAX_VOLUME)
-            val fadeDurationMs = remainingMs.coerceIn(1_400L, flowStateWindowMs)
-            val steps = (fadeDurationMs / FLOW_STATE_STEP_MS).coerceAtLeast(1L).toInt()
-
-            overlapCrossfadeJob = managerScope.launch {
-                for (step in 1..steps) {
-                    val activeController = mediaController ?: return@launch
-                    val activeSession = activeOverlapSession ?: return@launch
-                    val activePlayer = overlapPlayer ?: return@launch
-
-                    if (!activeController.isPlaying || activeController.currentMediaItem?.mediaId != activeSession.sourceMediaId) {
-                        return@launch
-                    }
-
-                    val t = step.toFloat() / steps.toFloat()
-                    val smooth = t * t * (3f - 2f * t)
-                    val outVolume = lerp(startVolume, FLOW_STATE_MIN_VOLUME, smooth)
-                    val inVolume = lerp(0f, FLOW_STATE_MAX_VOLUME, smooth)
-
-                    activeController.volume = outVolume
-                    activePlayer.setVolume(inVolume, inVolume)
-                    delay(FLOW_STATE_STEP_MS)
-                }
-            }
-        }
-
-        runCatching {
-            warmPlayer.setDataSource(context, targetUri)
-            warmPlayer.prepareAsync()
-        }.onFailure {
-            resetFlowStatePipeline(restoreFullVolume = true)
-        }
-    }
-
-    private fun handleOverlapTransition(controller: MediaController, transitionedMediaId: String?): Boolean {
-        val activeSession = activeOverlapSession ?: return false
-        if (transitionedMediaId == null || transitionedMediaId != activeSession.targetMediaId) {
-            releaseOverlapSession()
-            return false
-        }
-
-        val overlapPositionMs = runCatching {
-            overlapPlayer?.currentPosition?.toLong() ?: 0L
-        }.getOrDefault(0L).coerceAtLeast(0L)
-
-        if (overlapPositionMs > 0L) {
-            controller.seekTo(overlapPositionMs)
-        }
-
-        controller.volume = FLOW_STATE_MAX_VOLUME
-        releaseOverlapSession()
-        return true
-    }
-
-    private fun releaseOverlapSession() {
-        overlapCrossfadeJob?.cancel()
-        overlapCrossfadeJob = null
-
-        overlapPlayer?.let { player ->
-            runCatching {
-                player.setVolume(0f, 0f)
-                if (player.isPlaying) player.stop()
-            }
-            runCatching { player.release() }
-        }
-        overlapPlayer = null
-        activeOverlapSession = null
-    }
-
     private fun registerAudioRouteReceiver() {
         if (isRouteReceiverRegistered) return
 
@@ -567,6 +453,8 @@ class MediaControllerManager @Inject constructor(
         runCatching {
             context.registerReceiver(audioRouteReceiver, filter)
             isRouteReceiverRegistered = true
+            routeReceiverRegisteredAtMs = SystemClock.elapsedRealtime()
+            lastRouteActionHandledAt.clear()
         }.onFailure {
             Log.w("MediaManager", "Failed to register audio route receiver: ${it.message}")
         }
@@ -579,7 +467,8 @@ class MediaControllerManager @Inject constructor(
             context.unregisterReceiver(audioRouteReceiver)
         }
         isRouteReceiverRegistered = false
-        seenRouteActions.clear()
+        routeReceiverRegisteredAtMs = 0L
+        lastRouteActionHandledAt.clear()
     }
 
     private fun maybeResumeOnRouteConnect(route: String) {
@@ -619,15 +508,12 @@ class MediaControllerManager @Inject constructor(
     private fun resetFlowStatePipeline(restoreFullVolume: Boolean) {
         flowStateFadeOutJob?.cancel()
         flowStateFadeInJob?.cancel()
-        overlapCrossfadeJob?.cancel()
 
         flowStateFadeOutJob = null
         flowStateFadeInJob = null
-        overlapCrossfadeJob = null
 
         activeFlowStateMediaId = null
         pendingFlowStateFadeIn = false
-        releaseOverlapSession()
 
         if (restoreFullVolume) {
             mediaController?.volume = FLOW_STATE_MAX_VOLUME
@@ -754,7 +640,10 @@ class MediaControllerManager @Inject constructor(
     private fun saveCurrentState() {
         managerScope.launch {
             val controller = mediaController ?: return@launch
-            if (controller.mediaItemCount == 0) return@launch
+            if (controller.mediaItemCount == 0) {
+                playbackPrefs.clearPlaybackState()
+                return@launch
+            }
 
             val queue = getCurrentQueue()
             val queueIds = queue.map { it.mediaId }
@@ -851,14 +740,17 @@ class MediaControllerManager @Inject constructor(
 
     private fun restorePlaybackState(controller: MediaController) {
         managerScope.launch {
-            val lastId = playbackPrefs.lastTrackId.firstOrNull() ?: return@launch
+            val lastId = playbackPrefs.lastTrackId.firstOrNull()
             val lastPos = playbackPrefs.lastPosition.firstOrNull() ?: 0L
             val queueIds = playbackPrefs.lastQueueIds.firstOrNull() ?: emptyList()
             val queueSnapshot = playbackPrefs.lastQueueSnapshot.firstOrNull()
             val savedShuffle = playbackPrefs.shuffleMode.firstOrNull() ?: false
             val savedRepeat = playbackPrefs.repeatMode.firstOrNull() ?: Player.REPEAT_MODE_OFF
 
-            if (queueIds.isEmpty()) return@launch
+            if (queueIds.isEmpty()) {
+                playbackPrefs.clearPlaybackState()
+                return@launch
+            }
 
             val allTracks = audioRepository.getCachedLocalTracks().firstOrNull() ?: emptyList()
             val snapshotTracks = deserializeQueueSnapshot(queueSnapshot)
@@ -878,9 +770,14 @@ class MediaControllerManager @Inject constructor(
                 }
             }
 
-            if (restored.isEmpty()) return@launch
+            if (restored.isEmpty()) {
+                playbackPrefs.clearPlaybackState()
+                return@launch
+            }
 
-            val startIndex = restored.indexOfFirst { it.id == lastId }.coerceAtLeast(0)
+            val startIndex = lastId?.let { id ->
+                restored.indexOfFirst { it.id == id }.coerceAtLeast(0)
+            } ?: 0
 
             controller.setMediaItems(restored.map { createMediaItem(it) }, startIndex, lastPos)
             controller.shuffleModeEnabled = savedShuffle
@@ -940,6 +837,7 @@ class MediaControllerManager @Inject constructor(
         saveCurrentState()
         positionJob?.cancel()
         infinitePlayJob?.cancel()
+        bluetoothDeviceManager.stopTrackingListeningTime()
         resetFlowStatePipeline(restoreFullVolume = false)
         unregisterAudioRouteReceiver()
         controllerFuture?.let { MediaController.releaseFuture(it) }

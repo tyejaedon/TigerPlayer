@@ -139,10 +139,7 @@ class AudioRepository @Inject constructor(
                         cachedTracks != freshTracks
 
                 if (isArchiveOutdated) {
-                    tigerDao.clearTrackCache()
-                    if (freshTracks.isNotEmpty()) {
-                        tigerDao.insertCachedTracks(freshTracks.map { it.toEntity() })
-                    }
+                    tigerDao.insertCachedTracksTransaction(freshTracks.map { it.toEntity() })
                 }
             }
         }
@@ -164,7 +161,7 @@ class AudioRepository @Inject constructor(
                 cachedTracks != scannedTracks
 
             if (isArchiveOutdated) {
-                tigerDao.insertCachedTracks(scannedTracks.map { it.toEntity() })
+                tigerDao.insertCachedTracksTransaction(scannedTracks.map { it.toEntity() })
             }
         }
     }

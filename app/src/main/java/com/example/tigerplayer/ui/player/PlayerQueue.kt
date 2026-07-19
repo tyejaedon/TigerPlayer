@@ -1,5 +1,7 @@
 package com.example.tigerplayer.ui.player
 
+import androidx.compose.ui.platform.testTag
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -18,6 +20,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +61,7 @@ fun QueueDisplay(
     // LOCAL STATE FOR OPTIMISTIC UI
     var localQueue by remember(queue) { mutableStateOf(queue) }
     val listState = rememberLazyListState()
+    val view = LocalView.current
 
     var dragStartIndex by remember { mutableIntStateOf(-1) }
     var dragCurrentIndex by remember { mutableIntStateOf(-1) }
@@ -88,8 +94,8 @@ fun QueueDisplay(
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 12.dp)
                 .clip(androidx.compose.foundation.shape.CircleShape)
-                .background(Color.White.copy(alpha = 0.1f))
-                .border(0.5.dp, Color.White.copy(0.2f), androidx.compose.foundation.shape.CircleShape)
+                .background(dynamicTextColor.copy(alpha = 0.08f))
+                .border(0.5.dp, dynamicTextColor.copy(0.15f), androidx.compose.foundation.shape.CircleShape)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -97,84 +103,107 @@ fun QueueDisplay(
             Text(
                 if (shuffleModeEnabled) "CHAOS SEQUENCE" else "ARCHIVE ORDER",
                 style = MaterialTheme.typography.labelLarge,
-                color = dynamicTextColor.copy(alpha = 0.8f),
+                color = dynamicTextColor.copy(alpha = 0.9f),
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (shuffleModeEnabled) {
-                    Icon(WitcherIcons.Shuffle, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                    Icon(WitcherIcons.Shuffle, null, tint = Color.White, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                 }
                 Icon(
                     if (repeatMode == 1) WitcherIcons.RepeatOne else WitcherIcons.Repeat,
                     null,
-                    tint = if (repeatMode != 0) accentColor else dynamicTextColor.copy(alpha = 0.3f),
+                    tint = if (repeatMode != 0) Color.White else Color.White.copy(alpha = 0.45f),
                     modifier = Modifier.size(16.dp)
                 )
             }
         }
 
+        if (shuffleModeEnabled) {
+            Text(
+                text = "Reorder is disabled while shuffle is enabled",
+                style = MaterialTheme.typography.bodySmall,
+                color = dynamicTextColor.copy(alpha = 0.55f),
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+        }
+
         LazyColumn(
             state = listState,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag("player_queue_list")
+                .semantics { contentDescription = "Player queue list" },
             contentPadding = PaddingValues(top = 8.dp, bottom = 150.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             itemsIndexed(
                 items = localQueue,
-                key = { index, track -> "${index}_${track.id}" }
+                key = { _, track -> track.id }
             ) { index, track ->
                 val isActive = index == currentIndex
                 val isDragging = dragCurrentIndex == index && dragStartIndex != -1
                 val latestIndex by rememberUpdatedState(index)
-                val dragHandleModifier = Modifier.pointerInput(index, track.id) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            dragStartIndex = latestIndex
-                            dragCurrentIndex = latestIndex
-                            draggedDistance = 0f
-                        },
-                        onDragEnd = {
-                            if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
-                                onMoveItem(dragStartIndex, dragCurrentIndex)
-                            }
-                            dragStartIndex = -1
-                            dragCurrentIndex = -1
-                            draggedDistance = 0f
-                        },
-                        onDragCancel = {
-                            localQueue = queue
-                            dragStartIndex = -1
-                            dragCurrentIndex = -1
-                            draggedDistance = 0f
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            draggedDistance += dragAmount.y
-                            val itemHeight = 72.dp.toPx()
-                            val offsetInt = (draggedDistance / itemHeight).toInt()
+                val resolvedQueueIndex = remember(queue, track.id, index) {
+                    queue.indexOfFirst { it.id == track.id }.takeIf { it >= 0 } ?: index
+                }
 
-                            if (offsetInt != 0) {
-                                val newIndex = (dragCurrentIndex + offsetInt).coerceIn(0, localQueue.lastIndex)
-                                if (newIndex != dragCurrentIndex) {
-                                    val mutable = localQueue.toMutableList()
-                                    val item = mutable.removeAt(dragCurrentIndex)
-                                    mutable.add(newIndex, item)
-                                    localQueue = mutable
-                                    dragCurrentIndex = newIndex
-                                    draggedDistance -= (offsetInt * itemHeight)
+                val dragHandleModifier = if (shuffleModeEnabled) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(track.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                dragStartIndex = latestIndex
+                                dragCurrentIndex = latestIndex
+                                draggedDistance = 0f
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            },
+                            onDragEnd = {
+                                if (dragStartIndex != -1 && dragCurrentIndex != -1 && dragStartIndex != dragCurrentIndex) {
+                                    onMoveItem(dragStartIndex, dragCurrentIndex)
+                                }
+                                dragStartIndex = -1
+                                dragCurrentIndex = -1
+                                draggedDistance = 0f
+                            },
+                            onDragCancel = {
+                                localQueue = queue
+                                dragStartIndex = -1
+                                dragCurrentIndex = -1
+                                draggedDistance = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                draggedDistance += dragAmount.y
+                                val itemHeight = 72.dp.toPx()
+                                val offsetInt = (draggedDistance / itemHeight).toInt()
+
+                                if (offsetInt != 0) {
+                                    val newIndex = (dragCurrentIndex + offsetInt).coerceIn(0, localQueue.lastIndex)
+                                    if (newIndex != dragCurrentIndex) {
+                                        val mutable = localQueue.toMutableList()
+                                        val item = mutable.removeAt(dragCurrentIndex)
+                                        mutable.add(newIndex, item)
+                                        localQueue = mutable
+                                        dragCurrentIndex = newIndex
+                                        draggedDistance -= (offsetInt * itemHeight)
+                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
 
                 Surface(
                     modifier = Modifier
+                        .testTag("queue_row_${track.id}_$index")
                         .fillMaxWidth()
                         .animateItem()
-                        .bounceClick { onTrackClick(index) },
+                        .bounceClick { onTrackClick(resolvedQueueIndex) },
                     color = Color.Transparent,
                     shape = RoundedCornerShape(16.dp)
                 ) {
@@ -182,13 +211,18 @@ fun QueueDisplay(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                if (isActive || isDragging)
-                                    Brush.linearGradient(listOf(Color.White.copy(0.15f), Color.White.copy(0.05f)))
+                                if (isDragging)
+                                    Brush.linearGradient(listOf(accentColor.copy(0.25f), accentColor.copy(0.1f)))
+                                else if (isActive)
+                                    Brush.linearGradient(listOf(accentColor.copy(0.15f), Color.Transparent))
                                 else SolidColor(Color.Transparent)
                             )
                             .border(
                                 width = if (isActive || isDragging) 1.dp else 0.dp,
-                                brush = Brush.linearGradient(listOf(Color.White.copy(0.4f), Color.Transparent)),
+                                brush = if (isDragging) 
+                                    SolidColor(accentColor.copy(0.4f))
+                                else
+                                    Brush.linearGradient(listOf(dynamicTextColor.copy(0.3f), Color.Transparent)),
                                 shape = RoundedCornerShape(16.dp)
                             )
                     ) {
@@ -229,24 +263,26 @@ fun QueueDisplay(
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (!isActive) {
-                                    IconButton(onClick = { onRemoveFromQueue(index) }) {
-                                        Icon(WitcherIcons.Close, contentDescription = null, tint = dynamicTextColor.copy(0.4f), modifier = Modifier.size(18.dp))
+                                    IconButton(onClick = { onRemoveFromQueue(resolvedQueueIndex) }) {
+                                        Icon(WitcherIcons.Close, contentDescription = null, tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(18.dp))
                                     }
                                 }
 
                                 Box(
                                     modifier = Modifier
                                         .padding(start = 4.dp)
-                                        .size(24.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = if (isDragging) 0.14f else 0.08f))
-                                        .then(dragHandleModifier),
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(dynamicTextColor.copy(alpha = if (isDragging) 0.14f else 0.08f))
+                                        .then(dragHandleModifier)
+                                        .testTag("drag_handle_$index"),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         "≡",
                                         color = dynamicTextColor.copy(alpha = if (isDragging) 0.9f else 0.65f),
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp
                                     )
                                 }
                             }

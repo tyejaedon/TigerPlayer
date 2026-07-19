@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -177,7 +178,7 @@ fun AnimatedLibraryHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 16.dp)
-            .height(56.dp),
+            .height(60.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AnimatedVisibility(
@@ -282,8 +283,13 @@ fun VanguardLibraryTabs(
                 animationSpec = spring(stiffness = Spring.StiffnessMedium),
                 label = "TabBackground"
             )
+            val contrastBackground = backgroundColor.compositeOver(MaterialTheme.colorScheme.background)
             val textColor by animateColorAsState(
-                targetValue = if (isSelected) Color(0xFF0F172A) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                targetValue = if (isSelected) {
+                    MaterialTheme.colorScheme.onPrimary.ensureVisibleOn(contrastBackground, minContrast = 4.5)
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
+                },
                 animationSpec = spring(stiffness = Spring.StiffnessMedium),
                 label = "TabText"
             )
@@ -296,9 +302,9 @@ fun VanguardLibraryTabs(
             // Dynamic 3D depth parameters
             val elevation = if (isSelected) 8.dp else 2.dp
             val borderBrush = if (isSelected) {
-                Brush.verticalGradient(listOf(Color.White.copy(0.4f), Color.Transparent))
+                Brush.verticalGradient(listOf(MaterialTheme.colorScheme.onSurface.copy(0.22f), Color.Transparent))
             } else {
-                Brush.verticalGradient(listOf(Color.White.copy(0.12f), Color.White.copy(0.02f)))
+                Brush.verticalGradient(listOf(MaterialTheme.colorScheme.outlineVariant.copy(0.7f), MaterialTheme.colorScheme.outlineVariant.copy(0.2f)))
             }
 
             Box(
@@ -421,7 +427,7 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
             Text(
                 text = "Summoning Archives...",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
             )
         }
         return
@@ -764,7 +770,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     Text(
                         text = "YOUR GRIMOIRES",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                         fontWeight = FontWeight.Black,
                         letterSpacing = 2.sp,
                         modifier = Modifier.padding(bottom = 16.dp)
@@ -884,11 +890,11 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(5.dp))
                 Text(
                     text = track.artist.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Black,
                     letterSpacing = 0.8.sp,
                     maxLines = 1,
@@ -904,7 +910,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                 color = if (isActive) MaterialTheme.aardBlue.copy(0.9f) else MaterialTheme.colorScheme.onSurface.copy(
-                    alpha = 0.45f
+                    alpha = 0.58f
                 ),
                 modifier = Modifier.padding(horizontal = 6.dp)
             )
@@ -918,7 +924,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     Icon(
                         imageVector = WitcherIcons.Options,
                         contentDescription = "Track Menu Options",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -1052,11 +1058,11 @@ fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "${playlist.trackCount} CHANTS COLLECTED",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp
             )
@@ -1064,7 +1070,7 @@ fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
         Icon(
             WitcherIcons.Next,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
             modifier = Modifier.size(16.dp)
         )
     }

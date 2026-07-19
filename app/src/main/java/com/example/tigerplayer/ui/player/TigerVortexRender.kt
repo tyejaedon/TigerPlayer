@@ -106,7 +106,8 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
     private var timeHandle = 0
     private var resolutionHandle = 0
     private var audioHandle = 0
-    private var bandsHandle = 0
+    private var bandsLowHandle = 0
+    private var bandsHighHandle = 0
     private var energyHandle = 0
     private var fluxHandle = 0
     private var seedHandle = 0
@@ -130,6 +131,7 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
         val treble: Float = 0f,
         val energy: Float = 0f,
         val flux: Float = 0f,
+        val bands: List<Float> = List(6) { 0f },
         val seed: Float = 0.5f
     )
 
@@ -160,12 +162,19 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
     }
 
     fun setReactiveFrame(frame: AudioReactiveFrame, trackSeed: Float) {
+        val spectral = if (frame.spectralBands.size == 6) {
+            frame.spectralBands
+        } else {
+            listOf(frame.bass, frame.bass, frame.mid, frame.mid, frame.treble, frame.treble)
+        }
+
         reactiveData.set(ReactiveSnapshot(
             bass = frame.bass,
             mid = frame.mid,
             treble = frame.treble,
             energy = frame.energy,
             flux = frame.flux,
+            bands = spectral,
             seed = trackSeed
         ))
     }
@@ -198,7 +207,8 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
         timeHandle = GLES30.glGetUniformLocation(program, "u_time")
         resolutionHandle = GLES30.glGetUniformLocation(program, "u_resolution")
         audioHandle = GLES30.glGetUniformLocation(program, "u_audioData")
-        bandsHandle = GLES30.glGetUniformLocation(program, "u_bands")
+        bandsLowHandle = GLES30.glGetUniformLocation(program, "u_bandsLow")
+        bandsHighHandle = GLES30.glGetUniformLocation(program, "u_bandsHigh")
         energyHandle = GLES30.glGetUniformLocation(program, "u_energy")
         fluxHandle = GLES30.glGetUniformLocation(program, "u_flux")
         seedHandle = GLES30.glGetUniformLocation(program, "u_seed")
@@ -226,7 +236,9 @@ class TigerVortexRenderer : GLSurfaceView.Renderer {
         GLES30.glUniform1f(timeHandle, time)
         GLES30.glUniform2f(resolutionHandle, width, height)
         GLES30.glUniform1f(audioHandle, currentAmplitude)
-        GLES30.glUniform3f(bandsHandle, snapshot.bass, snapshot.mid, snapshot.treble)
+        val bands = snapshot.bands
+        GLES30.glUniform3f(bandsLowHandle, bands[0], bands[1], bands[2])
+        GLES30.glUniform3f(bandsHighHandle, bands[3], bands[4], bands[5])
         GLES30.glUniform1f(energyHandle, snapshot.energy)
         GLES30.glUniform1f(fluxHandle, snapshot.flux)
         GLES30.glUniform1f(seedHandle, snapshot.seed)
@@ -325,7 +337,8 @@ object VortexShaders {
         uniform float u_time;
         uniform vec2 u_resolution;
         uniform float u_audioData;
-        uniform vec3 u_bands;
+        uniform vec3 u_bandsLow;
+        uniform vec3 u_bandsHigh;
         uniform float u_energy;
         uniform float u_flux;
         uniform float u_seed;
@@ -368,9 +381,9 @@ object VortexShaders {
             float dist = length(p);
             float angle = atan(p.y, p.x);
             
-            float bass = u_bands.x;
-            float mid = u_bands.y;
-            float treble = u_bands.z;
+            float bass = u_bandsLow.x * 0.72 + u_bandsLow.y * 0.28;
+            float mid = u_bandsLow.z * 0.58 + u_bandsHigh.x * 0.42;
+            float treble = u_bandsHigh.y * 0.56 + u_bandsHigh.z * 0.44;
             
             // BEAT-DRIVEN PHYSICS: Use u_flux to trigger visual transients
             float onset = smoothstep(0.4, 0.9, u_flux);

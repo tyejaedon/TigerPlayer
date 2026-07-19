@@ -15,14 +15,9 @@ if (secretsFile.exists()) {
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
-    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
-}
-kotlin {
-    jvmToolchain(17)
 }
 
 // 🔥 THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
@@ -33,9 +28,10 @@ configure<ApplicationExtension> {
     defaultConfig {
         applicationId = "com.example.tigerplayer"
         minSdk = 29
+        //noinspection OldTargetApi
         targetSdk = 36
         versionCode = 1
-        versionName = "2.5"
+        versionName = "2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Spotify Manifest Placeholders
@@ -140,6 +136,7 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.gson)
+    implementation(libs.jtransforms)
 
     implementation(libs.kotlin.youtubeextractor)
     // --- Room (The Vault) ---
@@ -168,18 +165,19 @@ dependencies {
 
     // --- Testing ---
     testImplementation(libs.junit)
-    testImplementation("io.mockk:mockk:1.13.12")
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    androidTestImplementation("io.mockk:mockk-android:1.13.12")
-    androidTestImplementation("androidx.room:room-testing:2.8.4")
-    androidTestImplementation("androidx.benchmark:benchmark-macro-junit4:1.3.4")
-    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0-alpha05")
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.mockk.android)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.benchmark.macro.junit4)
+    androidTestImplementation(libs.androidx.uiautomator)
 
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
-    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.leakcanary.android)
 }
 
 // =========================================================================

@@ -58,13 +58,16 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
 // SAMSUNG GLASS (REALISTIC LAYERING)
 // ------------------------------
 fun Modifier.glassEffect(shape: Shape) = this.composed {
+    val isSystemDark = isSystemInDarkTheme()
+    val tint = if (isSystemDark) Color.White else Color.Black
+    
     this
         .clip(shape)
         .background(
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = 0.08f),
-                    Color.White.copy(alpha = 0.02f)
+                    tint.copy(alpha = if (isSystemDark) 0.08f else 0.04f),
+                    tint.copy(alpha = if (isSystemDark) 0.02f else 0.01f)
                 )
             )
         )

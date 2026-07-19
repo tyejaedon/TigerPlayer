@@ -28,7 +28,9 @@ data class ArtistDetails(
     val genres: List<String> = emptyList(),
     val localPlayCount: Int = 0,
     val popularity: Int = 0,
-    val minutesListened: Int = 0
+    val minutesListened: Int = 0,
+    // Local library popularity share: artist minutes / lifetime minutes * 100.
+    val listeningSharePercent: Float = 0f
 )
 
 @Singleton
@@ -54,6 +56,13 @@ class MediaDataRepository @Inject constructor(
                 // Gather temporal stats directly from the local records
                 val localCount = tigerDao.getArtistPlayCount(cleanArtist)
                 val localMinutes = tigerDao.getArtistMinutesListened(cleanArtist)
+                val lifetimeMinutes = (tigerDao.getTotalListeningTimeMs().first() / 60_000L)
+                    .toInt()
+                    .coerceAtLeast(0)
+                val listeningSharePercent = calculateListeningSharePercent(
+                    artistMinutes = localMinutes,
+                    lifetimeMinutes = lifetimeMinutes
+                )
 
                 if (cachedData != null) {
                     emit(ArtistDetails(
@@ -62,7 +71,8 @@ class MediaDataRepository @Inject constructor(
                         bio = cachedData.bio,
                         genres = cachedData.genres?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
                         localPlayCount = localCount,
-                        minutesListened = localMinutes
+                        minutesListened = localMinutes,
+                        listeningSharePercent = listeningSharePercent
                     ))
                 }
 
@@ -109,7 +119,8 @@ class MediaDataRepository @Inject constructor(
                                     genres = genreList,
                                     popularity = spotifyDetail?.popularity ?: 0,
                                     localPlayCount = localCount,
-                                    minutesListened = localMinutes
+                                    minutesListened = localMinutes,
+                                    listeningSharePercent = listeningSharePercent
                                 )
 
                                 tigerDao.insertArtistCache(
@@ -136,7 +147,8 @@ class MediaDataRepository @Inject constructor(
                                     imageUrl = null,
                                     bio = voidBio,
                                     localPlayCount = localCount,
-                                    minutesListened = localMinutes
+                                    minutesListened = localMinutes,
+                                    listeningSharePercent = listeningSharePercent
                                 )
                             } else null
                         }
@@ -148,6 +160,12 @@ class MediaDataRepository @Inject constructor(
                 }
             }
         }.distinctUntilChanged().flowOn(Dispatchers.IO)
+    }
+
+    private fun calculateListeningSharePercent(artistMinutes: Int, lifetimeMinutes: Int): Float {
+        if (artistMinutes <= 0 || lifetimeMinutes <= 0) return 0f
+        return ((artistMinutes.toFloat() / lifetimeMinutes.toFloat()) * 100f)
+            .coerceIn(0f, 100f)
     }
 
     private fun List<LastFmImage>.getBestImage(): String? {

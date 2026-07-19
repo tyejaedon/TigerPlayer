@@ -68,10 +68,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.tigerplayer.BuildConfig
+import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.example.tigerplayer.data.local.DefaultPlayerView
 import com.example.tigerplayer.data.local.SkipShortAudio
 import com.example.tigerplayer.data.local.ThemeMode
 import com.example.tigerplayer.data.local.TigerAccentStyle
+import com.example.tigerplayer.service.HapticsDebugEvent
+import com.example.tigerplayer.service.HapticsDebugState
 import com.example.tigerplayer.ui.theme.PremiumGlassCard
 import com.example.tigerplayer.ui.theme.TigerCyberCyan
 import com.example.tigerplayer.ui.theme.TigerNeonOrange
@@ -90,6 +94,7 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.settingsState.collectAsStateWithLifecycle()
     val rescan by viewModel.libraryRescanState.collectAsStateWithLifecycle()
+    val hapticsDebug by viewModel.hapticsDebugState.collectAsStateWithLifecycle()
     val accent = accentColor(settings.accentStyle)
     
     var crossfadeSlider by remember(settings.crossfadeDurationSec) {
@@ -135,7 +140,7 @@ fun SettingsScreen(
             MatrixSection(title = "Core Visuals", icon = Icons.Rounded.Palette, accent = accent) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("THEME MODE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -154,7 +159,7 @@ fun SettingsScreen(
                     }
                 }
 
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 ListItem(
                     headlineContent = { Text("AMOLED BLACK", fontWeight = FontWeight.Bold) },
@@ -166,7 +171,7 @@ fun SettingsScreen(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
 
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("NEON ACCENT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
@@ -185,7 +190,7 @@ fun SettingsScreen(
                                     .background(swatch)
                                     .border(
                                         width = if (selected) 2.5.dp else 1.dp,
-                                        color = if (selected) Color.White else Color.White.copy(alpha = 0.3f),
+                                        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
                                         shape = CircleShape
                                     )
                                     .then(if (selected) Modifier.tigerGlow(swatch) else Modifier)
@@ -195,16 +200,18 @@ fun SettingsScreen(
                     }
                 }
 
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("DEFAULT PLAYER VIEW", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        DefaultPlayerView.entries.forEach { view ->
+                        DefaultPlayerView.entries
+                            .filter { it != DefaultPlayerView.SONIC_PRISM }
+                            .forEach { view ->
                             FilterChip(
                                 selected = settings.defaultPlayerView == view,
                                 onClick = { viewModel.setDefaultPlayerView(view) },
@@ -244,7 +251,7 @@ fun SettingsScreen(
                     )
                 }
 
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 ListItem(
                     headlineContent = { Text("GAPLESS FLOW", fontWeight = FontWeight.Bold) },
@@ -271,13 +278,65 @@ fun SettingsScreen(
 
                 ListItem(
                     headlineContent = { Text("HAPTIC RESONANCE", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("Kick-drum mechanical feedback") },
+                    supportingContent = { Text("Kick-drum mechanical feedback (uses app DSP route)") },
                     leadingContent = { Icon(Icons.Rounded.Vibration, null, tint = accent) },
                     trailingContent = {
                         Switch(checked = settings.audioReactiveHaptics, onCheckedChange = viewModel::setAudioReactiveHaptics)
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
+
+                AnimatedVisibility(
+                    visible = settings.audioReactiveHaptics,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        Text(
+                            text = "HAPTIC INTENSITY",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = accent,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AudioReactiveHapticsProfile.entries.forEach { profile ->
+                                FilterChip(
+                                    selected = settings.audioReactiveHapticsProfile == profile,
+                                    onClick = { viewModel.setAudioReactiveHapticsProfile(profile) },
+                                    label = {
+                                        val label = when (profile) {
+                                            AudioReactiveHapticsProfile.SUBTLE -> "SUBTLE"
+                                            AudioReactiveHapticsProfile.BALANCED -> "BALANCED"
+                                            AudioReactiveHapticsProfile.AGGRESSIVE -> "AGGRESSIVE"
+                                        }
+                                        Text(label)
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = accent.copy(alpha = 0.2f),
+                                        selectedLabelColor = accent
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (BuildConfig.DEBUG) {
+                    HorizontalDivider(
+                        Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                    )
+                    HapticsDebugPanel(
+                        debugState = hapticsDebug,
+                        accent = accent
+                    )
+                }
             }
 
             // --- LIBRARY UTILITIES ---
@@ -340,11 +399,11 @@ fun SettingsScreen(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
 
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.05f))
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("SKIP SHORT AUDIO", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -377,11 +436,69 @@ fun SettingsScreen(
                 onClick = viewModel::resetToDefaults,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Text("RESTORE PROTOCOL DEFAULTS", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
+                Text("RESTORE PROTOCOL DEFAULTS", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
             }
             
             Spacer(modifier = Modifier.height(40.dp))
         }
+    }
+}
+
+@Composable
+private fun HapticsDebugPanel(
+    debugState: HapticsDebugState,
+    accent: Color
+) {
+    val eventLabel = when (debugState.event) {
+        HapticsDebugEvent.IDLE -> "IDLE"
+        HapticsDebugEvent.STATUS -> "STATUS"
+        HapticsDebugEvent.SKIP -> "SKIP"
+        HapticsDebugEvent.FIRE -> "FIRE"
+    }
+
+    val reason = debugState.reason.ifBlank { "none" }
+
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(
+            text = "HAPTICS DEBUG",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Black,
+            color = accent,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "event=$eventLabel reason=$reason",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "enabled=${debugState.enabled} playing=${debugState.isPlaying} profile=${debugState.profile.name}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "routeToSystem=${debugState.routeToSystemDecoderDsp} bitPerfect=${debugState.isBitPerfectMode} cooldownLeft=${debugState.cooldownRemainingMs}ms",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "raw=${"%.3f".format(debugState.rawScore)} smooth=${"%.3f".format(debugState.smoothedScore)} min=${"%.3f".format(debugState.minScore)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "bass=${"%.3f".format(debugState.bass)} energy=${"%.3f".format(debugState.energy)} flux=${"%.3f".format(debugState.flux)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
+        Text(
+            text = "pulses=${debugState.pulseCount} amp=${debugState.amplitude} dur=${debugState.durationMs}ms",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+        )
     }
 }
 
@@ -402,17 +519,17 @@ private fun MatrixSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(accent.copy(alpha = 0.05f))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = title.uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     color = accent,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.5.sp
+                    letterSpacing = 1.2.sp
                 )
             }
             content()

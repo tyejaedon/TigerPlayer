@@ -26,10 +26,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -110,18 +114,29 @@ fun MiniPlayer(
                     MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
                 )
             )
+            val isLightTheme = MaterialTheme.colorScheme.background.luminance() > 0.5f
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(82.dp)
                     .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .testTag("mini_player_expand")
+                    .semantics { contentDescription = "Expand player" }
                     .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                    .shadow(24.dp, RoundedCornerShape(24.dp), spotColor = actionColor.copy(alpha = 0.3f))
+                    .shadow(
+                        elevation = if (isLightTheme) 14.dp else 24.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        spotColor = if (isLightTheme) Color.Black.copy(alpha = 0.18f) else actionColor.copy(alpha = 0.3f)
+                    )
                     .clip(RoundedCornerShape(24.dp))
                     .glassEffect(RoundedCornerShape(24.dp))
                     .background(glassBg)
-                    .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+                    .border(
+                        width = if (isLightTheme) 1.dp else 0.5.dp,
+                        color = if (isLightTheme) MaterialTheme.colorScheme.outlineVariant else Color.White.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(24.dp)
+                    )
                     .pointerInput(track.id) {
                         detectTapGestures(
                             onTap = { onExpandClick() },
@@ -207,7 +222,7 @@ fun MiniPlayer(
                         modifier = Modifier
                             .size(52.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)),
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = if (isLightTheme) 0.1f else 0.06f)),
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(
@@ -279,7 +294,7 @@ fun MiniPlayer(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.5.sp
                             ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isLightTheme) 0.9f else 0.7f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -297,7 +312,7 @@ fun MiniPlayer(
                             Icon(
                                 imageVector = Icons.Rounded.Favorite,
                                 contentDescription = "Favorite",
-                                tint = if (track.isLiked) MaterialTheme.igniRed else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
+                                tint = if (track.isLiked) MaterialTheme.igniRed else MaterialTheme.colorScheme.onSurface.copy(alpha = if (isLightTheme) 0.38f else 0.15f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }

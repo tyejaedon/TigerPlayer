@@ -16,7 +16,7 @@ import com.example.tigerplayer.data.local.TigerAccentStyle
 private val DarkColorScheme = darkColorScheme(
     primary = TigerNeonOrange,
     secondary = TigerElectricAmber,
-    tertiary = Color(0xFFFFD0A6),
+    tertiary = AardBlueDark,
 
     background = TigerBlack,
     surface = TigerDeepGrey,
@@ -30,29 +30,39 @@ private val DarkColorScheme = darkColorScheme(
     onBackground = TigerTextHigh,
     onSurface = TigerTextHigh,
     onSurfaceVariant = TigerTextMed,
+    error = IgniRedDark
 )
 
 // Extension for elevated surfaces in your Theme.kt
 val MaterialTheme.elevatedSurface: Color
     @Composable
-    get() = if (this.colorScheme.background.luminance() < 0.5f) TigerSurfaceCharcoal else TigerMutedSilk
+    get() = if (this.colorScheme.background.luminance() < 0.5f) TigerSurfaceCharcoal else Color(0xFFEFF3FA)
+
 private val LightColorScheme = lightColorScheme(
     primary = TigerNeonOrange,
     secondary = TigerElectricAmber,
-    tertiary = Color(0xFFB75517),
+    tertiary = AardBlueLight,
 
     background = TigerIvory,
     surface = TigerPaper,
     surfaceVariant = TigerMutedSilk,
-    primaryContainer = Color(0xFFFFE2C7),
-    secondaryContainer = Color(0xFFFFEBCF),
-    onPrimary = Color(0xFF3A1D0D),
-    onSecondary = Color(0xFF3D230B),
-    onPrimaryContainer = Color(0xFF4A2410),
+    primaryContainer = Color(0xFFFFE3CC),
+    secondaryContainer = Color(0xFFFFEFD8),
+    tertiaryContainer = Color(0xFFFFDCCD),
+    onPrimary = Color(0xFFFFFFFF),
+    onSecondary = Color(0xFF2F1809),
+    onPrimaryContainer = Color(0xFF3A1B0A),
+    onTertiary = Color(0xFFFFFFFF),
+    onTertiaryContainer = Color(0xFF3A1A0C),
 
     onBackground = TigerTextInverse,
     onSurface = TigerTextInverse,
-    onSurfaceVariant = Color(0xFF6D5A49),
+    onSurfaceVariant = Color(0xFF4B5563),
+    outline = Color(0xFF8E98A7),
+    outlineVariant = Color(0xFFC8D0DC),
+    surfaceTint = TigerNeonOrange,
+    error = IgniRedLight,
+    onError = Color.White
 )
 
 // ------------------------------
@@ -104,13 +114,13 @@ fun TigerPlayerTheme(
 }
 
 // ------------------------------
-// SAMSUNG-STYLE EXTENSIONS
+// SAMSUNG-STYLE EXTENSIONS (Mapped Semantically)
 // ------------------------------
 val MaterialTheme.aardBlue: Color
     @Composable
-    get() = if (this.colorScheme.background.luminance() < 0.5f) AardBlueDark else AardBlueLight
+    get() = this.colorScheme.tertiary
 
 val MaterialTheme.igniRed: Color
     @Composable
-    get() = if (this.colorScheme.background.luminance() < 0.5f) IgniRedDark else IgniRedLight
+    get() = this.colorScheme.error
 

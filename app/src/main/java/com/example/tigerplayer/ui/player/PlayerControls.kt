@@ -41,12 +41,12 @@ fun PlaybackControls(
                 Icon(
                     imageVector = WitcherIcons.Shuffle,
                     contentDescription = "Shuffle",
-                    tint = if (uiState.isShuffleEnabled) aardBlue else textColor.copy(alpha = 0.6f),
+                    tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
             }
             IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
-                Icon(WitcherIcons.Previous, "Previous", modifier = Modifier.size(36.dp), tint = textColor)
+                Icon(WitcherIcons.Previous, "Previous", modifier = Modifier.size(36.dp), tint = Color.White)
             }
         }
 
@@ -93,13 +93,13 @@ fun PlaybackControls(
 
         Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
-                Icon(WitcherIcons.Next, "Next", modifier = Modifier.size(36.dp), tint = textColor)
+                Icon(WitcherIcons.Next, "Next", modifier = Modifier.size(36.dp), tint = Color.White)
             }
             IconButton(onClick = onRepeatToggle) {
                 Icon(
                     imageVector = when (uiState.repeatMode) { Player.REPEAT_MODE_ONE -> WitcherIcons.RepeatOne else -> WitcherIcons.Repeat },
                     contentDescription = "Repeat",
-                    tint = if (uiState.repeatMode != Player.REPEAT_MODE_OFF) aardBlue else textColor.copy(alpha = 0.6f),
+                    tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
             }

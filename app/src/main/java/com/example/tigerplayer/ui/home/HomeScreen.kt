@@ -75,7 +75,10 @@ fun HomeScreen(
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigatetoArtist: (String) -> Unit,
+    onNavigateToDaylist: () -> Unit,
+    onNavigateToDiscoverWeekly: () -> Unit,
     homeViewModel: HomeViewModel,
+    prismViewModel: PrismViewModel,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val homeState by viewModel.homeUiState.collectAsStateWithLifecycle()
@@ -182,6 +185,12 @@ fun HomeScreen(
                     )
                 }
 
+                if (uiState.connectedBluetoothDevice.isConnected) {
+                    item {
+                        BluetoothNexusCard(deviceInfo = uiState.connectedBluetoothDevice)
+                    }
+                }
+
                 item {
                     SectionTitle("THE NEXUS")
                     Row(
@@ -210,7 +219,6 @@ fun HomeScreen(
                 }
 
                 item {
-                    val prismViewModel: PrismViewModel = hiltViewModel()
                     SonicPrismHubCard(viewModel = prismViewModel)
                 }
 
@@ -238,10 +246,10 @@ fun HomeScreen(
                         ) {
                             if (daylistTracks.isNotEmpty()) {
                                 CurationRow(
-                                    title = "DAYLIST",
+                                    title = "DAY LIST",
                                     count = daylistTracks.size,
                                     color = AardBlue,
-                                    onClick = { viewModel.setPlaylistAndPlay(daylistTracks, 0) }
+                                    onClick = onNavigateToDaylist
                                 )
                             }
                             if (discoveryWeeklyTracks.isNotEmpty()) {
@@ -249,7 +257,7 @@ fun HomeScreen(
                                     title = "DISCOVERY WEEKLY",
                                     count = discoveryWeeklyTracks.size,
                                     color = SpotifyGreen,
-                                    onClick = { viewModel.setPlaylistAndPlay(discoveryWeeklyTracks, 0) }
+                                    onClick = onNavigateToDiscoverWeekly
                                 )
                             }
                         }
@@ -343,9 +351,8 @@ fun NexusGatewayCard(
     Box(
         modifier = modifier
             .height(110.dp)
-            .shadow(12.dp, MaterialTheme.shapes.extraLarge, spotColor = color.copy(alpha = 0.25f))
             .clip(MaterialTheme.shapes.extraLarge)
-            .background(Brush.linearGradient(listOf(color.copy(alpha = 0.15f), Color.Transparent)))
+            .background(Brush.linearGradient(listOf(color.copy(alpha = 0.56f), Color.Transparent)))
             .border(1.dp, color.copy(alpha = 0.15f), MaterialTheme.shapes.extraLarge)
             .bounceClick { onClick() }
             .padding(18.dp)
@@ -361,7 +368,7 @@ fun NexusGatewayCard(
             }
             Column {
                 Text(text = title, style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f), maxLines = 1)
+                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
             }
         }
     }
@@ -370,16 +377,14 @@ fun NexusGatewayCard(
 @Composable
 fun SonicPrismHubCard(viewModel: PrismViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var isExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 16.dp)
-            .shadow(16.dp, MaterialTheme.shapes.extraLarge, spotColor = SonicCyan.copy(alpha = 0.2f))
             .clip(MaterialTheme.shapes.extraLarge)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.extraLarge)
+            .background(MaterialTheme.colorScheme.background)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), MaterialTheme.shapes.extraLarge)
             .padding(16.dp)
     ) {
         Row(
@@ -391,30 +396,28 @@ fun SonicPrismHubCard(viewModel: PrismViewModel) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(SonicCyan.copy(alpha = 0.15f), CircleShape),
+                        .shadow(4.dp, CircleShape, ambientColor = Color.Transparent, spotColor = SonicCyan.copy(alpha = 0.2f))
+                        .border(1.dp, SonicCyan.copy(alpha = 0.2f), CircleShape)
+                        .background(SonicCyan.copy(alpha = 0.55f),CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Rounded.GraphicEq, null, tint = SonicCyan, modifier = Modifier.size(20.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text("SONIC PRISM", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = Color.White)
-                    Text("Real-time isolation hub", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                    Text("SONIC PRISM", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground)
+                    Text("Real-time isolation hub", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f))
                 }
             }
 
             Switch(
-                checked = isExpanded,
-                onCheckedChange = { 
-                    isExpanded = it
-                    viewModel.setPrismEnabled(it)
-                    if (!it) viewModel.disablePrismAndReset()
-                },
+                checked = state.isPrismEnabled,
+                onCheckedChange = viewModel::setPrismEnabled,
                 colors = SwitchDefaults.colors(checkedThumbColor = SonicCyan, checkedTrackColor = SonicCyan.copy(alpha = 0.3f))
             )
         }
 
-        AnimatedVisibility(visible = isExpanded) {
+        AnimatedVisibility(visible = state.isPrismEnabled) {
             Column {
                 Spacer(modifier = Modifier.height(24.dp))
                 PrismInlineMixer(
@@ -422,11 +425,15 @@ fun SonicPrismHubCard(viewModel: PrismViewModel) {
                     onVocalsChange = viewModel::updateVocals,
                     onBeatsChange = viewModel::updateBeats,
                     onInstrumentsChange = viewModel::updateInstruments,
+                    onEnabledChange = viewModel::setPrismEnabled,
+                    onPresetSelected = viewModel::applyPreset,
+                    onResetRequested = viewModel::resetMixToBalanced,
+                    onSpectralAnalysisChange = viewModel::setSpectralAnalysis,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(200.dp)
                         .clip(MaterialTheme.shapes.large)
-                        .background(Color.Black.copy(alpha = 0.2f))
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f))
                         .padding(vertical = 12.dp)
                 )
             }
@@ -459,14 +466,14 @@ fun CurationRow(
                 .background(color.copy(alpha = 0.2f), MaterialTheme.shapes.medium),
             contentAlignment = Alignment.Center
         ) {
-            Icon(WitcherIcons.Playlist, null, tint = color, modifier = Modifier.size(22.dp))
+            Icon(WitcherIcons.Radio, null, tint = color, modifier = Modifier.size(22.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = Color.White)
-            Text("$count Chants Manifested", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground)
+            Text("$count Chants Manifested", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground)
         }
-        Icon(WitcherIcons.ChevronRight, null, tint = Color.White.copy(alpha = 0.3f))
+        Icon(WitcherIcons.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f))
     }
 }
 
@@ -591,7 +598,7 @@ fun UserStatisticsHeader(statistics: UserStatistics, onClick: () -> Unit) {
         ) {
             Column {
                 Text("ARCHIVE ANALYTICS", style = MaterialTheme.typography.labelMedium, color = AardBlue, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
-                Text("Your sessional wisdom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text("Your sessional wisdom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f))
             }
             Icon(WitcherIcons.Expand, null, tint = AardBlue.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
         }
@@ -632,7 +639,7 @@ fun StatGlassWidget(
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(verticalArrangement = Arrangement.Center) {
-                Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, maxLines = 1)
+                Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, maxLines = 1)
                 Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -644,10 +651,10 @@ fun SectionTitle(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
         fontWeight = FontWeight.Black,
         letterSpacing = 2.sp,
-        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 12.dp)
+        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 30.dp, bottom = 14.dp)
     )
 }
 
@@ -663,7 +670,7 @@ fun HomeHeader(
             .fillMaxWidth()
             .statusBarsPadding()
             .padding(horizontal = 24.dp, vertical = 12.dp)
-            .height(56.dp),
+            .height(60.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
 

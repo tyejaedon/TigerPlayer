@@ -59,12 +59,24 @@ class QueueViewModel @Inject constructor(
 					else -> controller.currentMediaItemIndex.coerceIn(-1, queue.lastIndex)
 				}
 				val currentTrack = queue.getOrNull(currentIndex)
-				val upcoming = if (isShuffleEnabled) {
-					queue.filterIndexed { idx, _ -> idx != currentIndex }
-				} else if (currentIndex in queue.indices) {
-					queue.drop(currentIndex + 1)
-				} else {
-					queue
+
+				// FIX: Truthful ExoPlayer Timeline Traversal
+				val upcoming = mutableListOf<AudioTrack>()
+				if (controller != null && controller.currentTimeline.windowCount > 0) {
+					var loopIndex = controller.nextMediaItemIndex
+					var itemsAdded = 0
+					val maxItems = controller.mediaItemCount - 1
+
+					// Traverse until we hit the end, capped by max items to prevent infinite repeat loops
+					while (loopIndex != androidx.media3.common.C.INDEX_UNSET && itemsAdded < maxItems) {
+						upcoming.add(fallbackTrackFromMediaItem(controller.getMediaItemAt(loopIndex)))
+						loopIndex = controller.currentTimeline.getNextWindowIndex(
+							loopIndex,
+							androidx.media3.common.Player.REPEAT_MODE_OFF, // Ignore repeat for UI preview
+							isShuffleEnabled
+						)
+						itemsAdded++
+					}
 				}
 
 				QueueUiState(
@@ -78,7 +90,6 @@ class QueueViewModel @Inject constructor(
 			}.collect { _uiState.value = it }
 		}
 	}
-
 	private fun fallbackTrackFromMediaItem(mediaItem: MediaItem): AudioTrack {
 		val metadata = mediaItem.mediaMetadata
 		val extras = metadata.extras

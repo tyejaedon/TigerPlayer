@@ -19,8 +19,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -40,16 +46,19 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.tigerplayer.data.local.PrismSpectralAnalysis
 import com.example.tigerplayer.ui.theme.TigerCyberCyan
 import com.example.tigerplayer.ui.theme.TigerNeonOrange
 import com.example.tigerplayer.ui.theme.TigerSurfaceFloating
 import com.example.tigerplayer.ui.theme.TigerToxicLime
 import com.example.tigerplayer.ui.theme.bounceClick
+import java.util.Locale
 
 private val PrismBackdrop = Color(0xFF06070A)
 private val PrismPanel = Color(0xFF11131A)
@@ -97,7 +106,7 @@ fun SonicPrismHub(
                         letterSpacing = 2.sp
                     )
                     Text(
-                        text = "ISOLATE VOCALS, BEATS, AND MELODY",
+                        text = if (state.isPrismEnabled) "${state.preset.displayName.uppercase()} PROFILE ACTIVE" else "ISOLATE VOCALS, BEATS, AND MELODY",
                         color = PrismText.copy(alpha = 0.65f),
                         style = MaterialTheme.typography.labelMedium,
                         letterSpacing = 1.sp
@@ -130,6 +139,10 @@ fun SonicPrismHub(
                 onVocalsChange = viewModel::updateVocals,
                 onBeatsChange = viewModel::updateBeats,
                 onInstrumentsChange = viewModel::updateInstruments,
+                onEnabledChange = viewModel::setPrismEnabled,
+                onPresetSelected = viewModel::applyPreset,
+                onResetRequested = viewModel::resetMixToBalanced,
+                onSpectralAnalysisChange = viewModel::setSpectralAnalysis,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -147,31 +160,212 @@ fun PrismInlineMixer(
     onVocalsChange: (Float) -> Unit,
     onBeatsChange: (Float) -> Unit,
     onInstrumentsChange: (Float) -> Unit,
+    onEnabledChange: ((Boolean) -> Unit)? = null,
+    onPresetSelected: ((PrismPreset) -> Unit)? = null,
+    onResetRequested: (() -> Unit)? = null,
+    onSpectralAnalysisChange: ((PrismSpectralAnalysis) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    val dominantBandIndex = state.spectralBands.indices.maxByOrNull { state.spectralBands[it] } ?: 0
+    val dominantLabel = when (dominantBandIndex) {
+        0 -> "60 Hz"
+        1 -> "250 Hz"
+        2 -> "1 kHz"
+        3 -> "2.5 kHz"
+        4 -> "6 kHz"
+        else -> "12 kHz"
+    }
+    val analysisProfileLabel = remember(state.observedAnalysisMode, state.analysisCostMicros) {
+        val modeLabel = if (state.observedAnalysisMode == PrismSpectralAnalysis.FFT) "FFT" else "Bandpass"
+        val costMs = state.analysisCostMicros.coerceAtLeast(0f) / 1_000f
+        "Profiler: $modeLabel ${String.format(Locale.US, "%.2f", costMs)} ms/window"
+    }
+
+    Column(
         modifier = modifier,
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        PrismFader(
-            label = "VOCALS",
-            value = state.vocals,
-            activeColor = TigerNeonOrange,
-            onValueChange = onVocalsChange
-        )
-        PrismFader(
-            label = "BEATS",
-            value = state.beats,
-            activeColor = TigerCyberCyan,
-            onValueChange = onBeatsChange
-        )
-        PrismFader(
-            label = "MELODY",
-            value = state.instruments,
-            activeColor = TigerToxicLime,
-            onValueChange = onInstrumentsChange
-        )
+        if (onEnabledChange != null || onResetRequested != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (state.isPrismEnabled) "Prism Enabled" else "Prism Bypassed",
+                    color = PrismText.copy(alpha = 0.84f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    onResetRequested?.let {
+                        IconButton(
+                            onClick = it,
+                            modifier = Modifier.testTag(PrismTestTags.RESET_BUTTON)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Reset Prism Mix",
+                                tint = PrismText.copy(alpha = 0.86f)
+                            )
+                        }
+                    }
+                    onEnabledChange?.let {
+                        Switch(
+                            checked = state.isPrismEnabled,
+                            onCheckedChange = it,
+                            modifier = Modifier.testTag(PrismTestTags.ENABLE_SWITCH),
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = TigerCyberCyan,
+                                checkedTrackColor = TigerCyberCyan.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        if (onPresetSelected != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    PrismPreset.BALANCED,
+                    PrismPreset.VOCAL_FOCUS,
+                    PrismPreset.BEAT_PUNCH,
+                    PrismPreset.INSTRUMENTAL
+                ).forEach { preset ->
+                    val selected = state.preset == preset
+                    AssistChip(
+                        onClick = { onPresetSelected(preset) },
+                        modifier = Modifier.testTag(PrismTestTags.presetChip(preset)),
+                        label = { Text(preset.displayName) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (selected) TigerCyberCyan.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f),
+                            labelColor = if (selected) TigerCyberCyan else PrismText.copy(alpha = 0.84f)
+                        )
+                    )
+                }
+            }
+        }
+
+        if (onSpectralAnalysisChange != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Analysis",
+                    color = PrismText.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                AssistChip(
+                    onClick = { onSpectralAnalysisChange(PrismSpectralAnalysis.FFT) },
+                    modifier = Modifier.testTag(PrismTestTags.ANALYSIS_FFT_CHIP),
+                    label = { Text("FFT") },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (state.spectralAnalysis == PrismSpectralAnalysis.FFT) {
+                            TigerCyberCyan.copy(alpha = 0.22f)
+                        } else {
+                            Color.White.copy(alpha = 0.06f)
+                        },
+                        labelColor = if (state.spectralAnalysis == PrismSpectralAnalysis.FFT) {
+                            TigerCyberCyan
+                        } else {
+                            PrismText.copy(alpha = 0.84f)
+                        }
+                    )
+                )
+                AssistChip(
+                    onClick = { onSpectralAnalysisChange(PrismSpectralAnalysis.BANDPASS) },
+                    modifier = Modifier.testTag(PrismTestTags.ANALYSIS_BANDPASS_CHIP),
+                    label = { Text("Bandpass") },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (state.spectralAnalysis == PrismSpectralAnalysis.BANDPASS) {
+                            TigerCyberCyan.copy(alpha = 0.22f)
+                        } else {
+                            Color.White.copy(alpha = 0.06f)
+                        },
+                        labelColor = if (state.spectralAnalysis == PrismSpectralAnalysis.BANDPASS) {
+                            TigerCyberCyan
+                        } else {
+                            PrismText.copy(alpha = 0.84f)
+                        }
+                    )
+                )
+            }
+            Text(
+                text = analysisProfileLabel,
+                modifier = Modifier.testTag(PrismTestTags.ANALYSIS_PROFILE_LABEL),
+                color = PrismText.copy(alpha = 0.68f),
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 0.3.sp
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(PrismTestTags.SPECTRAL_SECTION),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Dominant: $dominantLabel",
+                modifier = Modifier.testTag(PrismTestTags.DOMINANT_BAND_LABEL),
+                color = PrismText.copy(alpha = 0.82f),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                state.spectralBands.forEachIndexed { index, value ->
+                    val barHeight = (value.coerceIn(0f, 1f) * 34f + 6f).dp
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(barHeight)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (index == dominantBandIndex) TigerCyberCyan.copy(alpha = 0.9f)
+                                else PrismText.copy(alpha = 0.28f)
+                            )
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PrismFader(
+                label = "VOCALS",
+                value = state.vocals,
+                activeColor = TigerNeonOrange,
+                onValueChange = onVocalsChange
+            )
+            PrismFader(
+                label = "BEATS",
+                value = state.beats,
+                activeColor = TigerCyberCyan,
+                onValueChange = onBeatsChange
+            )
+            PrismFader(
+                label = "MELODY",
+                value = state.instruments,
+                activeColor = TigerToxicLime,
+                onValueChange = onInstrumentsChange
+            )
+        }
     }
 }
 

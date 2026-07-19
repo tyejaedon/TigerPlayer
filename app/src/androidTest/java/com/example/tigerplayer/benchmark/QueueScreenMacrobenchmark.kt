@@ -1,11 +1,10 @@
 package com.example.tigerplayer.benchmark
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
@@ -15,7 +14,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-@RequiresApi(Build.VERSION_CODES.Q)
+@SdkSuppress(minSdkVersion = 29)
 @RunWith(AndroidJUnit4::class)
 class QueueScreenMacrobenchmark {
 
@@ -33,21 +32,31 @@ class QueueScreenMacrobenchmark {
                 pressHome()
                 startActivityAndWait()
 
-                // Open mini player/full player and jump to queue action.
                 val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                 val display = device.displayWidth to device.displayHeight
-                val centerX = display.first / 2
-                val bottomY = (display.second * 0.93f).toInt()
-                device.click(centerX, bottomY)
+
+                val miniPlayer = device.wait(Until.findObject(By.desc("Expand player")), 3_500)
+                if (miniPlayer != null) {
+                    miniPlayer.click()
+                } else {
+                    val centerX = display.first / 2
+                    val bottomY = (display.second * 0.93f).toInt()
+                    device.click(centerX, bottomY)
+                }
                 device.waitForIdle()
 
-                // Queue icon has no contentDescription, so coordinate fallback near top-right action row.
-                device.click((display.first * 0.84f).toInt(), (display.second * 0.16f).toInt())
-                device.wait(Until.findObject(By.textContains("UP NEXT")), 3_500)
+                val queueButton = device.wait(Until.findObject(By.desc("Open queue view")), 3_500)
+                if (queueButton != null) {
+                    queueButton.click()
+                } else {
+                    device.click((display.first * 0.84f).toInt(), (display.second * 0.16f).toInt())
+                }
+                device.wait(Until.findObject(By.desc("Player queue list")), 3_500)
             }
         ) {
             val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            val list = device.findObject(By.scrollable(true))
+            val list = device.findObject(By.desc("Player queue list"))
+                ?: device.findObject(By.scrollable(true))
 
             if (list != null) {
                 list.scroll(Direction.DOWN, 1.0f)

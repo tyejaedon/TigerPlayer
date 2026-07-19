@@ -1,34 +1,11 @@
 package com.example.tigerplayer.di
 
-import android.content.Context
-import com.example.tigerplayer.data.local.PlaybackPrefs
-import com.example.tigerplayer.data.local.SettingsDataStore
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.MediaDataRepository
-import com.example.tigerplayer.service.MediaControllerManager
 import dagger.Module
-import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
 
 @Module
-@InstallIn(SingletonComponent::class) // This makes the engine live as long as the app is alive
+@InstallIn(SingletonComponent::class)
 object MediaModule {
-
-    @Provides
-    @Singleton
-    fun provideMediaControllerManager(
-        @ApplicationContext context: Context,
-        playbackPrefs: PlaybackPrefs,
-        settingsDataStore: SettingsDataStore,
-        audioRepository: AudioRepository,
-        mediaDataRepository: MediaDataRepository
-    ): MediaControllerManager {
-        // Hilt will automatically pass the dependencies into your Manager
-        return MediaControllerManager(
-            context, playbackPrefs, settingsDataStore, audioRepository, mediaDataRepository
-        )
-    }
+    // MediaControllerManager is now self-providing via @Inject constructor
 }

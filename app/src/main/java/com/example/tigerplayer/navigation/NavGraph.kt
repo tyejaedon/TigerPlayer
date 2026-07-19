@@ -29,6 +29,8 @@ import androidx.navigation.*
 import androidx.navigation.compose.*
 import com.example.tigerplayer.R
 import com.example.tigerplayer.ui.cloud.*
+import com.example.tigerplayer.ui.home.DaylistDetailScreen
+import com.example.tigerplayer.ui.home.DiscoverWeeklyDetailScreen
 import com.example.tigerplayer.ui.library.*
 import com.example.tigerplayer.ui.main.MainScreen
 import com.example.tigerplayer.ui.permissions.PermissionScreen
@@ -162,6 +164,12 @@ fun TigerPlayerNavGraph(
                 onNavigateToPlaylist = { id, name ->
                     navController.navigate(Screen.LocalPlaylist.createRoute(id, name))
                 },
+                onNavigateToDaylistDetail = {
+                    navController.navigate(Screen.DaylistDetail.createRoute(origin = "home_curation_daylist"))
+                },
+                onNavigateToDiscoverWeeklyDetail = {
+                    navController.navigate(Screen.DiscoverWeeklyDetail.createRoute(origin = "home_curation_discover_weekly"))
+                },
                 onNavigateToNavidromeLogin = {
                     navController.navigate(Screen.NavidromeLogin.route)
                 },
@@ -184,6 +192,52 @@ fun TigerPlayerNavGraph(
 
         composable(Screen.Queue.route) {
             QueueScreen(onBackClick = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Screen.DaylistDetail.route,
+            arguments = listOf(navArgument("origin") { type = NavType.StringType; defaultValue = "home" }),
+            enterTransition = {
+                slideInVertically(
+                    initialOffsetY = { it / 3 },
+                    animationSpec = tween(420, easing = FastOutSlowInEasing)
+                ) + fadeIn(tween(320))
+            },
+            popExitTransition = {
+                slideOutVertically(
+                    targetOffsetY = { it / 4 },
+                    animationSpec = tween(260)
+                ) + fadeOut(tween(220))
+            }
+        ) {
+            DaylistDetailScreen(
+                viewModel = playerViewModel,
+                originTag = it.decodeArg("origin", "home"),
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.DiscoverWeeklyDetail.route,
+            arguments = listOf(navArgument("origin") { type = NavType.StringType; defaultValue = "home" }),
+            enterTransition = {
+                slideInVertically(
+                    initialOffsetY = { it / 3 },
+                    animationSpec = tween(420, easing = FastOutSlowInEasing)
+                ) + fadeIn(tween(320))
+            },
+            popExitTransition = {
+                slideOutVertically(
+                    targetOffsetY = { it / 4 },
+                    animationSpec = tween(260)
+                ) + fadeOut(tween(220))
+            }
+        ) {
+            DiscoverWeeklyDetailScreen(
+                viewModel = playerViewModel,
+                originTag = it.decodeArg("origin", "home"),
+                onBackClick = { navController.popBackStack() }
+            )
         }
 
         // ----------------------------------

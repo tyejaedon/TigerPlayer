@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.library
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,8 +32,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.tigerplayer.data.repository.ArtistDetails
+import com.example.tigerplayer.ui.theme.TigerElectricAmber
+import com.example.tigerplayer.ui.theme.TigerTextHigh
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.glassEffect
+import java.util.Locale
 
 
 fun formatMinutesListened(totalMinutes: Int): String {
@@ -45,6 +50,11 @@ fun formatMinutesListened(totalMinutes: Int): String {
         }
     }
 }
+
+private fun formatPopularityPercent(percent: Float): String {
+    return String.format(Locale.US, "%.1f%%", percent.coerceIn(0f, 100f))
+}
+
 @Composable
 fun ArtistHeroImage(model: Any?, artistName: String) {
     AsyncImage(
@@ -67,6 +77,13 @@ fun ArtistHeroImage(model: Any?, artistName: String) {
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun ArtistVanguardStats(profile: ArtistDetails?, accentColor: Color) {
+    val listeningSharePercent = (profile?.listeningSharePercent ?: 0f).coerceIn(0f, 100f)
+    val totalMinutes = profile?.minutesListened ?: 0
+    val shareProgress by animateFloatAsState(
+        targetValue = listeningSharePercent / 100f,
+        label = "ArtistListeningShareProgress"
+    )
+
     Column(
         modifier = Modifier
             .padding(16.dp)
@@ -85,19 +102,40 @@ fun ArtistVanguardStats(profile: ArtistDetails?, accentColor: Color) {
                 Text(
                     text = "VANGUARD DOSSIER",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.surfaceBright,
+                    color = TigerTextHigh,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 2.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Global Resonance: ${profile?.popularity ?: 0}%",
+                    text = "Library Popularity: ${formatPopularityPercent(profile?.listeningSharePercent ?: 0f)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { shareProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape),
+                    color = TigerElectricAmber,
+                    trackColor = TigerElectricAmber.copy(alpha = 0.2f)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "${formatMinutesListened(totalMinutes)} of lifetime listening minutes",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
+                )
+                Text(
+                    text = "Global Resonance: ${profile?.popularity ?: 0}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+                )
             }
 
-            val totalMinutes = profile?.minutesListened ?: 0
+
             ArtistMetadataBadge(
                 text = formatMinutesListened(totalMinutes),
                 textColor = if (totalMinutes >= 60) MaterialTheme.aardBlue else Color.Gray,

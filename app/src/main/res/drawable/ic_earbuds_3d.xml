@@ -1,0 +1,184 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+
+    <!-- ========================================== -->
+    <!--          CHARGING CASE BACKGROUND          -->
+    <!-- ========================================== -->
+
+    <!-- Case Outer Drop Shadow -->
+    <path
+        android:fillColor="#26000000"
+        android:pathData="M 14,28 C 14,16 18,12 34,12 C 50,12 54,16 54,28 V 40 C 54,52 50,56 34,56 C 18,56 14,52 14,40 Z" />
+
+    <!-- Case Outer Shell (Dark Metallic Finish) -->
+    <path android:pathData="M 12,26 C 12,14 16,10 32,10 C 48,10 52,14 52,26 V 38 C 52,50 48,54 32,54 C 16,54 12,50 12,38 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="20" android:startY="10" android:endX="44" android:endY="54">
+                <item android:offset="0.0" android:color="#FF3A3D44" />
+                <item android:offset="0.4" android:color="#FF1A1C20" />
+                <item android:offset="1.0" android:color="#FF0B0C0E" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Case Inner Rim (Shiny Chamfered Bezel) -->
+    <path android:pathData="M 13,26 C 13,15 17,11 32,11 C 47,11 51,15 51,26 V 38 C 51,49 47,53 32,53 C 17,53 13,49 13,38 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="13" android:startY="11" android:endX="51" android:endY="53">
+                <item android:offset="0.0" android:color="#FFBCC2D1" />
+                <item android:offset="0.3" android:color="#FF41444F" />
+                <item android:offset="0.7" android:color="#FF8A8E9C" />
+                <item android:offset="1.0" android:color="#FF2F3138" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Case Inner Cavity (Matte Black Depth) -->
+    <path android:pathData="M 14,26 C 14,16 18,12 32,12 C 46,12 50,16 50,26 V 38 C 50,48 46,52 32,52 C 18,52 14,48 14,38 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="32" android:startY="12" android:endX="32" android:endY="52">
+                <item android:offset="0.0" android:color="#FF1B1D22" />
+                <item android:offset="1.0" android:color="#FF030304" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Case Charging Indicator (Cyan Glow) -->
+    <path android:fillColor="#4D00E5FF" android:pathData="M 32,44 a 3,3 0 1 0 0,6 a 3,3 0 1 0 0,-6" />
+    <path android:fillColor="#FF00E5FF" android:pathData="M 32,45.5 a 1.5,1.5 0 1 0 0,3 a 1.5,1.5 0 1 0 0,-3" />
+
+
+    <!-- ========================================== -->
+    <!--                LEFT EARBUD                 -->
+    <!-- ========================================== -->
+
+    <!-- Left Stem Drop Shadow -->
+    <path android:fillColor="#99000000" android:pathData="M 21,26 v 16 a 3,3 0 0 0 6,0 v -16 z" />
+
+    <!-- Left Stem Body (Pearl / Silver) -->
+    <path android:pathData="M 20,24 v 16 a 3,3 0 0 0 6,0 v -16 z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="20" android:startY="32" android:endX="26" android:endY="32">
+                <item android:offset="0.0" android:color="#FFE8EAF6" />
+                <item android:offset="0.4" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#FFB0B3C4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Left Charging Contacts (Bottom of stem) -->
+    <path android:fillColor="#FF7A8090" android:pathData="M 21,41 h4 v1 h-4 z" />
+    <path android:fillColor="#FF7A8090" android:pathData="M 21,39.5 h4 v0.5 h-4 z" />
+
+    <!-- Left LED Indicator (Cyan Glow) -->
+    <path android:fillColor="#3300E5FF" android:pathData="M 23,33 a 2,2 0 1 0 0,4 a 2,2 0 1 0 0,-4" />
+    <path android:fillColor="#FF00E5FF" android:pathData="M 23,34 a 1,1 0 1 0 0,2 a 1,1 0 1 0 0,-2" />
+
+    <!-- Left Silicone Tip Base Shadow -->
+    <path android:fillColor="#66000000" android:pathData="M 29,17.5 c 5,0 7,1.5 7,3.5 c 0,2 -2,3.5 -7,3.5 z" />
+
+    <!-- Left Silicone Tip (Dark Grey) -->
+    <path android:pathData="M 29,17 c 5,0 7,1.5 7,3.5 c 0,2 -2,3.5 -7,3.5 z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="29" android:startY="17" android:endX="36" android:endY="24">
+                <item android:offset="0.0" android:color="#DD333333" />
+                <item android:offset="1.0" android:color="#DD0A0A0A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Left Silicone Tip Acoustic Opening -->
+    <path android:fillColor="#FF000000" android:pathData="M 33.5,19 c 1,0 1.5,0.7 1.5,1.5 c 0,0.8 -0.5,1.5 -1.5,1.5 c -1,0 -1,-0.7 -1,-1.5 c 0,-0.8 0,-1.5 1,-1.5 z" />
+
+    <!-- Left Head Ambient Shadow -->
+    <path android:fillColor="#99000000" android:pathData="M 16,21 a 8,8 0 1 0 16,0 a 8,8 0 1 0 -16,0" />
+
+    <!-- Left Head Body (3D Glossy Sphere) -->
+    <path android:pathData="M 15,19 a 8,8 0 1 0 16,0 a 8,8 0 1 0 -16,0">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="21" android:centerY="17" android:gradientRadius="10">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.6" android:color="#FFDADDED" />
+                <item android:offset="1.0" android:color="#FF9B9EAD" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Left Acoustic/Sensor Mesh -->
+    <path android:fillColor="#FF111111" android:pathData="M 17,19 a 2,3 0 1 0 4,0 a 2,3 0 1 0 -4,0" />
+    <path android:fillColor="#FF2A2A2A" android:pathData="M 17.5,19 a 1.5,2.5 0 1 0 3,0 a 1.5,2.5 0 1 0 -3,0" />
+    <path android:fillColor="#FF111111" android:pathData="M 23,12 a 2.5,1 0 1 0 0,2 a 2.5,1 0 1 0 0,-2" />
+
+    <!-- Left Glass Highlight (Crescent Arc) -->
+    <path android:fillColor="#CCFFFFFF" android:pathData="M 17,14 Q 21,12 25,14 Q 21,13.5 17,14 Z" />
+
+
+    <!-- ========================================== -->
+    <!--                RIGHT EARBUD                -->
+    <!-- ========================================== -->
+
+    <!-- Right Stem Drop Shadow -->
+    <path android:fillColor="#99000000" android:pathData="M 39,26 v 16 a 3,3 0 0 0 6,0 v -16 z" />
+
+    <!-- Right Stem Body (Pearl / Silver) -->
+    <path android:pathData="M 38,24 v 16 a 3,3 0 0 0 6,0 v -16 z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="38" android:startY="32" android:endX="44" android:endY="32">
+                <item android:offset="0.0" android:color="#FFE8EAF6" />
+                <item android:offset="0.4" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#FFB0B3C4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Right Charging Contacts -->
+    <path android:fillColor="#FF7A8090" android:pathData="M 39,41 h4 v1 h-4 z" />
+    <path android:fillColor="#FF7A8090" android:pathData="M 39,39.5 h4 v0.5 h-4 z" />
+
+    <!-- Right LED Indicator (Pink Glow) -->
+    <path android:fillColor="#33FF7FEF" android:pathData="M 41,33 a 2,2 0 1 0 0,4 a 2,2 0 1 0 0,-4" />
+    <path android:fillColor="#FFFF7FEF" android:pathData="M 41,34 a 1,1 0 1 0 0,2 a 1,1 0 1 0 0,-2" />
+
+    <!-- Right Silicone Tip Base Shadow -->
+    <path android:fillColor="#66000000" android:pathData="M 35,17.5 c -5,0 -7,1.5 -7,3.5 c 0,2 2,3.5 7,3.5 z" />
+
+    <!-- Right Silicone Tip (Dark Grey) -->
+    <path android:pathData="M 35,17 c -5,0 -7,1.5 -7,3.5 c 0,2 2,3.5 7,3.5 z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="35" android:startY="17" android:endX="28" android:endY="24">
+                <item android:offset="0.0" android:color="#DD333333" />
+                <item android:offset="1.0" android:color="#DD0A0A0A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Right Silicone Tip Acoustic Opening -->
+    <path android:fillColor="#FF000000" android:pathData="M 30.5,19 c -1,0 -1.5,0.7 -1.5,1.5 c 0,0.8 0.5,1.5 1.5,1.5 c 1,0 1,-0.7 1,-1.5 c 0,-0.8 0,-1.5 -1,-1.5 z" />
+
+    <!-- Right Head Ambient Shadow -->
+    <path android:fillColor="#99000000" android:pathData="M 34,21 a 8,8 0 1 0 16,0 a 8,8 0 1 0 -16,0" />
+
+    <!-- Right Head Body (3D Glossy Sphere) -->
+    <path android:pathData="M 33,19 a 8,8 0 1 0 16,0 a 8,8 0 1 0 -16,0">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="39" android:centerY="17" android:gradientRadius="10">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.6" android:color="#FFDADDED" />
+                <item android:offset="1.0" android:color="#FF9B9EAD" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Right Acoustic/Sensor Mesh -->
+    <path android:fillColor="#FF111111" android:pathData="M 43,19 a 2,3 0 1 0 4,0 a 2,3 0 1 0 -4,0" />
+    <path android:fillColor="#FF2A2A2A" android:pathData="M 43.5,19 a 1.5,2.5 0 1 0 3,0 a 1.5,2.5 0 1 0 -3,0" />
+    <path android:fillColor="#FF111111" android:pathData="M 41,12 a 2.5,1 0 1 0 0,2 a 2.5,1 0 1 0 0,-2" />
+
+    <!-- Right Glass Highlight (Crescent Arc) -->
+    <path android:fillColor="#CCFFFFFF" android:pathData="M 35,14 Q 39,12 43,14 Q 39,13.5 35,14 Z" />
+
+</vector>

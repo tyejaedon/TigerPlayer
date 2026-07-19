@@ -13,6 +13,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -76,6 +77,65 @@ class FullPlayerScreenTest {
 
         verify(exactly = 1) { playerViewModel.togglePlayPause() }
         assertTrue(uiStateFlow.value.isPlaying)
+    }
+
+    @Test
+    fun sonicPrism_visualMode_transition_togglesPrismEnableBinding() {
+        val playerViewModel = mockk<PlayerViewModel>(relaxed = true)
+        val prismViewModel = mockk<PrismViewModel>(relaxed = true)
+
+        val sampleTrack = AudioTrack(
+            id = "prism-track",
+            title = "Stem Field",
+            artist = "Tiger QA",
+            album = "Prism Trials",
+            uri = Uri.parse("content://media/external/audio/media/2"),
+            artworkUri = Uri.parse("content://media/external/audio/albumart/2"),
+            durationMs = 200_000L,
+            mimeType = "audio/mpeg",
+            isLocal = true,
+            bitrate = 320_000,
+            sampleRate = 48_000,
+            trackNumber = 2,
+            path = "/music/prism.mp3"
+        )
+
+        val uiStateFlow = MutableStateFlow(
+            PlayerUiState(
+                currentTrack = sampleTrack,
+                tracks = listOf(sampleTrack),
+                queue = listOf(sampleTrack),
+                visualMode = PlayerVisualMode.SONIC_PRISM,
+                mainViewState = MainViewState.ARTWORK
+            )
+        )
+        val prismStateFlow = MutableStateFlow(PrismUiState())
+
+        every { playerViewModel.uiState } returns uiStateFlow
+        every { prismViewModel.uiState } returns prismStateFlow
+
+        composeRule.setContent {
+            TigerPlayerTheme {
+                FullPlayerScreen(
+                    viewModel = playerViewModel,
+                    prismViewModel = prismViewModel,
+                    onCollapse = {},
+                    onOpenQueueScreen = {},
+                    onNavigateToAlbum = {}
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+        verify(atLeast = 1) { prismViewModel.setPrismEnabled(true) }
+
+        composeRule.runOnIdle {
+            uiStateFlow.value = uiStateFlow.value.copy(visualMode = PlayerVisualMode.ARTWORK)
+        }
+        composeRule.waitForIdle()
+
+        verify(atLeast = 1) { prismViewModel.setPrismEnabled(false) }
+        assertEquals(PlayerVisualMode.ARTWORK, uiStateFlow.value.visualMode)
     }
 }
 

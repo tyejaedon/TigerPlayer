@@ -111,7 +111,7 @@ fun AlbumGridCard(
                         .align(Alignment.TopEnd)
                         .padding(12.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(

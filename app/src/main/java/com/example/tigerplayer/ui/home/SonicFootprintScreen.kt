@@ -1,5 +1,6 @@
 package com.example.tigerplayer.ui.home
 
+import androidx.compose.ui.platform.testTag
 import android.graphics.BlurMaskFilter
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -118,6 +119,7 @@ fun SonicFootprintScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(300.dp)
+                                .testTag("radar_chart")
                         )
 
                         Spacer(modifier = Modifier.height(20.dp))
@@ -151,7 +153,8 @@ fun SonicFootprintScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f))
                         .border(1.dp, TigerNeonOrange.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                        .padding(horizontal = 18.dp, vertical = 14.dp)
+                        .testTag("genre_tag_$genre"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

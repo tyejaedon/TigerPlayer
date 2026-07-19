@@ -20,9 +20,9 @@ val TigerTextLow = Color(0xFF8B7A6C)
 // ------------------------------
 // LIGHT MODE BASE
 // ------------------------------
-val TigerIvory = Color(0xFFFFF8F0)
+val TigerIvory = Color(0xFFF5F7FB)
 val TigerPaper = Color(0xFFFFFFFF)
-val TigerMutedSilk = Color(0xFFF4EDE4)
+val TigerMutedSilk = Color(0xFFE8EDF5)
 
 // ------------------------------
 // ACCENTS (Samsung-style “clean neon”)
@@ -39,13 +39,13 @@ val SpotifyGreen = Color(0xFF1DB954)
 // TEXT TOKENS
 // ------------------------------
 
-val TigerTextInverse = Color(0xFF1C120A)
+val TigerTextInverse = Color(0xFF141A22)
 
 // ------------------------------
 // ADAPTIVE COLORS (Samsung-like system tinting)
 // ------------------------------
 val AardBlueLight = Color(0xFFE86A12)
-val AardBlueDark = Color(0xFFFF9C42)
+val AardBlueDark = Color(0xFFF11212)
 
 val IgniRedLight = Color(0xFFB64A16)
 val IgniRedDark = Color(0xFFFF7F3A)

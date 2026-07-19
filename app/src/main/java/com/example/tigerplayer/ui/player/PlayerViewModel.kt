@@ -6,7 +6,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import com.example.tigerplayer.data.local.DefaultPlayerView
+import com.example.tigerplayer.data.local.PlaybackPrefs
 import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
@@ -16,6 +18,8 @@ import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.engine.*
 import com.example.tigerplayer.service.MediaControllerManager
 import com.example.tigerplayer.ui.home.HomeUiState
+import com.example.tigerplayer.utils.BluetoothDeviceInfo
+import com.example.tigerplayer.utils.BluetoothDeviceManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,9 +79,11 @@ data class PlayerUiState(
     val visualMode: PlayerVisualMode = PlayerVisualMode.ARTWORK,
     val currentWaveform: List<Float> = emptyList(),
     val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame(),
-    val mainViewState: MainViewState = MainViewState.ARTWORK
+    val mainViewState: MainViewState = MainViewState.ARTWORK,
+    val connectedBluetoothDevice: BluetoothDeviceInfo = BluetoothDeviceInfo()
 )
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackEngine: PlaybackEngine,
@@ -89,8 +95,10 @@ class PlayerViewModel @Inject constructor(
     private val waveformEngine: WaveformEngine,
     private val adaptiveDspEngine: AdaptiveDspEngine,
     private val settingsDataStore: SettingsDataStore,
+    private val playbackPrefs: PlaybackPrefs,
     private val audioRepository: AudioRepository,
-    val youtubeRepository: YouTubeRepository
+    val youtubeRepository: YouTubeRepository,
+    private val bluetoothDeviceManager: BluetoothDeviceManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -101,6 +109,7 @@ class PlayerViewModel @Inject constructor(
 
     private var scanJob: Job? = null
     private var metadataJob: Job? = null
+    private var lastHandledSpotifyTrackId: String? = null
     private val libraryRefreshTrigger = MutableStateFlow(0)
     private var preferredDefaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D
 
@@ -139,13 +148,62 @@ class PlayerViewModel @Inject constructor(
         // --- 1. MEDIA CONTROLLER STATE BINDINGS ---
         viewModelScope.launch {
             mediaControllerManager.isPlaying.collect { isPlaying ->
+                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) return@collect
                 _uiState.update { it.copy(isPlaying = isPlaying) }
             }
         }
 
         viewModelScope.launch {
             mediaControllerManager.currentPosition.collect { pos ->
+                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) return@collect
                 _uiState.update { it.copy(currentPosition = pos) }
+            }
+        }
+
+        viewModelScope.launch {
+            playbackEngine.spotifyPlaybackState.collectLatest { spotifyState ->
+                val spotifyTrack = spotifyState?.track
+
+                if (spotifyTrack == null) {
+                    if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) {
+                        _uiState.update {
+                            it.copy(
+                                currentTrack = null,
+                                isPlaying = false,
+                                currentPosition = 0L,
+                                currentLyrics = null,
+                                artistImageUrl = null,
+                                currentWaveform = emptyList()
+                            )
+                        }
+                    }
+                    lastHandledSpotifyTrackId = null
+                    return@collectLatest
+                }
+
+                val previousTrackId = _uiState.value.currentTrack?.id
+                val trackChanged = previousTrackId != spotifyTrack.id
+
+                _uiState.update { state ->
+                    state.copy(
+                        currentTrack = spotifyTrack,
+                        isPlaying = spotifyState.isPlaying,
+                        currentPosition = spotifyState.positionMs,
+                        currentLyrics = if (trackChanged) null else state.currentLyrics,
+                        artistImageUrl = if (trackChanged) null else state.artistImageUrl,
+                        currentWaveform = if (trackChanged) emptyList() else state.currentWaveform
+                    )
+                }
+
+                if (trackChanged && lastHandledSpotifyTrackId != spotifyTrack.id) {
+                    lastHandledSpotifyTrackId = spotifyTrack.id
+                    metadataEngine.clearTrackMetadata()
+                    metadataJob?.cancel()
+                    metadataJob = viewModelScope.launch(Dispatchers.IO) {
+                        metadataEngine.fetchTrackMetadata(spotifyTrack)
+                    }
+                    statsEngine.recordPlaybackHistory(spotifyTrack)
+                }
             }
         }
 
@@ -176,6 +234,12 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             adaptiveDspEngine.audioReactiveFrame.collect { frame ->
                 _uiState.update { it.copy(audioReactiveFrame = frame) }
+            }
+        }
+
+        viewModelScope.launch {
+            bluetoothDeviceManager.connectedDevice.collect { device ->
+                _uiState.update { it.copy(connectedBluetoothDevice = device) }
             }
         }
 
@@ -251,6 +315,10 @@ class PlayerViewModel @Inject constructor(
                  old.first == new.first && old.second?.id == new.second?.id
              }
              .collectLatest { (_, resolvedTrack) ->
+                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) {
+                    return@collectLatest
+                }
+
                 val track = resolvedTrack ?: return@collectLatest
                 _uiState.update {
                     it.copy(
@@ -445,12 +513,12 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // Cycle through all visual surfaces including Sonic Prism.
+    // FullPlayer visual cycling excludes Sonic Prism; Prism is controlled from Home.
     fun toggleVisualMode() {
         val nextMode = when (_uiState.value.visualMode) {
             PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
             PlayerVisualMode.WAVEFORM -> PlayerVisualMode.VORTEX
-            PlayerVisualMode.VORTEX -> PlayerVisualMode.SONIC_PRISM
+            PlayerVisualMode.VORTEX -> PlayerVisualMode.ARTWORK
             PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
         }
         _uiState.update { it.copy(visualMode = nextMode) }
@@ -460,9 +528,15 @@ class PlayerViewModel @Inject constructor(
         val targetMode = when (preferredDefaultPlayerView) {
             DefaultPlayerView.ARTWORK_3D -> PlayerVisualMode.ARTWORK
             DefaultPlayerView.FLUID_VORTEX -> PlayerVisualMode.VORTEX
-            DefaultPlayerView.SONIC_PRISM -> PlayerVisualMode.SONIC_PRISM
+            DefaultPlayerView.SONIC_PRISM -> PlayerVisualMode.ARTWORK
         }
         _uiState.update { it.copy(visualMode = targetMode) }
+    }
+
+    fun setFullPlayerActive(active: Boolean) {
+        viewModelScope.launch {
+            playbackPrefs.saveFullPlayerActive(active)
+        }
     }
 
     fun onSearchQueryChanged(query: String) {
@@ -507,6 +581,10 @@ class PlayerViewModel @Inject constructor(
 
     fun onAuthSuccess(token: String) {
         networkEngine.onAuthSuccess(token)
+    }
+
+    fun refreshBluetoothRouteState() {
+        bluetoothDeviceManager.refreshConnectedDevice()
     }
 
     suspend fun connectToNavidrome(url: String, user: String, pass: String): Result<Unit> {

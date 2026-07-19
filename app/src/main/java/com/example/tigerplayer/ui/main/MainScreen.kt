@@ -7,8 +7,10 @@ import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -36,6 +39,7 @@ import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.prism.PrismViewModel
 import com.example.tigerplayer.ui.theme.glassEffect
 
 // ------------------------------
@@ -56,12 +60,17 @@ fun MainScreen(
     onNavigateToNavidromeLogin: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
     onNavigateToPlaylist: (Long, String) -> Unit,
+    onNavigateToDaylistDetail: () -> Unit,
+    onNavigateToDiscoverWeeklyDetail: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToQueue: () -> Unit
 ) {
     val windowState = rememberCoverScreenWindowState()
     
     if (windowState.isCoverScreen) {
+        LaunchedEffect(Unit) {
+            playerViewModel.setFullPlayerActive(false)
+        }
         CoverScreenMiniHub(
             playerViewModel = playerViewModel,
             windowState = windowState
@@ -73,10 +82,22 @@ fun MainScreen(
     val haptic = LocalHapticFeedback.current
 
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val prismViewModel: PrismViewModel = hiltViewModel()
 
     var playerState by remember { mutableStateOf(PlayerSheetState.MINI) }
     val isExpanded = playerState == PlayerSheetState.EXPANDED
     val hasTrack = uiState.currentTrack != null
+
+    // Keep service-visible fullscreen state in sync for fullscreen-only haptic policies.
+    LaunchedEffect(isExpanded) {
+        playerViewModel.setFullPlayerActive(isExpanded)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            playerViewModel.setFullPlayerActive(false)
+        }
+    }
 
     // Let the physical back button close the full-screen player
     BackHandler(enabled = isExpanded) {
@@ -105,6 +126,7 @@ fun MainScreen(
         BottomNavTab.Library,
         BottomNavTab.Cloud
     )
+    val isLightTheme = MaterialTheme.colorScheme.background.luminance() > 0.5f
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
@@ -147,7 +169,7 @@ fun MainScreen(
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 24.dp),
                                 thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isLightTheme) 0.18f else 0.08f)
                             )
                         }
                     }
@@ -249,9 +271,12 @@ fun MainScreen(
                         HomeScreen(
                             viewModel = playerViewModel,
                             homeViewModel = homeViewModel,
+                            prismViewModel = prismViewModel,
                             onNavigateToAlbum = onNavigateToAlbum,
                             onNavigateToSettings = onNavigateToSettings,
-                            onNavigatetoArtist = onNavigateToArtist
+                            onNavigatetoArtist = onNavigateToArtist,
+                            onNavigateToDaylist = onNavigateToDaylistDetail,
+                            onNavigateToDiscoverWeekly = onNavigateToDiscoverWeeklyDetail
                         )
                     }
 
@@ -312,21 +337,34 @@ fun MainScreen(
                 animationSpec = tween(250)
             )
         ) {
-            FullPlayerScreen(
-                viewModel = playerViewModel,
-                onCollapse = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    playerState = PlayerSheetState.MINI
-                },
-                onOpenQueueScreen = {
-                    playerState = PlayerSheetState.MINI
-                    onNavigateToQueue()
-                },
-                onNavigateToAlbum = {
-                    playerState = PlayerSheetState.MINI
-                    onNavigateToAlbum(it)
-                }
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Modal input shield: consume any tap not handled by the fullscreen player.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {}
+                        )
+                )
+
+                FullPlayerScreen(
+                    viewModel = playerViewModel,
+                    onCollapse = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        playerState = PlayerSheetState.MINI
+                    },
+                    onOpenQueueScreen = {
+                        playerState = PlayerSheetState.MINI
+                        onNavigateToQueue()
+                    },
+                    onNavigateToAlbum = {
+                        playerState = PlayerSheetState.MINI
+                        onNavigateToAlbum(it)
+                    }
+                )
+            }
         }
 
         // ==============================
