@@ -31,6 +31,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.compose.rememberNavController
+import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.local.ThemeMode
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.navigation.TigerPlayerNavGraph
@@ -55,9 +56,14 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var authManager: SpotifyAuthManager
 
+    @Inject
+    lateinit var settingsDataStore: SettingsDataStore
+
     private val playerViewModel: PlayerViewModel by viewModels()
     private val isInPipMode = MutableStateFlow(false)
     private val authMessage = MutableStateFlow<String?>(null)
+    @Volatile
+    private var isPipDisabledByUser = false
 
     private val redirectUri = "tigerplayer://callback"
 
@@ -107,6 +113,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        lifecycleScope.launch {
+            settingsDataStore.settingsFlow.collect { settings ->
+                isPipDisabledByUser = settings.disablePip
+            }
+        }
 
         setContent {
             val pipMode by isInPipMode.collectAsState()
@@ -190,6 +202,7 @@ class MainActivity : ComponentActivity() {
 
     private fun shouldEnterPictureInPicture(): Boolean {
         if (isFinishing || isDestroyed || isInPipMode.value) return false
+        if (isPipDisabledByUser) return false
         val uiState = playerViewModel.uiState.value
         return uiState.isPlaying && uiState.currentTrack != null
     }

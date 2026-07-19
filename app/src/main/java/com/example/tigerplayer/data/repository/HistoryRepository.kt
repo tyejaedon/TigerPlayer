@@ -1,8 +1,8 @@
 package com.example.tigerplayer.data.repository
 
 import com.example.tigerplayer.data.local.MediaSource
-import com.example.tigerplayer.data.local.dao.GenreFootprintStat
 import com.example.tigerplayer.data.local.dao.ArtistStats
+import com.example.tigerplayer.data.local.dao.SonicFootprintStats
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
@@ -61,8 +61,8 @@ class HistoryRepository @Inject constructor(
     fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>> =
         tigerDao.getTopArtists(startTime, limit)
 
-    fun getTopGenreFootprint(startTime: Long, limit: Int): Flow<List<GenreFootprintStat>> =
-        tigerDao.getTopGenreFootprint(startTime, limit)
+    fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats> =
+        tigerDao.getSonicFootprintStats(startTime)
 
     fun getAllTracksStats(): Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
 

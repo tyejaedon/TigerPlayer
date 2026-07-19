@@ -66,7 +66,7 @@ YOUTUBE_API_KEY=your_youtube_key
 
 ### Installation
 1. Clone the repository.
-2. Open in Android Studio (Ladybug or newer recommended for AGP 9.3+ support).
+2. Open in Android Studio (Ladybug or newer recommended for AGP 9.2.1 support).
 3. Sync Gradle (The "Firewall" strategy ensures KSP & Kotlin version synchronization).
 4. Build and deploy to a device running **Android 13+**.
 

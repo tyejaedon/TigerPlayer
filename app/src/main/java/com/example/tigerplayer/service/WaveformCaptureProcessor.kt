@@ -102,10 +102,12 @@ class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
         _waveform.value = smoothed
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onFlush() {
         lastUpdateTime = 0L
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onReset() {
         lastUpdateTime = 0L
     }

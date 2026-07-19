@@ -50,6 +50,7 @@ data class DetailedStatsUiState(
     val selectedFilter: String = "Today",
     val totalListeningHours: Int = 0,
     val totalListeningMinutes: Int = 0,
+    val globalListeningSharePercent: Float = 0f,
     val topArtists: List<StatItem> = emptyList(),
     val topTracks: List<StatItem> = emptyList()
 )
@@ -171,6 +172,7 @@ class PlayerViewModel @Inject constructor(
                                 currentTrack = null,
                                 isPlaying = false,
                                 currentPosition = 0L,
+                                isShuffleEnabled = mediaControllerManager.shuffleModeEnabled.value,
                                 currentLyrics = null,
                                 artistImageUrl = null,
                                 currentWaveform = emptyList()
@@ -189,6 +191,7 @@ class PlayerViewModel @Inject constructor(
                         currentTrack = spotifyTrack,
                         isPlaying = spotifyState.isPlaying,
                         currentPosition = spotifyState.positionMs,
+                        isShuffleEnabled = spotifyState.isShuffleEnabled,
                         currentLyrics = if (trackChanged) null else state.currentLyrics,
                         artistImageUrl = if (trackChanged) null else state.artistImageUrl,
                         currentWaveform = if (trackChanged) emptyList() else state.currentWaveform
@@ -215,6 +218,7 @@ class PlayerViewModel @Inject constructor(
 
         viewModelScope.launch {
             mediaControllerManager.shuffleModeEnabled.collect { shuffle ->
+                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) return@collect
                 _uiState.update { it.copy(isShuffleEnabled = shuffle) }
             }
         }

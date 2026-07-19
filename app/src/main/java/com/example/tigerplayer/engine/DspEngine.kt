@@ -581,7 +581,7 @@ class AdaptiveDspEngine @Inject constructor(
         return inputEnded && outputBuffer === AudioProcessor.EMPTY_BUFFER
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun flush() {
         outputBuffer = AudioProcessor.EMPTY_BUFFER
         inputEnded = false

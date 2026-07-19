@@ -1,56 +1,72 @@
 package com.example.tigerplayer.data.local
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.longPreferencesKey
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import android.content.SharedPreferences
+import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.dataStore by preferencesDataStore(name = "spotify_prefs")
 
 @Singleton
 class SpotifyPrefs @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
-    private val dataStore = context.dataStore
-
-    companion object {
-        val ACCESS_TOKEN = stringPreferencesKey("access_token")
-        val TOKEN_TIMESTAMP = longPreferencesKey("token_timestamp")
-        
-        val SERVICE_TOKEN = stringPreferencesKey("service_token")
-        val SERVICE_TOKEN_TIMESTAMP = longPreferencesKey("service_token_timestamp")
+    private companion object {
+        const val PREF_FILE = "spotify_secure_prefs"
+        const val ACCESS_TOKEN = "access_token"
+        const val TOKEN_TIMESTAMP = "token_timestamp"
+        const val SERVICE_TOKEN = "service_token"
+        const val SERVICE_TOKEN_TIMESTAMP = "service_token_timestamp"
+        const val KEYSTORE_ALIAS = "tigerplayer_spotify_key"
     }
 
-    val accessToken: Flow<String?> = dataStore.data.map { it[ACCESS_TOKEN] }
-    val tokenTimestamp: Flow<Long?> = dataStore.data.map { it[TOKEN_TIMESTAMP] }
+    private val securePrefs: SharedPreferences by lazy {
+        context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+    }
+    private val cipher = SecurePrefsCipher(KEYSTORE_ALIAS)
 
-    val serviceToken: Flow<String?> = dataStore.data.map { it[SERVICE_TOKEN] }
-    val serviceTokenTimestamp: Flow<Long?> = dataStore.data.map { it[SERVICE_TOKEN_TIMESTAMP] }
+    private fun readEncrypted(key: String): String? = cipher.decrypt(securePrefs.getString(key, null))
+
+    private fun readLongOrNull(key: String): Long? {
+        return readEncrypted(key)?.toLongOrNull()
+    }
+
+    private val _accessToken = MutableStateFlow(readEncrypted(ACCESS_TOKEN))
+    private val _tokenTimestamp = MutableStateFlow(readLongOrNull(TOKEN_TIMESTAMP))
+    private val _serviceToken = MutableStateFlow(readEncrypted(SERVICE_TOKEN))
+    private val _serviceTokenTimestamp = MutableStateFlow(readLongOrNull(SERVICE_TOKEN_TIMESTAMP))
+
+    val accessToken: Flow<String?> = _accessToken
+    val tokenTimestamp: Flow<Long?> = _tokenTimestamp
+    val serviceToken: Flow<String?> = _serviceToken
+    val serviceTokenTimestamp: Flow<Long?> = _serviceTokenTimestamp
 
     suspend fun saveToken(token: String, timestamp: Long) {
-        dataStore.edit { prefs ->
-            prefs[ACCESS_TOKEN] = token
-            prefs[TOKEN_TIMESTAMP] = timestamp
+        securePrefs.edit {
+            putString(ACCESS_TOKEN, cipher.encrypt(token))
+            putString(TOKEN_TIMESTAMP, cipher.encrypt(timestamp.toString()))
         }
+        _accessToken.value = token
+        _tokenTimestamp.value = timestamp
     }
 
     suspend fun saveServiceToken(token: String, timestamp: Long) {
-        dataStore.edit { prefs ->
-            prefs[SERVICE_TOKEN] = token
-            prefs[SERVICE_TOKEN_TIMESTAMP] = timestamp
+        securePrefs.edit {
+            putString(SERVICE_TOKEN, cipher.encrypt(token))
+            putString(SERVICE_TOKEN_TIMESTAMP, cipher.encrypt(timestamp.toString()))
         }
+        _serviceToken.value = token
+        _serviceTokenTimestamp.value = timestamp
     }
 
     suspend fun clearToken() {
-        dataStore.edit { prefs ->
-            prefs.remove(ACCESS_TOKEN)
-            prefs.remove(TOKEN_TIMESTAMP)
+        securePrefs.edit {
+            remove(ACCESS_TOKEN)
+            remove(TOKEN_TIMESTAMP)
         }
+        _accessToken.value = null
+        _tokenTimestamp.value = null
     }
 }

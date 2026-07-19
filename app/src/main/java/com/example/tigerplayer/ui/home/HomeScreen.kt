@@ -47,6 +47,7 @@ import com.example.tigerplayer.ui.components.DiscoverCarousel
 import com.example.tigerplayer.ui.components.RecentlyPlayedRow
 import com.example.tigerplayer.ui.constellation.ConstellationScreen
 import com.example.tigerplayer.ui.constellation.ConstellationViewModel
+import com.example.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.example.tigerplayer.ui.dashboard.DashboardViewModel
 import com.example.tigerplayer.ui.extras.NowBriefWidgetWrapper
 import com.example.tigerplayer.ui.library.*
@@ -65,6 +66,8 @@ private val IgniRed = Color(0xFFFF5252)
 private val SpotifyGreen = Color(0xFF1DB954)
 private val NeuralPurple = Color(0xFFB388FF)
 private val SonicCyan = Color(0xFF00E5FF)
+private const val DAYLIST_STALE_AFTER_MS = 6L * 60L * 60L * 1_000L
+private const val DISCOVERY_STALE_AFTER_MS = 9L * 24L * 60L * 60L * 1_000L
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
@@ -98,6 +101,8 @@ fun HomeScreen(
     val dashboardViewModel: DashboardViewModel = hiltViewModel()
     val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
     val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsStateWithLifecycle()
+    val daylistMeta by dashboardViewModel.daylistMeta.collectAsStateWithLifecycle()
+    val discoveryMeta by dashboardViewModel.discoveryMeta.collectAsStateWithLifecycle()
 
     val firstVisibleItem by remember { derivedStateOf { listState.firstVisibleItemIndex } }
 
@@ -164,8 +169,7 @@ fun HomeScreen(
                     matchedAlbums = matchedAlbums,
                     onNavigateToAlbum = onNavigateToAlbum,
                     onNavigatetoArtist = onNavigatetoArtist,
-                    artistDetails = artistDetails,
-                    onOptionsClick = { track -> searchTrackForOptions = track }
+                    artistDetails = artistDetails
                 )
             } else {
                 item {
@@ -237,29 +241,58 @@ fun HomeScreen(
                     }
                 }
 
-                if (daylistTracks.isNotEmpty() || discoveryWeeklyTracks.isNotEmpty()) {
+                val showCurationSection =
+                    daylistTracks.isNotEmpty() ||
+                        discoveryWeeklyTracks.isNotEmpty() ||
+                        daylistMeta.isLoading ||
+                        discoveryMeta.isLoading ||
+                        daylistMeta.lastAttemptEpochMs > 0L ||
+                        discoveryMeta.lastAttemptEpochMs > 0L ||
+                        daylistMeta.lastErrorMessage != null ||
+                        discoveryMeta.lastErrorMessage != null
+
+                if (showCurationSection) {
                     item { SectionTitle("NEURAL CURATIONS") }
                     item {
                         Column(
                             modifier = Modifier.padding(bottom = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (daylistTracks.isNotEmpty()) {
-                                CurationRow(
-                                    title = "DAY LIST",
+                            CurationRow(
+                                title = "DAY LIST",
+                                count = daylistTracks.size,
+                                color = AardBlue,
+                                status = curationStatusLabel(
+                                    meta = daylistMeta,
                                     count = daylistTracks.size,
-                                    color = AardBlue,
-                                    onClick = onNavigateToDaylist
-                                )
-                            }
-                            if (discoveryWeeklyTracks.isNotEmpty()) {
-                                CurationRow(
-                                    title = "DISCOVERY WEEKLY",
+                                    staleAfterMs = DAYLIST_STALE_AFTER_MS
+                                ),
+                                isStale = daylistMeta.isStale(DAYLIST_STALE_AFTER_MS),
+                                onClick = {
+                                    if (daylistTracks.isNotEmpty()) onNavigateToDaylist()
+                                    else dashboardViewModel.refreshForYou()
+                                }
+                            )
+                            CurationRow(
+                                title = "DISCOVERY WEEKLY",
+                                count = discoveryWeeklyTracks.size,
+                                color = SpotifyGreen,
+                                status = curationStatusLabel(
+                                    meta = discoveryMeta,
                                     count = discoveryWeeklyTracks.size,
-                                    color = SpotifyGreen,
-                                    onClick = onNavigateToDiscoverWeekly
-                                )
-                            }
+                                    staleAfterMs = DISCOVERY_STALE_AFTER_MS
+                                ),
+                                isStale = discoveryMeta.isStale(DISCOVERY_STALE_AFTER_MS),
+                                onClick = {
+                                    if (discoveryWeeklyTracks.isNotEmpty()) onNavigateToDiscoverWeekly()
+                                    else dashboardViewModel.refreshForYou()
+                                }
+                            )
+
+                            CurationAnalyticsRow(
+                                daylistMeta = daylistMeta,
+                                discoveryMeta = discoveryMeta
+                            )
                         }
                     }
                 }
@@ -331,9 +364,6 @@ fun HomeScreen(
                 viewModel.clearSearch()
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
-            },
-            onCreatePlaylist = { name ->
-                viewModel.createPlaylist(name)
             }
         )
     }
@@ -446,6 +476,8 @@ fun CurationRow(
     title: String,
     count: Int,
     color: Color,
+    status: String,
+    isStale: Boolean,
     onClick: () -> Unit
 ) {
     Row(
@@ -471,9 +503,75 @@ fun CurationRow(
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground)
-            Text("$count Chants Manifested", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground)
+            Text(
+                status,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isStale) IgniRed.copy(alpha = 0.95f) else MaterialTheme.colorScheme.onBackground
+            )
         }
         Icon(WitcherIcons.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f))
+    }
+}
+
+@Composable
+private fun CurationAnalyticsRow(
+    daylistMeta: CurationFeedMeta,
+    discoveryMeta: CurationFeedMeta
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        StatGlassWidget(
+            modifier = Modifier.weight(1f),
+            title = "DAYLIST LENGTH",
+            value = "${(daylistMeta.totalDurationMs / 60_000L).coerceAtLeast(0L)} min",
+            icon = WitcherIcons.Duration,
+            accentColor = AardBlue,
+            isFullWidth = true
+        )
+        StatGlassWidget(
+            modifier = Modifier.weight(1f),
+            title = "VAULT VARIETY",
+            value = "${discoveryMeta.uniqueArtistCount} artists",
+            icon = WitcherIcons.Library,
+            accentColor = SpotifyGreen,
+            isFullWidth = true
+        )
+    }
+}
+
+private fun curationStatusLabel(
+    meta: CurationFeedMeta,
+    count: Int,
+    staleAfterMs: Long
+): String {
+    if (meta.isLoading) return "Refreshing signal..."
+    if (count <= 0 && meta.lastErrorMessage != null) return "Refresh failed, tap to retry"
+
+    val ageMs = meta.ageMs()
+    if (ageMs == null) {
+        return if (count > 0) "$count chants manifested" else "No mix generated yet"
+    }
+
+    val ageText = formatAgeLabel(ageMs)
+    return when {
+        count <= 0 && ageMs > staleAfterMs -> "No mix yet (last update $ageText ago)"
+        count <= 0 -> "No mix generated yet"
+        ageMs > staleAfterMs -> "$count chants manifested - stale $ageText"
+        else -> "$count chants manifested - updated $ageText ago"
+    }
+}
+
+private fun formatAgeLabel(ageMs: Long): String {
+    val totalMinutes = (ageMs / 60_000L).coerceAtLeast(0L)
+    return when {
+        totalMinutes < 1L -> "just now"
+        totalMinutes < 60L -> "${totalMinutes}m"
+        totalMinutes < 1_440L -> "${totalMinutes / 60L}h"
+        else -> "${totalMinutes / 1_440L}d"
     }
 }
 

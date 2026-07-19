@@ -1,51 +1,63 @@
 package com.example.tigerplayer.data.local
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import android.content.SharedPreferences
+import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
-
-// The actual DataStore instance delegated to the Context
-private val Context.dataStore by preferencesDataStore(name = "navidrome_prefs")
 
 @Singleton
 class NavidromePrefs @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
-    private val dataStore = context.dataStore
-
-    companion object {
-        // These are the labels for the "drawers" in your local storage
-        val SERVER_URL = stringPreferencesKey("server_url")
-        val USERNAME = stringPreferencesKey("username")
-        val PASSWORD = stringPreferencesKey("password")
+    private companion object {
+        const val PREF_FILE = "navidrome_secure_prefs"
+        const val KEY_SERVER_URL = "server_url"
+        const val KEY_USERNAME = "username"
+        const val KEY_PASSWORD = "password"
+        const val KEYSTORE_ALIAS = "tigerplayer_navidrome_key"
     }
 
-    // These Flows act as "Observers" that tell the app whenever credentials change
-    val serverUrl: Flow<String?> = dataStore.data.map { it[SERVER_URL] }
-    val username: Flow<String?> = dataStore.data.map { it[USERNAME] }
-    val password: Flow<String?> = dataStore.data.map { it[PASSWORD] }
+    private val securePrefs: SharedPreferences by lazy {
+        context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+    }
+    private val cipher = SecurePrefsCipher(KEYSTORE_ALIAS)
+
+    private fun readEncrypted(key: String): String? = cipher.decrypt(securePrefs.getString(key, null))
+
+    private val _serverUrl = MutableStateFlow(readEncrypted(KEY_SERVER_URL))
+    private val _username = MutableStateFlow(readEncrypted(KEY_USERNAME))
+    private val _password = MutableStateFlow(readEncrypted(KEY_PASSWORD))
+
+    val serverUrl: Flow<String?> = _serverUrl
+    val username: Flow<String?> = _username
+    val password: Flow<String?> = _password
 
     /**
      * Stores the credentials. This is called when you hit "Initiate Sync".
      */
     suspend fun saveCredentials(url: String, user: String, pass: String) {
-        dataStore.edit { prefs ->
-            prefs[SERVER_URL] = url
-            prefs[USERNAME] = user
-            prefs[PASSWORD] = pass
+        securePrefs.edit {
+            putString(KEY_SERVER_URL, cipher.encrypt(url))
+            putString(KEY_USERNAME, cipher.encrypt(user))
+            putString(KEY_PASSWORD, cipher.encrypt(pass))
         }
+
+        _serverUrl.value = url
+        _username.value = user
+        _password.value = pass
     }
 
     /**
      * Clears all server data. Perfect for a "Logout" or "De-link" ritual.
      */
     suspend fun clearCredentials() {
-        dataStore.edit { it.clear() }
+        securePrefs.edit { clear() }
+        _serverUrl.value = null
+        _username.value = null
+        _password.value = null
     }
 }

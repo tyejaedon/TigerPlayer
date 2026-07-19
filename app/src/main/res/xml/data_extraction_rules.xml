@@ -5,15 +5,16 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <!-- Keep credential/token stores local-only. -->
+        <exclude domain="file" path="datastore/navidrome_prefs.preferences_pb" />
+        <exclude domain="file" path="datastore/spotify_prefs.preferences_pb" />
+        <exclude domain="sharedpref" path="navidrome_secure_prefs.xml" />
+        <exclude domain="sharedpref" path="spotify_secure_prefs.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="datastore/navidrome_prefs.preferences_pb" />
+        <exclude domain="file" path="datastore/spotify_prefs.preferences_pb" />
+        <exclude domain="sharedpref" path="navidrome_secure_prefs.xml" />
+        <exclude domain="sharedpref" path="spotify_secure_prefs.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

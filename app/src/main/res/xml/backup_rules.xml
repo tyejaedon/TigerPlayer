@@ -6,8 +6,9 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Exclude sensitive auth material from legacy Auto Backup transport. -->
+    <exclude domain="file" path="datastore/navidrome_prefs.preferences_pb" />
+    <exclude domain="file" path="datastore/spotify_prefs.preferences_pb" />
+    <exclude domain="sharedpref" path="navidrome_secure_prefs.xml" />
+    <exclude domain="sharedpref" path="spotify_secure_prefs.xml" />
 </full-backup-content>

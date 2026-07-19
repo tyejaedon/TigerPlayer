@@ -14,8 +14,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
+import com.example.tigerplayer.R
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -34,14 +36,17 @@ fun PlaybackControls(
     val isPlaying = uiState.isPlaying
     val aardBlue = MaterialTheme.aardBlue
     val igniRed = MaterialTheme.igniRed
+    val toggleActiveColor = Color(0xFF67F7B1)
+    val inactiveToggleColor = textColor.copy(alpha = 0.82f)
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onShuffleToggle) {
+                val shuffleIconRes = if (uiState.isShuffleEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle_off
                 Icon(
-                    imageVector = WitcherIcons.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = Color.White,
+                    painter = painterResource(id = shuffleIconRes),
+                    contentDescription = if (uiState.isShuffleEnabled) "Shuffle enabled" else "Shuffle disabled",
+                    tint = if (uiState.isShuffleEnabled) toggleActiveColor else inactiveToggleColor,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -96,10 +101,14 @@ fun PlaybackControls(
                 Icon(WitcherIcons.Next, "Next", modifier = Modifier.size(36.dp), tint = Color.White)
             }
             IconButton(onClick = onRepeatToggle) {
+                val repeatTint = when (uiState.repeatMode) {
+                    Player.REPEAT_MODE_OFF -> inactiveToggleColor
+                    else -> toggleActiveColor
+                }
                 Icon(
                     imageVector = when (uiState.repeatMode) { Player.REPEAT_MODE_ONE -> WitcherIcons.RepeatOne else -> WitcherIcons.Repeat },
                     contentDescription = "Repeat",
-                    tint = Color.White,
+                    tint = repeatTint,
                     modifier = Modifier.size(22.dp)
                 )
             }

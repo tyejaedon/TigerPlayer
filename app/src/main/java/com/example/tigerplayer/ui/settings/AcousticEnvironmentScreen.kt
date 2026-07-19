@@ -49,7 +49,7 @@ fun AcousticEnvironmentScreen(
     val haptic = LocalHapticFeedback.current
     val options = listOf(
         EnvironmentOption(
-            mode = AcousticEnvironmentMode.OFF,
+            mode = AcousticEnvironmentMode.STUDIO,
             title = "Neutral",
             subtitle = "Bit-clean path. No environmental coloration.",
             accent = Color(0xFF9AA0A6)

@@ -29,22 +29,38 @@ class StatsEngine @Inject constructor(
     ): Flow<DetailedStatsUiState> {
         return _statsFilter.flatMapLatest { filter ->
             val startTime = calculateStartTimeForFilter(filter)
-            combine(
+            val listeningTotals = combine(
                 historyRepository.getTotalListeningTime(startTime),
+                historyRepository.getTotalListeningTime(0L)
+            ) { filteredWindowMs, lifetimeMs ->
+                filteredWindowMs to lifetimeMs
+            }
+
+            combine(
+                listeningTotals,
                 // 🔥 FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
                 historyRepository.getTopArtists(startTime, limit = 50),
                 historyRepository.getTopTracks(startTime, limit = 50),
                 allTracksFlow,
                 artistDetailsMapFlow
-            ) { totalTimeMs, topArtistsDb, topTracksDb, allTracks, artistDetailsMap ->
+            ) { totals, topArtistsDb, topTracksDb, allTracks, artistDetailsMap ->
+                val (totalTimeMs, lifetimeTotalMs) = totals
                 val totalSeconds = (totalTimeMs ?: 0L) / 1000
                 val hours = (totalSeconds / 3600).toInt()
                 val minutes = ((totalSeconds % 3600) / 60).toInt()
+                val sharePercent = if ((lifetimeTotalMs ?: 0L) > 0L) {
+                    ((totalTimeMs ?: 0L).toDouble() / (lifetimeTotalMs ?: 1L).toDouble() * 100.0)
+                        .toFloat()
+                        .coerceIn(0f, 100f)
+                } else {
+                    0f
+                }
 
                 DetailedStatsUiState(
                     selectedFilter = filter,
                     totalListeningHours = hours,
                     totalListeningMinutes = minutes,
+                    globalListeningSharePercent = sharePercent,
                     topArtists = topArtistsDb.map { artist ->
                         // 🔥 FIX 2: Normalize the key to safely extract the High-Res API image
                         val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()

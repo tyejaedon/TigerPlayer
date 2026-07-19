@@ -59,6 +59,14 @@ class LibraryEngine @Inject constructor(
         val artworkUri: Uri?
     )
 
+    private data class HomeBaseState(
+        val recentEntities: List<PlaybackHistoryEntity>,
+        val totalMs: Long,
+        val todayMs: Long,
+        val topArtist: String?,
+        val allTracks: List<AudioTrack>
+    )
+
     // 🔥 THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
     @OptIn(FlowPreview::class)
     fun getAggregatedLibraryFlow(
@@ -141,20 +149,31 @@ class LibraryEngine @Inject constructor(
             }
         }.distinctUntilChanged()
 
-        return combine(
+        val baseHomeStateFlow = combine(
             historyRepository.recentTracks,
             historyRepository.totalListeningTime,
             historyRepository.listeningTimeToday,
             historyRepository.topArtistThisWeek,
-            allTracksFlow.distinctUntilChanged(),
+            allTracksFlow.distinctUntilChanged()
+        ) { recentEntities, totalMs, todayMs, topArtist, allTracks ->
+            HomeBaseState(
+                recentEntities = recentEntities,
+                totalMs = totalMs ?: 0L,
+                todayMs = todayMs ?: 0L,
+                topArtist = topArtist,
+                allTracks = allTracks
+            )
+        }
+
+        return combine(
+            baseHomeStateFlow,
             recommendationTicker
-        ) { args: Array<Any?> ->
-            val recentEntities = args[0] as List<PlaybackHistoryEntity>
-            val totalMs = args[1] as? Long ?: 0L
-            val todayMs = args[2] as? Long ?: 0L
-            val topArtist = args[3] as? String
-            val allTracks = args[4] as List<AudioTrack>
-            val seed = args[5] as Long
+        ) { baseState, seed ->
+            val recentEntities = baseState.recentEntities
+            val totalMs = baseState.totalMs
+            val todayMs = baseState.todayMs
+            val topArtist = baseState.topArtist
+            val allTracks = baseState.allTracks
 
             val resolvedTotalMs = totalMs
             val resolvedTodayMs = todayMs

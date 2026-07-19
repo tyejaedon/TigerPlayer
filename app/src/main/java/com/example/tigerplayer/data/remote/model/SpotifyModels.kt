@@ -116,7 +116,7 @@ data class SpotifyTrack(
  */
 data class PlaylistTrackItem(
     @SerializedName("added_at") val addedAt: String?,
-    @SerializedName("track") val track: SpotifyTrack
+    @SerializedName("track") val track: SpotifyTrack?
 )
 
 // ==========================================
@@ -149,6 +149,14 @@ data class SpotifySearchResponse(
     @SerializedName("albums") val albums: SpotifyPaging<SpotifyAlbum>?,
     @SerializedName("tracks") val tracks: SpotifyPaging<SpotifyTrack>?,
     @SerializedName("playlists") val playlists: SpotifyPaging<SpotifyPlaylist>?
+)
+
+data class SpotifyRecommendationsResponse(
+    @SerializedName("tracks") val tracks: List<SpotifyTrack>?
+)
+
+data class SpotifyTopTracksResponse(
+    @SerializedName("tracks") val tracks: List<SpotifyTrack>?
 )
 
 data class SpotifyTokenResponse(

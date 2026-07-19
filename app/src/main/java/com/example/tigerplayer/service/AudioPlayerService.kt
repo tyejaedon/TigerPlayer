@@ -673,16 +673,18 @@ class AudioPlayerService : MediaSessionService() {
     }
 
     private fun createCustomLayoutList(): List<CommandButton> {
-        val shuffleIcon = if (player.shuffleModeEnabled) R.drawable.ic_material_shuffle_on else R.drawable.ic_material_shuffle_off
+        val shuffleEnabled = player.shuffleModeEnabled
+        val shuffleIcon = if (shuffleEnabled) R.drawable.ic_material_shuffle_on else R.drawable.ic_material_shuffle_off
+        val shuffleLabel = if (shuffleEnabled) "Shuffle enabled" else "Shuffle disabled"
         val repeatIcon = when (player.repeatMode) {
             Player.REPEAT_MODE_ONE -> R.drawable.ic_material_repeat_one
             Player.REPEAT_MODE_ALL -> R.drawable.ic_material_repeat_all
             else -> R.drawable.ic_material_repeat_off
         }
-        val dspIcon = if (isBitPerfectMode) R.drawable.ic_material_shuffle_off else R.drawable.ic_material_shuffle_on
+        val dspIcon = if (isBitPerfectMode) R.drawable.ic_material_dsp_off else R.drawable.ic_material_dsp_on
 
         return listOf(
-            CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY)).setIconResId(shuffleIcon).setDisplayName("Shuffle").setEnabled(true).build(),
+            CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY)).setIconResId(shuffleIcon).setDisplayName(shuffleLabel).setEnabled(true).build(),
             CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY)).setIconResId(repeatIcon).setDisplayName("Repeat").setEnabled(true).build(),
             CommandButton.Builder().setSessionCommand(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY)).setIconResId(dspIcon).setDisplayName(if (isBitPerfectMode) "Bit-Perfect" else "Aural Nexus Active").setEnabled(true).build()
         )
@@ -714,13 +716,17 @@ class AudioPlayerService : MediaSessionService() {
 
         override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
             when (customCommand.customAction) {
-                CUSTOM_COMMAND_SHUFFLE -> player.shuffleModeEnabled = !player.shuffleModeEnabled
+                CUSTOM_COMMAND_SHUFFLE -> {
+                    player.shuffleModeEnabled = !player.shuffleModeEnabled
+                    invalidateCustomLayout()
+                }
                 CUSTOM_COMMAND_REPEAT -> {
                     player.repeatMode = when (player.repeatMode) {
                         Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                         Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                         else -> Player.REPEAT_MODE_OFF
                     }
+                    invalidateCustomLayout()
                 }
                 ACTION_TOGGLE_DSP -> {
                     serviceScope.launch {

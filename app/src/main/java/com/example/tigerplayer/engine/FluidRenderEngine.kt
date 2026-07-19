@@ -232,6 +232,22 @@ class FluidRenderer @Inject constructor(
     private fun stepSimulation(dt: Float) {
         val bands = currentEnergy.get()
         val kick = bands.getOrElse(0) { 0f }.coerceIn(0f, 1f)
+        val lowEnergy = (
+            bands.getOrElse(0) { 0f } +
+                bands.getOrElse(1) { 0f } +
+                bands.getOrElse(2) { 0f }
+            ) / 3f
+        val highEnergy = (
+            bands.getOrElse(3) { 0f } +
+                bands.getOrElse(4) { 0f } +
+                bands.getOrElse(5) { 0f }
+            ) / 3f
+        val expansion = ((lowEnergy - highEnergy) * 0.08f).coerceIn(-0.09f, 0.09f)
+        val flowSpeed = (0.90f + lowEnergy * 0.42f + kick * 0.33f).coerceIn(0.75f, 1.75f)
+        val turbulence = (0.08f + highEnergy * 0.26f + kick * 0.18f).coerceIn(0.04f, 0.55f)
+        val texelX = 1f / simWidth.toFloat()
+        val texelY = 1f / simHeight.toFloat()
+        val timeSec = System.nanoTime() / 1_000_000_000f
 
         GLES30.glViewport(0, 0, simWidth, simHeight)
         GLES30.glBindVertexArray(quadVao)
@@ -240,6 +256,10 @@ class FluidRenderer @Inject constructor(
             shader.use()
             shader.setUniform("uDt", dt)
             shader.setUniform("uKick", kick)
+            shader.setUniform("uExpansion", expansion)
+            shader.setUniform("uFlowSpeed", flowSpeed)
+            shader.setUniform("uTurbulence", turbulence)
+            shader.setUniform("uTime", timeSec)
 
             bindTexture(0, velocityRes?.readTexture ?: 0)
             shader.setUniform("uVelocity", 0)
@@ -264,6 +284,7 @@ class FluidRenderer @Inject constructor(
             curlS.use()
             bindTexture(0, velocityRes?.readTexture ?: 0)
             curlS.setUniform("uVelocity", 0)
+            curlS.setUniform("uTexelSize", texelX, texelY)
             curlRes?.write(curlS, false)
         }
 
@@ -273,8 +294,9 @@ class FluidRenderer @Inject constructor(
             bindTexture(1, curlRes?.texture ?: 0)
             vortS.setUniform("uVelocity", 0)
             vortS.setUniform("uCurl", 1)
+            vortS.setUniform("uTexelSize", texelX, texelY)
             vortS.setUniform("uDt", dt)
-            vortS.setUniform("uConfinement", FluidConfig.VORTICITY_CONFINEMENT)
+            vortS.setUniform("uCurlStrength", FluidConfig.VORTICITY_CONFINEMENT * (1f + kick * 0.35f))
             velocityRes?.write(vortS, false)
             velocityRes?.swap()
         }
@@ -284,6 +306,8 @@ class FluidRenderer @Inject constructor(
             divS.use()
             bindTexture(0, velocityRes?.readTexture ?: 0)
             divS.setUniform("uVelocity", 0)
+            divS.setUniform("uExpansion", expansion)
+            divS.setUniform("uTexelSize", texelX, texelY)
             divergenceRes?.write(divS, false)
         }
 
@@ -291,6 +315,8 @@ class FluidRenderer @Inject constructor(
             presS.use()
             bindTexture(1, divergenceRes?.texture ?: 0)
             presS.setUniform("uDivergence", 1)
+            presS.setUniform("uExpansion", expansion)
+            presS.setUniform("uTexelSize", texelX, texelY)
             // 20 Iterations is the sweet spot for mobile (Stability vs Performance)
             repeat(20) {
                 bindTexture(0, pressureRes?.readTexture ?: 0)
@@ -306,6 +332,7 @@ class FluidRenderer @Inject constructor(
             bindTexture(1, velocityRes?.readTexture ?: 0)
             gradS.setUniform("uPressure", 0)
             gradS.setUniform("uVelocity", 1)
+            gradS.setUniform("uTexelSize", texelX, texelY)
             velocityRes?.write(gradS, false)
             velocityRes?.swap()
         }
@@ -346,7 +373,7 @@ class FluidRenderer @Inject constructor(
         // Pass 2: bright-pass prefilter
         prefilterShader.use()
         bindTexture(0, scene.texture)
-        prefilterShader.setUniform("uScene", 0)
+        prefilterShader.setUniform("uSource", 0)
         prefilterShader.setUniform("uThreshold", (0.68f - avgEnergy * 0.2f).coerceIn(0.38f, 0.75f))
         prefilter.write(prefilterShader, false)
 

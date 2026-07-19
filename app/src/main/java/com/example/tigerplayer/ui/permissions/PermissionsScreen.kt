@@ -13,6 +13,10 @@ import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -65,9 +69,14 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
         }
     }
 
-    val missingPermissions = runtimePermissions.filter { permission ->
-        ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+    var permissionStateVersion by remember { mutableIntStateOf(0) }
+    val missingPermissions = remember(permissionStateVersion, runtimePermissions) {
+        runtimePermissions.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+        }
     }
+    val hasAudioPermission = ContextCompat.checkSelfPermission(context, audioPermission) ==
+        PackageManager.PERMISSION_GRANTED
 
     val permissionRequirements = buildList {
         add(
@@ -120,17 +129,9 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
     ) { permissions ->
         val isAudioGranted = permissions[audioPermission] == true ||
             ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
-        val isBluetoothGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val connectGranted = permissions[Manifest.permission.BLUETOOTH_CONNECT] == true ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-            val scanGranted = permissions[Manifest.permission.BLUETOOTH_SCAN] == true ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
-            connectGranted && scanGranted
-        } else {
-            true
-        }
+        permissionStateVersion += 1
 
-        if (isAudioGranted && isBluetoothGranted) {
+        if (isAudioGranted) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onPermissionGranted()
         }
@@ -206,16 +207,7 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
         Button(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                val hasAllCriticalPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val btConnectGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-                    val btScanGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
-                    val audioGranted = ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
-                    audioGranted && btConnectGranted && btScanGranted
-                } else {
-                    ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
-                }
-
-                if (missingPermissions.isEmpty() && hasAllCriticalPermissions) {
+                if (hasAudioPermission) {
                     onPermissionGranted()
                 } else {
                     permissionLauncher.launch(missingPermissions.toTypedArray())
@@ -231,7 +223,7 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
                 .bounceClick { }
         ) {
             Text(
-                text = if (missingPermissions.isEmpty()) "CONTINUE" else "GRANT ACCESS",
+                text = if (hasAudioPermission) "CONTINUE" else "GRANT ACCESS",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Bold
