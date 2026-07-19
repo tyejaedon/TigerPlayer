@@ -1,6 +1,5 @@
 package com.example.tigerplayer.ui.library
 
-import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.animateColorAsState
@@ -17,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -29,7 +27,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -37,11 +34,15 @@ import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.home.SectionTitle
 import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.example.tigerplayer.ui.theme.DominantColorExtractor
+import com.example.tigerplayer.ui.theme.TigerNeonOrange
 import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import com.example.tigerplayer.ui.theme.aardBlue
 import com.example.tigerplayer.utils.ArtistUtils
+import kotlinx.coroutines.launch
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -55,6 +56,7 @@ fun ArtistDetailsScreen(
     val context = LocalContext.current
     val artistDetails by viewModel.artistDetails.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val colorScope = rememberCoroutineScope()
 
     val normalizedKey = remember(artistName) {
         ArtistUtils.getBaseArtist(artistName).lowercase().trim()
@@ -75,7 +77,7 @@ fun ArtistDetailsScreen(
     val artistAlbumsWithCounts = remember(artistTracks) {
         artistTracks
             .groupBy { it.album.lowercase().trim() }
-            .map { (name, tracks) ->
+            .map { (_, tracks) ->
                 tracks.first() to tracks.size
             }
             .sortedByDescending { it.first.year ?: "" }
@@ -93,6 +95,7 @@ fun ArtistDetailsScreen(
         animationSpec = tween(1000), // Smooth transition as the palette is forged
         label = "DominantColorTransition"
     )
+    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.18f)
 
     val imageUrl = remember(profile?.imageUrl, artistTracks) {
         // Priority 1: The official Artist Lore image (Last.fm)
@@ -109,17 +112,14 @@ fun ArtistDetailsScreen(
             .memoryCachePolicy(CachePolicy.ENABLED)
             .allowHardware(false) // Required for Palette to read the bitmap
             .listener(onSuccess = { _, result ->
-                val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                bitmap?.let { b ->
-                    Palette.from(b).generate { palette ->
-                        // Prioritize Vibrant or Dominant swatches
-                        val colorInt = palette?.vibrantSwatch?.rgb
-                            ?: palette?.dominantSwatch?.rgb
-                            ?: palette?.mutedSwatch?.rgb
-
-                        colorInt?.let { Color(it) }
-                    }
+                colorScope.launch {
+                    dominantColor = DominantColorExtractor.extractSnappedNeon(
+                        drawable = result.drawable,
+                        fallback = TigerNeonOrange
+                    )
                 }
+            }, onError = { _, _ ->
+                dominantColor = fallbackColor
             })
             .build()
     }
@@ -137,15 +137,7 @@ fun ArtistDetailsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            animatedDominantColor.copy(alpha = 0.35f),
-                            fallbackColor // The gradient now "sinks" into the background
-                        ),
-                        endY = 1400f
-                    )
-                )
+                .background(ambientBrush)
         )
 
         Scaffold(
@@ -237,8 +229,7 @@ fun ArtistDetailsScreen(
                     onGoToAlbum = { albumName ->
                         trackForOptions = null
                         onAlbumClick(albumName)
-                    },
-                    onCreatePlaylist ={name -> viewModel.createPlaylist(name)}
+                    }
                 )
             }
         }

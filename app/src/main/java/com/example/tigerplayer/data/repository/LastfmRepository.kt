@@ -2,7 +2,6 @@ package com.example.tigerplayer.data.repository
 
 import android.util.Log
 import com.example.tigerplayer.data.remote.api.LastFmApi
-import com.example.tigerplayer.data.remote.model.LastFmImage
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +11,25 @@ import kotlinx.coroutines.withContext
 class LastFmRepository @Inject constructor(
     private val lastFmApi: LastFmApi
 ) {
+    suspend fun getSimilarArtistNames(artistName: String, limit: Int = 8): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val response = lastFmApi.getSimilarArtists(artistName = artistName, limit = limit)
+            if (!response.isSuccessful) return@withContext emptyList()
+
+            response.body()
+                ?.similarArtists
+                ?.artists
+                .orEmpty()
+                .mapNotNull { it.name?.trim() }
+                .filter { it.isNotEmpty() && !it.equals(artistName, ignoreCase = true) }
+                .distinct()
+                .take(limit)
+        } catch (e: Exception) {
+            Log.e("LastFm", "Similar artist fetch failed: ${e.message}")
+            emptyList()
+        }
+    }
+
     suspend fun fetchArtistProfile(artistName: String): ArtistDetails? = withContext(Dispatchers.IO) {
         try {
             val response = lastFmApi.getArtistInfo(artistName = artistName)
