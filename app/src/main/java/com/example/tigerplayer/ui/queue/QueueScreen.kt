@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -64,6 +65,12 @@ fun QueueScreen(
     var dragStartIndex by remember { mutableIntStateOf(-1) }
     var dragCurrentIndex by remember { mutableIntStateOf(-1) }
     var draggedDistance by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(uiState.upcomingTracks, dragStartIndex) {
+        if (dragStartIndex == -1) {
+            localUpcoming = uiState.upcomingTracks
+        }
+    }
 
     Column(
         modifier = Modifier

@@ -530,6 +530,76 @@ class MediaControllerManager @Inject constructor(
         return List(controller.mediaItemCount) { controller.getMediaItemAt(it) }
     }
 
+    fun getQueueFlow(): Flow<List<AudioTrack>> {
+        return mediaControllerState
+            .onStart { emit(Unit) }
+            .map { getQueueTracks() }
+    }
+
+    fun getQueueTracks(): List<AudioTrack> {
+        val controller = mediaController ?: return emptyList()
+        return List(controller.mediaItemCount) { index ->
+            mediaItemToAudioTrack(controller.getMediaItemAt(index))
+        }
+    }
+
+    fun getUpcomingTracksPreview(isShuffleEnabled: Boolean): List<AudioTrack> {
+        val controller = mediaController ?: return emptyList()
+        val queue = getQueueTracks()
+        if (queue.isEmpty()) return emptyList()
+
+        if (controller.currentTimeline.windowCount == 0) {
+            val currentIndex = controller.currentMediaItemIndex
+            if (currentIndex == C.INDEX_UNSET) return queue
+            return queue.drop((currentIndex + 1).coerceAtMost(queue.size))
+        }
+
+        val upcoming = mutableListOf<AudioTrack>()
+        var loopIndex = controller.nextMediaItemIndex
+        var itemsAdded = 0
+        val maxItems = controller.mediaItemCount - 1
+
+        while (loopIndex != C.INDEX_UNSET && itemsAdded < maxItems) {
+            upcoming.add(mediaItemToAudioTrack(controller.getMediaItemAt(loopIndex)))
+            loopIndex = controller.currentTimeline.getNextWindowIndex(
+                loopIndex,
+                Player.REPEAT_MODE_OFF,
+                isShuffleEnabled
+            )
+            itemsAdded++
+        }
+        return upcoming
+    }
+
+    fun mediaItemToAudioTrack(mediaItem: MediaItem): AudioTrack {
+        val metadata = mediaItem.mediaMetadata
+        val extras = metadata.extras
+        val fallbackUri = mediaItem.localConfiguration?.uri ?: Uri.EMPTY
+        val mimeType = extras?.getString(META_MIME_TYPE).orEmpty()
+
+        return AudioTrack(
+            id = mediaItem.mediaId,
+            title = metadata.title?.toString() ?: "Unknown",
+            artist = metadata.artist?.toString() ?: "Unknown Artist",
+            album = metadata.albumTitle?.toString() ?: "Unknown Album",
+            uri = fallbackUri,
+            artworkUri = metadata.artworkUri ?: Uri.EMPTY,
+            durationMs = extras?.getLong(META_DURATION_MS, 0L) ?: 0L,
+            mimeType = mimeType.ifBlank { "audio/unknown" },
+            isLocal = extras?.getBoolean(META_IS_LOCAL, false) ?: false,
+            isRemote = extras?.getBoolean(META_IS_REMOTE, fallbackUri != Uri.EMPTY)
+                ?: (fallbackUri != Uri.EMPTY),
+            bitrate = extras?.getInt(META_BITRATE, 0) ?: 0,
+            sampleRate = extras?.getInt(META_SAMPLE_RATE, 0) ?: 0,
+            trackNumber = extras?.getInt(META_TRACK_NUMBER, 0) ?: 0,
+            serverPath = extras?.getString(META_SERVER_PATH),
+            path = extras?.getString(META_PATH),
+            year = extras?.getString(META_YEAR),
+            dateAdded = extras?.getLong(META_DATE_ADDED, 0L) ?: 0L,
+            isLiked = extras?.getBoolean(META_IS_LIKED, false) ?: false
+        )
+    }
+
     fun createMediaItem(track: AudioTrack): MediaItem {
         return MediaItem.Builder()
             .setMediaId(track.id)
@@ -634,6 +704,14 @@ class MediaControllerManager @Inject constructor(
         if (fromIndex in 0 until controller.mediaItemCount && toIndex in 0 until controller.mediaItemCount) {
             controller.moveMediaItem(fromIndex, toIndex)
             saveCurrentState()
+        }
+    }
+
+    fun playQueueItem(index: Int) {
+        val controller = mediaController ?: return
+        if (index in 0 until controller.mediaItemCount) {
+            controller.seekTo(index, C.TIME_UNSET)
+            controller.play()
         }
     }
 
