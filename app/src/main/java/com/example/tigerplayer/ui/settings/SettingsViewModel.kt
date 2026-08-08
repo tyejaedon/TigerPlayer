@@ -74,6 +74,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setPureAmoledBlack(enabled) }
     }
 
+    fun setDisablePip(disabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setDisablePip(disabled) }
+    }
+
     fun setAccentStyle(style: TigerAccentStyle) {
         viewModelScope.launch { settingsDataStore.setAccentStyle(style) }
     }

@@ -3,6 +3,7 @@ package com.example.tigerplayer.ui.theme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -23,11 +24,8 @@ fun PremiumGlassCard(
     Box(
         modifier = modifier
             .clip(shape)
-            .glassEffect(
-                shape = shape,
-                showRgbBorder = true,
-                borderWidth = borderWidth
-            )
+            .glassEffect(shape = shape)
+            .border(borderWidth, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f), shape)
             .padding(contentPadding),
         content = content
     )

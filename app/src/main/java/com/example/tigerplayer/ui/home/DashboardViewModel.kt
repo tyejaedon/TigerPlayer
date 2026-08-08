@@ -7,6 +7,7 @@ import com.example.tigerplayer.data.repository.AudioRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +31,7 @@ data class DashboardUiState(
 )
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class DashboardViewModel @Inject constructor(
     private val audioRepository: AudioRepository
 ) : ViewModel() {

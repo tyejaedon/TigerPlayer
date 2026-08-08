@@ -75,6 +75,17 @@ class SpotifyAuthManager @Inject constructor(
         ""
     }
 
+    /**
+     * Returns only a valid user token for user-scoped endpoints (for example /v1/me).
+     * Never falls back to service tokens.
+     */
+    suspend fun getValidUserToken(): String = withContext(Dispatchers.IO) {
+        if (_token.value.isNotEmpty() && !isTokenExpired(tokenTimestamp)) {
+            return@withContext _token.value
+        }
+        ""
+    }
+
     private suspend fun fetchFreshServiceToken(): String {
         try {
             val authString = "$clientId:$clientSecret"

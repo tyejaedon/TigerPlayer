@@ -70,8 +70,8 @@ class AuralNexusScreenTest {
                                 color = Color(0xFFFFD500)
                             )
                         ),
-                        frequencyResponseCurve = curveState.value,
-                        audioReactiveFrame = frameState.value,
+                        curvePoints = curveState.value,
+                        audioFrame = frameState.value,
                         onNodeDragged = { _, _ -> dragEvents.incrementAndGet() }
                     )
                 }

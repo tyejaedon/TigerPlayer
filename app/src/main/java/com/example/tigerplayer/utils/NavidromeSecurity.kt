@@ -111,9 +111,9 @@ object NavidromeMapper {
             mimeType = "audio/${this.suffix.lowercase()}", // e.g., "audio/mp3", "audio/flac"
             isLocal = false,
             isRemote = true,
-            bitrate = this.bitRate ?: 0,
+            bitrate = this.bitRate,
             sampleRate = 0, // Navidrome doesn't typically expose sample rate here
-            trackNumber = this.track ?: 0,
+            trackNumber = this.track,
             serverPath = streamUrl,
             year = this.year?.toString(),
             isLiked = false,

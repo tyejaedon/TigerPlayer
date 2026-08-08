@@ -31,6 +31,7 @@ object FluidShaders {
         uniform sampler2D uVelocity;
         uniform sampler2D uSource;
         uniform float uDt;
+        uniform float uKick;
         uniform float uDissipation; 
         uniform float uExpansion;
         uniform float uFlowSpeed;
@@ -66,16 +67,19 @@ object FluidShaders {
         void main() {
             // Back-trace the velocity to find the source of the fluid 'ink'
             vec2 vel = texture(uVelocity, vUv).xy * uFlowSpeed;
-            vel += turbulenceField(vUv, uTime);
+            float kickPulse = smoothstep(0.08, 0.92, uKick);
+            vel += turbulenceField(vUv, uTime) * (1.0 + kickPulse * 0.85);
 
             vec2 coord = vUv - uDt * vel;
 
             // Expansion > 0 pushes the field outward, < 0 contracts inward.
             vec2 centered = coord - 0.5;
-            coord = centered / (1.0 + uExpansion) + 0.5;
+            vec2 radialKick = normalize(centered + vec2(1e-5)) * (kickPulse * 0.018);
+            coord = (centered - radialKick) / (1.0 + uExpansion + kickPulse * 0.06) + 0.5;
             coord = clamp(coord, vec2(0.001), vec2(0.999));
 
-            outColor = texture(uSource, coord) * uDissipation;
+            float kickDissipation = mix(1.0, 0.96, kickPulse);
+            outColor = texture(uSource, coord) * (uDissipation * kickDissipation);
         }
     """
 
@@ -246,7 +250,8 @@ object FluidShaders {
     precision highp sampler2D;
     
     uniform sampler2D uDensity;
-    uniform sampler2D uBloom;
+    uniform vec3 uBandsLow;
+    uniform vec3 uBandsHigh;
     in vec2 vUv;
     out vec4 outColor;
     
@@ -258,7 +263,8 @@ object FluidShaders {
 
     void main() {
         vec3 rawColor = max(texture(uDensity, vUv).rgb, vec3(0.0));
-        vec3 bloom = max(texture(uBloom, vUv).rgb, vec3(0.0));
+        float lowEnergy = clamp((uBandsLow.r + uBandsLow.g + uBandsLow.b) / 3.0, 0.0, 1.0);
+        float highEnergy = clamp((uBandsHigh.r + uBandsHigh.g + uBandsHigh.b) / 3.0, 0.0, 1.0);
 
         float peak = max(max(rawColor.r, rawColor.g), rawColor.b);
         float luma = dot(rawColor, vec3(0.2126, 0.7152, 0.0722));
@@ -274,9 +280,20 @@ object FluidShaders {
         vec3 compressed = rawColor / (1.0 + rawColor * 0.85);
         color = mix(color, compressed, 0.48);
 
-        // Treat bloom as halo/edge glow rather than full-frame whitening.
-        float bloomWeight = 0.14 + 0.24 * smoothstep(0.12, 0.9, peak);
-        color += bloom * bloomWeight;
+        // 6-band chromatic steering: low bands pull toward warm core, high bands toward neon edge.
+        vec3 lowTint = vec3(
+            1.00 + uBandsLow.r * 0.95,
+            0.34 + uBandsLow.g * 0.74,
+            0.20 + uBandsLow.b * 0.62
+        );
+        vec3 highTint = vec3(
+            0.24 + uBandsHigh.r * 0.50,
+            0.56 + uBandsHigh.g * 0.88,
+            1.00 + uBandsHigh.b * 1.30
+        );
+        vec3 spectralTint = mix(lowTint, highTint, smoothstep(0.15, 0.92, highEnergy));
+        float chromaDrive = clamp(0.22 + lowEnergy * 0.28 + highEnergy * 0.42, 0.0, 0.85);
+        color = mix(color, color * spectralTint, chromaDrive);
 
         float dist = distance(vUv, vec2(0.5));
 
@@ -343,6 +360,47 @@ object FluidShaders {
             sum += texture(uSource, vUv + stepUv * 3.230769).rgb * 0.070270;
             sum += texture(uSource, vUv - stepUv * 3.230769).rgb * 0.070270;
             outColor = vec4(sum, 1.0);
+        }
+    """
+
+    const val blurFrag = """
+        #version 300 es
+        precision mediump float;
+        precision mediump sampler2D;
+
+        uniform sampler2D uTexture;
+        uniform vec2 uTexelDir;
+
+        in vec2 vUv;
+        out vec4 outColor;
+
+        void main() {
+            vec3 sum = texture(uTexture, vUv).rgb * 0.227027;
+            sum += texture(uTexture, vUv + uTexelDir * 1.384615).rgb * 0.316216;
+            sum += texture(uTexture, vUv - uTexelDir * 1.384615).rgb * 0.316216;
+            sum += texture(uTexture, vUv + uTexelDir * 3.230769).rgb * 0.070270;
+            sum += texture(uTexture, vUv - uTexelDir * 3.230769).rgb * 0.070270;
+            outColor = vec4(sum, 1.0);
+        }
+    """
+
+    const val bloomCompositeFrag = """
+        #version 300 es
+        precision mediump float;
+        precision mediump sampler2D;
+
+        uniform sampler2D uScene;
+        uniform sampler2D uBloom;
+        uniform float uBloomStrength;
+
+        in vec2 vUv;
+        out vec4 outColor;
+
+        void main() {
+            vec3 scene = texture(uScene, vUv).rgb;
+            vec3 bloom = texture(uBloom, vUv).rgb * max(uBloomStrength, 0.0);
+            vec3 color = scene + bloom;
+            outColor = vec4(color, 1.0);
         }
     """
 }

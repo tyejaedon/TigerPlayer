@@ -1,0 +1,3 @@
+- [x] Update `libs.versions.toml` to include `androidx.window`
+- [x] Verify the change in `app/build.gradle.kts`
+- [x] Trigger Gradle Sync

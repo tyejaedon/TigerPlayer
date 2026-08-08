@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -64,6 +65,12 @@ fun QueueScreen(
     var dragStartIndex by remember { mutableIntStateOf(-1) }
     var dragCurrentIndex by remember { mutableIntStateOf(-1) }
     var draggedDistance by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(uiState.upcomingTracks, dragStartIndex) {
+        if (dragStartIndex == -1) {
+            localUpcoming = uiState.upcomingTracks
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -102,7 +109,11 @@ fun QueueScreen(
             QueueTrackRow(
                 track = current,
                 isPinned = true,
-                onClick = { viewModel.playTrackAt(uiState.currentIndex) }
+                onClick = {
+                    if (uiState.currentIndex >= 0) {
+                        viewModel.playTrackAt(uiState.currentIndex)
+                    }
+                }
             )
             Spacer(modifier = Modifier.height(14.dp))
         }
@@ -130,17 +141,14 @@ fun QueueScreen(
             contentPadding = PaddingValues(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // FIX 1: Remove 'index' from the LazyColumn key. Only rely on the immutable track.id.
-            itemsIndexed(localUpcoming, key = { _, track -> track.id }) { index, track ->
+            itemsIndexed(localUpcoming, key = { index, track -> "${track.id}#$index" }) { index, track ->
                 val isDragging = dragCurrentIndex == index && dragStartIndex != -1
                 val latestIndex by rememberUpdatedState(index)
 
                 val dragHandleModifier = if (uiState.isShuffleEnabled) {
                     Modifier
                 } else {
-                    // FIX 2: Remove 'index' from pointerInput.
-                    // 'latestIndex' inside the block guarantees we always have the right index.
-                    Modifier.pointerInput(track.id) {
+                    Modifier.pointerInput(track.id, index) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
                                 dragStartIndex = latestIndex
@@ -191,10 +199,12 @@ fun QueueScreen(
                     isDragging = isDragging,
                     dragHandleModifier = dragHandleModifier,
                     onClick = {
-                        val absoluteIndex = uiState.fullQueue.indexOfFirst { it.id == track.id }
-                        if (absoluteIndex >= 0) {
-                            viewModel.playTrackAt(absoluteIndex)
+                        val absoluteIndex = if (uiState.currentIndex >= 0) {
+                            uiState.currentIndex + index + 1
+                        } else {
+                            index
                         }
+                        viewModel.playTrackAt(absoluteIndex)
                     }
                 )
             }

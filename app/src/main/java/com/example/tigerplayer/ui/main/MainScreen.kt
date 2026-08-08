@@ -28,13 +28,13 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.example.tigerplayer.navigation.BottomNavTab
+import com.example.tigerplayer.navigation.MainNavigationPresets
 import com.example.tigerplayer.ui.cloud.CloudScreen
 import com.example.tigerplayer.ui.youtube.YouTubeSearchScreen
 import com.example.tigerplayer.ui.home.HomeScreen
 import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.library.LibraryScreen
 import com.example.tigerplayer.ui.library.ScanningOverlay
-import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
 import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
@@ -66,16 +66,9 @@ fun MainScreen(
     onNavigateToQueue: () -> Unit
 ) {
     val windowState = rememberCoverScreenWindowState()
-    
-    if (windowState.isCoverScreen) {
-        LaunchedEffect(Unit) {
-            playerViewModel.setFullPlayerActive(false)
-        }
-        CoverScreenMiniHub(
-            playerViewModel = playerViewModel,
-            windowState = windowState
-        )
-        return
+    val isCoverScreen = windowState.isCoverScreen
+    val navigationPreset = remember(isCoverScreen) {
+        if (isCoverScreen) MainNavigationPresets.CoverOneHand else MainNavigationPresets.Default
     }
 
     val tabNavController = rememberNavController()
@@ -106,26 +99,22 @@ fun MainScreen(
 
     // --- Z-AXIS MODAL PHYSICS (Apple Music / Spotify Style) ---
     val appScale by animateFloatAsState(
-        targetValue = if (isExpanded) 0.93f else 1f,
+        targetValue = if (isExpanded && !navigationPreset.minimizeBackdropPushback) 0.93f else 1f,
         animationSpec = spring(dampingRatio = 0.85f, stiffness = 250f),
         label = "AppScale"
     )
     val appCornerRadius by animateDpAsState(
-        targetValue = if (isExpanded) 32.dp else 0.dp,
+        targetValue = if (isExpanded && !navigationPreset.minimizeBackdropPushback) 32.dp else 0.dp,
         animationSpec = spring(dampingRatio = 0.85f, stiffness = 250f),
         label = "AppCornerRadius"
     )
     val appAlpha by animateFloatAsState(
-        targetValue = if (isExpanded) 0.4f else 1f,
+        targetValue = if (isExpanded && !navigationPreset.minimizeBackdropPushback) 0.4f else 1f,
         animationSpec = tween(400),
         label = "AppAlpha"
     )
 
-    val tabs = listOf(
-        BottomNavTab.Home,
-        BottomNavTab.Library,
-        BottomNavTab.Cloud
-    )
+    val tabs = navigationPreset.tabs
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() > 0.5f
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -161,7 +150,7 @@ fun MainScreen(
                                 viewModel = playerViewModel,
                                 onExpandClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    playerViewModel.onFullPlayerOpened()
+                                    playerViewModel.onFullPlayerOpened(isCoverOptimized = isCoverScreen)
                                     playerState = PlayerSheetState.EXPANDED
                                 }
                             )
@@ -217,6 +206,7 @@ fun MainScreen(
                                         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
+                                alwaysShowLabel = navigationPreset.showTabLabels,
                                 colors = NavigationBarItemDefaults.colors(
                                     indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                 )
@@ -237,7 +227,7 @@ fun MainScreen(
             ) {
                 NavHost(
                     navController = tabNavController,
-                    startDestination = BottomNavTab.Home.route,
+                    startDestination = navigationPreset.startDestinationRoute,
                     enterTransition = {
                         slideInHorizontally(
                             initialOffsetX = { fullWidth -> fullWidth },
@@ -318,24 +308,32 @@ fun MainScreen(
         AnimatedVisibility(
             visible = isExpanded,
             modifier = Modifier.fillMaxSize(),
-            enter = slideInVertically(
-                initialOffsetY = { fullHeight -> fullHeight },
-                animationSpec = spring(
-                    dampingRatio = 0.85f,
-                    stiffness = 250f
+            enter = if (navigationPreset.compactPlayerSheetMotion) {
+                fadeIn(animationSpec = tween(180))
+            } else {
+                slideInVertically(
+                    initialOffsetY = { fullHeight -> fullHeight },
+                    animationSpec = spring(
+                        dampingRatio = 0.85f,
+                        stiffness = 250f
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(200)
                 )
-            ) + fadeIn(
-                animationSpec = tween(200)
-            ),
-            exit = slideOutVertically(
-                targetOffsetY = { fullHeight -> fullHeight },
-                animationSpec = tween(
-                    durationMillis = 350,
-                    easing = FastOutSlowInEasing
+            },
+            exit = if (navigationPreset.compactPlayerSheetMotion) {
+                fadeOut(animationSpec = tween(140))
+            } else {
+                slideOutVertically(
+                    targetOffsetY = { fullHeight -> fullHeight },
+                    animationSpec = tween(
+                        durationMillis = 350,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeOut(
+                    animationSpec = tween(250)
                 )
-            ) + fadeOut(
-                animationSpec = tween(250)
-            )
+            }
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Modal input shield: consume any tap not handled by the fullscreen player.
@@ -351,6 +349,7 @@ fun MainScreen(
 
                 FullPlayerScreen(
                     viewModel = playerViewModel,
+                    isCoverOptimized = isCoverScreen,
                     onCollapse = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         playerState = PlayerSheetState.MINI

@@ -77,6 +77,7 @@ fun Modifier.glassEffect(shape: Shape) = this.composed {
 // ------------------------------
 @SuppressLint("UnnecessaryComposedModifier")
 @Composable
+@Suppress("DEPRECATION")
 fun Modifier.tigerGlow(
     color: Color = MaterialTheme.colorScheme.primary
 ) = composed {

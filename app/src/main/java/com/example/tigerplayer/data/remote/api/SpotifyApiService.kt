@@ -33,7 +33,8 @@ interface SpotifyApiService {
     @GET("v1/me/playlists")
     suspend fun getUserPlaylists(
         @Header("Authorization") bearerToken: String,
-        @Query("limit") limit: Int = 50
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
     ): Response<SpotifyPlaylistResponse>
 
     @GET("v1/me/albums")
@@ -55,6 +56,21 @@ interface SpotifyApiService {
         @Path("id") albumId: String,
         @Query("limit") limit: Int = 50
     ): Response<SpotifyPaging<SpotifyTrack>>
+
+    @GET("v1/recommendations")
+    suspend fun getRecommendations(
+        @Header("Authorization") bearerToken: String,
+        @Query("seed_tracks") seedTracks: String? = null,
+        @Query("seed_artists") seedArtists: String? = null,
+        @Query("limit") limit: Int = 20
+    ): Response<SpotifyRecommendationsResponse>
+
+    @GET("v1/artists/{id}/top-tracks")
+    suspend fun getArtistTopTracks(
+        @Header("Authorization") bearerToken: String,
+        @Path("id") artistId: String,
+        @Query("market") market: String = "US"
+    ): Response<SpotifyTopTracksResponse>
 }
 
 interface SpotifyAuthApi {

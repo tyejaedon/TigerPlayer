@@ -1,9 +1,7 @@
 package com.example.tigerplayer.ui.queue
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.MediaItem
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.service.MediaControllerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -39,92 +36,31 @@ class QueueViewModel @Inject constructor(
 	private fun observeQueue() {
 		viewModelScope.launch {
 			combine(
-				mediaControllerManager.mediaControllerState.onStart { emit(Unit) },
-				mediaControllerManager.currentMediaItemIndex,
+				mediaControllerManager.getQueueSnapshotFlow(),
 				mediaControllerManager.isPlaying,
 				mediaControllerManager.shuffleModeEnabled
-			) { _, currentIndexSignal, isPlaying, isShuffleEnabled ->
-				val controller = mediaControllerManager.mediaController
-				val queue = if (controller == null) {
-					emptyList()
+			) { snapshot, isPlaying, isShuffleEnabled ->
+				val currentTrack = snapshot.tracks.getOrNull(snapshot.currentIndex)
+				val upcoming = if (snapshot.currentIndex in snapshot.tracks.indices) {
+					snapshot.tracks.drop(snapshot.currentIndex + 1)
 				} else {
-					List(controller.mediaItemCount) { index ->
-						fallbackTrackFromMediaItem(controller.getMediaItemAt(index))
-					}
-				}
-
-				val currentIndex = when {
-					controller == null -> -1
-					currentIndexSignal in queue.indices -> currentIndexSignal
-					else -> controller.currentMediaItemIndex.coerceIn(-1, queue.lastIndex)
-				}
-				val currentTrack = queue.getOrNull(currentIndex)
-
-				// FIX: Truthful ExoPlayer Timeline Traversal
-				val upcoming = mutableListOf<AudioTrack>()
-				if (controller != null && controller.currentTimeline.windowCount > 0) {
-					var loopIndex = controller.nextMediaItemIndex
-					var itemsAdded = 0
-					val maxItems = controller.mediaItemCount - 1
-
-					// Traverse until we hit the end, capped by max items to prevent infinite repeat loops
-					while (loopIndex != androidx.media3.common.C.INDEX_UNSET && itemsAdded < maxItems) {
-						upcoming.add(fallbackTrackFromMediaItem(controller.getMediaItemAt(loopIndex)))
-						loopIndex = controller.currentTimeline.getNextWindowIndex(
-							loopIndex,
-							androidx.media3.common.Player.REPEAT_MODE_OFF, // Ignore repeat for UI preview
-							isShuffleEnabled
-						)
-						itemsAdded++
-					}
+					snapshot.tracks
 				}
 
 				QueueUiState(
 					currentTrack = currentTrack,
 					upcomingTracks = upcoming,
-					fullQueue = queue,
-					currentIndex = currentIndex,
+					fullQueue = snapshot.tracks,
+					currentIndex = snapshot.currentIndex,
 					isPlaying = isPlaying,
 					isShuffleEnabled = isShuffleEnabled
 				)
 			}.collect { _uiState.value = it }
 		}
 	}
-	private fun fallbackTrackFromMediaItem(mediaItem: MediaItem): AudioTrack {
-		val metadata = mediaItem.mediaMetadata
-		val extras = metadata.extras
-		val fallbackUri = mediaItem.localConfiguration?.uri ?: Uri.EMPTY
-		val mimeType = extras?.getString(MediaControllerManager.META_MIME_TYPE).orEmpty()
-
-		return AudioTrack(
-			id = mediaItem.mediaId,
-			title = metadata.title?.toString() ?: "Unknown",
-			artist = metadata.artist?.toString() ?: "Unknown Artist",
-			album = metadata.albumTitle?.toString() ?: "Unknown Album",
-			uri = fallbackUri,
-			artworkUri = metadata.artworkUri ?: Uri.EMPTY,
-			durationMs = extras?.getLong(MediaControllerManager.META_DURATION_MS, 0L) ?: 0L,
-			mimeType = mimeType.ifBlank { "audio/unknown" },
-			isLocal = extras?.getBoolean(MediaControllerManager.META_IS_LOCAL, false) ?: false,
-			isRemote = extras?.getBoolean(MediaControllerManager.META_IS_REMOTE, fallbackUri != Uri.EMPTY)
-				?: (fallbackUri != Uri.EMPTY),
-			bitrate = extras?.getInt(MediaControllerManager.META_BITRATE, 0) ?: 0,
-			sampleRate = extras?.getInt(MediaControllerManager.META_SAMPLE_RATE, 0) ?: 0,
-			trackNumber = extras?.getInt(MediaControllerManager.META_TRACK_NUMBER, 0) ?: 0,
-			serverPath = extras?.getString(MediaControllerManager.META_SERVER_PATH),
-			year = extras?.getString(MediaControllerManager.META_YEAR),
-			dateAdded = extras?.getLong(MediaControllerManager.META_DATE_ADDED, 0L) ?: 0L,
-			isLiked = extras?.getBoolean(MediaControllerManager.META_IS_LIKED, false) ?: false,
-			path = extras?.getString(MediaControllerManager.META_PATH)
-		)
-	}
 
 	fun playTrackAt(index: Int) {
-		val controller = mediaControllerManager.mediaController ?: return
-		if (index in 0 until controller.mediaItemCount) {
-			controller.seekToDefaultPosition(index)
-			controller.play()
-		}
+		mediaControllerManager.playQueueItem(index)
 	}
 
 	fun playNext(track: AudioTrack) {

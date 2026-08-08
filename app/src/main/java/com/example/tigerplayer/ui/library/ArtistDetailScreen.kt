@@ -54,23 +54,23 @@ fun ArtistDetailsScreen(
     onAlbumClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val artistDetails by viewModel.artistDetails.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val colorScope = rememberCoroutineScope()
 
-    val normalizedKey = remember(artistName) {
-        ArtistUtils.getBaseArtist(artistName).lowercase().trim()
+    val normalizedArtistName = remember(artistName) {
+        ArtistUtils.getBaseArtist(artistName).trim()
     }
-
-    // THE FIX: Lookup using the normalizedKey, NOT the raw artistName
-    val profile = artistDetails[normalizedKey]
+    val artistProfileFlow = remember(artistName) {
+        viewModel.observeArtistProfile(artistName)
+    }
+    val profile by artistProfileFlow.collectAsStateWithLifecycle(initialValue = null)
 
     val playlists by viewModel.customPlaylists.collectAsStateWithLifecycle(initialValue = emptyList())
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     // --- 1. THE DATA ARCHIVE ---
     val artistTracks = remember(uiState.tracks, artistName) {
         uiState.tracks.filter { track ->
-            ArtistUtils.getBaseArtist(track.artist).equals(artistName, ignoreCase = true)
+            ArtistUtils.getBaseArtist(track.artist).equals(normalizedArtistName, ignoreCase = true)
         }
     }
 
@@ -125,7 +125,7 @@ fun ArtistDetailsScreen(
     }
 
     LaunchedEffect(artistName) {
-        if (profile == null) viewModel.fetchArtistProfile(artistName)
+        viewModel.fetchArtistProfile(artistName)
     }
 
     Box(

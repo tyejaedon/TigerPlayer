@@ -115,6 +115,9 @@ class FftProcessor @Inject constructor() : BaseAudioProcessor() {
         _bands.value = smoothed
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onFlush() { ptr = 0 }
+
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onReset() { ptr = 0 }
 }

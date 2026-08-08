@@ -58,7 +58,6 @@ class QueueScreenDragDropTest {
             TigerPlayerTheme {
                 QueueDisplay(
                     queue = tracks,
-                    currentTrackId = "1",
                     currentQueueIndex = 0,
                     isPlaying = false,
                     shuffleModeEnabled = false,
@@ -106,7 +105,6 @@ class QueueScreenDragDropTest {
 
                 QueueDisplay(
                     queue = queueState,
-                    currentTrackId = "1",
                     currentQueueIndex = 0,
                     isPlaying = false,
                     shuffleModeEnabled = false,
@@ -162,7 +160,6 @@ class QueueScreenDragDropTest {
             TigerPlayerTheme {
                 QueueDisplay(
                     queue = tracks,
-                    currentTrackId = "1",
                     currentQueueIndex = 0,
                     isPlaying = false,
                     shuffleModeEnabled = true,

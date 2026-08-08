@@ -14,6 +14,7 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.remote.api.YouTubeRepository
 import com.example.tigerplayer.data.repository.AudioRepository
+import com.example.tigerplayer.data.repository.ArtistDetails
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.engine.*
 import com.example.tigerplayer.service.MediaControllerManager
@@ -50,6 +51,7 @@ data class DetailedStatsUiState(
     val selectedFilter: String = "Today",
     val totalListeningHours: Int = 0,
     val totalListeningMinutes: Int = 0,
+    val globalListeningSharePercent: Float = 0f,
     val topArtists: List<StatItem> = emptyList(),
     val topTracks: List<StatItem> = emptyList()
 )
@@ -171,6 +173,7 @@ class PlayerViewModel @Inject constructor(
                                 currentTrack = null,
                                 isPlaying = false,
                                 currentPosition = 0L,
+                                isShuffleEnabled = mediaControllerManager.shuffleModeEnabled.value,
                                 currentLyrics = null,
                                 artistImageUrl = null,
                                 currentWaveform = emptyList()
@@ -189,6 +192,7 @@ class PlayerViewModel @Inject constructor(
                         currentTrack = spotifyTrack,
                         isPlaying = spotifyState.isPlaying,
                         currentPosition = spotifyState.positionMs,
+                        isShuffleEnabled = spotifyState.isShuffleEnabled,
                         currentLyrics = if (trackChanged) null else state.currentLyrics,
                         artistImageUrl = if (trackChanged) null else state.artistImageUrl,
                         currentWaveform = if (trackChanged) emptyList() else state.currentWaveform
@@ -215,6 +219,7 @@ class PlayerViewModel @Inject constructor(
 
         viewModelScope.launch {
             mediaControllerManager.shuffleModeEnabled.collect { shuffle ->
+                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) return@collect
                 _uiState.update { it.copy(isShuffleEnabled = shuffle) }
             }
         }
@@ -222,12 +227,6 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             mediaControllerManager.repeatMode.collect { repeat ->
                 _uiState.update { it.copy(repeatMode = repeat) }
-            }
-        }
-
-        viewModelScope.launch {
-            mediaControllerManager.currentMediaItemIndex.collect { index ->
-                _uiState.update { it.copy(currentQueueIndex = index) }
             }
         }
 
@@ -280,8 +279,13 @@ class PlayerViewModel @Inject constructor(
 
         // --- 3. QUEUE SYNCHRONIZATION ---
         viewModelScope.launch {
-            playbackEngine.getQueueFlow().collect { resolvedQueue ->
-                _uiState.update { it.copy(queue = resolvedQueue) }
+            playbackEngine.getQueueSnapshotFlow().collect { snapshot ->
+                _uiState.update {
+                    it.copy(
+                        queue = snapshot.tracks,
+                        currentQueueIndex = snapshot.currentIndex
+                    )
+                }
             }
         }
 
@@ -301,15 +305,10 @@ class PlayerViewModel @Inject constructor(
         // --- 5. THE TRACK TRANSITION RITUAL ---
         viewModelScope.launch {
             combine(
-                mediaControllerManager.currentMediaItemIndex,
-                mediaControllerManager.currentMediaId,
                 _uiState.map { it.queue }.distinctUntilChanged(),
-                _uiState.map { it.allTracks }.distinctUntilChanged()
-            ) { queueIndex, mediaId, queue, allTracks ->
-                val resolvedTrack = queue.getOrNull(queueIndex)
-                    ?: queue.firstOrNull { it.id == mediaId }
-                    ?: allTracks.find { it.id == mediaId }
-                queueIndex to resolvedTrack
+                _uiState.map { it.currentQueueIndex }.distinctUntilChanged()
+            ) { queue, queueIndex ->
+                queueIndex to queue.getOrNull(queueIndex)
             }.filter { (_, track) -> track != null }
              .distinctUntilChanged { old, new ->
                  old.first == new.first && old.second?.id == new.second?.id
@@ -514,21 +513,27 @@ class PlayerViewModel @Inject constructor(
     }
 
     // FullPlayer visual cycling excludes Sonic Prism; Prism is controlled from Home.
-    fun toggleVisualMode() {
+    // On cover screens we skip VORTEX to reduce GPU/battery load.
+    fun toggleVisualMode(isCoverOptimized: Boolean = false) {
         val nextMode = when (_uiState.value.visualMode) {
             PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
-            PlayerVisualMode.WAVEFORM -> PlayerVisualMode.VORTEX
+            PlayerVisualMode.WAVEFORM -> if (isCoverOptimized) PlayerVisualMode.ARTWORK else PlayerVisualMode.VORTEX
             PlayerVisualMode.VORTEX -> PlayerVisualMode.ARTWORK
             PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
         }
         _uiState.update { it.copy(visualMode = nextMode) }
     }
 
-    fun onFullPlayerOpened() {
-        val targetMode = when (preferredDefaultPlayerView) {
+    fun onFullPlayerOpened(isCoverOptimized: Boolean = false) {
+        val preferredMode = when (preferredDefaultPlayerView) {
             DefaultPlayerView.ARTWORK_3D -> PlayerVisualMode.ARTWORK
             DefaultPlayerView.FLUID_VORTEX -> PlayerVisualMode.VORTEX
             DefaultPlayerView.SONIC_PRISM -> PlayerVisualMode.ARTWORK
+        }
+        val targetMode = if (isCoverOptimized && preferredMode == PlayerVisualMode.VORTEX) {
+            PlayerVisualMode.WAVEFORM
+        } else {
+            preferredMode
         }
         _uiState.update { it.copy(visualMode = targetMode) }
     }
@@ -573,6 +578,10 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             metadataEngine.fetchArtistProfile(artistName)
         }
+    }
+
+    fun observeArtistProfile(artistName: String): Flow<ArtistDetails?> {
+        return metadataEngine.observeArtistProfile(artistName)
     }
 
     // ==========================================

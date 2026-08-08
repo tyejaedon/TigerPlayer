@@ -54,6 +54,7 @@ enum class AudioReactiveHapticsProfile {
 data class TigerSettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pureAmoledBlack: Boolean = false,
+    val disablePip: Boolean = false,
     val accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_ORANGE,
     val defaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D,
     val crossfadeDurationSec: Int = 0,
@@ -80,6 +81,7 @@ class SettingsDataStore @Inject constructor(
         TigerSettingsState(
             themeMode = enumOrDefault(prefs[THEME_MODE], ThemeMode.SYSTEM),
             pureAmoledBlack = prefs[PURE_AMOLED_BLACK] ?: false,
+            disablePip = prefs[DISABLE_PIP] ?: false,
             accentStyle = enumOrDefault(prefs[ACCENT_STYLE], TigerAccentStyle.NEON_ORANGE),
             defaultPlayerView = enumOrDefault(prefs[DEFAULT_PLAYER_VIEW], DefaultPlayerView.ARTWORK_3D),
             crossfadeDurationSec = (prefs[CROSSFADE_DURATION_SEC] ?: 0).coerceIn(0, 12),
@@ -107,6 +109,10 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setPureAmoledBlack(enabled: Boolean) {
         dataStore.edit { it[PURE_AMOLED_BLACK] = enabled }
+    }
+
+    suspend fun setDisablePip(disabled: Boolean) {
+        dataStore.edit { it[DISABLE_PIP] = disabled }
     }
 
     suspend fun setAccentStyle(style: TigerAccentStyle) {
@@ -177,6 +183,7 @@ class SettingsDataStore @Inject constructor(
     private companion object {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val PURE_AMOLED_BLACK = booleanPreferencesKey("pure_amoled_black")
+        val DISABLE_PIP = booleanPreferencesKey("disable_pip")
         val ACCENT_STYLE = stringPreferencesKey("accent_style")
         val DEFAULT_PLAYER_VIEW = stringPreferencesKey("default_player_view")
         val CROSSFADE_DURATION_SEC = intPreferencesKey("crossfade_duration_sec")

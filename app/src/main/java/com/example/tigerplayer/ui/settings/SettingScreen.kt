@@ -399,6 +399,16 @@ fun SettingsScreen(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
 
+                ListItem(
+                    headlineContent = { Text("DISABLE PiP", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Stop mini-player mode when app goes to background") },
+                    leadingContent = { Icon(Icons.Rounded.Headset, null, tint = accent) },
+                    trailingContent = {
+                        Switch(checked = settings.disablePip, onCheckedChange = viewModel::setDisablePip)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 Column(modifier = Modifier.padding(16.dp)) {

@@ -222,6 +222,7 @@ private fun TimeRangeSelector(
 }
 
 @Composable
+@Suppress("DEPRECATION")
 private fun RadarChart(
     values: Map<SonicAxis, Float>,
     modifier: Modifier = Modifier

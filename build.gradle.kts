@@ -7,5 +7,5 @@ plugins {
     // Replace "2.0.21" with whatever Kotlin version your project is using.
     id("com.google.devtools.ksp") version "2.3.2" apply false
 
-    id("com.google.dagger.hilt.android") version "2.59.2" apply false
+    id("com.google.dagger.hilt.android") version "2.60.1" apply false
 }

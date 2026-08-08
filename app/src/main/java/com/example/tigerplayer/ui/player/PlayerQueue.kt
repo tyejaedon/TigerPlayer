@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.tigerplayer.R
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -35,7 +37,6 @@ import com.example.tigerplayer.ui.theme.bounceClick
 @Composable
 fun QueueDisplay(
     queue: List<AudioTrack>,
-    currentTrackId: String?,
     currentQueueIndex: Int,
     isPlaying: Boolean,
     shuffleModeEnabled: Boolean,
@@ -74,15 +75,15 @@ fun QueueDisplay(
         }
     }
 
-    val currentIndex = remember(currentQueueIndex, localQueue.size, currentTrackId) {
+    val currentIndex = remember(currentQueueIndex, localQueue.size) {
         if (currentQueueIndex in localQueue.indices) {
             currentQueueIndex
         } else {
-            localQueue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0)
+            -1
         }
     }
 
-    LaunchedEffect(currentTrackId) {
+    LaunchedEffect(currentQueueIndex, localQueue.size) {
         if (currentIndex >= 0) {
             listState.animateScrollToItem(currentIndex, scrollOffset = -200)
         }
@@ -108,10 +109,13 @@ fun QueueDisplay(
                 letterSpacing = 2.sp
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (shuffleModeEnabled) {
-                    Icon(WitcherIcons.Shuffle, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                }
+                Icon(
+                    painter = painterResource(id = if (shuffleModeEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle_off),
+                    contentDescription = if (shuffleModeEnabled) "Shuffle enabled" else "Shuffle disabled",
+                    tint = if (shuffleModeEnabled) Color.White else Color.White.copy(alpha = 0.42f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
                 Icon(
                     if (repeatMode == 1) WitcherIcons.RepeatOne else WitcherIcons.Repeat,
                     null,
@@ -141,19 +145,16 @@ fun QueueDisplay(
         ) {
             itemsIndexed(
                 items = localQueue,
-                key = { _, track -> track.id }
+                key = { index, track -> "${track.id}#$index" }
             ) { index, track ->
                 val isActive = index == currentIndex
                 val isDragging = dragCurrentIndex == index && dragStartIndex != -1
                 val latestIndex by rememberUpdatedState(index)
-                val resolvedQueueIndex = remember(queue, track.id, index) {
-                    queue.indexOfFirst { it.id == track.id }.takeIf { it >= 0 } ?: index
-                }
 
                 val dragHandleModifier = if (shuffleModeEnabled) {
                     Modifier
                 } else {
-                    Modifier.pointerInput(track.id) {
+                    Modifier.pointerInput(track.id, index) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
                                 dragStartIndex = latestIndex
@@ -203,7 +204,7 @@ fun QueueDisplay(
                         .testTag("queue_row_${track.id}_$index")
                         .fillMaxWidth()
                         .animateItem()
-                        .bounceClick { onTrackClick(resolvedQueueIndex) },
+                        .bounceClick { onTrackClick(index) },
                     color = Color.Transparent,
                     shape = RoundedCornerShape(16.dp)
                 ) {
@@ -263,7 +264,7 @@ fun QueueDisplay(
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (!isActive) {
-                                    IconButton(onClick = { onRemoveFromQueue(resolvedQueueIndex) }) {
+                                    IconButton(onClick = { onRemoveFromQueue(index) }) {
                                         Icon(WitcherIcons.Close, contentDescription = null, tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(18.dp))
                                     }
                                 }

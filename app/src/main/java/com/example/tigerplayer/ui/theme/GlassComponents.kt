@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun PremiumGlassCard(
+fun GlassCardContainer(
     modifier: Modifier = Modifier,
     shape: Shape = MaterialTheme.shapes.large,
     borderWidth: Dp = 1.3.dp,

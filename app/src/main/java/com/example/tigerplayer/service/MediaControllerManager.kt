@@ -49,6 +49,11 @@ class MediaControllerManager @Inject constructor(
     private val bluetoothDeviceManager: BluetoothDeviceManager
 ) {
 
+    data class QueueSnapshot(
+        val tracks: List<AudioTrack> = emptyList(),
+        val currentIndex: Int = -1
+    )
+
     companion object {
         private const val FLOW_STATE_DEFAULT_WINDOW_MS = 7_000L
         private const val FLOW_STATE_MIN_WINDOW_MS = 3_000L
@@ -209,8 +214,7 @@ class MediaControllerManager @Inject constructor(
                 _isPlaying.value = controller.isPlaying
                 _shuffleModeEnabled.value = controller.shuffleModeEnabled
                 _repeatMode.value = controller.repeatMode
-                _currentMediaId.value = controller.currentMediaItem?.mediaId ?: ""
-                _currentMediaItemIndex.value = controller.currentMediaItemIndex
+                updateCurrentQueuePointer(controller)
 
                 setupPlayerListener(controller)
                 restorePlaybackState(controller)
@@ -262,8 +266,7 @@ class MediaControllerManager @Inject constructor(
             }
 
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-                _currentMediaId.value = item?.mediaId ?: ""
-                _currentMediaItemIndex.value = controller.currentMediaItemIndex
+                updateCurrentQueuePointer(controller)
                 _currentPosition.value = 0L
                 maybeEmitTransitionHaptic()
                 flowStateFadeOutJob?.cancel()
@@ -281,7 +284,7 @@ class MediaControllerManager @Inject constructor(
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-                _currentMediaItemIndex.value = controller.currentMediaItemIndex
+                updateCurrentQueuePointer(controller)
                 _mediaControllerState.tryEmit(Unit)
             }
         })
@@ -530,6 +533,85 @@ class MediaControllerManager @Inject constructor(
         return List(controller.mediaItemCount) { controller.getMediaItemAt(it) }
     }
 
+    fun getQueueFlow(): Flow<List<AudioTrack>> {
+        return getQueueSnapshotFlow().map { it.tracks }
+    }
+
+    fun getQueueSnapshotFlow(): Flow<QueueSnapshot> {
+        return combine(
+            mediaControllerState.onStart { emit(Unit) },
+            currentMediaItemIndex
+        ) { _, currentIndex ->
+            val queue = getQueueTracks()
+            val safeIndex = if (currentIndex in queue.indices) currentIndex else -1
+            QueueSnapshot(tracks = queue, currentIndex = safeIndex)
+        }.distinctUntilChanged()
+    }
+
+    fun getQueueTracks(): List<AudioTrack> {
+        val controller = mediaController ?: return emptyList()
+        return List(controller.mediaItemCount) { index ->
+            mediaItemToAudioTrack(controller.getMediaItemAt(index))
+        }
+    }
+
+    fun getUpcomingTracksPreview(isShuffleEnabled: Boolean): List<AudioTrack> {
+        val controller = mediaController ?: return emptyList()
+        val queue = getQueueTracks()
+        if (queue.isEmpty()) return emptyList()
+
+        if (controller.currentTimeline.windowCount == 0) {
+            val currentIndex = controller.currentMediaItemIndex
+            if (currentIndex == C.INDEX_UNSET) return queue
+            return queue.drop((currentIndex + 1).coerceAtMost(queue.size))
+        }
+
+        val upcoming = mutableListOf<AudioTrack>()
+        var loopIndex = controller.nextMediaItemIndex
+        var itemsAdded = 0
+        val maxItems = controller.mediaItemCount - 1
+
+        while (loopIndex != C.INDEX_UNSET && itemsAdded < maxItems) {
+            upcoming.add(mediaItemToAudioTrack(controller.getMediaItemAt(loopIndex)))
+            loopIndex = controller.currentTimeline.getNextWindowIndex(
+                loopIndex,
+                Player.REPEAT_MODE_OFF,
+                isShuffleEnabled
+            )
+            itemsAdded++
+        }
+        return upcoming
+    }
+
+    fun mediaItemToAudioTrack(mediaItem: MediaItem): AudioTrack {
+        val metadata = mediaItem.mediaMetadata
+        val extras = metadata.extras
+        val fallbackUri = mediaItem.localConfiguration?.uri ?: Uri.EMPTY
+        val mimeType = extras?.getString(META_MIME_TYPE).orEmpty()
+
+        return AudioTrack(
+            id = mediaItem.mediaId,
+            title = metadata.title?.toString() ?: "Unknown",
+            artist = metadata.artist?.toString() ?: "Unknown Artist",
+            album = metadata.albumTitle?.toString() ?: "Unknown Album",
+            uri = fallbackUri,
+            artworkUri = metadata.artworkUri ?: Uri.EMPTY,
+            durationMs = extras?.getLong(META_DURATION_MS, 0L) ?: 0L,
+            mimeType = mimeType.ifBlank { "audio/unknown" },
+            isLocal = extras?.getBoolean(META_IS_LOCAL, false) ?: false,
+            isRemote = extras?.getBoolean(META_IS_REMOTE, fallbackUri != Uri.EMPTY)
+                ?: (fallbackUri != Uri.EMPTY),
+            bitrate = extras?.getInt(META_BITRATE, 0) ?: 0,
+            sampleRate = extras?.getInt(META_SAMPLE_RATE, 0) ?: 0,
+            trackNumber = extras?.getInt(META_TRACK_NUMBER, 0) ?: 0,
+            serverPath = extras?.getString(META_SERVER_PATH),
+            path = extras?.getString(META_PATH),
+            year = extras?.getString(META_YEAR),
+            dateAdded = extras?.getLong(META_DATE_ADDED, 0L) ?: 0L,
+            isLiked = extras?.getBoolean(META_IS_LIKED, false) ?: false
+        )
+    }
+
     fun createMediaItem(track: AudioTrack): MediaItem {
         return MediaItem.Builder()
             .setMediaId(track.id)
@@ -573,6 +655,8 @@ class MediaControllerManager @Inject constructor(
         controller.prepare()
         controller.play()
 
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -591,7 +675,8 @@ class MediaControllerManager @Inject constructor(
         if (index !in 0 until controller.mediaItemCount) return
 
         controller.removeMediaItem(index)
-        _currentMediaItemIndex.value = controller.currentMediaItemIndex
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -607,6 +692,8 @@ class MediaControllerManager @Inject constructor(
             val insertIndex = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
             controller.addMediaItem(insertIndex, newItem)
         }
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -621,6 +708,8 @@ class MediaControllerManager @Inject constructor(
         } else {
             controller.addMediaItem(controller.mediaItemCount, newItem)
         }
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -633,7 +722,22 @@ class MediaControllerManager @Inject constructor(
         val controller = mediaController ?: return
         if (fromIndex in 0 until controller.mediaItemCount && toIndex in 0 until controller.mediaItemCount) {
             controller.moveMediaItem(fromIndex, toIndex)
+            updateCurrentQueuePointer(controller)
+            _mediaControllerState.tryEmit(Unit)
             saveCurrentState()
+        }
+    }
+
+    private fun updateCurrentQueuePointer(controller: MediaController) {
+        _currentMediaId.value = controller.currentMediaItem?.mediaId ?: ""
+        _currentMediaItemIndex.value = controller.currentMediaItemIndex
+    }
+
+    fun playQueueItem(index: Int) {
+        val controller = mediaController ?: return
+        if (index in 0 until controller.mediaItemCount) {
+            controller.seekTo(index, C.TIME_UNSET)
+            controller.play()
         }
     }
 

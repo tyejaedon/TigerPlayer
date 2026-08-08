@@ -181,7 +181,7 @@ fun DaylistDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = { viewModel.setPlaylistAndPlay(tracks, 0) },
+                            onClick = { playCurationAt(viewModel, tracks, index = 0) },
                             enabled = tracks.isNotEmpty(),
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
@@ -197,7 +197,7 @@ fun DaylistDetailScreen(
                         OutlinedButton(
                             onClick = {
                                 if (tracks.isNotEmpty()) {
-                                    viewModel.setPlaylistAndPlay(tracks.shuffled(), 0)
+                                    playCurationShuffled(viewModel, tracks)
                                 }
                             },
                             enabled = tracks.isNotEmpty(),
@@ -249,7 +249,7 @@ fun DaylistDetailScreen(
                             index = index,
                             track = track,
                             accent = descriptor.accent,
-                            onClick = { viewModel.setPlaylistAndPlay(tracks, index) }
+                            onClick = { playCurationAt(viewModel, tracks, index) }
                         )
                     }
                 }
@@ -447,5 +447,27 @@ private fun formatDuration(durationMs: Long): String {
 private fun formatMinutes(durationMs: Long): String {
     val minutes = max(1L, durationMs / 60_000L)
     return "$minutes min"
+}
+
+private fun playCurationAt(viewModel: PlayerViewModel, tracks: List<AudioTrack>, index: Int) {
+    if (tracks.isEmpty()) return
+    val safeIndex = index.coerceIn(0, tracks.lastIndex)
+    val target = tracks[safeIndex]
+
+    if (target.id.startsWith("spotify:")) {
+        // Spotify App Remote does not support loading the local Media3 queue.
+        viewModel.playTrack(target)
+    } else {
+        viewModel.setPlaylistAndPlay(tracks, safeIndex)
+    }
+}
+
+private fun playCurationShuffled(viewModel: PlayerViewModel, tracks: List<AudioTrack>) {
+    if (tracks.isEmpty()) return
+    if (tracks.first().id.startsWith("spotify:")) {
+        viewModel.playTrack(tracks.shuffled().first())
+    } else {
+        viewModel.setPlaylistAndPlay(tracks.shuffled(), 0)
+    }
 }
 

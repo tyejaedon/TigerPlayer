@@ -30,6 +30,7 @@ val TigerMutedSilk = Color(0xFFE8EDF5)
 val TigerNeonOrange = Color(0xFFFF7A1A)
 val TigerCyberCyan = Color(0xFF00E5FF)
 val TigerToxicLime = Color(0xFF39FF14)
+val TigerHotPink = Color(0xFFFF4FC3)
 val TigerElectricAmber = Color(0xFFFFB347)
 val TigerSpectralViolet = Color(0xFF6C5CE7)
 

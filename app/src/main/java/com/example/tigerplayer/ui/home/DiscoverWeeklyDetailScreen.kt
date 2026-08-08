@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -213,7 +214,7 @@ fun DiscoverWeeklyDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = { viewModel.setPlaylistAndPlay(tracks, 0) },
+                            onClick = { playCurationAt(viewModel, tracks, index = 0) },
                             enabled = tracks.isNotEmpty(),
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
@@ -229,7 +230,7 @@ fun DiscoverWeeklyDetailScreen(
                         OutlinedButton(
                             onClick = {
                                 if (tracks.isNotEmpty()) {
-                                    viewModel.setPlaylistAndPlay(tracks.shuffled(), 0)
+                                    playCurationShuffled(viewModel, tracks)
                                 }
                             },
                             enabled = tracks.isNotEmpty(),
@@ -274,7 +275,7 @@ fun DiscoverWeeklyDetailScreen(
                         DiscoverTrackCard(
                             rank = index + 1,
                             track = track,
-                            onClick = { viewModel.setPlaylistAndPlay(tracks, index) }
+                            onClick = { playCurationAt(viewModel, tracks, index) }
                         )
                     }
                 }
@@ -342,7 +343,7 @@ private fun DiscoveryDeck(
                             fallback = androidx.compose.ui.res.painterResource(R.drawable.ic_tiger_logo),
                             modifier = Modifier
                                 .size(136.dp)
-                                .padding(start = xOffset, top = yOffset)
+                                .offset(x = xOffset, y = yOffset)
                                 .rotate(rotate)
                                 .clip(RoundedCornerShape(20.dp))
                                 .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
@@ -419,6 +420,27 @@ private fun DiscoverTrackCard(
                 modifier = Modifier.size(18.dp)
             )
         }
+    }
+}
+
+private fun playCurationAt(viewModel: PlayerViewModel, tracks: List<AudioTrack>, index: Int) {
+    if (tracks.isEmpty()) return
+    val safeIndex = index.coerceIn(0, tracks.lastIndex)
+    val target = tracks[safeIndex]
+
+    if (target.id.startsWith("spotify:")) {
+        viewModel.playTrack(target)
+    } else {
+        viewModel.setPlaylistAndPlay(tracks, safeIndex)
+    }
+}
+
+private fun playCurationShuffled(viewModel: PlayerViewModel, tracks: List<AudioTrack>) {
+    if (tracks.isEmpty()) return
+    if (tracks.first().id.startsWith("spotify:")) {
+        viewModel.playTrack(tracks.shuffled().first())
+    } else {
+        viewModel.setPlaylistAndPlay(tracks.shuffled(), 0)
     }
 }
 

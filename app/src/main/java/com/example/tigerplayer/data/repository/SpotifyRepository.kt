@@ -7,6 +7,7 @@ import com.example.tigerplayer.BuildConfig
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.remote.api.SpotifyApiService
 import com.example.tigerplayer.data.remote.model.SpotifyAlbum
+import com.example.tigerplayer.data.remote.model.SpotifyImage
 import com.example.tigerplayer.data.remote.model.SpotifyPlaylist
 import com.example.tigerplayer.data.remote.model.SpotifyTrack
 import com.spotify.android.appremote.api.ConnectionParams
@@ -29,7 +30,13 @@ import javax.inject.Singleton
 data class SpotifyPlaybackState(
     val track: AudioTrack,
     val isPlaying: Boolean,
-    val positionMs: Long
+    val positionMs: Long,
+    val isShuffleEnabled: Boolean = false
+)
+
+data class SpotifyCurationResult(
+    val daylist: List<AudioTrack>,
+    val discoveryWeekly: List<AudioTrack>
 )
 
 @Singleton
@@ -98,6 +105,77 @@ class SpotifyRepository @Inject constructor(
             Log.e("SpotifyRepo", "Playlist network failure", e)
             throw e // Re-throw so the ViewModel can catch it and notify the UI
         }
+    }
+
+    suspend fun fetchAllUserPlaylists(
+        token: String,
+        pageSize: Int = 50,
+        maxPages: Int = 6
+    ): List<SpotifyPlaylist> = withContext(Dispatchers.IO) {
+        val collected = mutableListOf<SpotifyPlaylist>()
+        var offset = 0
+        var pages = 0
+
+        while (pages < maxPages) {
+            val response = try {
+                spotifyApiService.getUserPlaylists(
+                    bearerToken = "Bearer $token",
+                    limit = pageSize,
+                    offset = offset
+                )
+            } catch (e: Exception) {
+                Log.e("SpotifyRepo", "Paged playlist fetch failed", e)
+                break
+            }
+
+            if (!response.isSuccessful) {
+                Log.e("SpotifyRepo", "Paged playlist fetch rejected: ${response.code()}")
+                break
+            }
+
+            val body = response.body() ?: break
+            val items = body.items
+            if (items.isEmpty()) break
+
+            collected += items
+            offset += items.size
+            pages += 1
+
+            if (body.next.isNullOrBlank()) break
+            if (offset >= body.total) break
+        }
+
+        collected
+    }
+
+    suspend fun fetchHomeCurations(token: String): SpotifyCurationResult = withContext(Dispatchers.IO) {
+        val playlists = fetchAllUserPlaylists(token)
+
+        fun pickPlaylist(keyword: String): SpotifyPlaylist? {
+            val candidates = playlists.filter { it.name.contains(keyword, ignoreCase = true) }
+            return candidates.firstOrNull { it.owner.id.equals("spotify", ignoreCase = true) }
+                ?: candidates.firstOrNull()
+        }
+
+        val daylistPlaylist = pickPlaylist("daylist")
+        val discoverWeeklyPlaylist = playlists.firstOrNull {
+            it.name.equals("Discover Weekly", ignoreCase = true)
+        } ?: pickPlaylist("discover weekly")
+
+        val daylistTracks = daylistPlaylist
+            ?.let { fetchPlaylistTracks(token, it.id) }
+            .orEmpty()
+            .map { it.toAudioTrack() }
+
+        val discoveryWeeklyTracks = discoverWeeklyPlaylist
+            ?.let { fetchPlaylistTracks(token, it.id) }
+            .orEmpty()
+            .map { it.toAudioTrack() }
+
+        SpotifyCurationResult(
+            daylist = daylistTracks,
+            discoveryWeekly = discoveryWeeklyTracks
+        )
     }
 
     suspend fun fetchUserSavedAlbums(token: String) = withContext(Dispatchers.IO) {
@@ -210,7 +288,12 @@ class SpotifyRepository @Inject constructor(
         _spotifyPlaybackState.value = _spotifyPlaybackState.value?.copy(positionMs = positionMs)
     }
 
-    fun toggleShuffle() = spotifyAppRemote?.playerApi?.toggleShuffle()
+    fun toggleShuffle() {
+        spotifyAppRemote?.playerApi?.toggleShuffle()
+        _spotifyPlaybackState.value = _spotifyPlaybackState.value?.let {
+            it.copy(isShuffleEnabled = !it.isShuffleEnabled)
+        }
+    }
     fun toggleRepeat() = spotifyAppRemote?.playerApi?.toggleRepeat()
 
     fun disconnect() {
@@ -244,7 +327,7 @@ class SpotifyRepository @Inject constructor(
                     album = "Spotify",
                     uri = Uri.EMPTY,
                     artworkUri = Uri.EMPTY,
-                    durationMs = track.duration.toLong(),
+                    durationMs = track.duration,
                     mimeType = "audio/spotify",
                     isLocal = false,
                     isRemote = true,
@@ -252,10 +335,17 @@ class SpotifyRepository @Inject constructor(
                     path = track.uri
                 )
 
+                // App Remote versions differ in typed accessors; reflection keeps this resilient.
+                val shuffleEnabled = extractShuffleEnabled(
+                    playerState = playerState,
+                    fallback = _spotifyPlaybackState.value?.isShuffleEnabled ?: false
+                )
+
                 _spotifyPlaybackState.value = SpotifyPlaybackState(
                     track = resolvedTrack,
                     isPlaying = !playerState.isPaused,
-                    positionMs = playerState.playbackPosition
+                    positionMs = playerState.playbackPosition,
+                    isShuffleEnabled = shuffleEnabled
                 )
             }
         } catch (e: Exception) {
@@ -267,8 +357,19 @@ class SpotifyRepository @Inject constructor(
         _spotifyPlaybackState.value = SpotifyPlaybackState(
             track = audioTrackFromUri(uri),
             isPlaying = true,
-            positionMs = 0L
+            positionMs = 0L,
+            isShuffleEnabled = _spotifyPlaybackState.value?.isShuffleEnabled ?: false
         )
+    }
+
+    private fun extractShuffleEnabled(playerState: Any, fallback: Boolean): Boolean {
+        val playbackOptions = runCatching {
+            playerState.javaClass.getMethod("getPlaybackOptions").invoke(playerState)
+        }.getOrNull() ?: return fallback
+
+        return runCatching {
+            playbackOptions.javaClass.getMethod("isShuffling").invoke(playbackOptions) as? Boolean
+        }.getOrNull() ?: fallback
     }
 
     private fun audioTrackFromUri(uri: String): AudioTrack {
@@ -290,5 +391,35 @@ class SpotifyRepository @Inject constructor(
             serverPath = null,
             path = uri
         )
+    }
+
+    private fun SpotifyTrack.toAudioTrack(): AudioTrack {
+        val trackUri = uri.ifBlank { "spotify:track:$id" }
+        val artwork = album?.images.bestImageUrl()
+
+        return AudioTrack(
+            id = trackUri,
+            title = name,
+            artist = artists.joinToString(", ") { it.name }.ifBlank { "Spotify" },
+            album = album?.name ?: "Spotify",
+            durationMs = durationMs,
+            uri = Uri.parse(trackUri),
+            artworkUri = artwork?.let(Uri::parse) ?: Uri.EMPTY,
+            mimeType = "audio/spotify",
+            isLocal = false,
+            isRemote = true,
+            trackNumber = 0,
+            bitrate = 0,
+            sampleRate = 0,
+            serverPath = null,
+            path = null
+        )
+    }
+
+    private fun List<SpotifyImage>?.bestImageUrl(): String? {
+        return this
+            ?.sortedByDescending { (it.width ?: 0) * (it.height ?: 0) }
+            ?.firstOrNull()
+            ?.url
     }
 }

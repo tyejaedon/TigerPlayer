@@ -69,6 +69,7 @@ class BluetoothDeviceManager @Inject constructor(
 
     private val bluetoothReceiver = object : BroadcastReceiver() {
         @SuppressLint("MissingPermission")
+        @Suppress("DEPRECATION")
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
 
@@ -90,7 +91,8 @@ class BluetoothDeviceManager @Inject constructor(
                 // Catch vendor-specific HFP broadcasts (Apple AT+XAPL, Plantronics, etc.)
                 "android.bluetooth.headset.profile.action.VENDOR_SPECIFIC_HEADSET_EVENT" -> {
                     val cmd = intent.getStringExtra("android.bluetooth.headset.extra.VENDOR_SPECIFIC_HEADSET_EVENT_CMD")
-                    val args = intent.getSerializableExtra("android.bluetooth.headset.extra.VENDOR_SPECIFIC_HEADSET_EVENT_ARGS") as? Array<*>
+                    val args = intent.extras
+                        ?.get("android.bluetooth.headset.extra.VENDOR_SPECIFIC_HEADSET_EVENT_ARGS") as? Array<*>
 
                     // Example: Apple/Beats exact battery reporting
                     if (cmd == "+IPHONEACCEV" && args != null && args.isNotEmpty()) {
@@ -171,10 +173,11 @@ class BluetoothDeviceManager @Inject constructor(
     }
 
     @SuppressLint("MissingPermission")
+    @Suppress("DEPRECATION")
     private fun connectGattForPreciseBattery(device: BluetoothDevice) {
         activeGatt?.close()
 
-        activeGatt = device.connectGatt(attributedContext, false, object : BluetoothGattCallback() {
+        val callback = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     gatt.discoverServices()
@@ -197,18 +200,43 @@ class BluetoothDeviceManager @Inject constructor(
             @Deprecated("Deprecated in Java")
             override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: android.bluetooth.BluetoothGattCharacteristic, status: Int) {
                 if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == BATTERY_LEVEL_UUID) {
-                    val level = characteristic.getIntValue(android.bluetooth.BluetoothGattCharacteristic.FORMAT_UINT8, 0)
+                    val level = readBatteryLevel(characteristic)
                     updateBatterySafely(gatt.device, level)
                 }
             }
 
+            @Deprecated("Deprecated in Java")
+            @Suppress("OVERRIDE_DEPRECATION")
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: android.bluetooth.BluetoothGattCharacteristic) {
                 if (characteristic.uuid == BATTERY_LEVEL_UUID) {
-                    val level = characteristic.getIntValue(android.bluetooth.BluetoothGattCharacteristic.FORMAT_UINT8, 0)
+                    val level = readBatteryLevel(characteristic)
                     updateBatterySafely(gatt.device, level)
                 }
             }
-        })
+
+            override fun onCharacteristicChanged(
+                gatt: BluetoothGatt,
+                characteristic: android.bluetooth.BluetoothGattCharacteristic,
+                value: ByteArray
+            ) {
+                if (characteristic.uuid == BATTERY_LEVEL_UUID) {
+                    val level = value.firstOrNull()?.toInt()?.and(0xFF) ?: -1
+                    updateBatterySafely(gatt.device, level)
+                }
+            }
+        }
+
+        activeGatt = device.connectGatt(
+            attributedContext,
+            false,
+            callback,
+            BluetoothDevice.TRANSPORT_AUTO
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readBatteryLevel(characteristic: android.bluetooth.BluetoothGattCharacteristic): Int {
+        return characteristic.value?.firstOrNull()?.toInt()?.and(0xFF) ?: -1
     }
 
     /**

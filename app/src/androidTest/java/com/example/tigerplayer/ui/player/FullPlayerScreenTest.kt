@@ -6,8 +6,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.prism.PrismUiState
-import com.example.tigerplayer.ui.prism.PrismViewModel
 import com.example.tigerplayer.ui.theme.TigerPlayerTheme
 import io.mockk.every
 import io.mockk.mockk
@@ -26,7 +24,6 @@ class FullPlayerScreenTest {
     @Test
     fun playPause_click_togglesState_and_neonThemeRendersWithoutCrash() {
         val playerViewModel = mockk<PlayerViewModel>(relaxed = true)
-        val prismViewModel = mockk<PrismViewModel>(relaxed = true)
 
         val sampleTrack = AudioTrack(
             id = "test-track",
@@ -53,10 +50,7 @@ class FullPlayerScreenTest {
                 currentWaveform = List(72) { 0.3f }
             )
         )
-        val prismStateFlow = MutableStateFlow(PrismUiState())
-
         every { playerViewModel.uiState } returns uiStateFlow
-        every { prismViewModel.uiState } returns prismStateFlow
         every { playerViewModel.togglePlayPause() } answers {
             uiStateFlow.value = uiStateFlow.value.copy(isPlaying = !uiStateFlow.value.isPlaying)
         }
@@ -65,7 +59,6 @@ class FullPlayerScreenTest {
             TigerPlayerTheme {
                 FullPlayerScreen(
                     viewModel = playerViewModel,
-                    prismViewModel = prismViewModel,
                     onCollapse = {},
                     onOpenQueueScreen = {},
                     onNavigateToAlbum = {}
@@ -80,9 +73,8 @@ class FullPlayerScreenTest {
     }
 
     @Test
-    fun sonicPrism_visualMode_transition_togglesPrismEnableBinding() {
+    fun header_lyrics_toggle_updates_main_view_state() {
         val playerViewModel = mockk<PlayerViewModel>(relaxed = true)
-        val prismViewModel = mockk<PrismViewModel>(relaxed = true)
 
         val sampleTrack = AudioTrack(
             id = "prism-track",
@@ -105,20 +97,19 @@ class FullPlayerScreenTest {
                 currentTrack = sampleTrack,
                 tracks = listOf(sampleTrack),
                 queue = listOf(sampleTrack),
-                visualMode = PlayerVisualMode.SONIC_PRISM,
                 mainViewState = MainViewState.ARTWORK
             )
         )
-        val prismStateFlow = MutableStateFlow(PrismUiState())
 
         every { playerViewModel.uiState } returns uiStateFlow
-        every { prismViewModel.uiState } returns prismStateFlow
+        every { playerViewModel.setMainViewState(any()) } answers {
+            uiStateFlow.value = uiStateFlow.value.copy(mainViewState = args[0] as MainViewState)
+        }
 
         composeRule.setContent {
             TigerPlayerTheme {
                 FullPlayerScreen(
                     viewModel = playerViewModel,
-                    prismViewModel = prismViewModel,
                     onCollapse = {},
                     onOpenQueueScreen = {},
                     onNavigateToAlbum = {}
@@ -126,16 +117,10 @@ class FullPlayerScreenTest {
             }
         }
 
-        composeRule.waitForIdle()
-        verify(atLeast = 1) { prismViewModel.setPrismEnabled(true) }
+        composeRule.onNodeWithContentDescription("Toggle lyrics view").assertIsDisplayed().performClick()
 
-        composeRule.runOnIdle {
-            uiStateFlow.value = uiStateFlow.value.copy(visualMode = PlayerVisualMode.ARTWORK)
-        }
-        composeRule.waitForIdle()
-
-        verify(atLeast = 1) { prismViewModel.setPrismEnabled(false) }
-        assertEquals(PlayerVisualMode.ARTWORK, uiStateFlow.value.visualMode)
+        verify(atLeast = 1) { playerViewModel.setMainViewState(MainViewState.LYRICS) }
+        assertEquals(MainViewState.LYRICS, uiStateFlow.value.mainViewState)
     }
 }
 

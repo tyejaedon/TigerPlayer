@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -155,7 +156,7 @@ private fun Header(currentMood: String, onClose: () -> Unit) {
 }
 
 @Composable
-private fun NexusSpatialCanvas(
+internal fun NexusSpatialCanvas(
     nodes: List<SpatialNode>,
     curvePoints: List<Offset>,
     audioFrame: AudioReactiveFrame,
@@ -169,6 +170,7 @@ private fun NexusSpatialCanvas(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
+            .testTag("nexus_canvas")
             .padding(horizontal = 24.dp, vertical = 8.dp)
             .shadow(20.dp, RoundedCornerShape(32.dp), spotColor = CyberCyan.copy(alpha = 0.24f))
             .glassEffect(RoundedCornerShape(32.dp))
@@ -247,6 +249,7 @@ private fun NexusSpatialCanvas(
 
             Box(
                 modifier = Modifier
+                    .testTag("nexus_node_${node.id}")
                     .offset(
                         with(LocalDensity.current) { px.toDp() - 34.dp },
                         with(LocalDensity.current) { py.toDp() - 34.dp }

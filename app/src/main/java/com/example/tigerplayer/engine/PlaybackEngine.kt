@@ -1,8 +1,6 @@
 package com.example.tigerplayer.engine
 
-import android.net.Uri
 import android.util.Log
-import androidx.media3.common.MediaItem
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.SpotifyPlaybackState
 import com.example.tigerplayer.data.repository.SpotifyRepository
@@ -24,43 +22,11 @@ class PlaybackEngine @Inject constructor(
 
     // Resolve queue directly from MediaController so queue state is not coupled to library filtering.
     fun getQueueFlow(): Flow<List<AudioTrack>> {
-        return mediaControllerManager.mediaControllerState
-            .onStart { emit(Unit) }
-            .map {
-                val controller = mediaControllerManager.mediaController ?: return@map emptyList()
-                List(controller.mediaItemCount) { i ->
-                    fallbackTrackFromMediaItem(controller.getMediaItemAt(i))
-                }
-            }
+        return mediaControllerManager.getQueueFlow()
     }
 
-    private fun fallbackTrackFromMediaItem(mediaItem: MediaItem): AudioTrack {
-        val metadata = mediaItem.mediaMetadata
-        val extras = metadata.extras
-        val fallbackUri = mediaItem.localConfiguration?.uri ?: Uri.EMPTY
-        val mimeType = extras?.getString(MediaControllerManager.META_MIME_TYPE).orEmpty()
-
-        return AudioTrack(
-            id = mediaItem.mediaId,
-            title = metadata.title?.toString() ?: "Unknown",
-            artist = metadata.artist?.toString() ?: "Unknown Artist",
-            album = metadata.albumTitle?.toString() ?: "Unknown Album",
-            uri = fallbackUri,
-            artworkUri = metadata.artworkUri ?: Uri.EMPTY,
-            durationMs = extras?.getLong(MediaControllerManager.META_DURATION_MS, 0L) ?: 0L,
-            mimeType = mimeType.ifBlank { "audio/unknown" },
-            isLocal = extras?.getBoolean(MediaControllerManager.META_IS_LOCAL, false) ?: false,
-            isRemote = extras?.getBoolean(MediaControllerManager.META_IS_REMOTE, fallbackUri != Uri.EMPTY)
-                ?: (fallbackUri != Uri.EMPTY),
-            bitrate = extras?.getInt(MediaControllerManager.META_BITRATE, 0) ?: 0,
-            sampleRate = extras?.getInt(MediaControllerManager.META_SAMPLE_RATE, 0) ?: 0,
-            trackNumber = extras?.getInt(MediaControllerManager.META_TRACK_NUMBER, 0) ?: 0,
-            serverPath = extras?.getString(MediaControllerManager.META_SERVER_PATH),
-            path = extras?.getString(MediaControllerManager.META_PATH),
-            year = extras?.getString(MediaControllerManager.META_YEAR),
-            dateAdded = extras?.getLong(MediaControllerManager.META_DATE_ADDED, 0L) ?: 0L,
-            isLiked = extras?.getBoolean(MediaControllerManager.META_IS_LIKED, false) ?: false
-        )
+    fun getQueueSnapshotFlow(): Flow<MediaControllerManager.QueueSnapshot> {
+        return mediaControllerManager.getQueueSnapshotFlow()
     }
 
     val spotifyRemoteTrack: Flow<AudioTrack?> = spotifyPlaybackState.map { it?.track }
@@ -154,11 +120,7 @@ class PlaybackEngine @Inject constructor(
     }
 
     fun playQueueItem(index: Int) {
-        val controller = mediaControllerManager.mediaController ?: return
-        if (index in 0 until controller.mediaItemCount) {
-            controller.seekTo(index, androidx.media3.common.C.TIME_UNSET)
-            controller.play()
-        }
+        mediaControllerManager.playQueueItem(index)
     }
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
