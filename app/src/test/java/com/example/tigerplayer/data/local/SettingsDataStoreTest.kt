@@ -2,24 +2,39 @@ package com.example.tigerplayer.data.local
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import java.io.File
+import androidx.datastore.preferences.core.emptyPreferences
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SettingsDataStoreTest {
 
+    private class InMemoryPreferencesDataStore(
+        initial: Preferences = emptyPreferences()
+    ) : DataStore<Preferences> {
+        private val state = MutableStateFlow(initial)
+        private val lock = Mutex()
+
+        override val data: Flow<Preferences> = state
+
+        override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences {
+            return lock.withLock {
+                val updated = transform(state.value)
+                state.value = updated
+                updated
+            }
+        }
+    }
+
     @Test
     fun persists_and_reads_control_matrix_preferences() {
         runBlocking {
-            val tempFile = File.createTempFile("settings_test", ".preferences_pb")
-            val dataStore: DataStore<Preferences> = PreferenceDataStoreFactory.create(
-                produceFile = { tempFile }
-            )
-
-            val settingsDataStore = SettingsDataStore(dataStore)
+            val settingsDataStore = SettingsDataStore(InMemoryPreferencesDataStore())
 
             settingsDataStore.setThemeMode(ThemeMode.DARK)
             settingsDataStore.setPureAmoledBlack(true)
@@ -44,8 +59,6 @@ class SettingsDataStoreTest {
             assertEquals(SkipShortAudio.BELOW_60_SECONDS, snapshot.skipShortAudio)
             assertEquals(false, snapshot.resumeOnBluetoothConnect)
             assertEquals(true, snapshot.resumeOnWiredHeadsetConnect)
-
-            tempFile.delete()
         }
     }
 }

@@ -49,6 +49,11 @@ class MediaControllerManager @Inject constructor(
     private val bluetoothDeviceManager: BluetoothDeviceManager
 ) {
 
+    data class QueueSnapshot(
+        val tracks: List<AudioTrack> = emptyList(),
+        val currentIndex: Int = -1
+    )
+
     companion object {
         private const val FLOW_STATE_DEFAULT_WINDOW_MS = 7_000L
         private const val FLOW_STATE_MIN_WINDOW_MS = 3_000L
@@ -209,8 +214,7 @@ class MediaControllerManager @Inject constructor(
                 _isPlaying.value = controller.isPlaying
                 _shuffleModeEnabled.value = controller.shuffleModeEnabled
                 _repeatMode.value = controller.repeatMode
-                _currentMediaId.value = controller.currentMediaItem?.mediaId ?: ""
-                _currentMediaItemIndex.value = controller.currentMediaItemIndex
+                updateCurrentQueuePointer(controller)
 
                 setupPlayerListener(controller)
                 restorePlaybackState(controller)
@@ -262,8 +266,7 @@ class MediaControllerManager @Inject constructor(
             }
 
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-                _currentMediaId.value = item?.mediaId ?: ""
-                _currentMediaItemIndex.value = controller.currentMediaItemIndex
+                updateCurrentQueuePointer(controller)
                 _currentPosition.value = 0L
                 maybeEmitTransitionHaptic()
                 flowStateFadeOutJob?.cancel()
@@ -281,7 +284,7 @@ class MediaControllerManager @Inject constructor(
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-                _currentMediaItemIndex.value = controller.currentMediaItemIndex
+                updateCurrentQueuePointer(controller)
                 _mediaControllerState.tryEmit(Unit)
             }
         })
@@ -531,9 +534,18 @@ class MediaControllerManager @Inject constructor(
     }
 
     fun getQueueFlow(): Flow<List<AudioTrack>> {
-        return mediaControllerState
-            .onStart { emit(Unit) }
-            .map { getQueueTracks() }
+        return getQueueSnapshotFlow().map { it.tracks }
+    }
+
+    fun getQueueSnapshotFlow(): Flow<QueueSnapshot> {
+        return combine(
+            mediaControllerState.onStart { emit(Unit) },
+            currentMediaItemIndex
+        ) { _, currentIndex ->
+            val queue = getQueueTracks()
+            val safeIndex = if (currentIndex in queue.indices) currentIndex else -1
+            QueueSnapshot(tracks = queue, currentIndex = safeIndex)
+        }.distinctUntilChanged()
     }
 
     fun getQueueTracks(): List<AudioTrack> {
@@ -643,6 +655,8 @@ class MediaControllerManager @Inject constructor(
         controller.prepare()
         controller.play()
 
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -661,7 +675,8 @@ class MediaControllerManager @Inject constructor(
         if (index !in 0 until controller.mediaItemCount) return
 
         controller.removeMediaItem(index)
-        _currentMediaItemIndex.value = controller.currentMediaItemIndex
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -677,6 +692,8 @@ class MediaControllerManager @Inject constructor(
             val insertIndex = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
             controller.addMediaItem(insertIndex, newItem)
         }
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -691,6 +708,8 @@ class MediaControllerManager @Inject constructor(
         } else {
             controller.addMediaItem(controller.mediaItemCount, newItem)
         }
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
     }
 
@@ -703,8 +722,15 @@ class MediaControllerManager @Inject constructor(
         val controller = mediaController ?: return
         if (fromIndex in 0 until controller.mediaItemCount && toIndex in 0 until controller.mediaItemCount) {
             controller.moveMediaItem(fromIndex, toIndex)
+            updateCurrentQueuePointer(controller)
+            _mediaControllerState.tryEmit(Unit)
             saveCurrentState()
         }
+    }
+
+    private fun updateCurrentQueuePointer(controller: MediaController) {
+        _currentMediaId.value = controller.currentMediaItem?.mediaId ?: ""
+        _currentMediaItemIndex.value = controller.currentMediaItemIndex
     }
 
     fun playQueueItem(index: Int) {

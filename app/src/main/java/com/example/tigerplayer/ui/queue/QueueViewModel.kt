@@ -36,26 +36,22 @@ class QueueViewModel @Inject constructor(
 	private fun observeQueue() {
 		viewModelScope.launch {
 			combine(
-				mediaControllerManager.getQueueFlow(),
-				mediaControllerManager.currentMediaItemIndex,
+				mediaControllerManager.getQueueSnapshotFlow(),
 				mediaControllerManager.isPlaying,
 				mediaControllerManager.shuffleModeEnabled
-			) { queue, currentIndexSignal, isPlaying, isShuffleEnabled ->
-				val controller = mediaControllerManager.mediaController
-
-				val currentIndex = when {
-					queue.isEmpty() -> -1
-					currentIndexSignal in queue.indices -> currentIndexSignal
-					else -> controller?.currentMediaItemIndex?.coerceIn(-1, queue.lastIndex) ?: -1
+			) { snapshot, isPlaying, isShuffleEnabled ->
+				val currentTrack = snapshot.tracks.getOrNull(snapshot.currentIndex)
+				val upcoming = if (snapshot.currentIndex in snapshot.tracks.indices) {
+					snapshot.tracks.drop(snapshot.currentIndex + 1)
+				} else {
+					snapshot.tracks
 				}
-				val currentTrack = queue.getOrNull(currentIndex)
-				val upcoming = mediaControllerManager.getUpcomingTracksPreview(isShuffleEnabled)
 
 				QueueUiState(
 					currentTrack = currentTrack,
 					upcomingTracks = upcoming,
-					fullQueue = queue,
-					currentIndex = currentIndex,
+					fullQueue = snapshot.tracks,
+					currentIndex = snapshot.currentIndex,
 					isPlaying = isPlaying,
 					isShuffleEnabled = isShuffleEnabled
 				)

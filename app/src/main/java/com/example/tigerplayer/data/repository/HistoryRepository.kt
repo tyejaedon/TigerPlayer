@@ -61,6 +61,9 @@ class HistoryRepository @Inject constructor(
     fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>> =
         tigerDao.getTopArtists(startTime, limit)
 
+    fun observeArtistStats(artistName: String): Flow<ArtistStats?> =
+        tigerDao.observeArtistStats(artistName)
+
     fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats> =
         tigerDao.getSonicFootprintStats(startTime)
 

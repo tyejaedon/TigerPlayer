@@ -109,7 +109,11 @@ fun QueueScreen(
             QueueTrackRow(
                 track = current,
                 isPinned = true,
-                onClick = { viewModel.playTrackAt(uiState.currentIndex) }
+                onClick = {
+                    if (uiState.currentIndex >= 0) {
+                        viewModel.playTrackAt(uiState.currentIndex)
+                    }
+                }
             )
             Spacer(modifier = Modifier.height(14.dp))
         }

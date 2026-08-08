@@ -247,10 +247,17 @@ abstract class TigerDao {
                     WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
                     WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
                     WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' with ') > 0 THEN substr(artist, 1, instr(lower(artist), ' with ') - 1)
+                    WHEN instr(lower(artist), ' vs. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' vs. ') - 1)
+                    WHEN instr(lower(artist), ' vs ') > 0 THEN substr(artist, 1, instr(lower(artist), ' vs ') - 1)
+                    WHEN instr(lower(artist), ' x ') > 0 THEN substr(artist, 1, instr(lower(artist), ' x ') - 1)
+                    WHEN instr(lower(artist), '(feat') > 0 THEN substr(artist, 1, instr(lower(artist), '(feat') - 1)
+                    WHEN instr(lower(artist), '[feat') > 0 THEN substr(artist, 1, instr(lower(artist), '[feat') - 1)
                     WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
                     WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
                     WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
                     WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
+                    WHEN instr(artist, '|') > 0 THEN substr(artist, 1, instr(artist, '|') - 1)
                     ELSE artist 
                 END) as artistName
             FROM playback_history
@@ -272,10 +279,17 @@ abstract class TigerDao {
                     WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
                     WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
                     WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' with ') > 0 THEN substr(artist, 1, instr(lower(artist), ' with ') - 1)
+                    WHEN instr(lower(artist), ' vs. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' vs. ') - 1)
+                    WHEN instr(lower(artist), ' vs ') > 0 THEN substr(artist, 1, instr(lower(artist), ' vs ') - 1)
+                    WHEN instr(lower(artist), ' x ') > 0 THEN substr(artist, 1, instr(lower(artist), ' x ') - 1)
+                    WHEN instr(lower(artist), '(feat') > 0 THEN substr(artist, 1, instr(lower(artist), '(feat') - 1)
+                    WHEN instr(lower(artist), '[feat') > 0 THEN substr(artist, 1, instr(lower(artist), '[feat') - 1)
                     WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
                     WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
                     WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
                     WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
+                    WHEN instr(artist, '|') > 0 THEN substr(artist, 1, instr(artist, '|') - 1)
                     ELSE artist 
                 END) as artistName,
                 durationListenedMs
@@ -287,6 +301,46 @@ abstract class TigerDao {
     """
     )
     abstract suspend fun getArtistMinutesListened(artistName: String): Int
+
+    @Query(
+        """
+        WITH NormalizedHistory AS (
+            SELECT
+                trim(CASE
+                    WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
+                    WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
+                    WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
+                    WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
+                    WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' with ') > 0 THEN substr(artist, 1, instr(lower(artist), ' with ') - 1)
+                    WHEN instr(lower(artist), ' vs. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' vs. ') - 1)
+                    WHEN instr(lower(artist), ' vs ') > 0 THEN substr(artist, 1, instr(lower(artist), ' vs ') - 1)
+                    WHEN instr(lower(artist), ' x ') > 0 THEN substr(artist, 1, instr(lower(artist), ' x ') - 1)
+                    WHEN instr(lower(artist), '(feat') > 0 THEN substr(artist, 1, instr(lower(artist), '(feat') - 1)
+                    WHEN instr(lower(artist), '[feat') > 0 THEN substr(artist, 1, instr(lower(artist), '[feat') - 1)
+                    WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
+                    WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
+                    WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
+                    WHEN instr(artist, '|') > 0 THEN substr(artist, 1, instr(artist, '|') - 1)
+                    ELSE artist
+                END) as artistName,
+                durationListenedMs
+            FROM playback_history
+        )
+        SELECT
+            h.artistName as artistName,
+            COUNT(*) as playCount,
+            COALESCE(SUM(h.durationListenedMs), 0) as totalListeningMs,
+            ac.imageUrl as imageUrl
+        FROM NormalizedHistory h
+        LEFT JOIN artist_cache ac ON ac.artistName = lower(trim(h.artistName))
+        WHERE lower(trim(h.artistName)) = lower(trim(:artistName))
+        GROUP BY h.artistName
+        LIMIT 1
+    """
+    )
+    abstract fun observeArtistStats(artistName: String): Flow<ArtistStats?>
 
     // ==========================================
     // --- 2. THE METADATA SIGN (Artist Cache) ---

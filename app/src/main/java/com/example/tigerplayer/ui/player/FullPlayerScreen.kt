@@ -76,8 +76,10 @@ fun FullPlayerScreen(
     onCollapse: () -> Unit,
     onOpenQueueScreen: () -> Unit,
     onNavigateToAlbum: (String) -> Unit,
+    isCoverOptimized: Boolean = false,
 ) {
     val windowState = rememberCoverScreenWindowState()
+    val useCoverOptimizedUi = isCoverOptimized || windowState.isCoverScreen
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentTrack = uiState.currentTrack ?: return
     val context = LocalContext.current
@@ -148,10 +150,15 @@ fun FullPlayerScreen(
     }
     val shouldUseUnifiedLyricsLayout =
         windowState.hasSeparatingHinge && uiState.mainViewState == MainViewState.LYRICS && useUnifiedFlexLyrics
+    val effectiveVisualMode = when {
+        useCoverOptimizedUi && uiState.visualMode == PlayerVisualMode.VORTEX -> PlayerVisualMode.WAVEFORM
+        useCoverOptimizedUi && uiState.visualMode == PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
+        else -> uiState.visualMode
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // --- 1. CINEMATIC BACKGROUND (Banding Correction) ---
-       CinematicZoomImage(model = imageRequest)
+       CinematicZoomImage(model = imageRequest, animated = !useCoverOptimizedUi)
 
         // --- BACKGROUND SCRIM (Visual Anchor) ---
         Box(
@@ -180,7 +187,7 @@ fun FullPlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = if (useCoverOptimizedUi) 12.dp else 20.dp)
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
@@ -202,6 +209,7 @@ fun FullPlayerScreen(
                 onToggleFlexLyricsUnified = { useUnifiedFlexLyrics = !useUnifiedFlexLyrics },
                 isAlbumClarityMode = albumClarityMode,
                 onToggleAlbumClarityMode = { albumClarityMode = !albumClarityMode },
+                isCoverOptimized = useCoverOptimizedUi,
                 track = currentTrack
             )
 
@@ -215,13 +223,15 @@ fun FullPlayerScreen(
                 ) {
                     PlayerMainContent(
                         uiState = uiState,
+                        visualMode = effectiveVisualMode,
                         currentTrack = currentTrack,
                         viewModel = viewModel,
                         dynamicTextColor = Color.White,
                         dynamicAccentColor = readableAccentColor,
                         dominantBgColor = dominantBgColor,
                         isLightTheme = isLightTheme,
-                        isAlbumClarityMode = albumClarityMode
+                        isAlbumClarityMode = albumClarityMode,
+                        isCoverOptimized = useCoverOptimizedUi
                     )
                 }
 
@@ -241,7 +251,8 @@ fun FullPlayerScreen(
                         uiState = uiState,
                         viewModel = viewModel,
                         showTechnicalInfo = showTechnicalInfo,
-                        onShowTechnicalInfoChange = { showTechnicalInfo = it }
+                        onShowTechnicalInfoChange = { showTechnicalInfo = it },
+                        isCoverOptimized = useCoverOptimizedUi
                     )
                 }
             } else {
@@ -254,13 +265,15 @@ fun FullPlayerScreen(
                 ) {
                     PlayerMainContent(
                         uiState = uiState,
+                        visualMode = effectiveVisualMode,
                         currentTrack = currentTrack,
                         viewModel = viewModel,
                         dynamicTextColor = Color.White,
                         dynamicAccentColor = readableAccentColor,
                         dominantBgColor = dominantBgColor,
                         isLightTheme = isLightTheme,
-                        isAlbumClarityMode = albumClarityMode
+                        isAlbumClarityMode = albumClarityMode,
+                        isCoverOptimized = useCoverOptimizedUi
                     )
                 }
 
@@ -272,7 +285,8 @@ fun FullPlayerScreen(
                     uiState = uiState,
                     viewModel = viewModel,
                     showTechnicalInfo = showTechnicalInfo,
-                    onShowTechnicalInfoChange = { showTechnicalInfo = it }
+                    onShowTechnicalInfoChange = { showTechnicalInfo = it },
+                    isCoverOptimized = useCoverOptimizedUi
                 )
             }
         }
@@ -303,19 +317,24 @@ fun FullPlayerScreen(
     }
 }
 @Composable
-fun CinematicZoomImage(model: Any) {
-    val transition = rememberInfiniteTransition(label = "CinematicZoom")
-
-    // Slowly loop between 1.0 and 1.1 every 10 seconds
-    val scale by transition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(10000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "Scale"
-    )
+fun CinematicZoomImage(
+    model: Any,
+    animated: Boolean = true
+) {
+    val scale = if (animated) {
+        val transition = rememberInfiniteTransition(label = "CinematicZoom")
+        transition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 1.1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(10000, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "Scale"
+        ).value
+    } else {
+        1.0f
+    }
 
     AsyncImage(
         model = model,
@@ -329,13 +348,15 @@ fun CinematicZoomImage(model: Any) {
 @Composable
 private fun PlayerMainContent(
     uiState: PlayerUiState,
+    visualMode: PlayerVisualMode,
     currentTrack: AudioTrack,
     viewModel: PlayerViewModel,
     dynamicTextColor: Color,
     dynamicAccentColor: Color,
     dominantBgColor: Color,
     isLightTheme: Boolean,
-    isAlbumClarityMode: Boolean
+    isAlbumClarityMode: Boolean,
+    isCoverOptimized: Boolean
 ) {
     AnimatedContent(
         targetState = uiState.mainViewState,
@@ -350,7 +371,6 @@ private fun PlayerMainContent(
             MainViewState.QUEUE -> {
                 QueueDisplay(
                     queue = uiState.queue,
-                    currentTrackId = currentTrack.id,
                     currentQueueIndex = uiState.currentQueueIndex,
                     isPlaying = uiState.isPlaying,
                     shuffleModeEnabled = uiState.isShuffleEnabled,
@@ -395,50 +415,57 @@ private fun PlayerMainContent(
                     var touchTiltX by remember { mutableFloatStateOf(0f) }
                     var touchTiltY by remember { mutableFloatStateOf(0f) }
 
-
-                    val sensorManager = sensorContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
                     val lifecycleOwner = LocalLifecycleOwner.current
-                    DisposableEffect(lifecycleOwner) {
-                        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-                        val listener = object : SensorEventListener {
-                            override fun onSensorChanged(event: SensorEvent?) {
-                                if (event != null) {
-                                    sensorTiltY = (event.values[0] * 1.5f).coerceIn(-12f, 12f)
-                                    sensorTiltX = (event.values[1] * 1.5f).coerceIn(-12f, 12f)
+                    if (!isCoverOptimized) {
+                        val sensorManager = sensorContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+                        DisposableEffect(lifecycleOwner) {
+                            val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+                            val listener = object : SensorEventListener {
+                                override fun onSensorChanged(event: SensorEvent?) {
+                                    if (event != null) {
+                                        sensorTiltY = (event.values[0] * 1.5f).coerceIn(-12f, 12f)
+                                        sensorTiltX = (event.values[1] * 1.5f).coerceIn(-12f, 12f)
+                                    }
+                                }
+                                override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+                            }
+
+                            val observer = LifecycleEventObserver { _, event ->
+                                when (event) {
+                                    Lifecycle.Event.ON_RESUME -> {
+                                        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+                                    }
+                                    Lifecycle.Event.ON_PAUSE -> {
+                                        sensorManager.unregisterListener(listener)
+                                        // Reset tilt to flat when backgrounded so it looks right upon return
+                                        sensorTiltX = 0f
+                                        sensorTiltY = 0f
+                                    }
+                                    else -> {}
                                 }
                             }
-                            override fun onAccuracyChanged(s: Sensor?, a: Int) {}
-                        }
 
-                        val observer = LifecycleEventObserver { _, event ->
-                            when (event) {
-                                Lifecycle.Event.ON_RESUME -> {
-                                    sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
-                                }
-                                Lifecycle.Event.ON_PAUSE -> {
-                                    sensorManager.unregisterListener(listener)
-                                    // Reset tilt to flat when backgrounded so it looks right upon return
-                                    sensorTiltX = 0f
-                                    sensorTiltY = 0f
-                                }
-                                else -> {}
+                            lifecycleOwner.lifecycle.addObserver(observer)
+                            onDispose {
+                                lifecycleOwner.lifecycle.removeObserver(observer)
+                                sensorManager.unregisterListener(listener)
                             }
-                        }
-
-                        lifecycleOwner.lifecycle.addObserver(observer)
-                        onDispose {
-                            lifecycleOwner.lifecycle.removeObserver(observer)
-                            sensorManager.unregisterListener(listener)
                         }
                     }
 
-                    val animatedTiltX by animateFloatAsState(targetValue = sensorTiltX + touchTiltX, label = "TiltX")
-                    val animatedTiltY by animateFloatAsState(targetValue = sensorTiltY + touchTiltY, label = "TiltY")
+                    val animatedTiltX by animateFloatAsState(
+                        targetValue = if (isCoverOptimized) 0f else sensorTiltX + touchTiltX,
+                        label = "TiltX"
+                    )
+                    val animatedTiltY by animateFloatAsState(
+                        targetValue = if (isCoverOptimized) 0f else sensorTiltY + touchTiltY,
+                        label = "TiltY"
+                    )
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .aspectRatio(1f)
+                    val motionModifier = if (isCoverOptimized) {
+                        Modifier
+                    } else {
+                        Modifier
                             .pointerInput(Unit) {
                                 detectDragGestures(
                                     onDragEnd = { touchTiltX = 0f; touchTiltY = 0f },
@@ -455,6 +482,13 @@ private fun PlayerMainContent(
                                 rotationY = animatedTiltY
                                 cameraDistance = 16f * density
                             }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(if (isCoverOptimized) 0.92f else 0.85f)
+                            .aspectRatio(1f)
+                            .then(motionModifier)
                             .shadow(
                                 elevation = if (isLightTheme) 24.dp else 48.dp,
                                 shape = RoundedCornerShape(32.dp),
@@ -462,7 +496,7 @@ private fun PlayerMainContent(
                             )
                             .clip(RoundedCornerShape(32.dp))
                             .pointerInput(Unit) {
-                                detectTapGestures(onTap = { viewModel.toggleVisualMode() })
+                                detectTapGestures(onTap = { viewModel.toggleVisualMode(isCoverOptimized = isCoverOptimized) })
                             }
                     ) {
                         // Base Art
@@ -474,7 +508,7 @@ private fun PlayerMainContent(
                         )
 
                         // Overlays
-                        AnimatedVisibility(visible = !isAlbumClarityMode && uiState.visualMode == PlayerVisualMode.VORTEX) {
+                        AnimatedVisibility(visible = !isAlbumClarityMode && visualMode == PlayerVisualMode.VORTEX) {
                             FluidVortexRenderer(
                                 isPlaying = uiState.isPlaying,
                                 amplitudes = uiState.currentWaveform,
@@ -484,7 +518,7 @@ private fun PlayerMainContent(
                             )
                         }
 
-                        AnimatedVisibility(visible = !isAlbumClarityMode && uiState.visualMode == PlayerVisualMode.WAVEFORM) {
+                        AnimatedVisibility(visible = !isAlbumClarityMode && visualMode == PlayerVisualMode.WAVEFORM) {
                             Box(
                                 modifier = Modifier.fillMaxSize().background(if (isLightTheme) Color.Black.copy(0.42f) else Color.Black.copy(0.6f)),
                                 contentAlignment = Alignment.Center
@@ -532,15 +566,28 @@ private fun PlayerControlsContent(
     uiState: PlayerUiState,
     viewModel: PlayerViewModel,
     showTechnicalInfo: Boolean,
-    onShowTechnicalInfoChange: (Boolean) -> Unit
+    onShowTechnicalInfoChange: (Boolean) -> Unit,
+    isCoverOptimized: Boolean
 ) {
-    Column(
-        modifier = Modifier
+    val controlShape = if (isCoverOptimized) RoundedCornerShape(24.dp) else RoundedCornerShape(36.dp)
+    val controlsContainerModifier = if (isCoverOptimized) {
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 14.dp)
+            .clip(controlShape)
+            .background(Color.Black.copy(alpha = 0.3f))
+            .padding(vertical = 16.dp)
+    } else {
+        Modifier
             .fillMaxWidth()
             .padding(bottom = 24.dp)
-            .clip(RoundedCornerShape(36.dp))
-            .glassEffect(RoundedCornerShape(36.dp))
+            .clip(controlShape)
+            .glassEffect(controlShape)
             .padding(vertical = 24.dp)
+    }
+
+    Column(
+        modifier = controlsContainerModifier
     ) {
         Box(modifier = Modifier.padding(horizontal = 24.dp)) {
             TrackInfoCard(
@@ -586,10 +633,11 @@ fun HeaderRitual(
     onToggleFlexLyricsUnified: () -> Unit,
     isAlbumClarityMode: Boolean,
     onToggleAlbumClarityMode: () -> Unit,
+    isCoverOptimized: Boolean,
     track: AudioTrack
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = if (isCoverOptimized) 8.dp else 16.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val buttonBg = if (backgroundColor.luminance() > 0.5f) {
@@ -623,14 +671,16 @@ fun HeaderRitual(
                     active = mainViewState == MainViewState.YOUTUBE_VIEWPORT,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.YOUTUBE_VIEWPORT) MainViewState.ARTWORK else MainViewState.YOUTUBE_VIEWPORT) },
                     contentDescription = "Toggle cloud view",
-                    testTag = "header_cloud_button"
+                    testTag = "header_cloud_button",
+                    isCoverOptimized = isCoverOptimized
                 )
                 HeaderButton(
                     icon = Icons.AutoMirrored.Rounded.Subject,
                     active = mainViewState == MainViewState.LYRICS,
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.LYRICS) MainViewState.ARTWORK else MainViewState.LYRICS) },
                     contentDescription = "Toggle lyrics view",
-                    testTag = "header_lyrics_button"
+                    testTag = "header_lyrics_button",
+                    isCoverOptimized = isCoverOptimized
                 )
                 HeaderButton(
                     icon = Icons.AutoMirrored.Rounded.QueueMusic,
@@ -638,7 +688,8 @@ fun HeaderRitual(
                     onClick = { onSetMainViewState(if (mainViewState == MainViewState.QUEUE) MainViewState.ARTWORK else MainViewState.QUEUE) },
                     onLongClick = onOpenQueueScreen,
                     contentDescription = "Open queue view",
-                    testTag = "header_queue_button"
+                    testTag = "header_queue_button",
+                    isCoverOptimized = isCoverOptimized
                 )
                 IconButton(onClick = onShowOptions) {
                     Icon(WitcherIcons.Options, null, tint = Color.White)
@@ -675,23 +726,25 @@ fun HeaderRitual(
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isFlexMode) {
+        if (!isCoverOptimized) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isFlexMode) {
+                    FilterChip(
+                        selected = isFlexLyricsUnified,
+                        onClick = onToggleFlexLyricsUnified,
+                        label = { Text("Flex Lyrics Full") }
+                    )
+                }
                 FilterChip(
-                    selected = isFlexLyricsUnified,
-                    onClick = onToggleFlexLyricsUnified,
-                    label = { Text("Flex Lyrics Full") }
+                    selected = isAlbumClarityMode,
+                    onClick = onToggleAlbumClarityMode,
+                    label = { Text("Clear Album") }
                 )
             }
-            FilterChip(
-                selected = isAlbumClarityMode,
-                onClick = onToggleAlbumClarityMode,
-                label = { Text("Clear Album") }
-            )
         }
     }
 }
@@ -704,7 +757,8 @@ private fun HeaderButton(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     contentDescription: String,
-    testTag: String? = null
+    testTag: String? = null,
+    isCoverOptimized: Boolean = false
 ) {
     val iconTint = Color.White
 
@@ -719,7 +773,7 @@ private fun HeaderButton(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(8.dp),
+            .padding(if (isCoverOptimized) 10.dp else 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = iconTint)

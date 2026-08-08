@@ -25,6 +25,10 @@ class PlaybackEngine @Inject constructor(
         return mediaControllerManager.getQueueFlow()
     }
 
+    fun getQueueSnapshotFlow(): Flow<MediaControllerManager.QueueSnapshot> {
+        return mediaControllerManager.getQueueSnapshotFlow()
+    }
+
     val spotifyRemoteTrack: Flow<AudioTrack?> = spotifyPlaybackState.map { it?.track }
 
     fun playTrack(track: AudioTrack, libraryTracks: List<AudioTrack>) {

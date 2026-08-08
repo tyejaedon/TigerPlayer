@@ -37,7 +37,6 @@ import com.example.tigerplayer.ui.theme.bounceClick
 @Composable
 fun QueueDisplay(
     queue: List<AudioTrack>,
-    currentTrackId: String?,
     currentQueueIndex: Int,
     isPlaying: Boolean,
     shuffleModeEnabled: Boolean,
@@ -76,11 +75,11 @@ fun QueueDisplay(
         }
     }
 
-    val currentIndex = remember(currentQueueIndex, localQueue.size, currentTrackId) {
+    val currentIndex = remember(currentQueueIndex, localQueue.size) {
         if (currentQueueIndex in localQueue.indices) {
             currentQueueIndex
         } else {
-            localQueue.indexOfFirst { it.id == currentTrackId }.coerceAtLeast(0)
+            -1
         }
     }
 

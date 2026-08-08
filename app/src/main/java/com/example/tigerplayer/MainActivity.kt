@@ -35,8 +35,6 @@ import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.local.ThemeMode
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.navigation.TigerPlayerNavGraph
-import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
-import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.player.PipVisualizerSurface
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.settings.SettingsViewModel
@@ -124,7 +122,6 @@ class MainActivity : ComponentActivity() {
             val pipMode by isInPipMode.collectAsState()
             val authMessageState by authMessage.collectAsState()
             val snackbarHostState = remember { SnackbarHostState() }
-            val coverWindowState = rememberCoverScreenWindowState()
             val settingsViewModel: SettingsViewModel =
                 hiltViewModel(checkNotNull(LocalViewModelStoreOwner.current) {
                     "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
@@ -162,11 +159,6 @@ class MainActivity : ComponentActivity() {
                     ) {
                         if (pipMode) {
                             PipVisualizerSurface(playerViewModel = playerViewModel)
-                        } else if (coverWindowState.isCoverScreen) {
-                            CoverScreenMiniHub(
-                                playerViewModel = playerViewModel,
-                                windowState = coverWindowState
-                            )
                         } else {
                             val navController = rememberNavController()
                             TigerPlayerNavGraph(

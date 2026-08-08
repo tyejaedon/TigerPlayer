@@ -41,6 +41,7 @@ import com.example.tigerplayer.constellation.PositionedNode
 import com.example.tigerplayer.ui.theme.bounceClick
 import com.example.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOf
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -75,6 +76,24 @@ fun ConstellationScreen(
             is ConstellationState.Loading -> ConstellationLoadingState()
             is ConstellationState.Error -> ErrorState(state.message, onClose)
             is ConstellationState.Success -> {
+                val focusedNode = focusedNodeId?.let { state.nodes[it] }
+                val focusedArtistName = focusedNode
+                    ?.takeIf { it.type == NodeType.ARTIST }
+                    ?.label
+                val selectedArtistFlow = remember(focusedArtistName) {
+                    focusedArtistName
+                        ?.let(viewModel::observeArtistReading)
+                        ?: flowOf(null)
+                }
+                val selectedArtistReading by selectedArtistFlow.collectAsState(initial = null)
+
+                LaunchedEffect(focusedArtistName) {
+                    focusedArtistName?.let(viewModel::prefetchArtistReading)
+                }
+
+                val artistNodeCount = state.nodes.values.count { it.type == NodeType.ARTIST }
+                val albumNodeCount = state.nodes.values.count { it.type == NodeType.ALBUM }
+                val trackNodeCount = state.nodes.values.count { it.type == NodeType.TRACK }
 
                 Box(
                     modifier = Modifier
@@ -230,6 +249,10 @@ fun ConstellationScreen(
                 // --- 3. UI OVERLAY ---
                 ConstellationOverlay(
                     insight = state.insightMessage,
+                    selectedArtistReading = selectedArtistReading,
+                    artistNodeCount = artistNodeCount,
+                    albumNodeCount = albumNodeCount,
+                    trackNodeCount = trackNodeCount,
                     onClose = onClose,
                     onRefresh = { viewModel.refreshUniverse() },
                     onRecenter = {
@@ -381,6 +404,10 @@ fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () 
 @Composable
 fun ConstellationOverlay(
     insight: String,
+    selectedArtistReading: ConstellationArtistReading?,
+    artistNodeCount: Int,
+    albumNodeCount: Int,
+    trackNodeCount: Int,
     onClose: () -> Unit,
     onRefresh: () -> Unit,
     onRecenter: () -> Unit
@@ -418,12 +445,63 @@ fun ConstellationOverlay(
                 Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFFB388FF))
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("COSMIC INSIGHT", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB388FF), fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                 Text(insight, style = MaterialTheme.typography.bodyMedium, color = Color.White, lineHeight = 20.sp)
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (selectedArtistReading != null) {
+                    val artist = selectedArtistReading
+                    Text(
+                        text = "${artist.artistName} • ${artist.playCount} plays • ${artist.minutesListened} min",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${formatPercent(artist.listeningSharePercent)} of lifetime listening",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.78f)
+                    )
+                    val genreLabel = artist.genres.take(3).joinToString(" • ")
+                    if (genreLabel.isNotBlank()) {
+                        Text(
+                            text = genreLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color(0xFFB388FF),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    artist.bioSnippet?.let { bio ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = bio,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.72f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Tap an artist star to inspect your real listening totals. Universe currently maps $artistNodeCount artists, $albumNodeCount albums, and $trackNodeCount tracks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.78f)
+                    )
+                }
             }
         }
     }
+}
+
+private fun formatPercent(value: Float): String {
+    return "${String.format("%.1f", value)}%"
 }
 
 @Composable

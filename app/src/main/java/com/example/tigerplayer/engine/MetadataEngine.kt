@@ -44,6 +44,40 @@ class MetadataEngine @Inject constructor(
     private val _currentArtistImageUrl = MutableStateFlow<String?>(null)
     val currentArtistImageUrl: StateFlow<String?> = _currentArtistImageUrl.asStateFlow()
 
+    fun observeArtistProfile(artistName: String): Flow<ArtistDetails?> {
+        val normalizedName = ArtistUtils.getBaseArtist(artistName).trim()
+        val normalizedKey = normalizedName.lowercase()
+
+        return combine(
+            artistDetails.map { it[normalizedKey] },
+            tigerDao.observeArtistStats(normalizedName),
+            tigerDao.getTotalListeningTimeMs(0L)
+        ) { cachedProfile, stats, lifetimeListeningMs ->
+            if (cachedProfile == null && stats == null) {
+                return@combine null
+            }
+
+            val artistListeningMs = (stats?.totalListeningMs ?: 0L).coerceAtLeast(0L)
+            val minutesListened = (artistListeningMs / 60_000L).toInt()
+            val listeningSharePercent = if (artistListeningMs > 0L && lifetimeListeningMs > 0L) {
+                ((artistListeningMs.toFloat() / lifetimeListeningMs.toFloat()) * 100f).coerceIn(0f, 100f)
+            } else {
+                0f
+            }
+
+            ArtistDetails(
+                name = cachedProfile?.name ?: stats?.artistName ?: normalizedName,
+                imageUrl = cachedProfile?.imageUrl ?: stats?.imageUrl,
+                bio = cachedProfile?.bio,
+                genres = cachedProfile?.genres ?: emptyList(),
+                localPlayCount = stats?.playCount ?: 0,
+                popularity = cachedProfile?.popularity ?: 0,
+                minutesListened = minutesListened,
+                listeningSharePercent = listeningSharePercent
+            )
+        }.distinctUntilChanged()
+    }
+
     fun clearTrackMetadata() {
         _currentLyrics.value = null
         _currentArtistImageUrl.value = null
