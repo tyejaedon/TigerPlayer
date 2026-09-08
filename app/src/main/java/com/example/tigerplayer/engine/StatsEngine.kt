@@ -129,8 +129,27 @@ class StatsEngine @Inject constructor(
                 calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
                 calendar.timeInMillis
             }
+            "Last 7 Days" -> {
+                // Includes today + previous 6 calendar days.
+                calendar.add(Calendar.DAY_OF_YEAR, -6)
+                calendar.timeInMillis
+            }
             "This Month" -> {
                 calendar.set(Calendar.DAY_OF_MONTH, 1)
+                calendar.timeInMillis
+            }
+            "Last 30 Days" -> {
+                // Includes today + previous 29 calendar days.
+                calendar.add(Calendar.DAY_OF_YEAR, -29)
+                calendar.timeInMillis
+            }
+            "Last 90 Days" -> {
+                // Includes today + previous 89 calendar days.
+                calendar.add(Calendar.DAY_OF_YEAR, -89)
+                calendar.timeInMillis
+            }
+            "This Year" -> {
+                calendar.set(Calendar.DAY_OF_YEAR, 1)
                 calendar.timeInMillis
             }
             "Lifetime" -> 0L // Captures everything
