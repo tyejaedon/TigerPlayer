@@ -232,6 +232,32 @@ class StatsEnginePlayTrackingTest {
         assertTrue(source.captured == MediaSource.SPOTIFY)
     }
 
+    @Test
+    fun `both navidrome id separators resolve to the navidrome source`() = runTest {
+        // Ids written before issue #44 may carry either separator. Misattributing a play would
+        // silently corrupt the per-source stats breakdown.
+        listOf("navidrome_abc", "navidrome:abc").forEach { id ->
+            val repository = mockk<HistoryRepository>(relaxed = true)
+            val localClock = FakeElapsedTimeSource()
+            val localEngine = StatsEngine(repository, localClock)
+            val source = slot<MediaSource>()
+            localEngine.onTrackChanged(track(id = id, durationMs = FIVE_MINUTES), isPlaying = true)
+            localClock.advance(THREE_MINUTES)
+            localEngine.flushPendingPlay()
+            coVerify(exactly = 1) {
+                repository.addTrackToHistory(
+                    trackId = id,
+                    title = any(),
+                    artist = any(),
+                    album = any(),
+                    imageUrl = any(),
+                    durationListenedMs = any(),
+                    source = capture(source)
+                )
+            }
+            assertEquals(MediaSource.NAVIDROME, source.captured)
+        }
+    }
     private companion object {
         const val FIVE_MINUTES = 5 * 60 * 1000L
         const val THREE_MINUTES = 3 * 60 * 1000L

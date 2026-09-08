@@ -36,6 +36,15 @@ class NavidromePrefs @Inject constructor(
     val username: Flow<String?> = _username
     val password: Flow<String?> = _password
 
+    // Synchronous snapshots for callers that cannot suspend - notably the Media3 data-source
+    // resolver and the Coil interceptor, which sign requests on a loading thread (issue #44).
+    // Backed by the same in-memory StateFlow, so no disk or crypto work happens here.
+    fun serverUrlSnapshot(): String? = _serverUrl.value
+
+    fun usernameSnapshot(): String? = _username.value
+
+    fun passwordSnapshot(): String? = _password.value
+
     /**
      * Stores the credentials. This is called when you hit "Initiate Sync".
      */

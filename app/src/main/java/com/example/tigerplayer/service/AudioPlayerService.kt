@@ -21,6 +21,10 @@ import androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -30,6 +34,8 @@ import com.example.tigerplayer.BuildConfig
 import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.example.tigerplayer.data.local.PlaybackPrefs
 import com.example.tigerplayer.data.local.SettingsDataStore
+import com.example.tigerplayer.data.remote.NavidromeUri
+import com.example.tigerplayer.data.remote.NavidromeUrlSigner
 import com.example.tigerplayer.MainActivity
 import com.example.tigerplayer.R
 import com.example.tigerplayer.engine.AcousticNode
@@ -39,6 +45,7 @@ import com.example.tigerplayer.engine.FilterType
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +76,7 @@ class AudioPlayerService : MediaSessionService() {
     @Inject lateinit var playbackPrefs: PlaybackPrefs
     @Inject lateinit var settingsDataStore: SettingsDataStore
     @Inject lateinit var hapticsDebugMonitor: HapticsDebugMonitor
+    @Inject lateinit var navidromeUrlSigner: NavidromeUrlSigner
 
     private var isBitPerfectMode = false // Initial state to ensure first call triggers
     private var routeToSystemDecoderDsp = false
@@ -161,12 +169,16 @@ class AudioPlayerService : MediaSessionService() {
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            // AUDIOPHILE COMPATIBILITY: Explicitly flag as high-priority music 
+            // AUDIOPHILE COMPATIBILITY: Explicitly flag as high-priority music
             // to improve Samsung's "Separate App Sound" routing accuracy.
             .setAllowedCapturePolicy(C.ALLOW_CAPTURE_BY_NONE)
             .build()
 
         player = ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(this)
+                    .setDataSourceFactory(buildNavidromeAwareDataSourceFactory())
+            )
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
@@ -260,6 +272,34 @@ class AudioPlayerService : MediaSessionService() {
         invalidateCustomLayout()
     }
 
+    /**
+     * Data-source chain that resolves opaque `navidrome://` URIs into freshly signed URLs at open
+     * time (issue #44).
+     *
+     * Signing here rather than at mapping time is what makes a restored queue playable: Subsonic
+     * salted tokens rotate, so a URL persisted in the queue snapshot would be dead on replay.
+     * The resolver runs on the loading thread and only reads in-memory credentials, so it does no
+     * disk I/O.
+     */
+    @OptIn(UnstableApi::class)
+    private fun buildNavidromeAwareDataSourceFactory(): DataSource.Factory {
+        val upstream = DefaultDataSource.Factory(this)
+
+        return ResolvingDataSource.Factory(upstream) { dataSpec ->
+            if (!NavidromeUri.isNavidrome(dataSpec.uri)) {
+                dataSpec
+            } else {
+                val signed = navidromeUrlSigner.sign(dataSpec.uri)
+                if (signed == null) {
+                    // No credentials: fail loudly rather than issuing an unsigned request that the
+                    // server would reject with a confusing error. Never log the URI itself.
+                    throw IOException("Navidrome credentials unavailable; cannot resolve stream")
+                }
+                dataSpec.withUri(signed)
+            }
+        }
+    }
+
     @OptIn(UnstableApi::class)
     private fun setAudioOffloadEnabled(enabled: Boolean) {
         // AUDIOPHILE COMPATIBILITY: On Samsung, we ONLY allow Offload in Bit-Perfect mode.
@@ -314,7 +354,7 @@ class AudioPlayerService : MediaSessionService() {
 
             player.seekTo(currentPosition)
             player.prepare()
-            
+
             if (wasPlaying) {
                 player.play()
                 // Ramp back up smoothly

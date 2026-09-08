@@ -80,6 +80,13 @@ configure<ApplicationExtension> {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests {
+            // Required by Robolectric so JVM tests can resolve Android resources.
+            isIncludeAndroidResources = true
+        }
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -167,6 +174,9 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Robolectric provides a real android.net.Uri on the JVM, so URI/signing logic can be unit
+    // tested without a device. Test-only; ships nothing.
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

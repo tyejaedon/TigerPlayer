@@ -47,17 +47,17 @@ class NetworkEngine @Inject constructor(
      * Fetches all remote tracks from Navidrome and maps them to AudioTracks.
      */
     suspend fun syncNavidromeArchives() {
-        val url = navidromePrefs.serverUrl.firstOrNull()
         val user = navidromePrefs.username.firstOrNull()
         val pass = navidromePrefs.password.firstOrNull()
 
-        if (url.isNullOrBlank() || user.isNullOrBlank() || pass.isNullOrBlank()) {
+        if (user.isNullOrBlank() || pass.isNullOrBlank()) {
             _remoteTracks.value = emptyList()
             return
         }
 
         navidromeRepository.getAllRemoteTracks(user, pass).onSuccess { remoteList ->
-            _remoteTracks.value = remoteList.map { it.toAudioTrack(url, user, pass) }
+            // Mapping carries no credentials; URIs are signed at request time (issue #44).
+            _remoteTracks.value = remoteList.map { it.toAudioTrack() }
         }.onFailure { error ->
             Log.e("NetworkEngine", "Failed to sync Navidrome: ${error.message}")
         }
