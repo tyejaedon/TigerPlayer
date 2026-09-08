@@ -1,0 +1,104 @@
+name: Bug report
+description: Report a defect in TigerPlayer
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a report. Please include enough detail that the bug can be reproduced
+        without guesswork — reproduction steps are the single most useful thing you can provide.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the defect and what you expected instead.
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps. Include whether the library is local, Navidrome, or Spotify.
+      placeholder: |
+        1. Open the Library tab
+        2. Play a FLAC from local storage
+        3. Toggle bit-perfect mode
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the app?
+      options:
+        - Playback / queue
+        - DSP / equalizer / haptics
+        - Library / scanning
+        - Analytics / stats / discovery
+        - Navidrome (remote)
+        - Spotify
+        - UI / visualizer
+        - Settings
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: "Pixel 8 Pro, Android 15"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: TigerPlayer version
+      description: Settings → About, or the build you compiled from (commit SHA).
+      placeholder: "2.1 (versionCode 1) / commit abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: audio-route
+    attributes:
+      label: Audio output route
+      description: Many playback defects are route-specific.
+      options:
+        - Phone speaker
+        - Wired headphones / USB DAC
+        - Bluetooth
+        - Not applicable
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant logcat output. **Redact any URL containing `u=`, `t=`, or `s=` parameters —
+        those carry Navidrome credentials.** Never paste a token or password.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I have removed any credentials, tokens, or signed URLs from the logs above
+          required: true
+

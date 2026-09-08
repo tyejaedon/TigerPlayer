@@ -1,0 +1,78 @@
+# EditorConfig - https://editorconfig.org
+# Defines the formatting conventions that AGENTS.md and AIRP Phase 2 refer to.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+
+# ---------- Kotlin ----------
+[*.{kt,kts}]
+indent_size = 4
+max_line_length = 120
+# ktlint-compatible settings (applied if ktlint is added later)
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+ij_kotlin_name_count_to_use_star_import = 2147483647
+ij_kotlin_name_count_to_use_star_import_for_members = 2147483647
+ij_kotlin_packages_to_use_import_on_demand = unset
+ij_kotlin_imports_layout = *
+ij_continuation_indent_size = 4
+
+# ---------- Java ----------
+[*.java]
+indent_size = 4
+max_line_length = 120
+
+# ---------- Gradle / config ----------
+[*.gradle]
+indent_size = 4
+
+[*.{toml,properties}]
+indent_size = 2
+max_line_length = unset
+
+[*.{yml,yaml}]
+indent_size = 2
+max_line_length = unset
+
+[*.{xml,json}]
+indent_size = 4
+max_line_length = unset
+
+# Android resource and manifest files
+[**/src/main/res/**.xml]
+indent_size = 4
+
+[AndroidManifest.xml]
+indent_size = 4
+
+# ---------- Docs ----------
+# Trailing whitespace is significant in Markdown (line break), so do not trim.
+[*.md]
+indent_size = 2
+max_line_length = 110
+trim_trailing_whitespace = false
+
+# ---------- Shell / batch ----------
+[*.sh]
+end_of_line = lf
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# ---------- Generated / vendored: leave alone ----------
+[{gradlew,gradlew.bat}]
+indent_size = unset
+max_line_length = unset
+trim_trailing_whitespace = false
+insert_final_newline = unset
+
+[.gitignore]
+max_line_length = unset
+
