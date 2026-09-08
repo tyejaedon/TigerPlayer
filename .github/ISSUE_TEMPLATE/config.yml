@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Roadmap and milestones
+    url: https://github.com/tyejaedon/TigerPlayer/blob/main/docs/Roadmap-v2.1-v2.3.md
+    about: Check whether your idea is already planned before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/tyejaedon/TigerPlayer/security/advisories/new
+    about: Report security issues privately. Do not open a public issue for a vulnerability.
+

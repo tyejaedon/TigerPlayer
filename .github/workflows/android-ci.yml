@@ -1,0 +1,161 @@
+name: Android CI
+
+# Enforces the AIRP Phase 3 quality gate on every PR and push to the default branch.
+# Command parity with AGENTS.md section 2.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# A new push to the same PR cancels the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------
+  # Guardrail: fail fast if credential material is committed.
+  # Mirrors the "never bulk stage" rule in AGENTS.md section 5.
+  # ---------------------------------------------------------------
+  secret-guard:
+    name: Secret guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if credential or signing material is tracked
+        run: |
+          echo "Scanning tracked files for credential material..."
+          MATCHES=$(git ls-files | grep -E '(^|/)(secrets|local|keystore|signing)\.properties$|\.(jks|keystore|p12|pem)$|google-services\.json$' || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Credential or signing material is tracked by git:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "OK - no credential material tracked."
+
+      - name: Fail if build output is tracked
+        run: |
+          MATCHES=$(git ls-files | grep -E '^(app/)?build/|^app/release/|\.(apk|aab)$' || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Generated build output is tracked by git:"
+            echo "$MATCHES" | head -50
+            exit 1
+          fi
+          echo "OK - no build output tracked."
+
+  # ---------------------------------------------------------------
+  # AIRP Phase 3, step 1: static analysis.
+  # Split into its own job because lintAnalyzeDebug takes ~4 minutes and
+  # would otherwise delay test feedback on every PR.
+  # Baseline at time of writing: 91 issues, 0 errors (84 warnings, 7 hints).
+  # ---------------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Write placeholder secrets.properties
+        run: |
+          cat > secrets.properties <<'EOF'
+          SPOTIFY_CLIENT_ID=MISSING_ID
+          SPOTIFY_CLIENT_SECRET=MISSING_SECRET
+          LASTFM_API_KEY=MISSING_API_KEY
+          YOUTUBE_API_KEY=MISSING_YOUTUBE_KEY
+          EOF
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: |
+            app/build/reports/lint-results-*.html
+            app/build/reports/lint-results-*.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------
+  # AIRP Phase 3, steps 2 and 3: unit tests, then compile.
+  # ---------------------------------------------------------------
+  test:
+    name: Unit tests & assemble
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # The build succeeds without secrets.properties using MISSING_* placeholders,
+      # but we write an explicit stub so CI is deterministic and never depends on
+      # real credentials. Cloud integrations are NOT exercised here - verify on device.
+      - name: Write placeholder secrets.properties
+        run: |
+          cat > secrets.properties <<'EOF'
+          SPOTIFY_CLIENT_ID=MISSING_ID
+          SPOTIFY_CLIENT_SECRET=MISSING_SECRET
+          LASTFM_API_KEY=MISSING_API_KEY
+          YOUTUBE_API_KEY=MISSING_YOUTUBE_KEY
+          EOF
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Assemble debug
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
