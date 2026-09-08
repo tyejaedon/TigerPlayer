@@ -7,13 +7,24 @@ import com.example.tigerplayer.data.repository.HistoryRepository
 import com.example.tigerplayer.ui.player.DetailedStatsUiState
 import com.example.tigerplayer.ui.player.StatItem
 import com.example.tigerplayer.utils.ArtistUtils
+import com.example.tigerplayer.utils.ElapsedTimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import java.util.Calendar
 import javax.inject.Inject
+import javax.inject.Singleton
 
+/**
+ * Owns listening analytics: the aggregation flows that feed the stats surfaces, and the
+ * listened-duration accounting that produces the underlying history rows.
+ *
+ * `@Singleton` is required for correctness, not just efficiency: an in-flight play is held in
+ * memory here, so a second instance would drop or double count it when a ViewModel is recreated.
+ */
+@Singleton
 class StatsEngine @Inject constructor(
-    private val historyRepository: HistoryRepository
+    private val historyRepository: HistoryRepository,
+    private val elapsedTimeSource: ElapsedTimeSource
 ) {
     private val _statsFilter = MutableStateFlow("Today")
 
@@ -92,12 +103,88 @@ class StatsEngine @Inject constructor(
         }
     }
 
-    suspend fun recordPlaybackHistory(track: AudioTrack) {
-        val source = when {
-            track.id.startsWith("spotify:", ignoreCase = true) -> MediaSource.SPOTIFY
-            track.id.startsWith("navidrome:", ignoreCase = true) -> MediaSource.NAVIDROME
-            else -> MediaSource.LOCAL
+    // ==========================================
+    // --- LISTENED-DURATION ACCOUNTING (issue #42) ---
+    // ==========================================
+    //
+    // A play is committed when the track is left, not when it starts, and it records the time
+    // actually listened rather than the track's nominal length. Previously every track transition
+    // wrote a full-length row, so skipping through 40 tracks recorded 40 complete plays and every
+    // downstream surface (Heavy Rotation, Sonic Footprint, Day List, Discovery Weekly, listening
+    // share) was inflated.
+
+    private val playLock = Any()
+    private var pendingTrack: AudioTrack? = null
+    private var accumulatedMs = 0L
+
+    /** Elapsed time when playback last started; `null` while paused. */
+    private var resumedAtMs: Long? = null
+
+    private data class PendingPlay(val track: AudioTrack, val listenedMs: Long)
+
+    /**
+     * Call when the current track changes.
+     *
+     * Commits the outgoing track's play if it qualifies, then begins accounting for [track].
+     */
+    suspend fun onTrackChanged(track: AudioTrack, isPlaying: Boolean) {
+        commitPendingPlay()
+        synchronized(playLock) {
+            pendingTrack = track
+            accumulatedMs = 0L
+            resumedAtMs = if (isPlaying) elapsedTimeSource.elapsedMs() else null
         }
+    }
+
+    /**
+     * Call whenever playback starts or stops, for any source.
+     *
+     * Idempotent: repeated calls with the same state do not double count.
+     */
+    fun onPlayingChanged(isPlaying: Boolean) {
+        synchronized(playLock) {
+            if (isPlaying) {
+                if (resumedAtMs == null) resumedAtMs = elapsedTimeSource.elapsedMs()
+            } else {
+                accumulateLocked()
+            }
+        }
+    }
+
+    /** Commits any in-flight play. Safe to call when nothing is pending. */
+    suspend fun flushPendingPlay() {
+        commitPendingPlay()
+    }
+
+    /** Folds the currently-running interval into [accumulatedMs]. Caller must hold [playLock]. */
+    private fun accumulateLocked() {
+        val startedAt = resumedAtMs ?: return
+        accumulatedMs += (elapsedTimeSource.elapsedMs() - startedAt).coerceAtLeast(0L)
+        resumedAtMs = null
+    }
+
+    private suspend fun commitPendingPlay() {
+        val pending = synchronized(playLock) {
+            val track = pendingTrack ?: return@synchronized null
+            accumulateLocked()
+            val snapshot = PendingPlay(track, accumulatedMs)
+            pendingTrack = null
+            accumulatedMs = 0L
+            resumedAtMs = null
+            snapshot
+        } ?: return
+
+        persistPlay(pending.track, pending.listenedMs)
+    }
+
+    private suspend fun persistPlay(track: AudioTrack, rawListenedMs: Long) {
+        val durationMs = track.durationMs
+
+        // Seeking backwards, or repeat-one, can accumulate more wall-clock time than the track is
+        // long. Cap so a single play can never contribute more than the track's own duration.
+        val listenedMs = if (durationMs > 0L) rawListenedMs.coerceAtMost(durationMs) else rawListenedMs
+
+        if (!qualifiesAsPlay(listenedMs, durationMs)) return
 
         historyRepository.addTrackToHistory(
             trackId = track.id,
@@ -105,9 +192,30 @@ class StatsEngine @Inject constructor(
             artist = track.artist,
             album = track.album,
             imageUrl = track.artworkUri.toString(),
-            durationMs = track.durationMs,
-            source = source
+            durationListenedMs = listenedMs,
+            source = resolveSource(track)
         )
+    }
+
+    /**
+     * The standard scrobble rule: a play counts once at least half the track, or four minutes,
+     * has been heard - whichever comes first. Tracks shorter than 30 seconds never qualify.
+     *
+     * When the duration is unknown (0 or negative, common for streams) only the absolute
+     * four-minute rule can qualify the play, since a percentage is meaningless.
+     */
+    private fun qualifiesAsPlay(listenedMs: Long, durationMs: Long): Boolean {
+        if (listenedMs < MIN_LISTENED_MS) return false
+        if (durationMs in 1 until MIN_TRACK_DURATION_MS) return false
+        if (listenedMs >= FULL_PLAY_THRESHOLD_MS) return true
+        if (durationMs <= 0L) return false
+        return listenedMs >= durationMs / 2
+    }
+
+    private fun resolveSource(track: AudioTrack): MediaSource = when {
+        track.id.startsWith("spotify:", ignoreCase = true) -> MediaSource.SPOTIFY
+        track.id.startsWith("navidrome:", ignoreCase = true) -> MediaSource.NAVIDROME
+        else -> MediaSource.LOCAL
     }
 
     /**
@@ -155,5 +263,16 @@ class StatsEngine @Inject constructor(
             "Lifetime" -> 0L // Captures everything
             else -> 0L
         }
+    }
+
+    private companion object {
+        /** A play always qualifies once four minutes have been heard, regardless of length. */
+        const val FULL_PLAY_THRESHOLD_MS = 4 * 60 * 1000L
+
+        /** Tracks shorter than this never qualify, matching the standard scrobble rule. */
+        const val MIN_TRACK_DURATION_MS = 30_000L
+
+        /** Absolute floor; below this the listener effectively skipped. */
+        const val MIN_LISTENED_MS = 5_000L
     }
 }

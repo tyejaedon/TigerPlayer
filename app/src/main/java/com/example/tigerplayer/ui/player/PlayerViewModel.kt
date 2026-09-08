@@ -206,7 +206,7 @@ class PlayerViewModel @Inject constructor(
                     metadataJob = viewModelScope.launch(Dispatchers.IO) {
                         metadataEngine.fetchTrackMetadata(spotifyTrack)
                     }
-                    statsEngine.recordPlaybackHistory(spotifyTrack)
+                    statsEngine.onTrackChanged(spotifyTrack, spotifyState.isPlaying)
                 }
             }
         }
@@ -240,6 +240,17 @@ class PlayerViewModel @Inject constructor(
             bluetoothDeviceManager.connectedDevice.collect { device ->
                 _uiState.update { it.copy(connectedBluetoothDevice = device) }
             }
+        }
+
+        // --- 1b. LISTENED-DURATION ACCOUNTING (issue #42) ---
+        // Driven from the unified UI state rather than a single transport, so local and Spotify
+        // playback both accumulate correctly. StatsEngine is a @Singleton, so an in-flight play
+        // survives this ViewModel being recreated.
+        viewModelScope.launch {
+            _uiState
+                .map { it.isPlaying }
+                .distinctUntilChanged()
+                .collect { isPlaying -> statsEngine.onPlayingChanged(isPlaying) }
         }
 
         // --- 2. LIBRARY SYNCHRONIZATION ---
@@ -333,7 +344,7 @@ class PlayerViewModel @Inject constructor(
                 metadataJob = viewModelScope.launch(Dispatchers.IO) {
                     metadataEngine.fetchTrackMetadata(track)
                 }
-                statsEngine.recordPlaybackHistory(track)
+                statsEngine.onTrackChanged(track, _uiState.value.isPlaying)
 
                 if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
                     viewModelScope.launch(Dispatchers.IO) {
