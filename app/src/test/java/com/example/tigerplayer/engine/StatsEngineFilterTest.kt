@@ -15,7 +15,7 @@ import org.junit.Test
 
 class StatsEngineFilterTest {
 
-    private val engine = StatsEngine(mockk<HistoryRepository>(relaxed = true))
+    private val engine = StatsEngine(mockk<HistoryRepository>(relaxed = true)) { 0L }
 
     @Test
     fun all_filters_map_to_expected_calendar_boundaries() {

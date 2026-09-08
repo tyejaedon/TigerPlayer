@@ -70,8 +70,12 @@ class HistoryRepository @Inject constructor(
     fun getAllTracksStats(): Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
 
     /**
-     * Records a manifestation.
-     * Optimization: If duration is < 5s, we skip recording to avoid polluting stats with "skips".
+     * Records a completed play.
+     *
+     * [durationListenedMs] must be the time **actually listened**, never the track's nominal
+     * length. Whether a play qualifies at all (the >= 50% / >= 4 minute rule) is decided upstream
+     * in `StatsEngine`; the floor below is only a defensive guard against a caller passing a
+     * value that clearly represents a skip.
      */
     suspend fun addTrackToHistory(
         trackId: String,
@@ -79,10 +83,10 @@ class HistoryRepository @Inject constructor(
         artist: String,
         album: String,
         imageUrl: String?,
-        durationMs: Long,
+        durationListenedMs: Long,
         source: MediaSource
     ) {
-        if (durationMs < 5000) return // Ignore brief skips
+        if (durationListenedMs < MIN_LISTENED_MS) return
 
         val historyEntry = PlaybackHistoryEntity(
             trackId = trackId,
@@ -90,7 +94,7 @@ class HistoryRepository @Inject constructor(
             artist = artist,
             album = album,
             imageUrl = imageUrl,
-            durationListenedMs = durationMs,
+            durationListenedMs = durationListenedMs,
             source = source,
             timestamp = System.currentTimeMillis()
         )
@@ -99,4 +103,8 @@ class HistoryRepository @Inject constructor(
 
     fun getTotalListeningTime(startTime: Long): Flow<Long?> =
         tigerDao.getTotalListeningTimeMs(startTime)
+
+    private companion object {
+        const val MIN_LISTENED_MS = 5_000L
+    }
 }
