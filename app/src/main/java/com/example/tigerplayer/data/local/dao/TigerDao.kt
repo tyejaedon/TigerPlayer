@@ -54,6 +54,13 @@ abstract class TigerDao {
     @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 60")
     abstract fun getRecentTracks(): Flow<List<PlaybackHistoryEntity>>
 
+    @Query("SELECT * FROM playback_history WHERE timestamp >= :startTime ORDER BY timestamp DESC LIMIT 60")
+    abstract fun getRecentTracks(startTime: Long): Flow<List<PlaybackHistoryEntity>>
+
+    /** Used once at startup to decide whether a stats epoch is needed (issue #80). */
+    @Query("SELECT COUNT(*) FROM playback_history")
+    abstract suspend fun getHistoryCountSync(): Int
+
     @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history")
     abstract fun getTotalListeningTimeMs(): Flow<Long>
 
@@ -125,8 +132,8 @@ abstract class TigerDao {
     @Query(
         """
         WITH NormalizedHistory AS (
-            SELECT 
-                trim(CASE 
+            SELECT
+                trim(CASE
                     WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
                     WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
                     WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
@@ -136,10 +143,10 @@ abstract class TigerDao {
                     WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
                     WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
                     WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
-                    ELSE artist 
+                    ELSE artist
                 END) as artistName,
                 durationListenedMs
-            FROM playback_history 
+            FROM playback_history
             WHERE timestamp >= :startTime
         ),
         FilteredHistory AS (
@@ -150,7 +157,7 @@ abstract class TigerDao {
         )
         SELECT artistName
         FROM FilteredHistory
-        GROUP BY artistName 
+        GROUP BY artistName
         ORDER BY SUM(durationListenedMs) DESC, COUNT(*) DESC
         LIMIT 1
     """
@@ -165,8 +172,8 @@ abstract class TigerDao {
     @Query(
         """
         WITH NormalizedHistory AS (
-            SELECT 
-                trim(CASE 
+            SELECT
+                trim(CASE
                     WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
                     WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
                     WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
@@ -176,7 +183,7 @@ abstract class TigerDao {
                     WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
                     WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
                     WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
-                    ELSE artist 
+                    ELSE artist
                 END) as artistName,
                 durationListenedMs
             FROM playback_history
@@ -200,14 +207,14 @@ abstract class TigerDao {
 
     @Query(
         """
-        SELECT h.trackId, h.title, h.artist, 
-               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl, 
-               COUNT(*) as playCount 
+        SELECT h.trackId, h.title, h.artist,
+               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl,
+               COUNT(*) as playCount
         FROM playback_history h
         LEFT JOIN cached_tracks ct ON ct.id = h.trackId
-        WHERE h.timestamp >= :startTime 
+        WHERE h.timestamp >= :startTime
         GROUP BY h.trackId
-        ORDER BY playCount DESC 
+        ORDER BY playCount DESC
         LIMIT :limit
     """
     )
@@ -219,15 +226,15 @@ abstract class TigerDao {
      */
     @Query(
         """
-        SELECT h.trackId, h.title, h.artist, 
-               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl, 
-               COUNT(*) as playCount 
+        SELECT h.trackId, h.title, h.artist,
+               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl,
+               COUNT(*) as playCount
         FROM playback_history h
         LEFT JOIN cached_tracks ct ON ct.id = h.trackId
         WHERE h.timestamp >= :since
         GROUP BY h.trackId
         HAVING playCount >= 2
-        ORDER BY playCount DESC 
+        ORDER BY playCount DESC
         LIMIT 12
     """
     )
@@ -240,8 +247,8 @@ abstract class TigerDao {
     @Query(
         """
         WITH NormalizedHistory AS (
-            SELECT 
-                trim(CASE 
+            SELECT
+                trim(CASE
                     WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
                     WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
                     WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
@@ -258,7 +265,7 @@ abstract class TigerDao {
                     WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
                     WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
                     WHEN instr(artist, '|') > 0 THEN substr(artist, 1, instr(artist, '|') - 1)
-                    ELSE artist 
+                    ELSE artist
                 END) as artistName
             FROM playback_history
         )
@@ -272,8 +279,8 @@ abstract class TigerDao {
     @Query(
         """
         WITH NormalizedHistory AS (
-            SELECT 
-                trim(CASE 
+            SELECT
+                trim(CASE
                     WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
                     WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
                     WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
@@ -290,13 +297,13 @@ abstract class TigerDao {
                     WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
                     WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
                     WHEN instr(artist, '|') > 0 THEN substr(artist, 1, instr(artist, '|') - 1)
-                    ELSE artist 
+                    ELSE artist
                 END) as artistName,
                 durationListenedMs
             FROM playback_history
         )
-        SELECT CAST(COALESCE(SUM(durationListenedMs), 0) / 60000 AS INTEGER) 
-        FROM NormalizedHistory 
+        SELECT CAST(COALESCE(SUM(durationListenedMs), 0) / 60000 AS INTEGER)
+        FROM NormalizedHistory
         WHERE lower(trim(artistName)) = lower(trim(:artistName))
     """
     )
@@ -378,13 +385,13 @@ abstract class TigerDao {
 
     @Query(
         """
-        SELECT h.trackId, h.title, h.artist, 
-               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl, 
-               COUNT(*) as playCount 
+        SELECT h.trackId, h.title, h.artist,
+               COALESCE(ct.artworkUriString, MAX(h.imageUrl)) as imageUrl,
+               COUNT(*) as playCount
         FROM playback_history h
         LEFT JOIN cached_tracks ct ON ct.id = h.trackId
         GROUP BY h.trackId
-        ORDER BY playCount DESC 
+        ORDER BY playCount DESC
     """
     )
     abstract fun getAllTracksStats(): Flow<List<TrackStats>>
@@ -598,10 +605,10 @@ abstract class TigerDao {
      */
     @Query(
         """
-        DELETE FROM playback_history 
+        DELETE FROM playback_history
         WHERE id NOT IN (
-            SELECT id FROM playback_history 
-            ORDER BY timestamp DESC 
+            SELECT id FROM playback_history
+            ORDER BY timestamp DESC
             LIMIT 5000
         )
     """
@@ -613,10 +620,10 @@ abstract class TigerDao {
 
     @Query(
         """
-        SELECT artworkUriString FROM cached_tracks 
-        WHERE artist = :artistName 
-        AND artworkUriString IS NOT NULL 
-        AND artworkUriString != '' 
+        SELECT artworkUriString FROM cached_tracks
+        WHERE artist = :artistName
+        AND artworkUriString IS NOT NULL
+        AND artworkUriString != ''
         LIMIT 1
     """
     )
@@ -637,10 +644,10 @@ abstract class TigerDao {
 
     @Query(
         """
-        DELETE FROM lyrics_cache 
+        DELETE FROM lyrics_cache
         WHERE trackId NOT IN (
-            SELECT trackId FROM lyrics_cache 
-            ORDER BY lastAccessed DESC 
+            SELECT trackId FROM lyrics_cache
+            ORDER BY lastAccessed DESC
             LIMIT 2000
         )
     """

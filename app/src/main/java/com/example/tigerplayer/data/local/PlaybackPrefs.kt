@@ -32,6 +32,7 @@ class PlaybackPrefs @Inject constructor(
         val FLOW_STATE_WINDOW_MS = longPreferencesKey("flow_state_window_ms")
         val FLOW_STATE_TRUE_OVERLAP = booleanPreferencesKey("flow_state_true_overlap")
         val FULL_PLAYER_ACTIVE = booleanPreferencesKey("full_player_active")
+        val STATS_EPOCH_MS = longPreferencesKey("stats_epoch_ms")
     }
 
     val lastTrackId: Flow<String?> = dataStore.data.map { it[LAST_TRACK_ID] }
@@ -61,6 +62,18 @@ class PlaybackPrefs @Inject constructor(
     }
     val fullPlayerActive: Flow<Boolean> = dataStore.data.map {
         it[FULL_PLAYER_ACTIVE] ?: false
+    }
+
+    /**
+     * Point in time from which listening analytics are trustworthy (issue #80).
+     *
+     * Deliberately nullable: `null` means "never initialized", which is what lets the epoch be set
+     * exactly once. A stored `0` means "no legacy data, count everything" and is a real value.
+     */
+    val statsEpochMs: Flow<Long?> = dataStore.data.map { it[STATS_EPOCH_MS] }
+
+    suspend fun saveStatsEpochMs(epochMs: Long) {
+        dataStore.edit { it[STATS_EPOCH_MS] = epochMs }
     }
 
     fun getBtListeningTime(address: String): Flow<Long> = dataStore.data.map {

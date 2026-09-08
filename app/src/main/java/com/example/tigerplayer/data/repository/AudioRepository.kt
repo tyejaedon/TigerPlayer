@@ -27,7 +27,8 @@ class AudioRepository @Inject constructor(
     private val localAudioDataSource: LocalAudioDataSource,
     private val playlistDao: PlaylistDao,
     private val tigerDao: TigerDao,
-    private val navidromeRepository: NavidromeRepository
+    private val navidromeRepository: NavidromeRepository,
+    private val statsEpoch: StatsEpoch
 ) {
 
     private var remoteCache: List<AudioTrack> = emptyList()
@@ -203,9 +204,14 @@ class AudioRepository @Inject constructor(
     }
      fun getAllTracksStats() = tigerDao.getAllTracksStats()
 
+    /**
+     * Heavy Rotation is a displayed statistic, so it is floored at the stats epoch to exclude
+     * pre-#42 inflated rows (issue #80).
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun getHeavyRotation(since: Long): Flow<List<TrackStats>> {
-        return tigerDao.getHeavyRotation(since)
-        }
+        return statsEpoch.effectiveStart(since).flatMapLatest { tigerDao.getHeavyRotation(it) }
+    }
 
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {

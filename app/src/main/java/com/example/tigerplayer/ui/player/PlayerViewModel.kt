@@ -53,7 +53,12 @@ data class DetailedStatsUiState(
     val totalListeningMinutes: Int = 0,
     val globalListeningSharePercent: Float = 0f,
     val topArtists: List<StatItem> = emptyList(),
-    val topTracks: List<StatItem> = emptyList()
+    val topTracks: List<StatItem> = emptyList(),
+    /**
+     * Epoch-millis from which these figures are trustworthy, or 0 if all history counts.
+     * Non-zero means pre-#42 rows are being excluded and the UI should say so (issue #80).
+     */
+    val statsEpochMs: Long = 0L
 )
 
 data class PlayerUiState(
