@@ -1,0 +1,66 @@
+name: Feature request
+description: Propose a new capability for TigerPlayer
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please check `docs/Roadmap-v2.1-v2.3.md` — the feature may already be
+        planned and tracked.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today? Describe the need, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work from the user's perspective?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Parity — other players have this and users expect it
+        - Differentiator — unique to TigerPlayer
+        - Quality of life
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: Which apps do this well? Auxio, Retro, Symphony, Gramophone, Namida, Fossify, Poweramp...
+      placeholder: "Auxio and Symphony both implement this as ..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: audio-impact
+    attributes:
+      label: Audio path impact
+      description: |
+        If this touches playback or DSP: does it require the in-app DSP chain? What should happen
+        in bit-perfect / offload mode, where the chain is bypassed?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I checked the roadmap and existing issues for duplicates
+          required: true
+
