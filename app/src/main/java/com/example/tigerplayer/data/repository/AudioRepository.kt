@@ -10,14 +10,12 @@ import com.example.tigerplayer.data.local.entity.CachedTrackEntity
 import com.example.tigerplayer.data.local.entity.PlaylistEntity
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
-import com.example.tigerplayer.data.remote.api.RemoteTrack
 import com.example.tigerplayer.data.source.LocalAudioDataSource
-import com.example.tigerplayer.utils.NavidromeSecurity
+import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,13 +51,12 @@ class AudioRepository @Inject constructor(
                     val remoteResult = navidromeRepository.getAllRemoteTracks(user, pass)
 
                     remoteResult.onSuccess { remoteTracks ->
-                        // 🔥 PERFORMANCE FIX: Generate salt/token ONCE per sync, not per track
-                        val salt = UUID.randomUUID().toString().substring(0, 8)
-                        val token = NavidromeSecurity.generateToken(pass, salt)
-                        val authQuery = "u=$user&t=$token&s=$salt&v=1.16.1&c=TigerPlayer"
-
-                        remoteCache = remoteTracks.map { it.toAudioTrack(baseUrl, authQuery,pass) }
+                        // Tracks carry opaque `navidrome://` URIs; auth is applied at request time
+                        // by NavidromeUrlSigner, so nothing credential-bearing is ever persisted
+                        // (issue #44).
+                        remoteCache = remoteTracks.map { it.toAudioTrack() }
                     }.onFailure { error ->
+                        // Never log the URL or credentials - only the failure reason.
                         Log.e("AudioRepository", "Archive sync failed: ${error.message}")
                     }
                 }
@@ -72,33 +69,6 @@ class AudioRepository @Inject constructor(
         (local + remote).sortedBy { it.title.lowercase() }
     }
 
-    /**
-     * THE NAVIDROME RITUAL
-     * Optimized for high-quality streaming.
-     */
-    private fun RemoteTrack.toAudioTrack(baseUrl: String, u: String, p: String): AudioTrack {
-        val salt = UUID.randomUUID().toString().substring(0, 8)
-        val token = NavidromeSecurity.generateToken(p, salt)
-        val authQuery = "u=$u&t=$token&s=$salt&v=1.16.1&c=TigerPlayer"
-
-        // Bit-Perfect Consideration: Navidrome stream.view returns the original file unless transcoding is forced.
-        // We omit 'maxBitRate' and 'format' parameters to ensure we get the source file (FLAC/ALAC/High-VBR MP3).
-        return AudioTrack(
-            id = id,
-            title = title,
-            artist = artist,
-            album = album,
-            durationMs = duration.toLong() * 1000,
-            artworkUri = Uri.parse("${baseUrl}rest/getCoverArt.view?id=$id&$authQuery"),
-            uri = Uri.parse("${baseUrl}rest/stream.view?id=$id&$authQuery"),
-            trackNumber = track,
-            mimeType = "audio/$suffix",
-            bitrate = bitRate * 1000,
-            isRemote = true,
-            serverPath = id,
-            year = year?.toString()
-        )
-    }
 
     /**
      * LOCAL CACHE LOGIC

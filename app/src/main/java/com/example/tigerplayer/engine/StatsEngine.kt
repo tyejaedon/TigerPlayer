@@ -216,7 +216,10 @@ class StatsEngine @Inject constructor(
 
     private fun resolveSource(track: AudioTrack): MediaSource = when {
         track.id.startsWith("spotify:", ignoreCase = true) -> MediaSource.SPOTIFY
-        track.id.startsWith("navidrome:", ignoreCase = true) -> MediaSource.NAVIDROME
+        // Both separators are accepted: rows written before issue #44 may carry either, and a play
+        // attributed to the wrong source silently corrupts the per-source stats breakdown.
+        track.id.startsWith("navidrome_", ignoreCase = true) ||
+            track.id.startsWith("navidrome:", ignoreCase = true) -> MediaSource.NAVIDROME
         else -> MediaSource.LOCAL
     }
 

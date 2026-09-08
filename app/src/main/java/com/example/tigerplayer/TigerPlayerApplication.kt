@@ -3,6 +3,10 @@ package com.example.tigerplayer
 import android.app.Application
 import android.os.StrictMode
 import android.util.Log
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import com.example.tigerplayer.data.remote.NavidromeArtInterceptor
+import com.example.tigerplayer.data.remote.NavidromeUrlSigner
 import com.example.tigerplayer.data.repository.StatsEpoch
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -12,10 +16,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 @HiltAndroidApp
-class TigerPlayerApplication : Application() {
+class TigerPlayerApplication : Application(), ImageLoaderFactory {
 
 	@Inject
 	lateinit var statsEpoch: StatsEpoch
+
+	@Inject
+	lateinit var navidromeUrlSigner: NavidromeUrlSigner
 
 	private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -33,6 +40,19 @@ class TigerPlayerApplication : Application() {
 			installStrictMode()
 		}
 	}
+
+	/**
+	 * Coil loader that resolves opaque `navidrome://art/<id>` URIs into freshly signed URLs at
+	 * request time (issue #44).
+	 *
+	 * Artwork URIs are persisted alongside tracks, so like stream URIs they must not carry a
+	 * rotating token. Signing in an interceptor keeps every `AsyncImage` call site unchanged.
+	 */
+	override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+		.components {
+			add(NavidromeArtInterceptor(navidromeUrlSigner))
+		}
+		.build()
 
 	private fun installStrictMode() {
 		StrictMode.setThreadPolicy(
