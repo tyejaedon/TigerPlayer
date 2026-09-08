@@ -42,9 +42,10 @@ class StatsEngine @Inject constructor(
             val startTime = calculateStartTimeForFilter(filter)
             val listeningTotals = combine(
                 historyRepository.getTotalListeningTime(startTime),
-                historyRepository.getTotalListeningTime(0L)
-            ) { filteredWindowMs, lifetimeMs ->
-                filteredWindowMs to lifetimeMs
+                historyRepository.getTotalListeningTime(0L),
+                historyRepository.statsEpochMs
+            ) { filteredWindowMs, lifetimeMs, epochMs ->
+                Triple(filteredWindowMs, lifetimeMs, epochMs)
             }
 
             combine(
@@ -55,7 +56,7 @@ class StatsEngine @Inject constructor(
                 allTracksFlow,
                 artistDetailsMapFlow
             ) { totals, topArtistsDb, topTracksDb, allTracks, artistDetailsMap ->
-                val (totalTimeMs, lifetimeTotalMs) = totals
+                val (totalTimeMs, lifetimeTotalMs, statsEpochMs) = totals
                 val totalSeconds = (totalTimeMs ?: 0L) / 1000
                 val hours = (totalSeconds / 3600).toInt()
                 val minutes = ((totalSeconds % 3600) / 60).toInt()
@@ -72,6 +73,7 @@ class StatsEngine @Inject constructor(
                     totalListeningHours = hours,
                     totalListeningMinutes = minutes,
                     globalListeningSharePercent = sharePercent,
+                    statsEpochMs = statsEpochMs,
                     topArtists = topArtistsDb.map { artist ->
                         // 🔥 FIX 2: Normalize the key to safely extract the High-Res API image
                         val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()

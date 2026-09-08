@@ -6,14 +6,25 @@ import com.example.tigerplayer.data.local.dao.SonicFootprintStats
 import com.example.tigerplayer.data.local.dao.TigerDao
 import com.example.tigerplayer.data.local.dao.TrackStats
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Gateway to listening history.
+ *
+ * Every read is floored at [StatsEpoch] so pre-#42 rows - which recorded the track's nominal length
+ * rather than the time actually listened - are excluded from analytics without being deleted
+ * (issue #80). Public signatures are unchanged, so call sites are unaffected.
+ */
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class HistoryRepository @Inject constructor(
-    private val tigerDao: TigerDao
+    private val tigerDao: TigerDao,
+    private val statsEpoch: StatsEpoch
 ) {
     // Correctly snap to local midnight
     private fun getStartOfToday(): Long {
@@ -41,31 +52,36 @@ class HistoryRepository @Inject constructor(
         return calendar.timeInMillis
     }
 
+    /** The window analytics actually cover. `0` means all history is trustworthy. */
+    val statsEpochMs: Flow<Long> = statsEpoch.epochMs
+
     // --- 1. RECENT CHANTS ---
-    val recentTracks: Flow<List<PlaybackHistoryEntity>> = tigerDao.getRecentTracks()
+    val recentTracks: Flow<List<PlaybackHistoryEntity>> =
+        statsEpoch.effectiveStart(0L).flatMapLatest { tigerDao.getRecentTracks(it) }
 
     // --- 2. AGGREGATE POWER ---
-    val totalListeningTime: Flow<Long?> = tigerDao.getTotalListeningTimeMs(0L)
+    val totalListeningTime: Flow<Long?> = getTotalListeningTime(0L)
 
     // Today's stats refreshed automatically
-    val listeningTimeToday: Flow<Long?> = tigerDao.getTotalListeningTimeMs(getStartOfToday())
+    val listeningTimeToday: Flow<Long?> = getTotalListeningTime(getStartOfToday())
 
-    val topArtistThisWeek: Flow<String?> = tigerDao.getTopArtist(getStartOfWeek())
+    val topArtistThisWeek: Flow<String?> = getTopArtist(getStartOfWeek())
 
     // --- 3. ANALYTICAL QUERIES ---
-    fun getTopArtist(startTime: Long = 0L): Flow<String?> = tigerDao.getTopArtist(startTime)
-
+    fun getTopArtist(startTime: Long = 0L): Flow<String?> =
+        statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getTopArtist(it) }
 
     fun getTopTracks(startTime: Long, limit: Int): Flow<List<TrackStats>> =
-        tigerDao.getTopTracks(startTime, limit)
+        statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getTopTracks(it, limit) }
+
     fun getTopArtists(startTime: Long, limit: Int): Flow<List<ArtistStats>> =
-        tigerDao.getTopArtists(startTime, limit)
+        statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getTopArtists(it, limit) }
 
     fun observeArtistStats(artistName: String): Flow<ArtistStats?> =
         tigerDao.observeArtistStats(artistName)
 
     fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats> =
-        tigerDao.getSonicFootprintStats(startTime)
+        statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getSonicFootprintStats(it) }
 
     fun getAllTracksStats(): Flow<List<TrackStats>> = tigerDao.getAllTracksStats()
 
@@ -102,7 +118,7 @@ class HistoryRepository @Inject constructor(
     }
 
     fun getTotalListeningTime(startTime: Long): Flow<Long?> =
-        tigerDao.getTotalListeningTimeMs(startTime)
+        statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getTotalListeningTimeMs(it) }
 
     private companion object {
         const val MIN_LISTENED_MS = 5_000L
