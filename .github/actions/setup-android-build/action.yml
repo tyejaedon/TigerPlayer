@@ -1,0 +1,29 @@
+﻿name: Setup Android build
+description: Pinned JDK, Android SDK, Gradle, and non-secret CI configuration for an already checked-out repository.
+inputs:
+  cache-read-only:
+    required: false
+    default: "true"
+    description: Whether to use a read-only cache for Gradle
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      with:
+        distribution: temurin
+        java-version: "17"
+    - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      with:
+        packages: "platform-tools platforms;android-37"
+    - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      with:
+        cache-read-only: ${{ inputs.cache-read-only }}
+    - shell: bash
+      run: |
+        chmod +x ./gradlew
+        cat > secrets.properties <<'EOF'
+        SPOTIFY_CLIENT_ID=MISSING_ID
+        SPOTIFY_CLIENT_SECRET=MISSING_SECRET
+        LASTFM_API_KEY=MISSING_API_KEY
+        YOUTUBE_API_KEY=MISSING_YOUTUBE_KEY
+        EOF

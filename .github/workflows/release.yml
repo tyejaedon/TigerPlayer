@@ -1,0 +1,55 @@
+﻿name: Release candidate
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, branch, or tag to build.
+        required: true
+        default: master
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release-candidate:
+    name: Build unsigned release candidate
+    runs-on: ubuntu-latest
+    environment: release-candidate
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-android-build
+        with:
+          cache-read-only: "false"
+      - run: ./gradlew --dependency-verification=strict help --stacktrace
+      - run: ./gradlew :app:minifyReleaseWithR8 --stacktrace
+      - run: ./gradlew :app:bundleRelease --stacktrace
+      - name: Generate checksums
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          find app/build/outputs -type f \( -name '*.aab' -o -name '*.apk' \) -print0 | sort -z | xargs -0 -r sha256sum > release-artifacts/SHA256SUMS.txt
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: release-artifacts/tigerplayer-sbom.spdx.json
+          upload-artifact: "false"
+          upload-release-assets: "false"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-release-${{ github.sha }}
+          path: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/mapping/release/mapping.txt
+            release-artifacts/SHA256SUMS.txt
+            release-artifacts/tigerplayer-sbom.spdx.json
+          if-no-files-found: error
+          retention-days: 30

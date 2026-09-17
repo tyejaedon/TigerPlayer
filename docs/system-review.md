@@ -8,12 +8,12 @@ I've reviewed the build config, manifest, service/playback layer, data layer, DI
 
 # 1. Architecture snapshot
 
-| Layer | Files | Verdict |
-|---|---|---|
-| Service | [`AudioPlayerService.kt`](app/src/main/java/com/example/tigerplayer/service/AudioPlayerService.kt), [`MediaControllerManager.kt`](app/src/main/java/com/example/tigerplayer/service/MediaControllerManager.kt) | Solid Media3 base, but doing far too much |
-| Engines | `engine/` (10 classes) | Good seam, but `PlaybackEngine` is a thin `if (spotify)` router repeated 8× |
-| Data | `AudioRepository`, `HistoryRepository`, `LyricsRepository`, Room + DataStore | Reasonable; caching logic is naive in places |
-| UI | ~60 Compose files, one god-ViewModel (`PlayerViewModel`, 603 lines) | Biggest structural weakness |
+| Layer   | Files                                                                                                                                                                                                          | Verdict                                                                     |
+|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| Service | [`AudioPlayerService.kt`](app/src/main/java/com/example/tigerplayer/service/AudioPlayerService.kt), [`MediaControllerManager.kt`](app/src/main/java/com/example/tigerplayer/service/MediaControllerManager.kt) | Solid Media3 base, but doing far too much                                   |
+| Engines | `engine/` (10 classes)                                                                                                                                                                                         | Good seam, but `PlaybackEngine` is a thin `if (spotify)` router repeated 8× |
+| Data    | `AudioRepository`, `HistoryRepository`, `LyricsRepository`, Room + DataStore                                                                                                                                   | Reasonable; caching logic is naive in places                                |
+| UI      | ~60 Compose files, one god-ViewModel (`PlayerViewModel`, 603 lines)                                                                                                                                            | Biggest structural weakness                                                 |
 
 The bones are good (Media3 + Hilt + Room + Compose + DataStore is the right 2026 stack). The problems are concentrated in **correctness bugs, a god ViewModel, and missing table-stakes features** that every notable OSS player has.
 
@@ -146,7 +146,7 @@ Two more competitive notes:
 
 # 5. Recommended release plan
 
-## v2.1 "Foundation" — ship-blockers only
+## v2.1.1 "Foundation" — ship-blockers only
 1. Fix stats recording (**B1**) — everything downstream is wrong until this lands.
 2. Room migrations + `exportSchema` + migration tests (**B2**).
 3. Fix Navidrome URL construction and auth-at-request-time (**B3**).

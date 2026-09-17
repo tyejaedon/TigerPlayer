@@ -1,22 +1,22 @@
-# TigerPlayer Roadmap — v2.1 → v2.3
+# TigerPlayer Roadmap — v2.1.1 → v2.3
 
 > Generated from the September 2026 codebase review.
 > Live tracking: [Milestones](https://github.com/tyejaedon/TigerPlayer/milestones)
 
 ## Legend
 
-| Label | Meaning |
-|---|---|
-| `P0-blocker` | Cannot ship without this |
-| `P1-high` | Should not ship without this |
-| `P2-medium` | Planned, not blocking |
-| `parity` | Table-stakes feature other players already have |
-| `differentiator` | Signature capability unique to TigerPlayer |
-| `tech-debt` | Refactoring / maintainability |
+| Label            | Meaning                                         |
+|------------------|-------------------------------------------------|
+| `P0-blocker`     | Cannot ship without this                        |
+| `P1-high`        | Should not ship without this                    |
+| `P2-medium`      | Planned, not blocking                           |
+| `parity`         | Table-stakes feature other players already have |
+| `differentiator` | Signature capability unique to TigerPlayer      |
+| `tech-debt`      | Refactoring / maintainability                   |
 
 ---
 
-## Milestone: v2.1 "Foundation" — due 2026-10-31
+## Milestone: v2.1.1 "Foundation" — due 2026-10-31
 
 **Theme:** correctness, data integrity, security, release config.
 

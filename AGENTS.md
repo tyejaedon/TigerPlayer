@@ -5,7 +5,7 @@ Human contributors should read `README.md` first.
 
 > **Companion documents**
 > - `.github/instructions/issue-resolution-protocol.instructions.md` — the AIRP lifecycle for resolving an issue
-> - `docs/Roadmap-v2.1-v2.3.md` — milestones, issue index, dependency graph
+> - `docs/Roadmap-v2.1.1-v2.3.md` — milestones, issue index, dependency graph
 
 ---
 
