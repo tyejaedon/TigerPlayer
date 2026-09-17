@@ -21,9 +21,12 @@ jobs:
     environment: release-candidate
     timeout-minutes: 45
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
       - uses: ./.github/actions/setup-android-build
         with:
-          checkout-ref: ${{ inputs.ref || github.sha }}
           cache-read-only: "false"
       - run: ./gradlew --dependency-verification=strict help --stacktrace
       - run: ./gradlew :app:minifyReleaseWithR8 --stacktrace

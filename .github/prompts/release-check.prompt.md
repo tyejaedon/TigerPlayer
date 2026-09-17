@@ -13,16 +13,16 @@ explicitly asked. Produce a go / no-go verdict.
 Check the state of each and report open/closed:
 
 ```powershell
-gh issue list --milestone "v2.1 Foundation" --label P0-blocker --state all
+gh issue list --milestone "v2.1.1 Foundation" --label P0-blocker --state all
 ```
 
-| Issue | Blocker |
-|---|---|
-| #42 | Listening stats inflated — analytics present fabricated data |
-| #43 | Room has no migrations — upgrade crash for every existing user |
-| #44 | Navidrome URLs malformed + expiring tokens cached |
-| #45 | `versionCode = 1`, `applicationId` is `com.example.tigerplayer` |
-| #46 | Spotify client secret shipped in the APK |
+| Issue | Blocker                                                         |
+|-------|-----------------------------------------------------------------|
+| #42   | Listening stats inflated — analytics present fabricated data    |
+| #43   | Room has no migrations — upgrade crash for every existing user  |
+| #44   | Navidrome URLs malformed + expiring tokens cached               |
+| #45   | `versionCode = 1`, `applicationId` is `com.example.tigerplayer` |
+| #46   | Spotify client secret shipped in the APK                        |
 
 ## 2. Build configuration
 
