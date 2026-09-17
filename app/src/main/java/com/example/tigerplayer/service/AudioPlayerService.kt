@@ -42,6 +42,7 @@ import com.example.tigerplayer.engine.AcousticNode
 import com.example.tigerplayer.engine.AcousticEnvironmentMode
 import com.example.tigerplayer.engine.AdaptiveDspEngine
 import com.example.tigerplayer.engine.FilterType
+import com.example.tigerplayer.engine.OffloadVolumePolicy
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
@@ -49,6 +50,7 @@ import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -56,7 +58,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlin.math.pow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 data class PeqBand(val type: String, val frequency: Float, val gain: Float, val q: Float)
@@ -92,6 +96,15 @@ class AudioPlayerService : MediaSessionService() {
     private var currentProfile: PeqProfile? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    /** In-flight offload transition, cancelled if the user toggles again mid-fade (issue #53). */
+    private var offloadTransitionJob: Job? = null
+
+    /** Serialises offload transitions so a cancelled fade always completes its terminal restore. */
+    private val offloadTransitionMutex = Mutex()
+
+    /** Set before `player.release()` so a cancelled fade does not touch a released player. */
+    private var isPlayerReleased = false
+
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             getSystemService(VibratorManager::class.java)?.defaultVibrator
@@ -115,6 +128,14 @@ class AudioPlayerService : MediaSessionService() {
         private const val AUDIO_REACTIVE_HAPTIC_MAX_DURATION_MS = 20L
         private const val AUDIO_REACTIVE_HAPTIC_MIN_AMPLITUDE = 40
         private const val AUDIO_REACTIVE_HAPTIC_MAX_AMPLITUDE = 255
+
+        /** Offload transition fade shape (issue #53). */
+        private const val VOLUME_RAMP_STEPS = 8
+        private val FADE_OUT_STEP = 20.milliseconds
+        private val FADE_IN_STEP = 40.milliseconds
+
+        /** Lets the A2DP / HAL buffers drain before the sink is reconfigured. */
+        private val SINK_DRAIN_DELAY = 350.milliseconds
     }
 
     private data class AudioReactiveHapticProfileConfig(
@@ -300,81 +321,98 @@ class AudioPlayerService : MediaSessionService() {
         }
     }
 
+    /**
+     * Switches the audio-offload (bit-perfect) route on or off (issue #53).
+     *
+     * The sink is reconfigured by changing the offload preference on
+     * [Player.trackSelectionParameters], which triggers a track reselection **in place**. There is
+     * deliberately no `stop()` / `prepare()` cycle: that discards the loaded media and re-buffers
+     * HTTP and Navidrome sources from scratch, turning a DSP toggle into an audible restart.
+     *
+     * The volume is faded out across the swap to hide the hardware click, so every exit path -
+     * including cancellation - must restore a sane terminal volume. See [OffloadVolumePolicy].
+     */
     @OptIn(UnstableApi::class)
     private fun setAudioOffloadEnabled(enabled: Boolean) {
-        // AUDIOPHILE COMPATIBILITY: On Samsung, we ONLY allow Offload in Bit-Perfect mode.
-        // If we are in "Aural Nexus" (DSP) mode, we must use the standard path to avoid HAL Float glitches.
-        val effectiveEnabled = if (isSamsungDevice) {
-            enabled // Allow offload on Samsung if requested (Bit-Perfect)
-        } else {
-            enabled
-        }
+        if (isBitPerfectMode == enabled) return
+        isBitPerfectMode = enabled
 
-        if (isBitPerfectMode == effectiveEnabled) return
-        isBitPerfectMode = effectiveEnabled
-
-        val offloadMode = if (effectiveEnabled) {
+        val offloadMode = if (enabled) {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
         } else {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
         }
 
-        serviceScope.launch {
-            val wasPlaying = player.isPlaying
-            val currentPosition = player.currentPosition
-            val startVolume = player.volume
+        // A rapid double-toggle would otherwise leave two coroutines ramping the same volume
+        // against each other; whichever lost would strand it at a partial value.
+        offloadTransitionJob?.cancel()
+        offloadTransitionJob = serviceScope.launch {
+            // The mutex makes the cancelled transition's terminal restore complete before the next
+            // one samples the volume, so preFadeVolume is never read mid-fade.
+            offloadTransitionMutex.withLock {
+                val wasPlaying = player.isPlaying
+                // Captured before ANY mutation - this is what the user was actually hearing.
+                val preFadeVolume = player.volume
 
-            // FADED SWAP: Ramp down before hardware reset to hide the click/pop
-            if (wasPlaying) {
-                val steps = 8
-                for (i in 1..steps) {
-                    player.volume = startVolume * (1f - i.toFloat() / steps)
-                    delay(20.milliseconds) // Quicker UI increments
-                }
-                // FIX: Add generous delay to allow A2DP/Hardware buffers to actually drain
-                delay(350.milliseconds)
-            }
-
-            player.stop()
-
-            player.trackSelectionParameters = player.trackSelectionParameters
-                .buildUpon()
-                .setAudioOffloadPreferences(
-                    AudioOffloadPreferences.Builder()
-                        .setAudioOffloadMode(offloadMode)
-                        .build()
+                val targetVolume = OffloadVolumePolicy.targetVolume(
+                    bitPerfect = enabled,
+                    profilePreampDb = currentProfile?.preamp,
+                    preFadeVolume = preFadeVolume
                 )
-                .build()
 
-            if (effectiveEnabled) {
-                player.volume = 1f
-            } else {
-                currentProfile?.let { applyProfileToDsp(it) }
-            }
+                try {
+                    if (wasPlaying) {
+                        rampVolume(from = preFadeVolume, to = 0f, stepDelay = FADE_OUT_STEP)
+                        // Let the A2DP / HAL buffers drain before the sink is reconfigured.
+                        delay(SINK_DRAIN_DELAY)
+                    }
 
-            player.seekTo(currentPosition)
-            player.prepare()
+                    player.trackSelectionParameters = player.trackSelectionParameters
+                        .buildUpon()
+                        .setAudioOffloadPreferences(
+                            AudioOffloadPreferences.Builder()
+                                .setAudioOffloadMode(offloadMode)
+                                .build()
+                        )
+                        .build()
 
-            if (wasPlaying) {
-                player.play()
-                // Ramp back up smoothly
-                val targetVolume = player.volume
-                player.volume = 0f
-                val steps = 8
-                for (i in 1..steps) {
-                    player.volume = targetVolume * (i.toFloat() / steps)
-                    delay(40.milliseconds)
+                    // In bit-perfect mode the DSP chain is bypassed, so the PEQ profile must not be
+                    // reapplied - doing so would reintroduce the preamp attenuation it excludes.
+                    if (!enabled) {
+                        currentProfile?.let { applyProfileToDsp(it) }
+                    }
+
+                    if (wasPlaying) {
+                        rampVolume(from = 0f, to = targetVolume, stepDelay = FADE_IN_STEP)
+                    }
+                } finally {
+                    // Terminal restore. Without this, cancellation mid-fade or a throw from the
+                    // reconfiguration strands the player at zero volume with no path back.
+                    if (!isPlayerReleased) {
+                        player.volume = targetVolume
+                    }
                 }
-                player.volume = targetVolume
             }
+        }
+    }
+
+    /** Linear volume ramp on the main thread. Values are clamped; a NaN would silence the sink. */
+    private suspend fun rampVolume(from: Float, to: Float, stepDelay: Duration) {
+        val safeFrom = if (from.isFinite()) from else 0f
+        val safeTo = if (to.isFinite()) to else 0f
+        for (step in 1..VOLUME_RAMP_STEPS) {
+            if (isPlayerReleased) return
+            val fraction = step.toFloat() / VOLUME_RAMP_STEPS
+            player.volume = (safeFrom + (safeTo - safeFrom) * fraction).coerceIn(0f, 1f)
+            delay(stepDelay)
         }
     }
 
     private fun applyProfileToDsp(profile: PeqProfile) {
         if (isBitPerfectMode) return
 
-        val safePreampDb = profile.preamp.coerceAtMost(0f)
-        player.volume = 10.0.pow(safePreampDb / 20.0).toFloat().coerceIn(0.05f, 1.0f)
+        // Shared with the offload transition so both agree on the resulting volume.
+        player.volume = OffloadVolumePolicy.preampVolume(profile.preamp)
 
         val acousticNodes = profile.bands.mapIndexed { index, band ->
             val type = when (band.type.uppercase()) {
@@ -733,6 +771,13 @@ class AudioPlayerService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
 
     override fun onDestroy() {
+        // Must precede release(): an in-flight offload transition is suspended in a delay(), and
+        // cancelling the scope resumes it into its terminal-volume restore. Touching a released
+        // player there would crash on teardown (issue #53).
+        isPlayerReleased = true
+        offloadTransitionJob?.cancel()
+        offloadTransitionJob = null
+
         mediaSession?.run {
             player.release()
             release()

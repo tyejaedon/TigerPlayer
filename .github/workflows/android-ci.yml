@@ -71,6 +71,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -121,6 +123,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -153,7 +153,7 @@ TigerPlayer/
 - **Android SDK**:
   - `minSdk = 29`
   - `targetSdk = 36`
-  - `compileSdk = 37`
+  - `compileSdk = 36`
 - **Device recommendation**: Android 13+ for best UI/visualizer behavior.
 
 Reference: `app/build.gradle.kts`.
