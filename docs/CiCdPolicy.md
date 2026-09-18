@@ -11,7 +11,7 @@ Protect `master`, require pull requests, stale-approval dismissal, conversation 
 - `Supply-chain security / Dependency checksum verification`
 ## Supply-chain and Android build policy
 - Third-party Actions use immutable commit SHAs annotated with release tags; Dependabot updates Actions and Gradle dependencies weekly.
-- CI uses JDK 17 and `platforms;android-37`, matching `compileSdk = 37`.
+- CI uses JDK 17 and `platforms;android-36`, matching `compileSdk = 36`.
 - Pull requests pass lint, JVM tests, R8, an unsigned release bundle, and deterministic Room/app-context instrumentation smoke tests.
 - Gradle checksum verification is mandatory in CI using `--dependency-verification=strict`; update `gradle/verification-metadata.xml` only with an intentional reviewed dependency change.
 - Pull-request workflows must not receive release-signing keys or production credentials.
