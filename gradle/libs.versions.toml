@@ -1,5 +1,5 @@
 [versions]
-agp = "9.2.1"
+agp = "9.4.0"
 auth = "5.0.0"
 benchmarkMacroJunit4 = "1.4.1"
 datastorePreferences = "1.2.1"
