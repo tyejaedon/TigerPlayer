@@ -18,7 +18,7 @@ Room persistence, unifying a local library with Navidrome (Subsonic) and Spotify
 |---|---|
 | Language | Kotlin `2.2.20` |
 | JDK | 17 |
-| `minSdk` / `targetSdk` / `compileSdk` | 29 / 36 / 37 |
+| `minSdk` / `targetSdk` / `compileSdk` | 29 / 36 / 36 |
 | DI | Hilt (KSP) |
 | Persistence | Room + DataStore Preferences |
 | Playback | AndroidX Media3 (`MediaSessionService`) |
