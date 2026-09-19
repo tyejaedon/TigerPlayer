@@ -198,7 +198,7 @@ dependencies {
 configurations.all {
     resolutionStrategy {
         // Hardcoded to 2.2.20 to match your KSP compiler exactly
-        val kotlinVersion = "2.2.20"
+        val kotlinVersion = "2.4.20"
         force("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
         force("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
         force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")
