@@ -87,6 +87,13 @@ configure<ApplicationExtension> {
         }
     }
 
+    sourceSets {
+        // Exposes the committed Room schema JSON to MigrationTestHelper (issue #43 / #74).
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
