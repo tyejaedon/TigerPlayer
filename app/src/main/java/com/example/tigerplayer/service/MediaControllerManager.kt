@@ -7,7 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -19,6 +18,9 @@ import android.os.VibratorManager
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -162,11 +164,33 @@ class MediaControllerManager @Inject constructor(
     private val infiniteLookAhead = 1
     private val infiniteBatchSize = 12
 
+    @Volatile private var isReleased = false
+
+    /**
+     * Runs [release] when the whole app process is going away, so the [MediaController]
+     * future, [managerScope], and [audioRouteReceiver] registered in [init] don't outlive the
+     * process (issue #48). This is a @Singleton with no other natural teardown hook.
+     */
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onDestroy(owner: LifecycleOwner) {
+            release()
+        }
+    }
+
     init {
         observeFlowStatePreferences()
         observeControlMatrixSettings()
         registerAudioRouteReceiver()
         initializeController()
+        registerProcessLifecycleTeardown()
+    }
+
+    private fun registerProcessLifecycleTeardown() {
+        // ProcessLifecycleOwner must be touched from the main thread; this constructor can run
+        // off it (e.g. instrumented tests), so hop over rather than assuming.
+        ContextCompat.getMainExecutor(context).execute {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+        }
     }
 
     private fun observeFlowStatePreferences() {
@@ -342,7 +366,7 @@ class MediaControllerManager @Inject constructor(
             while (isActive) {
                 mediaController?.let { controller ->
                     _currentPosition.value = controller.currentPosition
-                    
+
                     // OPTIMIZATION: Only perform heavy FlowState checks in the final 20 seconds
                     val duration = controller.duration
                     if (duration != C.TIME_UNSET && duration > 0) {
@@ -372,7 +396,7 @@ class MediaControllerManager @Inject constructor(
         if (remainingMs > flowStateWindowMs || remainingMs <= 0L) return
 
         val mediaId = controller.currentMediaItem?.mediaId ?: return
-        
+
         // AUDIOPHILE DECISION: Disable True Overlap Crossfade via MediaPlayer.
         // It bypasses the High-Resolution DSP chain and compromises bit-depth during transitions.
         // Standard Media3 gapless transitions are preserved for bit-perfect timing.
@@ -453,8 +477,13 @@ class MediaControllerManager @Inject constructor(
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
         }
 
+        // Android 14+ requires an explicit export flag for a context-registered receiver of
+        // non-system broadcasts, or registration throws SecurityException (issue #48). Neither of
+        // these broadcasts needs to be visible to other apps.
         runCatching {
-            context.registerReceiver(audioRouteReceiver, filter)
+            ContextCompat.registerReceiver(
+                context, audioRouteReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
+            )
             isRouteReceiverRegistered = true
             routeReceiverRegisteredAtMs = SystemClock.elapsedRealtime()
             lastRouteActionHandledAt.clear()
@@ -468,6 +497,8 @@ class MediaControllerManager @Inject constructor(
 
         runCatching {
             context.unregisterReceiver(audioRouteReceiver)
+        }.onFailure {
+            Log.w("MediaManager", "Failed to unregister audio route receiver: ${it.message}")
         }
         isRouteReceiverRegistered = false
         routeReceiverRegisteredAtMs = 0L
@@ -938,12 +969,16 @@ class MediaControllerManager @Inject constructor(
     }
 
     fun release() {
+        if (isReleased) return
+        isReleased = true
+
         saveCurrentState()
         positionJob?.cancel()
         infinitePlayJob?.cancel()
         bluetoothDeviceManager.stopTrackingListeningTime()
         resetFlowStatePipeline(restoreFullVolume = false)
         unregisterAudioRouteReceiver()
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
         controllerFuture?.let { MediaController.releaseFuture(it) }
         mediaController = null
         managerScope.cancel()

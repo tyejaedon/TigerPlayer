@@ -134,6 +134,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.glance)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.window)
 
     // Remote Compose (The Alpha Library)
