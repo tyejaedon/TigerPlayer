@@ -27,5 +27,13 @@ data class CachedTrackEntity(
 
     // --- THE FIX: The Absolute Path ---
     // Critical for the LyricsRepository to locate .lrc files in the same folder
-    val path: String?
+    val path: String?,
+
+    // --- ReplayGain (issue #56) ---
+    // Parsed from REPLAYGAIN_* tags at scan time. Null means "not tagged" -
+    // distinct from 0.0 dB, so AdaptiveDspEngine can tell "no gain" apart from "untagged".
+    val replayGainTrackDb: Double? = null,
+    val replayGainAlbumDb: Double? = null,
+    val replayGainTrackPeak: Double? = null,
+    val replayGainAlbumPeak: Double? = null
 )
