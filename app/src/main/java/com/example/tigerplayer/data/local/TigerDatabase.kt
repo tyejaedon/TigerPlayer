@@ -23,8 +23,8 @@ import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
         CachedTrackEntity::class, // <-- Added
         LyricsCacheEntity::class // 2. Add it to the array
     ],
-    version = 11, // <-- Bumped to 5 for year addition
-    exportSchema = false
+    version = 11, // <-- version 11
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class TigerDatabase : RoomDatabase() {

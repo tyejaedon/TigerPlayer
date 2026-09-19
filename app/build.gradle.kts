@@ -99,8 +99,11 @@ configure<ApplicationExtension> {
     }
 }
 
-
-
+// Room schema export - required so migrations can be verified/auto-generated
+// against a committed baseline (see app/schemas). See issue #43.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
 
 dependencies {
     // --- Compose & UI (Using Version Catalog) ---
@@ -150,6 +153,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
 
     // --- Hilt (Dependency Injection) ---
     implementation(libs.hilt.android)
