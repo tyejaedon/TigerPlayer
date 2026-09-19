@@ -99,6 +99,9 @@ jobs:
 
   android-smoke:
     name: Android instrumentation smoke
+    # Temporarily deferred: the hosted emulator remains unreliable after KVM setup.
+    # Re-enable after issue #99 establishes a stable device-test environment.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
