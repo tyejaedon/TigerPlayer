@@ -87,6 +87,13 @@ configure<ApplicationExtension> {
         }
     }
 
+    sourceSets {
+        // Exposes the committed Room schema JSON to MigrationTestHelper (issue #43 / #74).
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -99,8 +106,11 @@ configure<ApplicationExtension> {
     }
 }
 
-
-
+// Room schema export - required so migrations can be verified/auto-generated
+// against a committed baseline (see app/schemas). See issue #43.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
 
 dependencies {
     // --- Compose & UI (Using Version Catalog) ---
@@ -150,6 +160,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
 
     // --- Hilt (Dependency Injection) ---
     implementation(libs.hilt.android)

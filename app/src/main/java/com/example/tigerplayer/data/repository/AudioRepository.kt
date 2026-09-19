@@ -254,7 +254,11 @@ class AudioRepository @Inject constructor(
         path = path,
         year = year,
         dateAdded = dateAdded,
-        isLiked = isLiked
+        isLiked = isLiked,
+        replayGainTrackDb = replayGainTrackDb,
+        replayGainAlbumDb = replayGainAlbumDb,
+        replayGainTrackPeak = replayGainTrackPeak,
+        replayGainAlbumPeak = replayGainAlbumPeak
     )
 
     private fun AudioTrack.toEntity() = CachedTrackEntity(
@@ -272,6 +276,10 @@ class AudioRepository @Inject constructor(
         path = path,
         year = year,
         dateAdded = dateAdded,
-        isLiked = isLiked
+        isLiked = isLiked,
+        replayGainTrackDb = replayGainTrackDb,
+        replayGainAlbumDb = replayGainAlbumDb,
+        replayGainTrackPeak = replayGainTrackPeak,
+        replayGainAlbumPeak = replayGainAlbumPeak
     )
 }

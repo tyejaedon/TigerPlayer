@@ -1,5 +1,6 @@
 package com.example.tigerplayer.data.local
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
@@ -23,8 +24,11 @@ import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
         CachedTrackEntity::class, // <-- Added
         LyricsCacheEntity::class // 2. Add it to the array
     ],
-    version = 11, // <-- Bumped to 5 for year addition
-    exportSchema = false
+    version = 12, // <-- Bumped to 12 for ReplayGain columns (issue #56)
+    exportSchema = true,
+    autoMigrations = [
+        AutoMigration(from = 11, to = 12)
+    ]
 )
 @TypeConverters(Converters::class)
 abstract class TigerDatabase : RoomDatabase() {

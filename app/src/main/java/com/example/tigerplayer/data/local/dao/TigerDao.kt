@@ -466,6 +466,10 @@ abstract class TigerDao {
                 c.dateAdded,
                 c.isLiked,
                 c.path,
+                c.replayGainTrackDb,
+                c.replayGainAlbumDb,
+                c.replayGainTrackPeak,
+                c.replayGainAlbumPeak,
                 CASE
                     WHEN LOWER(TRIM(c.artist)) IN (SELECT artistName FROM top_artists) THEN 0
                     ELSE 1
@@ -488,7 +492,11 @@ abstract class TigerDao {
             year,
             dateAdded,
             isLiked,
-            path
+            path,
+            replayGainTrackDb,
+            replayGainAlbumDb,
+            replayGainTrackPeak,
+            replayGainAlbumPeak
         FROM never_played
         ORDER BY priority ASC, dateAdded DESC
         LIMIT :limit

@@ -23,7 +23,13 @@ data class AudioTrack(
 
     // --- THE MISSING LINK ---
     // This must exist for track.path to work in the LyricsRepository!
-    val path: String? = null
+    val path: String? = null,
+
+    // --- ReplayGain (issue #56) ---
+    val replayGainTrackDb: Double? = null,
+    val replayGainAlbumDb: Double? = null,
+    val replayGainTrackPeak: Double? = null,
+    val replayGainAlbumPeak: Double? = null
 )
 
 /**
