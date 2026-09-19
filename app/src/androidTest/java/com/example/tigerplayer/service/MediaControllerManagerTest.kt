@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,7 +44,7 @@ class MediaControllerManagerTest {
         )
         every { settingsDataStore.settingsFlow } returns settingsFlow
         every { playbackPrefs.flowStateTrueOverlap } returns emptyFlow()
-        
+
         manager = MediaControllerManager(
             context,
             playbackPrefs,
@@ -58,11 +59,11 @@ class MediaControllerManagerTest {
     fun skipToNext_restores_full_volume() {
         val mockController = mockk<MediaController>(relaxed = true)
         manager.mediaController = mockController
-        
+
         every { mockController.volume } returns 0.5f
-        
+
         manager.skipToNext()
-        
+
         verify { mockController.volume = 1.0f }
     }
 
@@ -89,5 +90,19 @@ class MediaControllerManagerTest {
         delay(120)
 
         verify(atLeast = 1) { mockController.volume = 1.0f }
+    }
+
+    // Regression coverage for issue #48: release() previously had no call sites at all, so its
+    // idempotency was never exercised. A double release (e.g. a duplicate process-teardown
+    // callback) must not crash, and must actually tear the controller reference down.
+    @Test
+    fun release_is_idempotent_and_clears_media_controller() {
+        val mockController = mockk<MediaController>(relaxed = true)
+        manager.mediaController = mockController
+
+        manager.release()
+        manager.release()
+
+        assertNull(manager.mediaController)
     }
 }
