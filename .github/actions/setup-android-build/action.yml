@@ -14,7 +14,7 @@ runs:
         java-version: "17"
     - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       with:
-        packages: "platform-tools platforms;android-36"
+        packages: "platform-tools platforms;android-36 platforms;android-37"
     - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       with:
         cache-read-only: ${{ inputs.cache-read-only }}

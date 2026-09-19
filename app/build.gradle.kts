@@ -23,7 +23,7 @@ plugins {
 // 🔥 THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
 configure<ApplicationExtension> {
     namespace = "com.example.tigerplayer"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.tigerplayer"
