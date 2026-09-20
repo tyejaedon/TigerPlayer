@@ -5,7 +5,9 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.hardware.display.DisplayManager
 import android.os.Build
+import android.util.Log
 import android.view.Display
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.*
@@ -68,6 +70,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
+
+private const val TAG = "CoverScreenMiniHub"
 
 data class CoverScreenWindowState(
     val widthDp: Int,
@@ -141,6 +145,51 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
     val activity = remember(context) { context.findActivity() }
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
 
+    // Bumped by the DisplayManager.DisplayListener below whenever a display attaches, detaches,
+    // or changes. A true secondary display (Motorola-style) appearing/disappearing at runtime
+    // does not necessarily change this window's own Configuration, so without this tick the
+    // state would only refresh on an unrelated recomposition.
+    var displayChangeTick by remember { mutableStateOf(0) }
+
+    DisposableEffect(activity) {
+        val displayManager = activity?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        val listener = if (displayManager != null) {
+            object : DisplayManager.DisplayListener {
+                override fun onDisplayAdded(displayId: Int) {
+                    displayChangeTick++
+                }
+
+                override fun onDisplayRemoved(displayId: Int) {
+                    displayChangeTick++
+                }
+
+                override fun onDisplayChanged(displayId: Int) {
+                    displayChangeTick++
+                }
+            }
+        } else {
+            null
+        }
+
+        if (displayManager != null && listener != null) {
+            try {
+                displayManager.registerDisplayListener(listener, null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to register DisplayManager.DisplayListener", e)
+            }
+        }
+
+        onDispose {
+            if (displayManager != null && listener != null) {
+                try {
+                    displayManager.unregisterDisplayListener(listener)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to unregister DisplayManager.DisplayListener", e)
+                }
+            }
+        }
+    }
+
     val windowLayoutInfo by produceState<WindowLayoutInfo?>(initialValue = null, activity) {
         if (activity == null) {
             value = null
@@ -155,7 +204,9 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         ?.displayFeatures
         ?.any { it is FoldingFeature && it.isSeparating } == true
 
-    val displayId = activity?.currentDisplayIdOrDefault() ?: Display.DEFAULT_DISPLAY
+    val displayId = remember(activity, displayChangeTick) {
+        activity?.currentDisplayIdOrDefault() ?: Display.DEFAULT_DISPLAY
+    }
     val isSecondaryDisplay = isSecondaryDisplayIdentity(displayId)
     val isInMultiWindowMode = activity?.isInMultiWindowMode == true
 
