@@ -45,12 +45,12 @@ configure<ApplicationExtension> {
 
         val clientId = secrets.getProperty("SPOTIFY_CLIENT_ID") ?: "MISSING_ID"
         val lastfmApiKey = secrets.getProperty("LASTFM_API_KEY") ?: "MISSING_API_KEY"
-        val clientSecret = secrets.getProperty("SPOTIFY_CLIENT_SECRET") ?: "MISSING_SECRET"
         val youtubeApiKey = secrets.getProperty("YOUTUBE_API_KEY") ?: "MISSING_YOUTUBE_KEY"
 
         // BuildConfig Fields
+        // NOTE: No SPOTIFY_CLIENT_SECRET field. Spotify auth uses Authorization Code + PKCE,
+        // which requires no client secret. Never add one back here (issue #46).
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$clientId\"")
-        buildConfigField("String", "SPOTIFY_CLIENT_SECRET", "\"$clientSecret\"")
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastfmApiKey\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
     }
@@ -116,6 +116,7 @@ dependencies {
     // --- Compose & UI (Using Version Catalog) ---
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.animation)
+    implementation(libs.androidx.browser)
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

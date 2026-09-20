@@ -76,17 +76,19 @@ interface SpotifyApiService {
 interface SpotifyAuthApi {
     @POST("api/token")
     @FormUrlEncoded
-    suspend fun getServiceToken(
-        @Header("Authorization") basicAuth: String,
-        @Field("grant_type") grantType: String = "client_credentials"
+    suspend fun getUserToken(
+        @Field("client_id") clientId: String,
+        @Field("grant_type") grantType: String = "authorization_code",
+        @Field("code") code: String?,
+        @Field("redirect_uri") redirectUri: String,
+        @Field("code_verifier") codeVerifier: String
     ): Response<SpotifyTokenResponse>
 
     @POST("api/token")
     @FormUrlEncoded
-    suspend fun getUserToken(
-        @Header("Authorization") authHeader: String,
-        @Field("grant_type") grantType: String = "authorization_code",
-        @Field("code") code: String?,
-        @Field("redirect_uri") redirectUri: String
+    suspend fun refreshToken(
+        @Field("client_id") clientId: String,
+        @Field("grant_type") grantType: String = "refresh_token",
+        @Field("refresh_token") refreshToken: String
     ): Response<SpotifyTokenResponse>
 }

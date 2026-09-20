@@ -2,9 +2,11 @@ package com.example.tigerplayer
 
 import android.app.PictureInPictureParams
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.util.Rational
@@ -12,8 +14,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -33,15 +35,13 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.compose.rememberNavController
 import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.local.ThemeMode
+import com.example.tigerplayer.data.repository.PkceGenerator
 import com.example.tigerplayer.data.repository.SpotifyAuthManager
 import com.example.tigerplayer.navigation.TigerPlayerNavGraph
 import com.example.tigerplayer.ui.player.PipVisualizerSurface
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.settings.SettingsViewModel
 import com.example.tigerplayer.ui.theme.TigerPlayerTheme
-import com.spotify.sdk.android.auth.AuthorizationClient
-import com.spotify.sdk.android.auth.AuthorizationRequest
-import com.spotify.sdk.android.auth.AuthorizationResponse
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -63,49 +63,9 @@ class MainActivity : ComponentActivity() {
     @Volatile
     private var isPipDisabledByUser = false
 
+    private var pendingCodeVerifier: String? = null
+
     private val redirectUri = "tigerplayer://callback"
-
-    // --- 1. SPOTIFY AUTH RITUAL ---
-    private val spotifyAuthLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val response = AuthorizationClient.getResponse(result.resultCode, result.data)
-
-        when (response.type) {
-            AuthorizationResponse.Type.CODE -> {
-                val authCode = response.code
-                Log.d("SpotifyAuth", "Code acquired! Swapping for token...")
-
-                lifecycleScope.launch {
-                    try {
-                        val token = authManager.exchangeCodeForToken(authCode, redirectUri)
-                        if (token.isNotEmpty()) {
-                            playerViewModel.onAuthSuccess(token)
-                            Log.d("SpotifyAuth", "Ritual complete. ViewModels will auto-sync.")
-                        } else {
-                            authMessage.value = "Spotify login returned an empty token. Please retry."
-                        }
-                    } catch (e: Exception) {
-                        Log.e("SpotifyAuth", "Ritual failed during token exchange: ${e.message}")
-                        authMessage.value = "Spotify token exchange failed. Check connection and retry."
-                    }
-                }
-            }
-            AuthorizationResponse.Type.ERROR -> {
-                if (response.error == "NO_INTERNET_CONNECTION") {
-                    Log.e("SpotifyAuth", "Auth failed: Spotify login requires an active internet connection.")
-                    Toast.makeText(this, "No internet connection. Check network and retry.", Toast.LENGTH_SHORT).show()
-                    authMessage.value = "Spotify login needs internet access."
-                } else {
-                    Log.e("SpotifyAuth", "Auth Error: ${response.error}")
-                    authMessage.value = "Spotify auth error: ${response.error ?: "Unknown"}"
-                }
-            }
-            else -> {
-                Log.w("SpotifyAuth", "Flow cancelled or unknown type.")
-            }
-        }
-    }
 
     // --- 2. LIFECYCLE ---
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -117,6 +77,9 @@ class MainActivity : ComponentActivity() {
                 isPipDisabledByUser = settings.disablePip
             }
         }
+
+        // Handle a cold-start launch via the tigerplayer://callback deep link
+        handleSpotifyRedirect(intent)
 
         setContent {
             val pipMode by isInPipMode.collectAsState()
@@ -172,6 +135,51 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSpotifyRedirect(intent)
+    }
+
+    private fun handleSpotifyRedirect(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "tigerplayer" || uri.host != "callback") return
+
+        val code = uri.getQueryParameter("code")
+        val error = uri.getQueryParameter("error")
+        val verifier = pendingCodeVerifier
+
+        when {
+            code != null && verifier != null -> {
+                Log.d("SpotifyAuth", "Code acquired! Swapping for token...")
+                lifecycleScope.launch {
+                    try {
+                        val token = authManager.exchangeCodeForToken(code, redirectUri, verifier)
+                        if (token.isNotEmpty()) {
+                            playerViewModel.onAuthSuccess(token)
+                            Log.d("SpotifyAuth", "Ritual complete. ViewModels will auto-sync.")
+                        } else {
+                            authMessage.value = "Spotify login returned an empty token. Please retry."
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SpotifyAuth", "Ritual failed during token exchange: ${e.message}")
+                        authMessage.value = "Spotify token exchange failed. Check connection and retry."
+                    } finally {
+                        pendingCodeVerifier = null
+                    }
+                }
+            }
+            error != null -> {
+                Log.e("SpotifyAuth", "Auth Error: $error")
+                authMessage.value = "Spotify auth error: $error"
+                pendingCodeVerifier = null
+            }
+            else -> {
+                Log.w("SpotifyAuth", "Redirect received with neither code nor error.")
+            }
+        }
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (shouldEnterPictureInPicture()) {
@@ -207,10 +215,8 @@ class MainActivity : ComponentActivity() {
         enterPictureInPictureMode(paramsBuilder.build())
     }
 
-
     fun authenticateSpotify() {
         val clientId = BuildConfig.SPOTIFY_CLIENT_ID
-        val redirectUri = "tigerplayer://callback"
 
         if (clientId.startsWith("MISSING_")) {
             Log.e("SpotifyAuth", "Spotify client ID is missing in BuildConfig/secrets.properties")
@@ -226,24 +232,25 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val builder = AuthorizationRequest.Builder(
-            clientId,
-            AuthorizationResponse.Type.CODE,
-            redirectUri
-        ).apply {
-            setScopes(arrayOf(
-                "playlist-read-private",
-                "playlist-read-collaborative",
-                "user-library-read",
-                "user-read-private",
-                "streaming"
-            ))
-            setShowDialog(true)
-        }
+        val verifier = PkceGenerator.generateCodeVerifier()
+        val challenge = PkceGenerator.generateCodeChallenge(verifier)
+        pendingCodeVerifier = verifier
 
-        val request = builder.build()
-        val intent = AuthorizationClient.createLoginActivityIntent(this, request)
-        spotifyAuthLauncher.launch(intent)
+        val scopes = listOf(
+            "playlist-read-private", "playlist-read-collaborative",
+            "user-library-read", "user-read-private", "streaming"
+        ).joinToString(" ")
+
+        val uri = Uri.parse("https://accounts.spotify.com/authorize").buildUpon()
+            .appendQueryParameter("client_id", clientId)
+            .appendQueryParameter("response_type", "code")
+            .appendQueryParameter("redirect_uri", redirectUri)
+            .appendQueryParameter("code_challenge_method", "S256")
+            .appendQueryParameter("code_challenge", challenge)
+            .appendQueryParameter("scope", scopes)
+            .build()
+
+        CustomTabsIntent.Builder().build().launchUrl(this, uri)
     }
 
     private fun hasInternetConnection(): Boolean {
