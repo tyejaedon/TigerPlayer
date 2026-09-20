@@ -7,6 +7,7 @@ import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
+import com.example.tigerplayer.data.model.TrackFingerprint
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -470,6 +471,7 @@ abstract class TigerDao {
                 c.replayGainAlbumDb,
                 c.replayGainTrackPeak,
                 c.replayGainAlbumPeak,
+                c.dateModified,
                 CASE
                     WHEN LOWER(TRIM(c.artist)) IN (SELECT artistName FROM top_artists) THEN 0
                     ELSE 1
@@ -496,7 +498,8 @@ abstract class TigerDao {
             replayGainTrackDb,
             replayGainAlbumDb,
             replayGainTrackPeak,
-            replayGainAlbumPeak
+            replayGainAlbumPeak,
+            dateModified
         FROM never_played
         ORDER BY priority ASC, dateAdded DESC
         LIMIT :limit
@@ -510,22 +513,33 @@ abstract class TigerDao {
     @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
     abstract suspend fun getCachedTracksSync(): List<CachedTrackEntity>
 
+    /**
+     * The cheap identity read used to diff a fresh MediaStore scan against the cache
+     * (issue #49). Only `(id, dateModified)` is projected - never the full row - so a
+     * cold-start diff against a large library doesn't materialize every field of every track.
+     */
+    @Query("SELECT id, dateModified FROM cached_tracks")
+    abstract suspend fun getCachedTrackFingerprints(): List<TrackFingerprint>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun internalInsertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
 
-    @Query("DELETE FROM cached_tracks")
-    abstract suspend fun internalClearTrackCache(): Int
+    @Query("DELETE FROM cached_tracks WHERE id IN (:ids)")
+    abstract suspend fun internalDeleteCachedTracksByIds(ids: List<String>): Int
 
     /**
-     * THE RECONCILIATION TRANSACTION
-     * Ensures the UI never sees an empty library during a refresh.
-     * This is the "Nuclear" fix for flickering screens.
+     * THE DELTA RECONCILIATION TRANSACTION (issue #49)
+     * Replaces the old "wipe the whole table and reinsert everything" reconciliation.
+     * Only the rows that are actually new or changed are written, and only the rows that
+     * genuinely disappeared from the scan are removed - every unaffected row is left untouched.
      */
     @Transaction
-    open suspend fun insertCachedTracksTransaction(tracks: List<CachedTrackEntity>) {
-        internalClearTrackCache()
-        if (tracks.isNotEmpty()) {
-            internalInsertCachedTracks(tracks)
+    open suspend fun applyCachedTracksDelta(upserts: List<CachedTrackEntity>, removedIds: List<String>) {
+        if (removedIds.isNotEmpty()) {
+            internalDeleteCachedTracksByIds(removedIds)
+        }
+        if (upserts.isNotEmpty()) {
+            internalInsertCachedTracks(upserts)
         }
     }
 
