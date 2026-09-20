@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +36,8 @@ import com.example.tigerplayer.ui.home.HomeScreen
 import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.library.LibraryScreen
 import com.example.tigerplayer.ui.library.ScanningOverlay
+import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
+import com.example.tigerplayer.ui.coverscreen.CoverScreenTestTags
 import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
@@ -67,9 +70,28 @@ fun MainScreen(
 ) {
     val windowState = rememberCoverScreenWindowState()
     val isCoverScreen = windowState.isCoverScreen
-    val navigationPreset = remember(isCoverScreen) {
-        if (isCoverScreen) MainNavigationPresets.CoverOneHand else MainNavigationPresets.Default
+
+    // Audio must load regardless of shell: the cover-screen mini hub reads the same
+    // playerViewModel.uiState as the full shell.
+    LaunchedEffect(Unit) {
+        playerViewModel.loadLocalAudio(forceRefresh = false)
     }
+
+    if (isCoverScreen) {
+        // Cover-screen users get the purpose-built gesture-first mini hub instead of the full
+        // app shell (Scaffold + bottom NavigationBar) squeezed into a ~1.9-3.4in panel.
+        CoverScreenMiniHub(
+            playerViewModel = playerViewModel,
+            windowState = windowState,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(CoverScreenTestTags.MINI_HUB_ROOT)
+        )
+        return
+    }
+
+    // isCoverScreen is always false past this point (the cover-screen branch already returned).
+    val navigationPreset = MainNavigationPresets.Default
 
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
@@ -374,13 +396,6 @@ fun MainScreen(
                 progress = uiState.scanProgress,
                 total = uiState.totalFilesToScan
             )
-        }
-
-        // ==============================
-        // INIT
-        // ==============================
-        LaunchedEffect(Unit) {
-            playerViewModel.loadLocalAudio(forceRefresh = false)
         }
     }
 }
