@@ -14,6 +14,16 @@ class CoverScreenHeuristicTest {
     }
 
     @Test
+    fun `identifies non-Z-Flip cover panels (Motorola Razr family)`() {
+        // Motorola Razr (2022) cover: ~246x343dp, aspect ratio ~1.39 - outside the original
+        // 220..399 / <=450 / <=1.35f band.
+        assertTrue(isCoverScreenHeuristic(widthDp = 246, heightDp = 343))
+        // Motorola Razr+ / Razr 50 Ultra (2023/2024) cover: ~409x413dp, near-square - the short
+        // edge (409) was outside the original band's 399 upper bound.
+        assertTrue(isCoverScreenHeuristic(widthDp = 409, heightDp = 413))
+    }
+
+    @Test
     fun rejects_regular_phone_display_sizes() {
         assertFalse(isCoverScreenHeuristic(widthDp = 412, heightDp = 915))
         assertFalse(isCoverScreenHeuristic(widthDp = 800, heightDp = 360))

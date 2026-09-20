@@ -83,12 +83,26 @@ data class CoverScreenWindowState(
     val isInMultiWindowMode: Boolean = false
 )
 
+/**
+ * dp band tuned against known cover/outer display profiles across OEMs (approximate,
+ * short-edge x long-edge dp at each device's reported density):
+ * - Samsung Galaxy Z Flip4/5/6 cover: ~260x260 to ~306x316dp (roughly square).
+ * - Motorola Razr (2022) cover: ~246x343dp, aspect ratio ~1.39.
+ * - Motorola Razr+ / Razr 50 Ultra (2023/2024) cover: ~409x413dp, aspect ratio ~1.01 - this is
+ *   the profile that motivated broadening the original 220..399 / <=450 / <=1.35f band (issue
+ *   #125), which only covered the Z Flip family and missed this larger, near-square panel.
+ *
+ * This heuristic is intentionally permissive on its own; it is only ever consulted as a
+ * fallback when [resolveIsCoverScreen] has already ruled out a genuine secondary display and a
+ * user-resized multi-window state (split-screen/freeform/DeX - see issue #122), so a wider band
+ * does not reopen the false-positive surface those checks close.
+ */
 fun isCoverScreenHeuristic(widthDp: Int, heightDp: Int): Boolean {
     val shortEdge = min(widthDp, heightDp)
     val longEdge = max(widthDp, heightDp)
     if (shortEdge <= 0 || longEdge <= 0) return false
     val aspectRatio = longEdge.toFloat() / shortEdge.toFloat()
-    return shortEdge in 220..399 && longEdge <= 450 && aspectRatio <= 1.35f
+    return shortEdge in 200..420 && longEdge <= 460 && aspectRatio <= 1.5f
 }
 
 /**
