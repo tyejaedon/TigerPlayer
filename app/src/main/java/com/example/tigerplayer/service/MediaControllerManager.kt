@@ -40,6 +40,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.milliseconds
 
 @Singleton
 class MediaControllerManager @Inject constructor(
@@ -66,6 +67,10 @@ class MediaControllerManager @Inject constructor(
         private const val FLOW_STATE_FADE_IN_MS = 2_200L
         private const val QUEUE_ITEM_SEPARATOR = "\u001F"
         private const val QUEUE_FIELD_SEPARATOR = "\u001E"
+
+        private const val TICK_INTERVAL_MS = 250L
+
+        private const val POSITION_SAVE_INTERVAL_MS = 15_000L
 
         // Metadata keys embedded in MediaItem extras so queue resolution does not depend on library flows.
         const val META_IS_LOCAL = "tp_meta_is_local"
@@ -123,7 +128,6 @@ class MediaControllerManager @Inject constructor(
 
     @Volatile private var flowStateEnabled = true
     @Volatile private var flowStateWindowMs = FLOW_STATE_DEFAULT_WINDOW_MS
-    @Volatile private var flowStateTrueOverlap = false
     @Volatile private var gaplessPlaybackEnabled = true
     @Volatile private var audioReactiveHapticsEnabled = false
     @Volatile private var resumeOnBluetoothConnect = true
@@ -360,14 +364,16 @@ class MediaControllerManager @Inject constructor(
     }
 
     // Ticks smoothly for the UI slider, but no longer abuses SharedPreferences
+// Ticks smoothly for the UI slider, and persists position periodically so
+// process death mid-playback doesn't lose the resume point (issue #55).
     private fun startPositionTicker() {
         positionJob?.cancel()
         positionJob = managerScope.launch {
+            var elapsedSinceSave = 0L
             while (isActive) {
                 mediaController?.let { controller ->
                     _currentPosition.value = controller.currentPosition
 
-                    // OPTIMIZATION: Only perform heavy FlowState checks in the final 20 seconds
                     val duration = controller.duration
                     if (duration != C.TIME_UNSET && duration > 0) {
                         val remaining = duration - controller.currentPosition
@@ -375,11 +381,19 @@ class MediaControllerManager @Inject constructor(
                             maybeStartFlowStateFadeOut(controller)
                         }
                     }
+
+                    elapsedSinceSave += TICK_INTERVAL_MS
+                    if (elapsedSinceSave >= POSITION_SAVE_INTERVAL_MS) {
+                        elapsedSinceSave = 0L
+                        // Throttled write; do not persist on every tick.
+                        playbackPrefs.savePosition(controller.currentPosition)
+                    }
                 }
-                delay(250)
+                delay(TICK_INTERVAL_MS.milliseconds)
             }
         }
     }
+
 
     private fun maybeStartFlowStateFadeOut(controller: MediaController) {
         if (!flowStateEnabled || !gaplessPlaybackEnabled) return
@@ -432,7 +446,7 @@ class MediaControllerManager @Inject constructor(
                 val smooth = t * t * (3f - (2f * t))
                 val volume = lerp(startVolume, FLOW_STATE_MIN_VOLUME, smooth)
                 activeController.volume = volume
-                delay(FLOW_STATE_STEP_MS)
+                delay(FLOW_STATE_STEP_MS.milliseconds)
             }
 
             mediaController?.takeIf { it.currentMediaItem?.mediaId == mediaId }?.let {
@@ -459,7 +473,7 @@ class MediaControllerManager @Inject constructor(
                 val smooth = 1f - ((1f - t) * (1f - t))
                 val volume = lerp(startVolume, FLOW_STATE_MAX_VOLUME, smooth)
                 activeController.volume = volume
-                delay(FLOW_STATE_STEP_MS)
+                delay(FLOW_STATE_STEP_MS.milliseconds)
             }
 
             mediaController?.takeIf { it.currentMediaItem?.mediaId == targetId }?.let {
@@ -531,12 +545,7 @@ class MediaControllerManager @Inject constructor(
     private fun emitShortHaptic(vibrator: Vibrator) {
         if (!vibrator.hasVibrator()) return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(12L, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(12L)
-        }
+        vibrator.vibrate(VibrationEffect.createOneShot(12L, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     private fun resetFlowStatePipeline(restoreFullVolume: Boolean) {
@@ -691,16 +700,6 @@ class MediaControllerManager @Inject constructor(
         saveCurrentState()
     }
 
-    fun removeFromQueue(trackId: String) {
-        val controller = mediaController ?: return
-        for (i in 0 until controller.mediaItemCount) {
-            if (controller.getMediaItemAt(i).mediaId == trackId) {
-                removeFromQueueAt(i)
-                break
-            }
-        }
-    }
-
     fun removeFromQueueAt(index: Int) {
         val controller = mediaController ?: return
         if (index !in 0 until controller.mediaItemCount) return
@@ -742,11 +741,6 @@ class MediaControllerManager @Inject constructor(
         updateCurrentQueuePointer(controller)
         _mediaControllerState.tryEmit(Unit)
         saveCurrentState()
-    }
-
-    // Compatibility shim for existing call sites.
-    fun addNextToQueue(track: AudioTrack) {
-        playNext(track)
     }
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
