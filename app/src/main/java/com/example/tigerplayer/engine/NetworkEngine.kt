@@ -14,6 +14,16 @@ import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
+/**
+ * Thrown by [NetworkEngine.connectToNavidrome] when the resolved server URL is unencrypted
+ * (`http://`) and the caller has not explicitly set `allowCleartext = true`. The UI layer is
+ * expected to catch this, surface a warning to the user, and retry with acknowledgement -
+ * this is the actual per-connection scoping for cleartext traffic (issue #47); the static
+ * network security config cannot know the user's server address ahead of time.
+ */
+class CleartextNotAcknowledgedException(val url: String) :
+    Exception("Server address '$url' uses an unencrypted (http://) connection.")
+
 class NetworkEngine @Inject constructor(
     private val navidromePrefs: NavidromePrefs,
     private val hostManager: SubsonicHostManager,
@@ -66,9 +76,23 @@ class NetworkEngine @Inject constructor(
     /**
      * 3. CONNECT TO NAVIDROME
      * Validates credentials and returns a Kotlin Result so the ViewModel can handle UI success/error.
+     *
+     * [allowCleartext] must be explicitly set by the caller (after user acknowledgement) before
+     * an `http://` server address is permitted; otherwise this fails with
+     * [CleartextNotAcknowledgedException] rather than silently sending credentials in the clear.
      */
-    suspend fun connectToNavidrome(url: String, user: String, pass: String): Result<Unit> {
+    suspend fun connectToNavidrome(
+        url: String,
+        user: String,
+        pass: String,
+        allowCleartext: Boolean = false
+    ): Result<Unit> {
         val finalUrl = url.ensureValidUrl()
+
+        if (finalUrl.startsWith("http://") && !allowCleartext) {
+            return Result.failure(CleartextNotAcknowledgedException(finalUrl))
+        }
+
         hostManager.currentBaseUrl = finalUrl
 
         return navidromeRepository.pingServer(user, pass).map {
@@ -100,7 +124,10 @@ class NetworkEngine @Inject constructor(
     // --- UTILS ---
 
     private fun String.ensureValidUrl(): String {
-        val clean = if (startsWith("http")) this else "http://$this"
+        val clean = when {
+            startsWith("http://") || startsWith("https://") -> this
+            else -> "https://$this"
+        }
         return if (clean.endsWith("/")) clean else "$clean/"
     }
 }

@@ -616,7 +616,12 @@ class PlayerViewModel @Inject constructor(
         bluetoothDeviceManager.refreshConnectedDevice()
     }
 
-    suspend fun connectToNavidrome(url: String, user: String, pass: String): Result<Unit> {
-        return networkEngine.connectToNavidrome(url, user, pass)
+    suspend fun connectToNavidrome(
+        url: String,
+        user: String,
+        pass: String,
+        allowCleartext: Boolean = false
+    ): Result<Unit> {
+        return networkEngine.connectToNavidrome(url, user, pass, allowCleartext)
     }
 }

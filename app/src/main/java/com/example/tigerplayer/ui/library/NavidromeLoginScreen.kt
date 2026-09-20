@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import com.example.tigerplayer.engine.CleartextNotAcknowledgedException
 import com.example.tigerplayer.ui.player.PlayerViewModel
 import com.example.tigerplayer.ui.theme.WitcherIcons
 import com.example.tigerplayer.ui.theme.bounceClick
@@ -32,7 +33,31 @@ fun NavidromeLoginScreen(
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    // Set only when NetworkEngine rejects an unencrypted server address pending explicit
+    // user acknowledgement (issue #47) - see CleartextNotAcknowledgedException.
+    var pendingCleartextUrl by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    fun attemptConnect(allowCleartext: Boolean) {
+        isLoading = true
+        errorMessage = null
+
+        scope.launch {
+            viewModel.connectToNavidrome(serverUrl, username, password, allowCleartext)
+                .onSuccess {
+                    // The library is already refreshing in the background!
+                    onLoginSuccess()
+                }
+                .onFailure { error ->
+                    if (error is CleartextNotAcknowledgedException) {
+                        pendingCleartextUrl = error.url
+                    } else {
+                        errorMessage = error.message ?: "Authentication failed"
+                    }
+                }
+            isLoading = false
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -78,8 +103,8 @@ fun NavidromeLoginScreen(
             LoginField(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
-                label = "Server URL (http://...)",
-                placeholder = "192.168.1.100:4533"
+                label = "Server URL",
+                placeholder = "https://192.168.1.100:4533"
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -114,22 +139,7 @@ fun NavidromeLoginScreen(
 
             // --- THE RITUAL BUTTON (Executes the MD5 Ping) ---
             Button(
-                onClick = {
-                    isLoading = true
-                    errorMessage = null
-
-                    scope.launch {
-                        viewModel.connectToNavidrome(serverUrl, username, password)
-                            .onSuccess {
-                                // The library is already refreshing in the background!
-                                onLoginSuccess()
-                            }
-                            .onFailure { error ->
-                                errorMessage = error.message ?: "Authentication failed"
-                            }
-                        isLoading = false
-                    }
-                },
+                onClick = { attemptConnect(allowCleartext = false) },
                 enabled = !isLoading && serverUrl.isNotBlank() && username.isNotBlank(),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -145,6 +155,32 @@ fun NavidromeLoginScreen(
                 }
             }
         }
+    }
+
+    // --- CLEARTEXT ACKNOWLEDGEMENT (issue #47) ---
+    // NSC cannot know the user's server address ahead of time, so this is the actual
+    // per-connection consent gate for an unencrypted (http://) Navidrome address.
+    pendingCleartextUrl?.let { url ->
+        AlertDialog(
+            onDismissRequest = { pendingCleartextUrl = null },
+            title = { Text("Unencrypted connection") },
+            text = {
+                Text(
+                    "\"$url\" is not using HTTPS. Your Navidrome username and password will be " +
+                        "sent in plain text over the network. Only continue if this server is on " +
+                        "a network you trust."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingCleartextUrl = null
+                    attemptConnect(allowCleartext = true)
+                }) { Text("Connect anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCleartextUrl = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
