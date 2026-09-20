@@ -54,6 +54,39 @@ survive a schema change.
 
 ---
 
+## Milestone: v2.1.2 "Cover Screen Correctness" — due 2026-11-30
+
+**Theme:** the cover-screen (flip-phone outer display) feature has a fully built mini-hub UI and a
+gesture system that are never mounted in the app, and detection relies solely on a dp-size heuristic
+with no `displayId`/`DisplayManager` awareness — so it cannot distinguish a real secondary display from
+an ordinary resized/split-screen window. Full analysis: [`docs/CoverScreen-DisplayId-Review.md`](./CoverScreen-DisplayId-Review.md).
+
+### P0
+
+| # | Issue | Area |
+|---|---|---|
+| [#77](https://github.com/tyejaedon/TigerPlayer/issues/77) | `CoverScreenMiniHub` is never mounted — cover-screen users see the full app shell | ui/coverscreen |
+| [#78](https://github.com/tyejaedon/TigerPlayer/issues/78) | Add `displayId`/`DisplayManager` identity check alongside the dp-size heuristic | ui/coverscreen |
+
+### P1
+
+| # | Issue | Area |
+|---|---|---|
+| [#79](https://github.com/tyejaedon/TigerPlayer/issues/79) | Cover-screen heuristic false-positives in split-screen / freeform / DeX pop-up view | ui/coverscreen |
+| [#80](https://github.com/tyejaedon/TigerPlayer/issues/80) | No handling for display attach/detach (`DisplayManager.DisplayListener`) | ui/coverscreen, lifecycle |
+| [#81](https://github.com/tyejaedon/TigerPlayer/issues/81) | Motorola external-display manifest meta-data unverified — no `displayId`-aware path confirms it | ui/coverscreen, build |
+| [#83](https://github.com/tyejaedon/TigerPlayer/issues/83) | Instrumented test for `rememberCoverScreenWindowState()` against a fake tracker | testing |
+| [#84](https://github.com/tyejaedon/TigerPlayer/issues/84) | Regression test asserting `CoverScreenMiniHub` is actually composed when cover state is true | testing |
+
+### P2
+
+| # | Issue | Area |
+|---|---|---|
+| [#82](https://github.com/tyejaedon/TigerPlayer/issues/82) | Hardcoded cover-screen dp band will miss non-Z-Flip cover panels | ui/coverscreen |
+| [#85](https://github.com/tyejaedon/TigerPlayer/issues/85) | Document resize-model vs. true-secondary-display model distinction | docs |
+
+---
+
 ## Milestone: v2.2 "Parity" — due 2026-12-31
 
 **Theme:** close the table-stakes gap.
@@ -125,9 +158,17 @@ timer and folder browsing are missing.
 #75 dependency risk ──────> #71 F-Droid submission
 
 #72 split ViewModel ──────> #73 test coverage
+
+#78 displayId identity ──┬─> #79 reject split-screen/freeform false positives
+                         ├─> #81 verify Motorola external-display path
+                         └─> #83 instrumented state-holder test
+#77 mount CoverScreenMiniHub ─┬─> #84 regression test for mounting
+                              └─> #80 display attach/detach lifecycle
 ```
 
 **Critical path:** `#42` and `#43` gate the largest number of downstream items. Start there.
+`#77` and `#78` gate the entire cover-screen milestone — the hub UI must actually render, and
+detection must be display-aware, before any of the surrounding polish issues are meaningful.
 
 ---
 
