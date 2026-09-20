@@ -38,6 +38,7 @@ import com.example.tigerplayer.ui.library.LibraryScreen
 import com.example.tigerplayer.ui.library.ScanningOverlay
 import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
 import com.example.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.example.tigerplayer.ui.coverscreen.CoverScreenWindowState
 import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
@@ -66,9 +67,13 @@ fun MainScreen(
     onNavigateToDaylistDetail: () -> Unit,
     onNavigateToDiscoverWeeklyDetail: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToQueue: () -> Unit
+    onNavigateToQueue: () -> Unit,
+    // Test-only seam: rememberCoverScreenWindowState() needs a real Activity/display to produce a
+    // genuine cover-screen Configuration, which an instrumented Compose test can't simulate. Left
+    // null in production so real callers are unaffected (see CoverScreenMountingTest).
+    windowStateOverride: CoverScreenWindowState? = null
 ) {
-    val windowState = rememberCoverScreenWindowState()
+    val windowState = windowStateOverride ?: rememberCoverScreenWindowState()
     val isCoverScreen = windowState.isCoverScreen
 
     // Audio must load regardless of shell: the cover-screen mini hub reads the same
@@ -188,7 +193,9 @@ fun MainScreen(
                     NavigationBar(
                         containerColor = Color.Transparent,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.background(Color.Transparent)
+                        modifier = Modifier
+                            .background(Color.Transparent)
+                            .testTag(MainScreenTestTags.BOTTOM_NAVIGATION_BAR)
                     ) {
                         val backStack by tabNavController.currentBackStackEntryAsState()
                         val destination = backStack?.destination
