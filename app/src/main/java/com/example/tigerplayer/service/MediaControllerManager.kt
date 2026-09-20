@@ -33,6 +33,9 @@ import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.repository.AudioRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
+import com.example.tigerplayer.engine.SleepTimerController
+import com.example.tigerplayer.engine.SleepTimerMode
+import com.example.tigerplayer.engine.SleepTimerState
 import com.example.tigerplayer.utils.BluetoothDeviceManager
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -49,7 +52,8 @@ class MediaControllerManager @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val audioRepository: AudioRepository,
     private val mediaDataRepository: MediaDataRepository,
-    private val bluetoothDeviceManager: BluetoothDeviceManager
+    private val bluetoothDeviceManager: BluetoothDeviceManager,
+    private val sleepTimerController: SleepTimerController
 ) {
 
     data class QueueSnapshot(
@@ -110,6 +114,9 @@ class MediaControllerManager @Inject constructor(
 
     private val _mediaControllerState = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val mediaControllerState: SharedFlow<Unit> = _mediaControllerState
+
+    val sleepTimerState: StateFlow<SleepTimerState> = sleepTimerController.state
+    var onSleepTimerExpired: (() -> Unit)? = null
 
     private val managerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionJob: Job? = null
@@ -187,6 +194,7 @@ class MediaControllerManager @Inject constructor(
         registerAudioRouteReceiver()
         initializeController()
         registerProcessLifecycleTeardown()
+        sleepTimerController.onExpired = { onSleepTimerExpired?.invoke() }
     }
 
     private fun registerProcessLifecycleTeardown() {
@@ -218,6 +226,35 @@ class MediaControllerManager @Inject constructor(
                 if (!flowStateEnabled) {
                     resetFlowStatePipeline(restoreFullVolume = true)
                 }
+            }
+        }
+    }
+    //sleep timer logic section
+    fun setSleepTimerDuration(durationMs: Long, fadeOutEnabled: Boolean = true) {
+        sleepTimerController.startDuration(durationMs, fadeOutEnabled)
+    }
+    fun setSleepTimerEndOfTrack() = sleepTimerController.armEndOfTrack()
+    fun setSleepTimerEndOfQueue() = sleepTimerController.armEndOfQueue()
+    fun cancelSleepTimer() = sleepTimerController.cancel()
+    /** Fades to silence then pauses, restoring a sane terminal volume so the next play isn't silent
+     *  (same terminal-restore discipline as the offload transition in AudioPlayerService, issue #53). */
+    fun fadeOutAndPause(durationMs: Long = 6_000L) {
+        val controller = mediaController ?: return
+        if (!controller.isPlaying) return
+
+        managerScope.launch {
+            val startVolume = controller.volume.coerceIn(0f, FLOW_STATE_MAX_VOLUME)
+            val steps = 60
+            val stepDelay = (durationMs / steps).coerceAtLeast(20L)
+            for (step in 1..steps) {
+                val active = mediaController ?: return@launch
+                if (!active.isPlaying) break
+                active.volume = lerp(startVolume, 0f, step.toFloat() / steps)
+                delay(stepDelay.milliseconds)
+            }
+            mediaController?.let {
+                it.pause()
+                it.volume = FLOW_STATE_MAX_VOLUME
             }
         }
     }
@@ -264,6 +301,11 @@ class MediaControllerManager @Inject constructor(
                 if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
                     maybeScheduleInfinitePlay(controller.currentMediaItem?.mediaId)
                 }
+                if (playbackState == Player.STATE_ENDED &&
+                    sleepTimerController.state.value.mode == SleepTimerMode.END_OF_QUEUE) {
+                    sleepTimerController.cancel()
+                    onSleepTimerExpired?.invoke()
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -307,6 +349,12 @@ class MediaControllerManager @Inject constructor(
                     flowStateFadeInJob?.cancel()
                     controller.volume = FLOW_STATE_MAX_VOLUME
                 }
+                if (sleepTimerController.state.value.mode == SleepTimerMode.END_OF_TRACK &&
+                    reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    sleepTimerController.cancel()
+                    onSleepTimerExpired?.invoke()
+                }
+
                 maybeScheduleInfinitePlay(item?.mediaId)
                 saveCurrentState()
             }
@@ -866,6 +914,7 @@ class MediaControllerManager @Inject constructor(
                 )
             }
     }
+
 
     private fun restorePlaybackState(controller: MediaController) {
         managerScope.launch {

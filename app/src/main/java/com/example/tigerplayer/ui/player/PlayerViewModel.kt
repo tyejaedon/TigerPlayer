@@ -591,6 +591,18 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ==========================================
+    // --- SLEEPTIMER  SECTION ---
+    // ==========================================
+    val sleepTimerState: StateFlow<SleepTimerState> = playbackEngine.sleepTimerState
+        .stateIn(viewModelScope, SharingStarted.Lazily, SleepTimerState())
+
+    fun setSleepTimerDuration(minutes: Int) = playbackEngine.setSleepTimerDuration(minutes)
+    fun setSleepTimerEndOfTrack() = playbackEngine.setSleepTimerEndOfTrack()
+    fun setSleepTimerEndOfQueue() = playbackEngine.setSleepTimerEndOfQueue()
+    fun cancelSleepTimer() = playbackEngine.cancelSleepTimer()
+
+
+    // ==========================================
     // --- METADATA FETCHING ---
     // ==========================================
 

@@ -67,6 +67,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.example.tigerplayer.engine.SleepTimerMode
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,6 +84,10 @@ fun FullPlayerScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentTrack = uiState.currentTrack ?: return
     val context = LocalContext.current
+
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
+    val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
+
 
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showTechnicalInfo by remember { mutableStateOf(false) }
@@ -210,8 +215,22 @@ fun FullPlayerScreen(
                 isAlbumClarityMode = albumClarityMode,
                 onToggleAlbumClarityMode = { albumClarityMode = !albumClarityMode },
                 isCoverOptimized = useCoverOptimizedUi,
-                track = currentTrack
+                track = currentTrack,
+                sleepTimerActive = sleepTimerState.mode != SleepTimerMode.OFF,
+                onShowSleepTimer = { showSleepTimerSheet = true }
             )
+
+                if (showSleepTimerSheet) {
+                    SleepTimerSheet(
+                        state = sleepTimerState,
+                        onDismiss = { showSleepTimerSheet = false },
+                        onSetDuration = { minutes -> viewModel.setSleepTimerDuration(minutes) },
+                        onSetEndOfTrack = viewModel::setSleepTimerEndOfTrack,
+                        onSetEndOfQueue = viewModel::setSleepTimerEndOfQueue,
+                        onCancel = viewModel::cancelSleepTimer
+                    )
+                }
+
 
             if (windowState.hasSeparatingHinge && !shouldUseUnifiedLyricsLayout) {
                 // FLEX MODE: Visuals on TOP, Controls on BOTTOM
@@ -634,6 +653,8 @@ fun HeaderRitual(
     isAlbumClarityMode: Boolean,
     onToggleAlbumClarityMode: () -> Unit,
     isCoverOptimized: Boolean,
+    sleepTimerActive: Boolean,
+    onShowSleepTimer: () -> Unit,
     track: AudioTrack
 ) {
     Column(
@@ -666,6 +687,9 @@ fun HeaderRitual(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                /* Disabled due to API key config currently under work
+
+
                 HeaderButton(
                     icon = WitcherIcons.Cloud,
                     active = mainViewState == MainViewState.YOUTUBE_VIEWPORT,
@@ -674,6 +698,16 @@ fun HeaderRitual(
                     testTag = "header_cloud_button",
                     isCoverOptimized = isCoverOptimized
                 )
+                */
+                HeaderButton(
+                    icon = WitcherIcons.SleepTimer,
+                    active = sleepTimerActive,
+                    onClick = onShowSleepTimer,
+                    contentDescription = "Sleep timer",
+                    testTag = "header_sleep_timer_button",
+                    isCoverOptimized = isCoverOptimized
+                )
+
                 HeaderButton(
                     icon = Icons.AutoMirrored.Rounded.Subject,
                     active = mainViewState == MainViewState.LYRICS,
