@@ -73,29 +73,31 @@ Nothing here should ship as "done" until the mini-hub is reachable and detection
 
 | # | Title | Priority | Area |
 |---|---|---|---|
-| [#77](https://github.com/tyejaedon/TigerPlayer/issues/77) | `CoverScreenMiniHub` is never mounted — cover-screen users see the full app shell, not the mini hub | P0 | ui/coverscreen |
-| [#78](https://github.com/tyejaedon/TigerPlayer/issues/78) | Add `displayId`/`DisplayManager` identity check alongside the dp-size heuristic | P0 | ui/coverscreen |
-| [#79](https://github.com/tyejaedon/TigerPlayer/issues/79) | Cover-screen heuristic produces false positives in split-screen / freeform / DeX pop-up view | P1 | ui/coverscreen |
-| [#80](https://github.com/tyejaedon/TigerPlayer/issues/80) | No handling for display attach/detach (`DisplayManager.DisplayListener`) — risk of stale UI or leaked listeners | P1 | ui/coverscreen, lifecycle |
-| [#81](https://github.com/tyejaedon/TigerPlayer/issues/81) | Motorola external-display manifest meta-data is unverified — no `displayId`-aware code path confirms it does anything | P1 | ui/coverscreen, build |
-| [#82](https://github.com/tyejaedon/TigerPlayer/issues/82) | Hardcoded cover-screen dp band (`220..399`/`≤450`/aspect `≤1.35`) will miss non-Z-Flip cover panels | P2 | ui/coverscreen |
-| [#83](https://github.com/tyejaedon/TigerPlayer/issues/83) | Add instrumented test for `rememberCoverScreenWindowState()` against a fake `WindowInfoTracker`/`DisplayManager` | P1 | testing |
-| [#84](https://github.com/tyejaedon/TigerPlayer/issues/84) | Add regression test asserting `CoverScreenMiniHub` is actually composed when cover state is true | P1 | testing |
-| [#85](https://github.com/tyejaedon/TigerPlayer/issues/85) | Document the resize-model vs. true-secondary-display model distinction in `ui/coverscreen/README.md` | P2 | docs |
+| [#120](https://github.com/tyejaedon/TigerPlayer/issues/120) | `CoverScreenMiniHub` is never mounted — cover-screen users see the full app shell, not the mini hub | P0 | ui/coverscreen |
+| [#121](https://github.com/tyejaedon/TigerPlayer/issues/121) | Add `displayId`/`DisplayManager` identity check alongside the dp-size heuristic | P0 | ui/coverscreen |
+| [#122](https://github.com/tyejaedon/TigerPlayer/issues/122) | Cover-screen heuristic produces false positives in split-screen / freeform / DeX pop-up view | P1 | ui/coverscreen |
+| [#123](https://github.com/tyejaedon/TigerPlayer/issues/123) | No handling for display attach/detach (`DisplayManager.DisplayListener`) — risk of stale UI or leaked listeners | P1 | ui/coverscreen, lifecycle |
+| [#124](https://github.com/tyejaedon/TigerPlayer/issues/124) | Motorola external-display manifest meta-data is unverified — no `displayId`-aware code path confirms it does anything | P1 | ui/coverscreen, build |
+| [#125](https://github.com/tyejaedon/TigerPlayer/issues/125) | Hardcoded cover-screen dp band (`220..399`/`≤450`/aspect `≤1.35`) will miss non-Z-Flip cover panels | P2 | ui/coverscreen |
+| [#126](https://github.com/tyejaedon/TigerPlayer/issues/126) | Add instrumented test for `rememberCoverScreenWindowState()` against a fake `WindowInfoTracker`/`DisplayManager` | P1 | testing |
+| [#127](https://github.com/tyejaedon/TigerPlayer/issues/127) | Add regression test asserting `CoverScreenMiniHub` is actually composed when cover state is true | P1 | testing |
+| [#128](https://github.com/tyejaedon/TigerPlayer/issues/128) | Document the resize-model vs. true-secondary-display model distinction in `ui/coverscreen/README.md` | P2 | docs |
 
 ### Suggested sequencing
 
 ```
-#78 displayId identity check ──┬─> #79 reject split-screen/freeform false positives
-                                └─> #81 verify Motorola external-display path
-#77 mount CoverScreenMiniHub ───┬─> #84 regression test for mounting
-                                └─> #80 display attach/detach lifecycle
-#78 + #77 ─────────────────────> #83 instrumented state-holder test
-#78 ────────────────────────────> #82 replace/augment hardcoded dp band
-#77 + #78 ──────────────────────> #85 README update
+#121 displayId identity check ──┬─> #122 reject split-screen/freeform false positives
+                                 └─> #124 verify Motorola external-display path
+#120 mount CoverScreenMiniHub ───┬─> #127 regression test for mounting
+                                 └─> #123 display attach/detach lifecycle
+#121 + #120 ─────────────────────> #126 instrumented state-holder test
+#121 ────────────────────────────> #125 replace/augment hardcoded dp band
+#120 + #121 ──────────────────────> #128 README update
 ```
 
-**Critical path:** `#78` (displayId identity) and `#77` (mount the hub) gate almost everything else —
+**Critical path:** `#121` (displayId identity) and `#120` (mount the hub) gate almost everything else —
 without them, all other work is polishing a feature that either can't tell what display it's on, or
 never renders regardless.
+
+**Tracking:** [GitHub Milestone "Cover Screen Correctness (v2.1.2)"](https://github.com/tyejaedon/TigerPlayer/milestone/10)
 

@@ -65,25 +65,25 @@ an ordinary resized/split-screen window. Full analysis: [`docs/CoverScreen-Displ
 
 | # | Issue | Area |
 |---|---|---|
-| [#77](https://github.com/tyejaedon/TigerPlayer/issues/77) | `CoverScreenMiniHub` is never mounted — cover-screen users see the full app shell | ui/coverscreen |
-| [#78](https://github.com/tyejaedon/TigerPlayer/issues/78) | Add `displayId`/`DisplayManager` identity check alongside the dp-size heuristic | ui/coverscreen |
+| [#120](https://github.com/tyejaedon/TigerPlayer/issues/120) | `CoverScreenMiniHub` is never mounted — cover-screen users see the full app shell | ui/coverscreen |
+| [#121](https://github.com/tyejaedon/TigerPlayer/issues/121) | Add `displayId`/`DisplayManager` identity check alongside the dp-size heuristic | ui/coverscreen |
 
 ### P1
 
 | # | Issue | Area |
 |---|---|---|
-| [#79](https://github.com/tyejaedon/TigerPlayer/issues/79) | Cover-screen heuristic false-positives in split-screen / freeform / DeX pop-up view | ui/coverscreen |
-| [#80](https://github.com/tyejaedon/TigerPlayer/issues/80) | No handling for display attach/detach (`DisplayManager.DisplayListener`) | ui/coverscreen, lifecycle |
-| [#81](https://github.com/tyejaedon/TigerPlayer/issues/81) | Motorola external-display manifest meta-data unverified — no `displayId`-aware path confirms it | ui/coverscreen, build |
-| [#83](https://github.com/tyejaedon/TigerPlayer/issues/83) | Instrumented test for `rememberCoverScreenWindowState()` against a fake tracker | testing |
-| [#84](https://github.com/tyejaedon/TigerPlayer/issues/84) | Regression test asserting `CoverScreenMiniHub` is actually composed when cover state is true | testing |
+| [#122](https://github.com/tyejaedon/TigerPlayer/issues/122) | Cover-screen heuristic false-positives in split-screen / freeform / DeX pop-up view | ui/coverscreen |
+| [#123](https://github.com/tyejaedon/TigerPlayer/issues/123) | No handling for display attach/detach (`DisplayManager.DisplayListener`) | ui/coverscreen, lifecycle |
+| [#124](https://github.com/tyejaedon/TigerPlayer/issues/124) | Motorola external-display manifest meta-data unverified — no `displayId`-aware path confirms it | ui/coverscreen, build |
+| [#126](https://github.com/tyejaedon/TigerPlayer/issues/126) | Instrumented test for `rememberCoverScreenWindowState()` against a fake tracker | testing |
+| [#127](https://github.com/tyejaedon/TigerPlayer/issues/127) | Regression test asserting `CoverScreenMiniHub` is actually composed when cover state is true | testing |
 
 ### P2
 
 | # | Issue | Area |
 |---|---|---|
-| [#82](https://github.com/tyejaedon/TigerPlayer/issues/82) | Hardcoded cover-screen dp band will miss non-Z-Flip cover panels | ui/coverscreen |
-| [#85](https://github.com/tyejaedon/TigerPlayer/issues/85) | Document resize-model vs. true-secondary-display model distinction | docs |
+| [#125](https://github.com/tyejaedon/TigerPlayer/issues/125) | Hardcoded cover-screen dp band will miss non-Z-Flip cover panels | ui/coverscreen |
+| [#128](https://github.com/tyejaedon/TigerPlayer/issues/128) | Document resize-model vs. true-secondary-display model distinction | docs |
 
 ---
 
@@ -159,15 +159,15 @@ timer and folder browsing are missing.
 
 #72 split ViewModel ──────> #73 test coverage
 
-#78 displayId identity ──┬─> #79 reject split-screen/freeform false positives
-                         ├─> #81 verify Motorola external-display path
-                         └─> #83 instrumented state-holder test
-#77 mount CoverScreenMiniHub ─┬─> #84 regression test for mounting
-                              └─> #80 display attach/detach lifecycle
+#121 displayId identity ──┬─> #122 reject split-screen/freeform false positives
+                          ├─> #124 verify Motorola external-display path
+                          └─> #126 instrumented state-holder test
+#120 mount CoverScreenMiniHub ─┬─> #127 regression test for mounting
+                               └─> #123 display attach/detach lifecycle
 ```
 
 **Critical path:** `#42` and `#43` gate the largest number of downstream items. Start there.
-`#77` and `#78` gate the entire cover-screen milestone — the hub UI must actually render, and
+`#120` and `#121` gate the entire cover-screen milestone — the hub UI must actually render, and
 detection must be display-aware, before any of the surrounding polish issues are meaningful.
 
 ---
