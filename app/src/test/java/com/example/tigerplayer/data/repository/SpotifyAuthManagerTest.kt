@@ -18,6 +18,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import retrofit2.Response
 
 /**
@@ -28,7 +31,12 @@ import retrofit2.Response
  * non-injectable `CoroutineScope(Dispatchers.IO)`, so those specific assertions use a bounded
  * `coVerify(timeout = ...)` rather than `runTest` virtual time. All token-state assertions
  * (`getToken()`, return values) are set synchronously and do not need it.
+ *
+ * Runs under Robolectric so the real `android.util.Log` calls on the error/refresh paths do not
+ * throw ("not mocked") the way they would under a plain JVM unit test.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class SpotifyAuthManagerTest {
 
     private val spotifyPrefs = mockk<SpotifyPrefs>(relaxed = true)
