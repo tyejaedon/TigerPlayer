@@ -32,6 +32,7 @@ import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.milliseconds
 
 @Singleton
 class AudioRepository @Inject constructor(
@@ -53,7 +54,8 @@ class AudioRepository @Inject constructor(
         private const val MEDIA_STORE_CHANGE_DEBOUNCE_MS = 1_500L
     }
 
-    private var remoteCache: List<AudioTrack> = emptyList()
+    private val remoteCache: MutableStateFlow<List<AudioTrack>> = MutableStateFlow(emptyList())
+    private val remoteRefreshMutex = Mutex()
     private val hasPrimedLocalScan = AtomicBoolean(false)
     private val localScanMutex = Mutex()
 
@@ -99,7 +101,7 @@ class AudioRepository @Inject constructor(
 
         repositoryScope.launch {
             mediaStoreChangeSignal
-                .debounce(MEDIA_STORE_CHANGE_DEBOUNCE_MS)
+                .debounce(MEDIA_STORE_CHANGE_DEBOUNCE_MS.milliseconds)
                 .collectLatest {
                     try {
                         // SAF custom folders aren't covered by this observer (it only fires for
@@ -124,30 +126,34 @@ class AudioRepository @Inject constructor(
         pass: String?,
         baseUrl: String?,
         forceRefresh: Boolean = false
-    ): Flow<List<AudioTrack>> = combine(
-        getLocalTracks(forceRefresh),
-        flow {
-            if (!user.isNullOrBlank() && !pass.isNullOrBlank() && !baseUrl.isNullOrBlank()) {
-                if (remoteCache.isEmpty() || forceRefresh) {
-                    val remoteResult = navidromeRepository.getAllRemoteTracks(user, pass)
+    ): Flow<List<AudioTrack>> {
+        val hasRemoteCredentials = !user.isNullOrBlank() && !pass.isNullOrBlank() && !baseUrl.isNullOrBlank()
 
-                    remoteResult.onSuccess { remoteTracks ->
-                        // Tracks carry opaque `navidrome://` URIs; auth is applied at request time
-                        // by NavidromeUrlSigner, so nothing credential-bearing is ever persisted
-                        // (issue #44).
-                        remoteCache = remoteTracks.map { it.toAudioTrack() }
-                    }.onFailure { error ->
-                        // Never log the URL or credentials - only the failure reason.
-                        Log.e("AudioRepository", "Archive sync failed: ${error.message}")
+        // Kick off (or await) the remote refresh as a side effect, not inline in the flow body.
+        if (hasRemoteCredentials) {
+            repositoryScope.launch {
+                if (forceRefresh || remoteCache.value.isEmpty()) {
+                    remoteRefreshMutex.withLock {
+                        // double-check after acquiring the lock to avoid duplicate fetches
+                        if (forceRefresh || remoteCache.value.isEmpty()) {
+                            navidromeRepository.getAllRemoteTracks(user, pass)
+                                .onSuccess { remoteTracks ->
+                                    remoteCache.value = remoteTracks.map { it.toAudioTrack() }
+                                }
+                                .onFailure { error ->
+                                    Log.e(TAG, "Archive sync failed: ${error.message}")
+                                }
+                        }
                     }
                 }
-                emit(remoteCache)
-            } else {
-                emit(emptyList())
             }
         }
-    ) { local, remote ->
-        (local + remote).sortedBy { it.title.lowercase() }
+
+        val remoteFlow = if (hasRemoteCredentials) remoteCache else flowOf(emptyList())
+
+        return combine(getLocalTracks(forceRefresh), remoteFlow) { local, remote ->
+            (local + remote).sortedBy { it.title.lowercase() }
+        }
     }
 
 
