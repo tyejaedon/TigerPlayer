@@ -18,7 +18,23 @@ class PlaybackEngine @Inject constructor(
     val currentMediaId: Flow<String> = mediaControllerManager.currentMediaId
     val shuffleModeEnabled: Flow<Boolean> = mediaControllerManager.shuffleModeEnabled
     val repeatMode: Flow<Int> = mediaControllerManager.repeatMode
+    val sleepTimerState: StateFlow<SleepTimerState> = mediaControllerManager.sleepTimerState
     val spotifyPlaybackState: Flow<SpotifyPlaybackState?> = spotifyRepository.spotifyPlaybackState
+    init {
+        mediaControllerManager.onSleepTimerExpired = { pauseActiveTransport() }
+    }
+    private fun pauseActiveTransport() {
+        val spotifyActive = spotifyRepository.spotifyPlaybackState.value?.isPlaying == true
+        if (spotifyActive) spotifyRepository.pause() else mediaControllerManager.fadeOutAndPause()
+    }
+
+    fun setSleepTimerDuration(minutes: Int, fadeOutEnabled: Boolean = true) {
+        mediaControllerManager.setSleepTimerDuration(minutes * 60_000L, fadeOutEnabled)
+    }
+    fun setSleepTimerEndOfTrack() = mediaControllerManager.setSleepTimerEndOfTrack()
+    fun setSleepTimerEndOfQueue() = mediaControllerManager.setSleepTimerEndOfQueue()
+    fun cancelSleepTimer() = mediaControllerManager.cancelSleepTimer()
+
 
     // Resolve queue directly from MediaController so queue state is not coupled to library filtering.
     fun getQueueFlow(): Flow<List<AudioTrack>> {
