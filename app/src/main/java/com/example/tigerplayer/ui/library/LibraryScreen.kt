@@ -2,6 +2,7 @@ package com.example.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -24,8 +25,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Folder
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,7 +89,7 @@ fun LibraryScreen(
     // 🔥 NEW: Pull pre-seeded artist profiles from the VM vault
     val artistDetails by viewModel.artistDetails.collectAsState()
 
-    val tabs = listOf("Songs", "Albums", "Artists", "Playlists")
+    val tabs = listOf("Songs", "Albums", "Artists", "Playlists", "Folders")
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
 
@@ -154,6 +157,7 @@ fun LibraryScreen(
                         1 -> AlbumsTab(viewModel, onNavigateToAlbum)
                         2 -> ArtistsTab(viewModel, onNavigateToArtist)
                         3 -> PlaylistsTab(viewModel, onNavigateToPlaylist)
+                        4 -> FoldersTab(viewModel, onNavigateToAlbum)
                     }
                 }
             }
@@ -784,6 +788,109 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                 }
             }
         }
+    }
+}
+
+@Composable
+fun FoldersTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
+    val uiState by viewModel.uiState.collectAsState()
+    val currentTrack = uiState.currentTrack
+    val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
+    var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+
+    // Local tracks are the only ones with a filesystem `path`, so remote/Navidrome tracks are
+    // naturally excluded from the folder browser.
+    val localTracks = remember(uiState.tracks) { uiState.tracks.filter { !it.path.isNullOrBlank() } }
+    val folderIndex = remember(localTracks) { viewModel.buildFolderIndex(localTracks) }
+    var currentPath by remember { mutableStateOf("") }
+    val currentContents = folderIndex[currentPath] ?: folderIndex[""]
+
+    BackHandler(enabled = currentPath.isNotEmpty()) {
+        currentPath = currentPath.substringBeforeLast('/', missingDelimiterValue = "")
+    }
+
+    if (localTracks.isEmpty()) {
+        EmptyArchiveState("No Local Archives Found...")
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (currentPath.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bounceClick { currentPath = currentPath.substringBeforeLast('/', missingDelimiterValue = "") }
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Up a folder", tint = MaterialTheme.aardBlue)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = (currentContents?.name ?: "Root").uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+
+        if (currentContents == null || (currentContents.subfolders.isEmpty() && currentContents.tracks.isEmpty())) {
+            EmptyArchiveState("Folder is Empty...")
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 140.dp)
+            ) {
+                items(currentContents.subfolders, key = { "folder_$it" }) { folderPath ->
+                    val folderName = folderIndex[folderPath]?.name ?: folderPath.substringAfterLast('/')
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                            .bounceClick { currentPath = folderPath }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.aardBlue)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = folderName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                items(currentContents.tracks, key = { "track_${it.id}" }) { track ->
+                    val isActive = currentTrack?.id == track.id
+                    Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                        SongItem(
+                            track = track,
+                            isActive = isActive,
+                            isPlaying = uiState.isPlaying && isActive,
+                            onClick = { viewModel.playTrack(track) },
+                            onOptionsClick = { trackForOptions = track }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    trackForOptions?.let { selectedTrack ->
+        SongOptionsSheet(
+            track = selectedTrack,
+            playlists = playlists,
+            onDismiss = { trackForOptions = null },
+            onPlayNext = { viewModel.addNextToQueue(selectedTrack) },
+            onAddToPlaylist = { playlistId -> viewModel.addTrackToPlaylist(playlistId, selectedTrack) },
+            onGoToAlbum = { albumName -> onNavigateToAlbum(albumName) }
+        )
     }
 }
 

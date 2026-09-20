@@ -3,6 +3,7 @@ package com.example.tigerplayer.di
 import android.content.Context
 import androidx.room.Room
 import com.example.tigerplayer.data.local.TigerDatabase
+import com.example.tigerplayer.data.local.dao.MusicFolderDao
 import com.example.tigerplayer.data.local.dao.PlaylistDao
 import com.example.tigerplayer.data.local.dao.TigerDao
 import dagger.Module
@@ -37,5 +38,10 @@ object DatabaseModule {
     @Provides
     fun providePlaylistDao(database: TigerDatabase): PlaylistDao {
         return database.playlistDao()
+    }
+
+    @Provides
+    fun provideMusicFolderDao(database: TigerDatabase): MusicFolderDao {
+        return database.musicFolderDao()
     }
 }

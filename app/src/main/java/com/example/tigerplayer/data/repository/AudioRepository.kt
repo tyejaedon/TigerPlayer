@@ -16,6 +16,7 @@ import com.example.tigerplayer.data.local.entity.PlaylistEntity
 import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.source.LocalAudioDataSource
+import com.example.tigerplayer.data.source.SafFolderScanner
 import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +40,9 @@ class AudioRepository @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val tigerDao: TigerDao,
     private val navidromeRepository: NavidromeRepository,
-    private val statsEpoch: StatsEpoch
+    private val statsEpoch: StatsEpoch,
+    private val musicFolderRepository: MusicFolderRepository,
+    private val safFolderScanner: SafFolderScanner
 ) {
 
     companion object {
@@ -99,7 +102,9 @@ class AudioRepository @Inject constructor(
                 .debounce(MEDIA_STORE_CHANGE_DEBOUNCE_MS)
                 .collectLatest {
                     try {
-                        refreshLocalCache(forceRefresh = false)
+                        // SAF custom folders aren't covered by this observer (it only fires for
+                        // MediaStore changes), so skip re-walking them on every debounced resync.
+                        refreshLocalCache(forceRefresh = false, includeSafFolders = false)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -179,12 +184,13 @@ class AudioRepository @Inject constructor(
 
             if (status is LocalAudioDataSource.ScanStatus.Complete) {
                 hasPrimedLocalScan.set(true)
-                applyLibraryDiff(status.tracks, forceRefresh)
+                val mergedTracks = mergeWithCustomFolders(status.tracks, includeSafFolders = true)
+                applyLibraryDiff(mergedTracks, forceRefresh)
             }
         }
     }
 
-    private suspend fun refreshLocalCache(forceRefresh: Boolean) {
+    private suspend fun refreshLocalCache(forceRefresh: Boolean, includeSafFolders: Boolean = true) {
         var scannedTracks: List<AudioTrack>? = null
         localAudioDataSource.getLocalAudioFiles().collect { status ->
             if (status is LocalAudioDataSource.ScanStatus.Complete) {
@@ -192,7 +198,48 @@ class AudioRepository @Inject constructor(
             }
         }
 
-        applyLibraryDiff(scannedTracks ?: return, forceRefresh)
+        val mergedTracks = mergeWithCustomFolders(scannedTracks ?: return, includeSafFolders)
+        applyLibraryDiff(mergedTracks, forceRefresh)
+    }
+
+    /**
+     * CUSTOM FOLDERS & EXCLUSIONS (issue #50)
+     * Applies the exclude list to the MediaStore fast path, then - unless [includeSafFolders] is
+     * false (skipped for cheap incremental MediaStore-only resyncs) - walks every "include" SAF
+     * root and merges its tracks in, preferring the MediaStore-indexed copy when the same
+     * absolute path was reached through both sources.
+     */
+    private suspend fun mergeWithCustomFolders(
+        mediaStoreTracks: List<AudioTrack>,
+        includeSafFolders: Boolean
+    ): List<AudioTrack> {
+        val excludedPaths = musicFolderRepository.getExcludedPathsSync()
+        val filteredMediaStore = if (excludedPaths.isEmpty()) {
+            mediaStoreTracks
+        } else {
+            mediaStoreTracks.filterNot { FolderExclusionRules.isTrackExcluded(it.path, excludedPaths) }
+        }
+
+        if (!includeSafFolders) return filteredMediaStore
+
+        val includedFolders = musicFolderRepository.getIncludedFoldersSync()
+        if (includedFolders.isEmpty()) return filteredMediaStore
+
+        val safTracks = includedFolders.flatMap { folder ->
+            try {
+                safFolderScanner.scan(folder.uriString.toUri(), excludedPaths)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to scan custom folder ${folder.displayName}: ${e.message}")
+                emptyList()
+            }
+        }
+
+        val mediaStorePaths = filteredMediaStore.mapNotNullTo(HashSet()) { it.path }
+        val dedupedSafTracks = safTracks.filterNot { it.path != null && it.path in mediaStorePaths }
+
+        return filteredMediaStore + dedupedSafTracks
     }
 
     /**

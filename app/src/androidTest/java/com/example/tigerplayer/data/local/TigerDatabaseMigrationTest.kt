@@ -19,6 +19,7 @@ import org.junit.runner.RunWith
  * Covers:
  * - 11 -> 12: ReplayGain columns on CachedTrackEntity (issue #56)
  * - 12 -> 13: dateModified fingerprint column on CachedTrackEntity (issue #49)
+ * - 13 -> 14: new music_folders table for custom directories (issue #50)
  */
 @RunWith(AndroidJUnit4::class)
 class TigerDatabaseMigrationTest {
@@ -150,6 +151,49 @@ class TigerDatabaseMigrationTest {
             cursor.getLong(cursor.getColumnIndexOrThrow("dateModified"))
         )
         cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate13To14_preservesCachedTrackRows_andCreatesMusicFoldersTable() {
+        // Arrange: create the DB at version 13 (pre-music_folders) and insert a representative row.
+        var db: SupportSQLiteDatabase = helper.createDatabase(testDbName, 13)
+        db.execSQL(
+            """
+            INSERT INTO cached_tracks
+                (id, title, artist, album, uriString, artworkUriString, durationMs, mimeType,
+                 bitrate, sampleRate, trackNumber, year, dateAdded, isLiked, path,
+                 replayGainTrackDb, replayGainAlbumDb, replayGainTrackPeak, replayGainAlbumPeak,
+                 dateModified)
+            VALUES
+                ('local_track_003', 'Vault Signal', 'Tiger Unit', 'Midnight Circuit',
+                 'content://media/external/audio/media/44', 'content://media/external/audio/albumart/9',
+                 205000, 'audio/flac', 960000, 48000, 6, '2026', 1719374400, 0,
+                 '/storage/emulated/0/Music/Tiger/Vault Signal.flac', -3.0, -2.0, 0.9, 0.95,
+                 1719374400)
+            """.trimIndent()
+        )
+        db.close()
+
+        // Act: run the real 13 -> 14 migration path (validates against the committed schema JSON).
+        db = helper.runMigrationsAndValidate(testDbName, 14, true)
+
+        // Assert: the pre-existing cached track survives untouched.
+        val cursor = db.query("SELECT * FROM cached_tracks WHERE id = 'local_track_003'")
+        assertTrue("expected the pre-migration row to still exist", cursor.moveToFirst())
+        assertEquals("Vault Signal", cursor.getString(cursor.getColumnIndexOrThrow("title")))
+        cursor.close()
+
+        // Assert: the new music_folders table exists and is usable.
+        db.execSQL(
+            "INSERT INTO music_folders (uriString, displayName, path, isExcluded, addedAt) " +
+                "VALUES ('content://tree/primary:Music', 'Music', '/storage/emulated/0/Music', 0, 1719374400)"
+        )
+        val folderCursor = db.query("SELECT * FROM music_folders WHERE uriString = 'content://tree/primary:Music'")
+        assertTrue("music_folders table must exist and accept a row post-migration", folderCursor.moveToFirst())
+        assertEquals("Music", folderCursor.getString(folderCursor.getColumnIndexOrThrow("displayName")))
+        assertEquals(0, folderCursor.getInt(folderCursor.getColumnIndexOrThrow("isExcluded")))
+        folderCursor.close()
         db.close()
     }
 }

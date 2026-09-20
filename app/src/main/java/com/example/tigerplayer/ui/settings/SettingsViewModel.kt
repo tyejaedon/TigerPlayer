@@ -2,6 +2,7 @@ package com.example.tigerplayer.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.example.tigerplayer.data.local.DefaultPlayerView
 import com.example.tigerplayer.data.local.SettingsDataStore
@@ -9,6 +10,7 @@ import com.example.tigerplayer.data.local.SkipShortAudio
 import com.example.tigerplayer.data.local.ThemeMode
 import com.example.tigerplayer.data.local.TigerAccentStyle
 import com.example.tigerplayer.data.local.TigerSettingsState
+import com.example.tigerplayer.data.model.MusicFolder
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.engine.LibraryEngine
 import com.example.tigerplayer.service.HapticsDebugMonitor
@@ -62,6 +64,13 @@ class SettingsViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000L),
             initialValue = HapticsDebugState()
+        )
+
+    val musicFolders: StateFlow<List<MusicFolder>> = libraryEngine.getMusicFolders()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000L),
+            initialValue = emptyList()
         )
 
     private var rescanJob: Job? = null
@@ -127,6 +136,26 @@ class SettingsViewModel @Inject constructor(
     fun resetToDefaults() {
         viewModelScope.launch {
             settingsDataStore.resetToDefaults()
+        }
+    }
+
+    /**
+     * @param isExcluded true adds [treeUri] as an exclude entry (hidden from scan, search and
+     * playback), false adds it as an include root scanned for tracks. Either way, a rescan is
+     * triggered so the change takes effect immediately instead of waiting for the next cold start.
+     */
+    fun addMusicFolder(treeUri: Uri, isExcluded: Boolean) {
+        viewModelScope.launch {
+            if (libraryEngine.addMusicFolder(treeUri, isExcluded)) {
+                triggerLibraryRescan()
+            }
+        }
+    }
+
+    fun removeMusicFolder(uriString: String) {
+        viewModelScope.launch {
+            libraryEngine.removeMusicFolder(uriString)
+            triggerLibraryRescan()
         }
     }
 

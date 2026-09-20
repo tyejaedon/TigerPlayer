@@ -449,6 +449,10 @@ class PlayerViewModel @Inject constructor(
         return libraryEngine.getPlaylistTracks(playlistId, _uiState.value.allTracks)
     }
 
+    // --- FOLDER BROWSING (issue #50) ---
+
+    fun buildFolderIndex(tracks: List<AudioTrack>) = libraryEngine.buildFolderIndex(tracks)
+
     fun createPlaylist(name: String) {
         viewModelScope.launch {
             libraryEngine.createPlaylist(name)
