@@ -75,7 +75,8 @@ data class CoverScreenWindowState(
     val isCoverScreen: Boolean,
     val hasSeparatingHinge: Boolean,
     val displayId: Int = Display.DEFAULT_DISPLAY,
-    val isSecondaryDisplay: Boolean = false
+    val isSecondaryDisplay: Boolean = false,
+    val isInMultiWindowMode: Boolean = false
 )
 
 fun isCoverScreenHeuristic(widthDp: Int, heightDp: Int): Boolean {
@@ -98,17 +99,25 @@ fun isSecondaryDisplayIdentity(displayId: Int): Boolean {
 }
 
 /**
- * Combines the displayId identity signal with the dp/hinge heuristic. Identity is authoritative
- * when available (a non-default displayId can only mean a true secondary display); otherwise the
- * dp-size + hinge heuristic decides, since resize-model devices never produce a second displayId.
+ * Combines the displayId identity signal with the dp/hinge heuristic and rejects ordinary
+ * user-resize states. Precedence:
+ * 1. A true secondary display ([isSecondaryDisplay]) is authoritative — there is no ambiguity,
+ *    so it wins even if the window happens to also report multi-window mode.
+ * 2. Multi-window mode (split-screen, freeform/desktop-mode, Samsung DeX pop-up view) means the
+ *    small size is a user resize choice on the *same* display, not a real device posture, so it
+ *    is rejected outright.
+ * 3. Otherwise, resize-model devices (no second display ever exists) fall back to the dp-size +
+ *    hinge heuristic.
  */
 internal fun resolveIsCoverScreen(
     widthDp: Int,
     heightDp: Int,
     hasSeparatingHinge: Boolean,
-    isSecondaryDisplay: Boolean
+    isSecondaryDisplay: Boolean,
+    isInMultiWindowMode: Boolean = false
 ): Boolean {
     if (isSecondaryDisplay) return true
+    if (isInMultiWindowMode) return false
     return isCoverScreenHeuristic(widthDp, heightDp) && !hasSeparatingHinge
 }
 
@@ -148,12 +157,14 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
 
     val displayId = activity?.currentDisplayIdOrDefault() ?: Display.DEFAULT_DISPLAY
     val isSecondaryDisplay = isSecondaryDisplayIdentity(displayId)
+    val isInMultiWindowMode = activity?.isInMultiWindowMode == true
 
     val isCover = resolveIsCoverScreen(
         widthDp = configuration.screenWidthDp,
         heightDp = configuration.screenHeightDp,
         hasSeparatingHinge = hasSeparatingHinge,
-        isSecondaryDisplay = isSecondaryDisplay
+        isSecondaryDisplay = isSecondaryDisplay,
+        isInMultiWindowMode = isInMultiWindowMode
     )
 
     return remember(
@@ -162,7 +173,8 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         isCover,
         hasSeparatingHinge,
         displayId,
-        isSecondaryDisplay
+        isSecondaryDisplay,
+        isInMultiWindowMode
     ) {
         CoverScreenWindowState(
             widthDp = configuration.screenWidthDp,
@@ -170,7 +182,8 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
             isCoverScreen = isCover,
             hasSeparatingHinge = hasSeparatingHinge,
             displayId = displayId,
-            isSecondaryDisplay = isSecondaryDisplay
+            isSecondaryDisplay = isSecondaryDisplay,
+            isInMultiWindowMode = isInMultiWindowMode
         )
     }
 }

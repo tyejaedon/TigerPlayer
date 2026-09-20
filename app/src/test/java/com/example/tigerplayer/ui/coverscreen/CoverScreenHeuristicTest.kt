@@ -72,5 +72,46 @@ class CoverScreenHeuristicTest {
             )
         )
     }
+
+    @Test
+    fun `cover-sized split-screen or freeform window is rejected as a false positive`() {
+        // Same dp band as a genuine flip cover screen, but the window is in multi-window mode
+        // (split-screen, freeform/desktop-mode, or DeX pop-up view) rather than a real posture.
+        assertFalse(
+            resolveIsCoverScreen(
+                widthDp = 372,
+                heightDp = 400,
+                hasSeparatingHinge = false,
+                isSecondaryDisplay = false,
+                isInMultiWindowMode = true
+            )
+        )
+    }
+
+    @Test
+    fun `secondary display identity wins even if multi-window mode also reports true`() {
+        assertTrue(
+            resolveIsCoverScreen(
+                widthDp = 800,
+                heightDp = 1200,
+                hasSeparatingHinge = false,
+                isSecondaryDisplay = true,
+                isInMultiWindowMode = true
+            )
+        )
+    }
+
+    @Test
+    fun `full-size multi-window is unaffected since it was already outside the dp band`() {
+        assertFalse(
+            resolveIsCoverScreen(
+                widthDp = 600,
+                heightDp = 915,
+                hasSeparatingHinge = false,
+                isSecondaryDisplay = false,
+                isInMultiWindowMode = true
+            )
+        )
+    }
 }
 
