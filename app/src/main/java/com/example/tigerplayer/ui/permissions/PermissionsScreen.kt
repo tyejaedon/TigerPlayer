@@ -164,7 +164,7 @@ fun PermissionScreen(onPermissionGranted: () -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "SYSTEM OVERRIDE",
+            text = "PERMISSION REQUESTS",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Black,

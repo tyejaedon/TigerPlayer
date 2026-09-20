@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
+import android.view.Display
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -71,7 +73,9 @@ data class CoverScreenWindowState(
     val widthDp: Int,
     val heightDp: Int,
     val isCoverScreen: Boolean,
-    val hasSeparatingHinge: Boolean
+    val hasSeparatingHinge: Boolean,
+    val displayId: Int = Display.DEFAULT_DISPLAY,
+    val isSecondaryDisplay: Boolean = false
 )
 
 fun isCoverScreenHeuristic(widthDp: Int, heightDp: Int): Boolean {
@@ -80,6 +84,46 @@ fun isCoverScreenHeuristic(widthDp: Int, heightDp: Int): Boolean {
     if (shortEdge <= 0 || longEdge <= 0) return false
     val aspectRatio = longEdge.toFloat() / shortEdge.toFloat()
     return shortEdge in 220..399 && longEdge <= 450 && aspectRatio <= 1.35f
+}
+
+/**
+ * True when the window is hosted on a genuinely distinct physical [Display] (the Motorola-style
+ * true-secondary-display model) rather than merely being resized on the default display (the
+ * Samsung Z Flip/Fold resize model, where no second display ever exists). This is the
+ * authoritative signal on devices that expose it; the dp/hinge heuristic is only a fallback for
+ * devices where it does not apply.
+ */
+fun isSecondaryDisplayIdentity(displayId: Int): Boolean {
+    return displayId != Display.DEFAULT_DISPLAY
+}
+
+/**
+ * Combines the displayId identity signal with the dp/hinge heuristic. Identity is authoritative
+ * when available (a non-default displayId can only mean a true secondary display); otherwise the
+ * dp-size + hinge heuristic decides, since resize-model devices never produce a second displayId.
+ */
+internal fun resolveIsCoverScreen(
+    widthDp: Int,
+    heightDp: Int,
+    hasSeparatingHinge: Boolean,
+    isSecondaryDisplay: Boolean
+): Boolean {
+    if (isSecondaryDisplay) return true
+    return isCoverScreenHeuristic(widthDp, heightDp) && !hasSeparatingHinge
+}
+
+private fun Activity.currentDisplayIdOrDefault(): Int {
+    return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display?.displayId ?: Display.DEFAULT_DISPLAY
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager?.defaultDisplay?.displayId ?: Display.DEFAULT_DISPLAY
+        }
+    } catch (e: UnsupportedOperationException) {
+        // Context.display throws for non-visual/application contexts on some OEM builds.
+        Display.DEFAULT_DISPLAY
+    }
 }
 
 @Composable
@@ -102,19 +146,31 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         ?.displayFeatures
         ?.any { it is FoldingFeature && it.isSeparating } == true
 
-    val isCover = isCoverScreenHeuristic(configuration.screenWidthDp, configuration.screenHeightDp) && !hasSeparatingHinge
+    val displayId = activity?.currentDisplayIdOrDefault() ?: Display.DEFAULT_DISPLAY
+    val isSecondaryDisplay = isSecondaryDisplayIdentity(displayId)
+
+    val isCover = resolveIsCoverScreen(
+        widthDp = configuration.screenWidthDp,
+        heightDp = configuration.screenHeightDp,
+        hasSeparatingHinge = hasSeparatingHinge,
+        isSecondaryDisplay = isSecondaryDisplay
+    )
 
     return remember(
         configuration.screenWidthDp,
         configuration.screenHeightDp,
         isCover,
-        hasSeparatingHinge
+        hasSeparatingHinge,
+        displayId,
+        isSecondaryDisplay
     ) {
         CoverScreenWindowState(
             widthDp = configuration.screenWidthDp,
             heightDp = configuration.screenHeightDp,
             isCoverScreen = isCover,
-            hasSeparatingHinge = hasSeparatingHinge
+            hasSeparatingHinge = hasSeparatingHinge,
+            displayId = displayId,
+            isSecondaryDisplay = isSecondaryDisplay
         )
     }
 }

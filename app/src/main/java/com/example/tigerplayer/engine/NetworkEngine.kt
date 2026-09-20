@@ -116,9 +116,15 @@ class NetworkEngine @Inject constructor(
 
     /**
      * 6. SPOTIFY AUTH
+     *
+     * With the Authorization Code + PKCE flow, [SpotifyAuthManager.exchangeCodeForToken] already
+     * persists the freshly exchanged token before this hook fires (issue #46 migration). This
+     * remains as an explicit acknowledgement point for callers rather than re-deriving token
+     * state here.
      */
     fun onAuthSuccess(newToken: String) {
-        authManager.updateToken(newToken)
+        val persisted = authManager.getToken() == newToken
+        Log.d("NetworkEngine", "Spotify auth success acknowledged (matches persisted token=$persisted).")
     }
 
     // --- UTILS ---

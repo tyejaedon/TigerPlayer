@@ -14,17 +14,17 @@ Human contributors should read `README.md` first.
 TigerPlayer is an **Android** music player: Jetpack Compose UI, Media3/ExoPlayer playback, Hilt DI,
 Room persistence, unifying a local library with Navidrome (Subsonic) and Spotify App Remote.
 
-| Property | Value |
-|---|---|
-| Language | Kotlin `2.2.20` |
-| JDK | 17 |
-| `minSdk` / `targetSdk` / `compileSdk` | 29 / 36 / 36 |
-| DI | Hilt (KSP) |
-| Persistence | Room + DataStore Preferences |
-| Playback | AndroidX Media3 (`MediaSessionService`) |
-| Networking | Retrofit + Gson |
-| Images | Coil |
-| Build | Gradle Kotlin DSL + version catalog |
+| Property                              | Value                                   |
+|---------------------------------------|-----------------------------------------|
+| Language                              | Kotlin `2.2.20`                         |
+| JDK                                   | 17                                      |
+| `minSdk` / `targetSdk` / `compileSdk` | 29 / 36 / 36                            |
+| DI                                    | Hilt (KSP)                              |
+| Persistence                           | Room + DataStore Preferences            |
+| Playback                              | AndroidX Media3 (`MediaSessionService`) |
+| Networking                            | Retrofit + Gson                         |
+| Images                                | Coil                                    |
+| Build                                 | Gradle Kotlin DSL + version catalog     |
 
 ---
 
@@ -67,10 +67,12 @@ Run a single test class:
 
 ```properties
 SPOTIFY_CLIENT_ID=...
-SPOTIFY_CLIENT_SECRET=...
 LASTFM_API_KEY=...
 YOUTUBE_API_KEY=...
 ```
+
+Spotify auth is Authorization Code + PKCE, so no client secret is read, stored, or needed
+(issue #46).
 
 The build **will still succeed** without it, so a green build does not prove cloud integrations work.
 

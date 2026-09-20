@@ -17,8 +17,7 @@ class SpotifyPrefs @Inject constructor(
         const val PREF_FILE = "spotify_secure_prefs"
         const val ACCESS_TOKEN = "access_token"
         const val TOKEN_TIMESTAMP = "token_timestamp"
-        const val SERVICE_TOKEN = "service_token"
-        const val SERVICE_TOKEN_TIMESTAMP = "service_token_timestamp"
+        const val REFRESH_TOKEN = "refresh_token"
         const val KEYSTORE_ALIAS = "tigerplayer_spotify_key"
     }
 
@@ -35,38 +34,35 @@ class SpotifyPrefs @Inject constructor(
 
     private val _accessToken = MutableStateFlow(readEncrypted(ACCESS_TOKEN))
     private val _tokenTimestamp = MutableStateFlow(readLongOrNull(TOKEN_TIMESTAMP))
-    private val _serviceToken = MutableStateFlow(readEncrypted(SERVICE_TOKEN))
-    private val _serviceTokenTimestamp = MutableStateFlow(readLongOrNull(SERVICE_TOKEN_TIMESTAMP))
+    private val _refreshToken = MutableStateFlow(readEncrypted(REFRESH_TOKEN))
 
     val accessToken: Flow<String?> = _accessToken
     val tokenTimestamp: Flow<Long?> = _tokenTimestamp
-    val serviceToken: Flow<String?> = _serviceToken
-    val serviceTokenTimestamp: Flow<Long?> = _serviceTokenTimestamp
+    val refreshToken: Flow<String?> = _refreshToken
 
-    suspend fun saveToken(token: String, timestamp: Long) {
+    suspend fun saveToken(token: String, timestamp: Long, refreshToken: String? = null) {
         securePrefs.edit {
             putString(ACCESS_TOKEN, cipher.encrypt(token))
             putString(TOKEN_TIMESTAMP, cipher.encrypt(timestamp.toString()))
+            if (refreshToken != null) {
+                putString(REFRESH_TOKEN, cipher.encrypt(refreshToken))
+            }
         }
         _accessToken.value = token
         _tokenTimestamp.value = timestamp
-    }
-
-    suspend fun saveServiceToken(token: String, timestamp: Long) {
-        securePrefs.edit {
-            putString(SERVICE_TOKEN, cipher.encrypt(token))
-            putString(SERVICE_TOKEN_TIMESTAMP, cipher.encrypt(timestamp.toString()))
+        if (refreshToken != null) {
+            _refreshToken.value = refreshToken
         }
-        _serviceToken.value = token
-        _serviceTokenTimestamp.value = timestamp
     }
 
     suspend fun clearToken() {
         securePrefs.edit {
             remove(ACCESS_TOKEN)
             remove(TOKEN_TIMESTAMP)
+            remove(REFRESH_TOKEN)
         }
         _accessToken.value = null
         _tokenTimestamp.value = null
+        _refreshToken.value = null
     }
 }

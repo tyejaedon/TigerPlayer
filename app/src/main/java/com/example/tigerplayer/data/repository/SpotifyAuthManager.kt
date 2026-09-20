@@ -1,12 +1,12 @@
 package com.example.tigerplayer.data.repository
 
-import android.util.Base64
 import android.util.Log
 import com.example.tigerplayer.BuildConfig
 import com.example.tigerplayer.data.local.SpotifyPrefs
 import com.example.tigerplayer.data.remote.api.SpotifyAuthApi
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,51 +25,38 @@ class SpotifyAuthManager @Inject constructor(
     private val _token = MutableStateFlow("")
     val token: StateFlow<String> = _token.asStateFlow()
     private var tokenTimestamp: Long = 0L
+    private var expiresInMs: Long = 3600_000L
+    private var refreshToken: String = ""
 
-    // --- SERVICE AUTH STATE (Client Credentials) ---
-    private var serviceToken: String = ""
-    private var serviceTokenTimestamp: Long = 0L
-
-    // SECURED: Values are now fetched from BuildConfig, which reads from secrets.properties
+    // Public client identifier only — no secret. PKCE requires no client authentication.
     private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
-    private val clientSecret = BuildConfig.SPOTIFY_CLIENT_SECRET
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
     init {
         scope.launch {
-            // Load User Token
             val cachedToken = spotifyPrefs.accessToken.firstOrNull()
             val cachedTimestamp = spotifyPrefs.tokenTimestamp.firstOrNull()
             if (cachedToken != null && cachedTimestamp != null) {
                 _token.value = cachedToken
                 tokenTimestamp = cachedTimestamp
             }
-
-            // Load Service Token
-            serviceToken = spotifyPrefs.serviceToken.firstOrNull() ?: ""
-            serviceTokenTimestamp = spotifyPrefs.serviceTokenTimestamp.firstOrNull() ?: 0L
+            refreshToken = spotifyPrefs.refreshToken.firstOrNull() ?: ""
         }
     }
 
     /**
-     * THE MASTER TOKEN RITUAL
-     * Returns the user's token if logged in, otherwise fetches a generic Service Token.
+     * Returns a valid access token, transparently refreshing via the stored refresh token
+     * if the cached access token has expired. Returns "" if the user must re-authenticate.
      */
     suspend fun getValidToken(): String = withContext(Dispatchers.IO) {
-        // 1. Priority: Valid User Token
         if (_token.value.isNotEmpty() && !isTokenExpired(tokenTimestamp)) {
             return@withContext _token.value
         }
 
-        // 2. Fallback: Valid Service Token
-        if (serviceToken.isNotEmpty() && !isTokenExpired(serviceTokenTimestamp)) {
-            return@withContext serviceToken
-        }
-
-        // 3. Last Resort: Fetch Fresh Service Token
-        if (clientSecret.isNotEmpty()) {
-            return@withContext fetchFreshServiceToken()
+        if (refreshToken.isNotEmpty()) {
+            val refreshed = refreshAccessToken()
+            if (refreshed.isNotEmpty()) return@withContext refreshed
         }
 
         ""
@@ -77,43 +64,51 @@ class SpotifyAuthManager @Inject constructor(
 
     /**
      * Returns only a valid user token for user-scoped endpoints (for example /v1/me).
-     * Never falls back to service tokens.
+     * Behaves identically to [getValidToken] now that the client-credentials fallback is gone.
      */
-    suspend fun getValidUserToken(): String = withContext(Dispatchers.IO) {
-        if (_token.value.isNotEmpty() && !isTokenExpired(tokenTimestamp)) {
-            return@withContext _token.value
-        }
-        ""
-    }
+    suspend fun getValidUserToken(): String = getValidToken()
 
-    private suspend fun fetchFreshServiceToken(): String {
-        try {
-            val authString = "$clientId:$clientSecret"
-            val encodedAuth = Base64.encodeToString(authString.toByteArray(), Base64.NO_WRAP)
-            val basicAuth = "Basic $encodedAuth"
-
-            val response = spotifyAuthApi.getServiceToken(basicAuth)
+    private suspend fun refreshAccessToken(): String {
+        return try {
+            val response = spotifyAuthApi.refreshToken(
+                clientId = clientId,
+                refreshToken = refreshToken
+            )
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null) {
-                    serviceToken = body.accessToken
-                    serviceTokenTimestamp = System.currentTimeMillis()
-                    spotifyPrefs.saveServiceToken(serviceToken, serviceTokenTimestamp)
-                    Log.d("SpotifyAuth", "Service Token Refreshed successfully.")
-                    return serviceToken
+                    // Spotify may or may not rotate the refresh token on refresh.
+                    val newRefreshToken = body.refreshToken ?: refreshToken
+                    updateToken(body.accessToken, body.expiresIn, newRefreshToken)
+                    Log.d("SpotifyAuth", "Access token refreshed successfully.")
+                    body.accessToken
+                } else {
+                    Log.e("SpotifyAuth", "Refresh failed: response body was empty.")
+                    ""
                 }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e("SpotifyAuth", "Refresh failed with code ${response.code()}: $errorBody")
+                if (response.code() == 400 || response.code() == 401) {
+                    // Refresh token itself is dead — force the user to log in again.
+                    logout()
+                }
+                ""
             }
         } catch (e: Exception) {
-            Log.e("SpotifyAuth", "Failed to summon Service Token: ${e.message}")
+            if (e is CancellationException) throw e
+            Log.e("SpotifyAuth", "Exception during refresh: ${e.message}")
+            ""
         }
-        return ""
     }
 
-    fun updateToken(newToken: String) {
+    private fun updateToken(newToken: String, expiresInSeconds: Int, newRefreshToken: String) {
         _token.value = newToken
         tokenTimestamp = System.currentTimeMillis()
+        expiresInMs = expiresInSeconds * 1000L
+        refreshToken = newRefreshToken
         scope.launch {
-            spotifyPrefs.saveToken(newToken, tokenTimestamp)
+            spotifyPrefs.saveToken(newToken, tokenTimestamp, newRefreshToken)
         }
     }
 
@@ -121,57 +116,56 @@ class SpotifyAuthManager @Inject constructor(
 
     fun isTokenExpired(timestamp: Long): Boolean {
         if (timestamp == 0L) return true
-        val hourInMs = 60 * 60 * 1000L
-        return System.currentTimeMillis() - timestamp > (hourInMs - 300000L) // 5 min buffer
+        val bufferMs = 300_000L // 5 min buffer
+        return System.currentTimeMillis() - timestamp > (expiresInMs - bufferMs)
     }
 
     fun logout() {
         _token.value = ""
         tokenTimestamp = 0L
+        refreshToken = ""
         scope.launch {
             spotifyPrefs.clearToken()
         }
     }
 
     /**
-     * THE SWAP RITUAL
-     * Takes the temporary Authorization Code and securely exchanges it for an Access Token.
+     * Exchanges the temporary Authorization Code for an Access Token using PKCE.
+     * No client secret is required or sent — [codeVerifier] proves possession of the
+     * original code_challenge instead.
      */
-    suspend fun exchangeCodeForToken(authCode: String?, redirectUri: String): String {
+    suspend fun exchangeCodeForToken(
+        authCode: String?,
+        redirectUri: String,
+        codeVerifier: String
+    ): String {
         return try {
-            // Use the Client ID and Secret to forge the Basic Auth header
-            val authString = "$clientId:$clientSecret"
-            val encodedAuth = Base64.encodeToString(authString.toByteArray(), Base64.NO_WRAP)
-            val basicAuth = "Basic $encodedAuth"
-
             val response = spotifyAuthApi.getUserToken(
-                authHeader = basicAuth,
-                grantType = "authorization_code", // Explicitly define the ritual type
+                clientId = clientId,
                 code = authCode,
-                redirectUri = redirectUri
+                redirectUri = redirectUri,
+                codeVerifier = codeVerifier
             )
 
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null) {
-                    val newToken = body.accessToken
-                    updateToken(newToken)
+                    updateToken(body.accessToken, body.expiresIn, body.refreshToken.orEmpty())
                     Log.d("SpotifyAuth", "Token forged successfully from Code!")
-                    newToken
+                    body.accessToken
                 } else {
-                    Log.e("SpotifyAuth", "Ritual failed: Response body was empty.")
+                    Log.e("SpotifyAuth", "Exchange failed: response body was empty.")
                     ""
                 }
             } else {
-                // Log the error body to see exactly why Spotify rejected the swap
                 val errorBody = response.errorBody()?.string()
                 Log.e("SpotifyAuth", "Swap failed with code ${response.code()}: $errorBody")
                 ""
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("SpotifyAuth", "Exception during ritual: ${e.message}")
             ""
         }
     }
 }
-
