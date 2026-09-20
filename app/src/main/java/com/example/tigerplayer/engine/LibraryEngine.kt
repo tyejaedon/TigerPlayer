@@ -6,10 +6,12 @@ import android.net.Uri
 import android.util.Log
 import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.example.tigerplayer.data.model.AudioTrack
+import com.example.tigerplayer.data.model.MusicFolder
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.repository.AudioRepository
 import com.example.tigerplayer.data.repository.HistoryRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
+import com.example.tigerplayer.data.repository.MusicFolderRepository
 import com.example.tigerplayer.ui.home.HomeUiState
 import com.example.tigerplayer.ui.home.UserStatistics
 import com.example.tigerplayer.ui.player.LibraryArtist
@@ -24,7 +26,8 @@ import kotlin.random.Random
 class LibraryEngine @Inject constructor(
     private val historyRepository: HistoryRepository,
     private val audioRepository: AudioRepository,
-    private val mediaDataRepository: MediaDataRepository
+    private val mediaDataRepository: MediaDataRepository,
+    private val musicFolderRepository: MusicFolderRepository
 ) {
 
     enum class SortOrder {
@@ -280,6 +283,27 @@ class LibraryEngine @Inject constructor(
     fun getLocalAudioScanFlow(forceRefresh: Boolean = false): Flow<com.example.tigerplayer.data.source.LocalAudioDataSource.ScanStatus> {
         return audioRepository.getLocalTracksWithProgress(forceRefresh)
     }
+
+    // --- CUSTOM MUSIC FOLDERS (issue #50) ---
+
+    fun getMusicFolders(): Flow<List<MusicFolder>> = musicFolderRepository.getFolders()
+
+    /**
+     * @param isExcluded true adds [treeUri] as an exclude entry (hidden everywhere), false adds
+     * it as an include root scanned for tracks. Returns false if the persistable permission grant
+     * failed, in which case nothing was saved and the caller should not trigger a rescan.
+     */
+    suspend fun addMusicFolder(treeUri: Uri, isExcluded: Boolean): Boolean {
+        return musicFolderRepository.addFolder(treeUri, isExcluded)
+    }
+
+    suspend fun removeMusicFolder(uriString: String) {
+        musicFolderRepository.removeFolder(uriString)
+    }
+
+    /** Builds the folder-browser index for the current local library snapshot. */
+    fun buildFolderIndex(tracks: List<AudioTrack>): Map<String, FolderTreeBuilder.FolderContents> =
+        FolderTreeBuilder.index(tracks)
 
     private suspend fun ensureLikedPlaylistExists() {
         val playlists = audioRepository.getCustomPlaylists().first()

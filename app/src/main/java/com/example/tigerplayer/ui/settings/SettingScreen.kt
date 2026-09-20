@@ -1,5 +1,7 @@
 package com.example.tigerplayer.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -26,9 +28,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BluetoothAudio
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.Memory
@@ -47,6 +53,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -440,6 +447,9 @@ fun SettingsScreen(
                 }
             }
 
+            // --- MUSIC FOLDERS SECTION (issue #50) ---
+            MusicFoldersSection(viewModel = viewModel, accent = accent)
+
             Spacer(modifier = Modifier.height(24.dp))
             
             TextButton(
@@ -450,6 +460,71 @@ fun SettingsScreen(
             }
             
             Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+}
+
+@Composable
+private fun MusicFoldersSection(viewModel: SettingsViewModel, accent: Color) {
+    val musicFolders by viewModel.musicFolders.collectAsStateWithLifecycle()
+
+    val addFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) viewModel.addMusicFolder(uri, isExcluded = false)
+    }
+    val excludeFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) viewModel.addMusicFolder(uri, isExcluded = true)
+    }
+
+    MatrixSection(title = "Music Folders", icon = Icons.Rounded.Folder, accent = accent) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Include folders MediaStore may have missed, or exclude ones you don't want scanned.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = { addFolderLauncher.launch(null) }) {
+                    Icon(Icons.Rounded.Add, null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("ADD FOLDER", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(onClick = { excludeFolderLauncher.launch(null) }) {
+                    Icon(Icons.Rounded.Block, null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("EXCLUDE FOLDER", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (musicFolders.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            musicFolders.forEach { folder ->
+                ListItem(
+                    headlineContent = { Text(folder.displayName, fontWeight = FontWeight.Bold) },
+                    supportingContent = {
+                        Text(
+                            if (folder.isExcluded) "EXCLUDED" else "INCLUDED",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (folder.isExcluded) MaterialTheme.colorScheme.error else accent
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            Icons.Rounded.Folder,
+                            null,
+                            tint = if (folder.isExcluded) MaterialTheme.colorScheme.error else accent
+                        )
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { viewModel.removeMusicFolder(folder.uriString) }) {
+                            Icon(Icons.Rounded.Delete, contentDescription = "Remove folder")
+                        }
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
         }
     }
 }
