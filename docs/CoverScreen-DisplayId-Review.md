@@ -101,3 +101,13 @@ never renders regardless.
 
 **Tracking:** [GitHub Milestone "Cover Screen Correctness (v2.1.2)"](https://github.com/tyejaedon/TigerPlayer/milestone/10)
 
+## 6. Motorola external-display verification (issue #124)
+
+The manifest's `com.motorola.android.externaldisplay.*` meta-data is now backed by the
+`displayId`-aware code path from section 5 (#121's identity check, #123's attach/detach
+listener), but has not been verified end-to-end on physical Motorola hardware - there is no such
+device or an emulator profile that simulates one in this project's CI or development
+environment. See `docs/CoverScreen-Motorola-Verification.md` for what is and isn't verified, and
+the manual protocol required to close it out.
+
+
