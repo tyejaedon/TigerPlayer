@@ -11,10 +11,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Proves that the 11 -> 12 migration (ReplayGain columns on CachedTrackEntity, issue #56)
- * preserves existing data, per issue #43 / #74. A schema validation pass alone is not enough -
- * PlaybackHistoryEntity rows and cached track rows written under the old schema must still be
- * readable, with their original values intact, after the migration runs.
+ * Proves that Room schema migrations preserve existing data, per issue #43 / #74. A schema
+ * validation pass alone is not enough - PlaybackHistoryEntity rows and cached track rows written
+ * under an older schema must still be readable, with their original values intact, after the
+ * migration runs.
+ *
+ * Covers:
+ * - 11 -> 12: ReplayGain columns on CachedTrackEntity (issue #56)
+ * - 12 -> 13: dateModified fingerprint column on CachedTrackEntity (issue #49)
  */
 @RunWith(AndroidJUnit4::class)
 class TigerDatabaseMigrationTest {
@@ -110,6 +114,42 @@ class TigerDatabaseMigrationTest {
         assertTrue("playlist ordering must survive the migration", crossRefCursor.moveToFirst())
         assertEquals(0, crossRefCursor.getInt(crossRefCursor.getColumnIndexOrThrow("position")))
         crossRefCursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate12To13_preservesCachedTrackRows_andBackfillsDateModifiedAsZero() {
+        // Arrange: create the DB at version 12 (pre-dateModified) and insert a representative row.
+        var db: SupportSQLiteDatabase = helper.createDatabase(testDbName, 12)
+        db.execSQL(
+            """
+            INSERT INTO cached_tracks
+                (id, title, artist, album, uriString, artworkUriString, durationMs, mimeType,
+                 bitrate, sampleRate, trackNumber, year, dateAdded, isLiked, path,
+                 replayGainTrackDb, replayGainAlbumDb, replayGainTrackPeak, replayGainAlbumPeak)
+            VALUES
+                ('local_track_002', 'Chrome Static', 'Tiger Unit', 'Midnight Circuit',
+                 'content://media/external/audio/media/43', 'content://media/external/audio/albumart/8',
+                 198000, 'audio/flac', 960000, 48000, 5, '2026', 1719374400, 0,
+                 '/storage/emulated/0/Music/Tiger/Chrome Static.flac', -3.2, -2.1, 0.95, 0.98)
+            """.trimIndent()
+        )
+        db.close()
+
+        // Act: run the real 12 -> 13 migration path (validates against the committed schema JSON).
+        db = helper.runMigrationsAndValidate(testDbName, 13, true)
+
+        // Assert: the pre-existing row survives, untouched, with dateModified defaulting to 0.
+        val cursor = db.query("SELECT * FROM cached_tracks WHERE id = 'local_track_002'")
+        assertTrue("expected the pre-migration row to still exist", cursor.moveToFirst())
+        assertEquals("Chrome Static", cursor.getString(cursor.getColumnIndexOrThrow("title")))
+        assertEquals(198000L, cursor.getLong(cursor.getColumnIndexOrThrow("durationMs")))
+        assertEquals(-3.2, cursor.getDouble(cursor.getColumnIndexOrThrow("replayGainTrackDb")), 0.0001)
+        assertEquals(
+            0L,
+            cursor.getLong(cursor.getColumnIndexOrThrow("dateModified"))
+        )
+        cursor.close()
         db.close()
     }
 }

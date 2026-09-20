@@ -29,7 +29,12 @@ data class AudioTrack(
     val replayGainTrackDb: Double? = null,
     val replayGainAlbumDb: Double? = null,
     val replayGainTrackPeak: Double? = null,
-    val replayGainAlbumPeak: Double? = null
+    val replayGainAlbumPeak: Double? = null,
+
+    // --- Incremental indexing (issue #49) ---
+    // MediaStore.Audio.Media.DATE_MODIFIED, in seconds since epoch. Used as the cheap identity
+    // fingerprint for library-cache diffing instead of a deep field-by-field comparison.
+    val dateModified: Long = 0L
 )
 
 /**

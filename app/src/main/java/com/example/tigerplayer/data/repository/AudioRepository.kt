@@ -1,6 +1,11 @@
 package com.example.tigerplayer.data.repository
 
+import android.content.Context
+import android.database.ContentObserver
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
 import com.example.tigerplayer.data.local.dao.PlaylistDao
@@ -12,8 +17,15 @@ import com.example.tigerplayer.data.model.AudioTrack
 import com.example.tigerplayer.data.model.Playlist
 import com.example.tigerplayer.data.source.LocalAudioDataSource
 import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
@@ -22,6 +34,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AudioRepository @Inject constructor(
+    @param:ApplicationContext private val context: Context,
     private val localAudioDataSource: LocalAudioDataSource,
     private val playlistDao: PlaylistDao,
     private val tigerDao: TigerDao,
@@ -29,9 +42,72 @@ class AudioRepository @Inject constructor(
     private val statsEpoch: StatsEpoch
 ) {
 
+    companion object {
+        private const val TAG = "AudioRepository"
+
+        // Coalesces bursts of MediaStore change notifications (e.g. a multi-file copy) into a
+        // single incremental resync instead of triggering one per row.
+        private const val MEDIA_STORE_CHANGE_DEBOUNCE_MS = 1_500L
+    }
+
     private var remoteCache: List<AudioTrack> = emptyList()
     private val hasPrimedLocalScan = AtomicBoolean(false)
     private val localScanMutex = Mutex()
+
+    // Lives for the process lifetime, mirroring this @Singleton's own lifecycle - there is no
+    // narrower scope to tie it to, since MediaStore changes can arrive whenever the app process
+    // is alive, not only while a screen observing the library is on-screen.
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mediaStoreChangeSignal = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+
+    init {
+        observeMediaStoreChanges()
+    }
+
+    /**
+     * INCREMENTAL INDEXING (issue #49)
+     * Registers a ContentObserver on the external audio collection so external library changes
+     * (files added/removed/edited by other apps) are picked up as a cheap incremental resync
+     * while the app is running, instead of relying on a full rescan at the next cold start.
+     */
+    @OptIn(FlowPreview::class)
+    private fun observeMediaStoreChanges() {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                // Never do the actual scan/diff work on the main thread - just signal it.
+                mediaStoreChangeSignal.tryEmit(Unit)
+            }
+        }
+        try {
+            context.contentResolver.registerContentObserver(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                /* notifyForDescendants = */ true,
+                observer
+            )
+        } catch (e: Exception) {
+            // Registration failing must never take the app down with it - the library still
+            // works via the existing scan-on-demand path, it just won't pick up external
+            // changes live until the next explicit refresh.
+            Log.e(TAG, "Failed to register MediaStore ContentObserver: ${e.message}")
+        }
+
+        repositoryScope.launch {
+            mediaStoreChangeSignal
+                .debounce(MEDIA_STORE_CHANGE_DEBOUNCE_MS)
+                .collectLatest {
+                    try {
+                        refreshLocalCache(forceRefresh = false)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Incremental MediaStore resync failed: ${e.message}")
+                    }
+                }
+        }
+    }
 
     /**
      * THE MASTER ARCHIVE
@@ -91,8 +167,7 @@ class AudioRepository @Inject constructor(
      * Used specifically when the UI needs to display the ScanningOverlay.
      */
     fun getLocalTracksWithProgress(forceRefresh: Boolean = false): Flow<LocalAudioDataSource.ScanStatus> = flow {
-        val cachedEntities = tigerDao.getCachedTracksSync()
-        val cachedTracks = cachedEntities.map { it.toDomainModel() }
+        val cachedTracks = tigerDao.getCachedTracksSync().map { it.toDomainModel() }
 
         if (cachedTracks.isNotEmpty() && !forceRefresh) {
             emit(LocalAudioDataSource.ScanStatus.Complete(cachedTracks))
@@ -103,39 +178,49 @@ class AudioRepository @Inject constructor(
             emit(status)
 
             if (status is LocalAudioDataSource.ScanStatus.Complete) {
-                val freshTracks = status.tracks
                 hasPrimedLocalScan.set(true)
-                val isArchiveOutdated = forceRefresh ||
-                        cachedTracks.size != freshTracks.size ||
-                        cachedTracks != freshTracks
-
-                if (isArchiveOutdated) {
-                    tigerDao.insertCachedTracksTransaction(freshTracks.map { it.toEntity() })
-                }
+                applyLibraryDiff(status.tracks, forceRefresh)
             }
         }
     }
 
     private suspend fun refreshLocalCache(forceRefresh: Boolean) {
-        localScanMutex.withLock {
-            var freshTracks: List<AudioTrack>? = null
-            localAudioDataSource.getLocalAudioFiles().collect { status ->
-                if (status is LocalAudioDataSource.ScanStatus.Complete) {
-                    freshTracks = status.tracks
-                }
+        var scannedTracks: List<AudioTrack>? = null
+        localAudioDataSource.getLocalAudioFiles().collect { status ->
+            if (status is LocalAudioDataSource.ScanStatus.Complete) {
+                scannedTracks = status.tracks
             }
+        }
 
-            val scannedTracks = freshTracks ?: return
-            val cachedTracks = tigerDao.getCachedTracksSync().map { it.toDomainModel() }
-            val isArchiveOutdated = forceRefresh ||
-                cachedTracks.size != scannedTracks.size ||
-                cachedTracks != scannedTracks
+        applyLibraryDiff(scannedTracks ?: return, forceRefresh)
+    }
 
-            if (isArchiveOutdated) {
-                tigerDao.insertCachedTracksTransaction(scannedTracks.map { it.toEntity() })
+    /**
+     * THE ONE DIFF (issue #49)
+     * Routes every local-cache reconciliation - the initial cold-start scan, a user-triggered
+     * rescan, and an incremental MediaStore-change resync - through [LibraryCacheDiffer] and
+     * writes only the resulting delta, never a full-table rewrite. Guarded by [localScanMutex]
+     * so concurrent callers (e.g. a manual rescan racing an incremental ContentObserver resync)
+     * can't interleave reads and writes against the cache.
+     */
+    private suspend fun applyLibraryDiff(scannedTracks: List<AudioTrack>, forceRefresh: Boolean) {
+        localScanMutex.withLock {
+            val cachedFingerprints = tigerDao.getCachedTrackFingerprints()
+            val diff = LibraryCacheDiffer.diff(
+                cached = cachedFingerprints,
+                scanned = scannedTracks,
+                forceUpsertAll = forceRefresh
+            )
+
+            if (diff.hasChanges) {
+                tigerDao.applyCachedTracksDelta(
+                    upserts = diff.upserts.map { it.toEntity() },
+                    removedIds = diff.removedIds.toList()
+                )
             }
         }
     }
+
 
     // ==========================================
     // --- GRIMOIRE (PLAYLIST) OPERATIONS ---
@@ -258,7 +343,8 @@ class AudioRepository @Inject constructor(
         replayGainTrackDb = replayGainTrackDb,
         replayGainAlbumDb = replayGainAlbumDb,
         replayGainTrackPeak = replayGainTrackPeak,
-        replayGainAlbumPeak = replayGainAlbumPeak
+        replayGainAlbumPeak = replayGainAlbumPeak,
+        dateModified = dateModified
     )
 
     private fun AudioTrack.toEntity() = CachedTrackEntity(
@@ -280,6 +366,7 @@ class AudioRepository @Inject constructor(
         replayGainTrackDb = replayGainTrackDb,
         replayGainAlbumDb = replayGainAlbumDb,
         replayGainTrackPeak = replayGainTrackPeak,
-        replayGainAlbumPeak = replayGainAlbumPeak
+        replayGainAlbumPeak = replayGainAlbumPeak,
+        dateModified = dateModified
     )
 }

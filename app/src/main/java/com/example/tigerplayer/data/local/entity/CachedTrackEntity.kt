@@ -1,5 +1,6 @@
 package com.example.tigerplayer.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -35,5 +36,11 @@ data class CachedTrackEntity(
     val replayGainTrackDb: Double? = null,
     val replayGainAlbumDb: Double? = null,
     val replayGainTrackPeak: Double? = null,
-    val replayGainAlbumPeak: Double? = null
+    val replayGainAlbumPeak: Double? = null,
+
+    // --- Incremental indexing (issue #49) ---
+    // MediaStore.Audio.Media.DATE_MODIFIED, in seconds since epoch. The cheap identity fingerprint
+    // used to diff the scanned library against the cache without a deep field comparison.
+    @ColumnInfo(defaultValue = "0")
+    val dateModified: Long = 0L
 )

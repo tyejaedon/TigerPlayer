@@ -24,10 +24,11 @@ import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
         CachedTrackEntity::class, // <-- Added
         LyricsCacheEntity::class // 2. Add it to the array
     ],
-    version = 12, // <-- Bumped to 12 for ReplayGain columns (issue #56)
+    version = 13, // <-- Bumped to 13 for the dateModified fingerprint column (issue #49)
     exportSchema = true,
     autoMigrations = [
-        AutoMigration(from = 11, to = 12)
+        AutoMigration(from = 11, to = 12),
+        AutoMigration(from = 12, to = 13)
     ]
 )
 @TypeConverters(Converters::class)
