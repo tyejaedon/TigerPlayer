@@ -41,7 +41,9 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,8 +63,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,12 +74,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.widget.Toast
 import com.example.tigerplayer.BuildConfig
+import com.example.tigerplayer.data.backup.RestoreStrategy
 import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.example.tigerplayer.data.local.DefaultPlayerView
 import com.example.tigerplayer.data.local.SkipShortAudio
@@ -102,8 +109,23 @@ fun SettingsScreen(
     val settings by viewModel.settingsState.collectAsStateWithLifecycle()
     val rescan by viewModel.libraryRescanState.collectAsStateWithLifecycle()
     val hapticsDebug by viewModel.hapticsDebugState.collectAsStateWithLifecycle()
+    val backupEvent by viewModel.backupEvent.collectAsStateWithLifecycle()
     val accent = accentColor(settings.accentStyle)
-    
+
+    val context = LocalContext.current
+    LaunchedEffect(backupEvent) {
+        val event = backupEvent ?: return@LaunchedEffect
+        val message = when (event) {
+            is BackupUiEvent.ExportSucceeded ->
+                "Backup saved: ${event.playlists} playlists, ${event.history} history rows"
+            is BackupUiEvent.ImportSucceeded ->
+                "Restored: ${event.playlists} playlists, ${event.history} history rows"
+            is BackupUiEvent.Failed -> "Backup error: ${event.message}"
+        }
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        viewModel.consumeBackupEvent()
+    }
+
     var crossfadeSlider by remember(settings.crossfadeDurationSec) {
         mutableFloatStateOf(settings.crossfadeDurationSec.toFloat())
     }
@@ -142,7 +164,7 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            
+
             // --- APPEARANCE SECTION ---
             MatrixSection(title = "Core Visuals", icon = Icons.Rounded.Palette, accent = accent) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -387,7 +409,7 @@ fun SettingsScreen(
                         Icon(Icons.Rounded.Bolt, null, tint = accent.copy(alpha = 0.5f))
                     }
                 }
-                
+
                 ListItem(
                     headlineContent = { Text("BLUETOOTH RESUME", fontWeight = FontWeight.Bold) },
                     leadingContent = { Icon(Icons.Rounded.BluetoothAudio, null, tint = accent) },
@@ -450,15 +472,18 @@ fun SettingsScreen(
             // --- MUSIC FOLDERS SECTION (issue #50) ---
             MusicFoldersSection(viewModel = viewModel, accent = accent)
 
+            // --- BACKUP & RESTORE ---
+            BackupRestoreSection(viewModel = viewModel, accent = accent)
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             TextButton(
                 onClick = viewModel::resetToDefaults,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
                 Text("RESTORE PROTOCOL DEFAULTS", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
             }
-            
+
             Spacer(modifier = Modifier.height(40.dp))
         }
     }
@@ -524,6 +549,76 @@ private fun MusicFoldersSection(viewModel: SettingsViewModel, accent: Color) {
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupRestoreSection(viewModel: SettingsViewModel, accent: Color) {
+    // Merge by default: a restore should never silently wipe what's already on the device.
+    var restoreStrategy by remember { mutableStateOf(RestoreStrategy.MERGE) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> if (uri != null) viewModel.exportBackup(uri) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) viewModel.importBackup(uri, restoreStrategy) }
+
+    MatrixSection(title = "Backup & Restore", icon = Icons.Rounded.SaveAlt, accent = accent) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Saves playlists, listening history, and app settings to a JSON file you choose. " +
+                    "Navidrome/Spotify sign-in is never included — you'll sign back in after a restore.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { exportLauncher.launch("tigerplayer-backup.json") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Rounded.SaveAlt, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("EXPORT BACKUP", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("ON RESTORE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = restoreStrategy == RestoreStrategy.MERGE,
+                    onClick = { restoreStrategy = RestoreStrategy.MERGE },
+                    label = { Text("ADD TO EXISTING") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = accent.copy(alpha = 0.2f),
+                        selectedLabelColor = accent
+                    )
+                )
+                FilterChip(
+                    selected = restoreStrategy == RestoreStrategy.REPLACE,
+                    onClick = { restoreStrategy = RestoreStrategy.REPLACE },
+                    label = { Text("REPLACE ALL") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = accent.copy(alpha = 0.2f),
+                        selectedLabelColor = accent
+                    )
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { importLauncher.launch(arrayOf("application/json")) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("RESTORE BACKUP", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             }
         }
     }

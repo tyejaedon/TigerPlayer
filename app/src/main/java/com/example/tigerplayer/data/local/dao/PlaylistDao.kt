@@ -66,7 +66,7 @@ abstract class PlaylistDao {
     }
 
     @Query("""
-        SELECT 
+        SELECT
             p.playlistId AS id,
             p.name,
             p.createdAt,
@@ -89,8 +89,8 @@ abstract class PlaylistDao {
 
 
     @Query("""
-        UPDATE playlist_track_cross_ref 
-        SET position = :newPosition 
+        UPDATE playlist_track_cross_ref
+        SET position = :newPosition
         WHERE playlistId = :playlistId AND trackId = :trackId
     """)
     abstract suspend fun updateTrackPosition(playlistId: Long, trackId: String, newPosition: Int): Int
@@ -109,9 +109,9 @@ abstract class PlaylistDao {
     protected abstract suspend fun getTrackCountImmediate(playlistId: Long): Int
 
     @Query("""
-        SELECT trackId 
-        FROM playlist_track_cross_ref 
-        WHERE playlistId = :playlistId 
+        SELECT trackId
+        FROM playlist_track_cross_ref
+        WHERE playlistId = :playlistId
         ORDER BY position ASC, dateAdded ASC
     """)
     abstract fun getTrackIdsForPlaylist(playlistId: Long): Flow<List<String>>
@@ -119,8 +119,8 @@ abstract class PlaylistDao {
     // --- PRIVATE ARCHIVE RECOVERY ---
 
     @Query("""
-        SELECT * FROM playlist_track_cross_ref 
-        WHERE playlistId = :playlistId 
+        SELECT * FROM playlist_track_cross_ref
+        WHERE playlistId = :playlistId
         ORDER BY position ASC
     """)
     protected abstract suspend fun getRawCrossRefs(playlistId: Long): List<PlaylistTrackCrossRef>
@@ -133,5 +133,28 @@ abstract class PlaylistDao {
                 updateTrackPosition(playlistId, ref.trackId, index)
             }
         }
+    }
+
+    // --- BACKUP & RESTORE (one-shot reads / destructive writes, used only by BackupManager) ---
+
+    /** One-shot snapshot of every playlist, for export. Never observed by the UI. */
+    @Query("SELECT * FROM playlists ORDER BY createdAt DESC")
+    abstract suspend fun getAllPlaylistsSync(): List<PlaylistEntity>
+
+    /** One-shot snapshot of a playlist's tracks in order, for export. */
+    @Query("SELECT * FROM playlist_track_cross_ref WHERE playlistId = :playlistId ORDER BY position ASC")
+    abstract suspend fun getCrossRefsForPlaylistSync(playlistId: Long): List<PlaylistTrackCrossRef>
+
+    @Query("DELETE FROM playlists")
+    protected abstract suspend fun clearAllPlaylists(): Int
+
+    @Query("DELETE FROM playlist_track_cross_ref")
+    protected abstract suspend fun clearAllCrossRefs(): Int
+
+    /** Wipes every playlist and cross-ref row. Only ever called for a "replace" restore. */
+    @Transaction
+    open suspend fun replaceAllPlaylists() {
+        clearAllCrossRefs()
+        clearAllPlaylists()
     }
 }
