@@ -1,272 +1,195 @@
 # TigerPlayer 🐅🐺
 
-> **[v2.0 "NEON VANGUARD"]**
-> *A high-fidelity, dual-engine Android music player that unifies local archives, remote servers, and cloud signals with neon visuals and listening intelligence.*
+### v2.0 "NEON VANGUARD"
 
-TigerPlayer 2.0 is a major architectural overhaul focused on three pillars:
+A modern Android music player that combines **local audio playback**, **Spotify integration**, **smart music discovery**, and a **real-time GPU-powered visualizer** into a single experience.
 
-1. **Playback fidelity and control** (local Media3 + Spotify remote routing)
-2. **Discovery intelligence** (Day List + Discovery Weekly + listening analytics)
-3. **Immersive presentation** (GPU fluid visualizer + reactive neon UI)
-
-This README is intentionally implementation-aware so contributors can move from setup to code quickly.
+Built with **Kotlin**, **Jetpack Compose**, **AndroidX Media3**, **Room**, and **OpenGL ES**.
 
 ---
 
-## Table of Contents
+## ✨ Highlights
 
-- [What TigerPlayer Is](#what-tigerplayer-is)
-- [Core Features](#core-features)
-- [Architecture Overview](#architecture-overview)
-- [Discovery Logic (Day List + Discovery Weekly)](#discovery-logic-day-list--discovery-weekly)
-- [Project Layout](#project-layout)
-- [Requirements](#requirements)
-- [Setup](#setup)
-- [Build and Run](#build-and-run)
-- [Testing and Validation](#testing-and-validation)
-- [Troubleshooting](#troubleshooting)
-- [Release Notes](#release-notes)
-- [Contributing](#contributing)
+- 🎵 Local music playback with Media3 / ExoPlayer
+- 🎧 Spotify App Remote integration
+- 🧠 On-device music discovery and listening analytics
+- 🌊 Real-time fluid visualizer with audio-reactive effects
+- ⚡ Jetpack Compose UI with a custom neon design system
+- 💾 Room-powered library, history, and analytics storage
+- 🔒 Spotify Authorization Code + PKCE authentication
 
 ---
 
-## What TigerPlayer Is
+## 📸 Screenshots
 
-TigerPlayer is an Android-first player built with Jetpack Compose and Media3, designed to serve as a **single control surface** for:
+| Home                          | Player                            | Day List                             |
+|-------------------------------|-----------------------------------|--------------------------------------|
+| ![Home](screenshots/Home.png) | ![Player](screenshots/Player.png) | ![Day List](screenshots/Daylist.png) |
 
-- Local on-device music libraries
-- Spotify App Remote sessions
-- Remote metadata/enrichment services (for analytics and profile quality)
-
-Instead of treating local and cloud as separate apps, TigerPlayer routes playback commands through a unified engine and adapts UI behavior by source.
-
----
-
-## Core Features
-
-### 1) Dual-engine playback routing
-
-- Unified playback control for local Media3 and Spotify App Remote.
-- Command routing includes play, pause, seek, skip, shuffle/repeat, and queue actions.
-- Queue state persistence and restoration for better process-death resilience.
-
-### 2) Discovery + analytics surfaces
-
-- **Day List**: time-bucketed discovery by listening window (Morning, Afternoon, Evening, Night).
-- **Discovery Weekly**: stale/new track resurfacing with genre affinity weighting.
-- **Heavy Rotation** and high-density listening stats backed by Room queries.
-- **Sonic Footprint**: maps listening behavior into dimensions such as acoustic/electronic/bass/instrumental.
-
-### 3) DSP and listening environments
-
-- Acoustic environments include **Neutral**, **Vinyl Warmth**, and **Concert Hall** profiles.
-- Crossfade flow controls with user-tunable duration and conflict handling around transport actions.
-- Sonic Prism real-time mix controls with spectral analysis modes.
-
-### 4) Visual system and UI
-
-- GPU-driven fluid visualizer (Navier-Stokes-inspired shader pipeline).
-- ACES-style tone mapping, bloom/vignette, and audio-reactive splat behavior.
-- Neon token snapping and ambient art-derived color treatment.
-- Full player, mini player, and foldable cover-screen mini hub surfaces.
-
-### 5) Reliability and release hardening
-
-- Release minification and resource shrinking are enabled.
-- Proguard rules are wired for media/network/database stack.
-- Debug health support includes StrictMode and LeakCanary integration.
+| Discover Weekly                                     | Fluid Visualizer                                     | Waveform Visualizer                                         |
+|-----------------------------------------------------|------------------------------------------------------|-------------------------------------------------------------|
+| ![Discover Weekly](screenshots/Discover_Weekly.png) | ![Fluid Visualizer](screenshots/Fluid_Visulizer.png) | ![Waveform Visualizer](screenshots/Waveform_Visualizer.png) |
 
 ---
 
-## Architecture Overview
+## 🚀 Key Features
 
-TigerPlayer follows MVVM with repository/data-source boundaries and reactive state via Kotlin Flows.
+### Dual Playback Engine
 
-### UI layer
+TigerPlayer unifies:
 
-- Compose screens for Home, Library, Cloud, Full Player, Queue, Settings, and detail routes.
-- Navigation graph in `app/src/main/java/com/example/tigerplayer/navigation/NavGraph.kt`.
-- Bottom-tab shell and player sheet orchestration in `app/src/main/java/com/example/tigerplayer/ui/main/MainScreen.kt`.
+- Local music playback via Media3
+- Spotify playback via Spotify App Remote
+- Shared controls, queue management, and playback state
 
-### Domain/engine layer
+### Smart Discovery
 
-- Playback routing and state coordination through engine/service classes.
-- DSP processing and spectral analysis in engine package.
-- Metadata and enrichment orchestration for artist and lyrics experiences.
+Personalised recommendations generated entirely on-device.
 
-### Data layer
+- **Day List** based on listening habits and time of day
+- **Discovery Weekly** for resurfacing forgotten tracks
+- **Heavy Rotation** tracking
+- **Sonic Footprint** listening analytics
 
-- Room database + DAOs for track cache, playback history, artist cache, and analytics reads.
-- DataStore-backed settings and persisted user controls.
-- Retrofit-based integrations for remote metadata APIs.
+### Fluid Visualizer
 
----
+A custom GPU-based visualizer featuring:
 
-## Discovery Logic (Day List + Discovery Weekly)
-
-### Day List
-
-- Data source: `DashboardViewModel.daylistTracks`.
-- Repository bridge: `AudioRepository.getDaylistTracks(...)`.
-- DAO query: `TigerDao.getDaylistTracks(...)`.
-- Strategy: chooses tracks based on recent listening buckets plus artist/genre affinity.
-
-### Discovery Weekly
-
-- Data source: `DashboardViewModel.discoveryWeeklyTracks`.
-- Repository bridge: `AudioRepository.getDiscoveryWeeklyTracks(...)`.
-- DAO query: `TigerDao.getDiscoveryWeeklyTracks(...)`.
-- Strategy:
-  - Include never-played tracks and stale tracks.
-  - Boost candidates matching top-genre signals from listening history.
-  - Randomize final ordering and cap list size.
-
-### UI flow for Discovery Weekly
-
-1. Home screen shows curation row when `discoveryWeeklyTracks` is non-empty.
-2. Navigation route opens `discover_weekly_detail?origin=...`.
-3. Detail screen supports Play Feed, Random Scan, and per-track play actions.
+- Audio-reactive fluid simulations
+- Dynamic colour extraction
+- Bloom effects
+- ACES tone mapping
+- Real-time shader rendering
 
 ---
 
-## Project Layout
+## 🏗️ Architecture
+
+TigerPlayer follows **Clean MVVM** with **Unidirectional Data Flow (UDF)** powered by Kotlin Coroutines and StateFlow.
 
 ```text
-TigerPlayer/
-  app/
-	src/main/java/com/example/tigerplayer/
-	  data/           # Room entities/dao, repositories, remote api
-	  engine/         # Playback, DSP, render/analysis engines
-	  navigation/     # Screen routes + nav graph
-	  service/        # Media service/controller integration
-	  ui/             # Compose screens and components
-  docs/               # Validation, issue review, implementation notes
-  gradle/             # Version catalog + wrapper config
+UI (Jetpack Compose)
+        │
+        ▼
+Domain / Engine Layer
+        │
+        ▼
+Data Layer
+ ├── Media3
+ ├── Spotify Remote
+ ├── Room
+ ├── DataStore
+ └── Remote APIs
 ```
 
 ---
 
-## Requirements
+## 🛠 Tech Stack
 
-- **Android Studio**: Ladybug or newer recommended.
-- **JDK**: 17 (project compile target).
-- **Android SDK**:
-  - `minSdk = 29`
-  - `targetSdk = 36`
-  - `compileSdk = 36`
-- **Device recommendation**: Android 13+ for best UI/visualizer behavior.
-
-Reference: `app/build.gradle.kts`.
+| Component    | Technology                  |
+|--------------|-----------------------------|
+| Language     | Kotlin 2.x                  |
+| UI           | Jetpack Compose             |
+| Audio        | AndroidX Media3 / ExoPlayer |
+| Database     | Room                        |
+| Preferences  | DataStore                   |
+| Networking   | Retrofit                    |
+| Architecture | MVVM + UDF                  |
+| Visualizer   | OpenGL ES 3.0+              |
+| JDK          | 17                          |
 
 ---
 
-## Setup
+## 🔑 Setup
 
-TigerPlayer reads cloud/API secrets from a root-level `secrets.properties`.
-
-### 1) Create `secrets.properties`
+Create a `secrets.properties` file in the project root:
 
 ```properties
-SPOTIFY_CLIENT_ID=your_client_id
-LASTFM_API_KEY=your_lastfm_key
-YOUTUBE_API_KEY=your_youtube_key
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+LASTFM_API_KEY=your_lastfm_api_key
+YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
-> Spotify auth uses Authorization Code + PKCE, so no client secret is read, stored, or needed.
-
-If this file is missing, the build still compiles with placeholder values, but cloud integrations will not work correctly.
-
-### 2) Spotify dashboard setup
-
-1. Register an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Whitelist package `com.example.tigerplayer` and your signing SHA-1.
-3. Ensure redirect placeholders match app config (`tigerplayer://callback`).
-
-### 3) Open and sync
-
-1. Open project root in Android Studio.
-2. Let Gradle sync complete.
-3. Confirm SDK/platform packages requested by AGP are installed.
+> Spotify authentication uses Authorization Code with PKCE. No Spotify client secret is required.
 
 ---
 
-## Build and Run
+## 🎧 Spotify Configuration
 
-```zsh
-cd /Users/tyejaedon/StudioProjects/TigerPlayer
+1. Create an app in the Spotify Developer Dashboard.
+2. Use package name:
+
+```text
+com.example.tigerplayer
+```
+
+3. Add your signing SHA-1 fingerprints.
+4. Register:
+
+```text
+tigerplayer://callback
+```
+
+---
+
+## 🔨 Build
+
+Debug build:
+
+```bash
 ./gradlew :app:assembleDebug
 ```
 
-Install from Android Studio or use your usual deploy flow to a connected device.
+Release build:
 
-For release packaging:
-
-```zsh
-cd /Users/tyejaedon/StudioProjects/TigerPlayer
+```bash
 ./gradlew :app:assembleRelease
 ```
 
----
+Run tests:
 
-## Testing and Validation
-
-Recommended baseline checks:
-
-```zsh
-cd /Users/tyejaedon/StudioProjects/TigerPlayer
+```bash
 ./gradlew :app:testDebugUnitTest
+```
+
+Run lint:
+
+```bash
 ./gradlew :app:lintDebug
 ```
 
-Pre-flight matrix for RC validation lives in `docs/PreFlightValidationMatrix.md`.
+---
+
+## 📂 Project Structure
+
+```text
+app/
+├── data/          # Database, repositories, APIs
+├── engine/        # Playback, DSP, visualizer engines
+├── navigation/    # Navigation graph
+├── service/       # Media services
+└── ui/            # Compose screens and components
+
+docs/              # Documentation
+```
 
 ---
 
-## Troubleshooting
+## 🤝 Contributing
 
-### Cloud features are not working
+Contributions are welcome.
 
-- Verify `secrets.properties` keys are set and non-placeholder.
-- Rebuild after changing secrets so `BuildConfig` updates.
+Before submitting a PR:
 
-### Spotify auth callback fails
-
-- Recheck package name and SHA-1 in Spotify dashboard.
-- Confirm callback scheme/host path placeholders match app manifest placeholders.
-
-### Discovery rows are empty
-
-- Confirm local library cache exists (initial scan completed).
-- Discovery queries depend on cached tracks and playback history signals.
-
-### Performance issues in visualizer surfaces
-
-- Test with lower device thermal load and battery saver off.
-- Compare behavior with PiP/fullscreen transitions to isolate lifecycle regressions.
+1. Open or link an issue.
+2. Keep changes focused and scoped.
+3. Run tests and lint checks.
+4. Update documentation when needed.
 
 ---
 
-## Release Notes
+## ❤️ Credits
 
-- Detailed 2.0 notes: `docs/Release-Notes-2.0.md`
-- Issue/evidence review: `docs/Issues-Review-2026-07-10.md`
-- Status rundown: `docs/Issue-Status-Rundown-2026-07-18.md`
+Created by **Jaedon** in Nairobi, Kenya.
 
----
-
-## Contributing
-
-Pull requests are welcome. For larger changes:
-
-1. Open or reference an issue first.
-2. Keep changes scoped by feature area.
-3. Include validation commands/results in PR notes.
-4. Update docs when behavior or setup changes.
-
----
-
-## Credits
-
-Forged in Nairobi by **Jaedon**.
-
-If you find a bug in the archives or want to add a new ritual, contributions are appreciated.
+TigerPlayer is an ongoing exploration of high-fidelity Android audio, intelligent music discovery, modern UI design, and real-time graphics.
