@@ -185,7 +185,7 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
             null
         }
 
-        if (displayManager != null && listener != null) {
+        if (displayManager != null) {
             try {
                 displayManager.registerDisplayListener(listener, null)
             } catch (e: Exception) {
@@ -194,7 +194,7 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         }
 
         onDispose {
-            if (displayManager != null && listener != null) {
+            if (displayManager != null) {
                 try {
                     displayManager.unregisterDisplayListener(listener)
                 } catch (e: Exception) {
@@ -267,7 +267,7 @@ fun CoverScreenMiniHub(
 
     // FIX: Interactive Sheet State (Enhanced for Cover Screen Stability)
     var queueVisible by remember { mutableStateOf(false) }
-    
+
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
     val artworkDescription = remember(track?.id, track?.title, track?.artist) {
@@ -497,6 +497,7 @@ fun CoverScreenMiniHub(
                     CoverQueueSheet(
                         queue = uiState.queue,
                         currentId = track?.id,
+                        currentIndex = uiState.currentQueueIndex,
                         onTrackTapped = {
                             playerViewModel.playTrack(it)
                             queueVisible = false
@@ -517,7 +518,7 @@ private fun TrackInfoText(
     isLarge: Boolean
 ) {
     Spacer(modifier = Modifier.height(if (isLarge) 12.dp else 8.dp))
-    
+
     Text(
         text = track?.title ?: "TIGER PLAYER",
         color = Color.White,
@@ -526,7 +527,7 @@ private fun TrackInfoText(
         style = if (isLarge) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Black
     )
-    
+
     Text(
         text = track?.artist?.uppercase() ?: "WITCHER ARCHIVE",
         color = TigerNeonOrange,
@@ -625,6 +626,7 @@ private fun CoverControlButton(
 private fun CoverQueueSheet(
     queue: List<com.example.tigerplayer.data.model.AudioTrack>,
     currentId: String?,
+    currentIndex: Int,
     onTrackTapped: (com.example.tigerplayer.data.model.AudioTrack) -> Unit
 ) {
     Box(
@@ -642,8 +644,8 @@ private fun CoverQueueSheet(
             )
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        val upcoming = remember(queue, currentId) {
-            queue.filter { it.id != currentId }.take(8)
+        val upcoming = remember(queue, currentIndex) {
+            if (currentIndex in queue.indices) queue.drop(currentIndex).take(9) else queue.take(9)
         }
 
         val queueListState = rememberLazyListState()
@@ -772,7 +774,7 @@ private fun Modifier.coverScreenGestures(
 ): Modifier {
     return pointerInput(swipeThresholdPx, tapSlopPx) {
         awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
+            val down = awaitFirstDown(requireUnconsumed = true)
 
             // FIX: System Edge Exclusion Zone (ignore outer 12% of the screen)
             val edgeX = size.width * 0.12f
