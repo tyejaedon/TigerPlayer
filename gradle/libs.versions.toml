@@ -7,6 +7,7 @@ documentfile = "1.1.0"
 gson = "2.14.0"
 jtransforms = "3.2"
 kotlin = "2.4.20"
+ksp = "2.3.12"
 kotlinxCoroutinesPlayServices = "1.11.0"
 kotlinxCoroutinesTest = "1.11.0"
 
@@ -132,3 +133,5 @@ androidx-browser = { group = "androidx.browser", name = "browser", version.ref =
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
