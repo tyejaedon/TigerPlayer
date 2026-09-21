@@ -139,6 +139,10 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
    It is an existing workaround tracked in issue #75; do not build on it.
 7. **Never** edit anything under `app/build/`, `build/`, or `.gradle/` — generated output.
 8. Do not "fix" unrelated files you happen to open. AIRP Phase 2 forbids out-of-scope changes.
+9. **Never** commit or push directly to `master`. It is branch-protected (PR + status checks
+   required); a direct push is rejected by GitHub. Always create a feature branch first
+   (`git checkout -b fix/issue-<ID>-<slug>` or similar) and land changes via a pull request. See
+   `.github/instructions/git-workflow.instructions.md`.
 
 ---
 
