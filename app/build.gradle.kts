@@ -109,6 +109,11 @@ configure<ApplicationExtension> {
 
     sourceSets {
         // Exposes the committed Room schema JSON to MigrationTestHelper (issue #43 / #74).
+        // Added to debug so Robolectric JVM unit tests and androidTest can load schemas,
+        // while ensuring schemas are never packaged into release builds.
+        getByName("debug") {
+            assets.srcDir("$projectDir/schemas")
+        }
         getByName("androidTest") {
             assets.srcDir("$projectDir/schemas")
         }
@@ -208,6 +213,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.room.testing)
     // Robolectric provides a real android.net.Uri on the JVM, so URI/signing logic can be unit
     // tested without a device. Test-only; ships nothing.
     testImplementation(libs.robolectric)
