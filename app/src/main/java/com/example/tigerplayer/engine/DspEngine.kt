@@ -7,6 +7,7 @@ import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.util.UnstableApi
+import com.tigerplayer.data.local.ReplayGainMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -46,6 +47,16 @@ class AdaptiveDspEngine @Inject constructor(
     private var isActive = true
     private var inputEnded = false
     @Volatile private var autoMakeupGain = 1.0f
+    @Volatile private var replayGainLinear = 1.0f
+    @Volatile private var replayGainMode = ReplayGainMode.SMART
+    @Volatile private var replayGainPreampDb = 0.0f
+    @Volatile private var replayGainPreventClipping = true
+    @Volatile private var replayGainTrackDb: Double? = null
+    @Volatile private var replayGainAlbumDb: Double? = null
+    @Volatile private var replayGainTrackPeak: Double? = null
+    @Volatile private var replayGainAlbumPeak: Double? = null
+    @Volatile private var isSequentialAlbumPlay = false
+    @Volatile private var isBitPerfect = false
 
     private var buffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var outputBuffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
@@ -252,6 +263,50 @@ class AdaptiveDspEngine @Inject constructor(
         )
     }
 
+    fun setReplayGainConfig(
+        mode: ReplayGainMode,
+        preampDb: Float,
+        preventClipping: Boolean,
+        isBitPerfect: Boolean
+    ) {
+        this.replayGainMode = mode
+        this.replayGainPreampDb = preampDb
+        this.replayGainPreventClipping = preventClipping
+        this.isBitPerfect = isBitPerfect
+        recalculateReplayGain()
+    }
+
+    fun setReplayGainTrackData(
+        trackGainDb: Double?,
+        albumGainDb: Double?,
+        trackPeak: Double?,
+        albumPeak: Double?,
+        isSequentialAlbumPlay: Boolean
+    ) {
+        this.replayGainTrackDb = trackGainDb
+        this.replayGainAlbumDb = albumGainDb
+        this.replayGainTrackPeak = trackPeak
+        this.replayGainAlbumPeak = albumPeak
+        this.isSequentialAlbumPlay = isSequentialAlbumPlay
+        recalculateReplayGain()
+    }
+
+    fun getEffectiveReplayGainLinear(): Float = replayGainLinear
+
+    private fun recalculateReplayGain() {
+        replayGainLinear = ReplayGainCalculator.calculateEffectiveLinearGain(
+            mode = replayGainMode,
+            preampDb = replayGainPreampDb,
+            preventClipping = replayGainPreventClipping,
+            trackGainDb = replayGainTrackDb,
+            albumGainDb = replayGainAlbumDb,
+            trackPeak = replayGainTrackPeak,
+            albumPeak = replayGainAlbumPeak,
+            isSequentialAlbumPlay = isSequentialAlbumPlay,
+            isBitPerfect = isBitPerfect
+        )
+    }
+
     fun setSpectralAnalysisMode(mode: SpectralAnalysisMode) {
         spectralAnalysisMode = mode
     }
@@ -395,9 +450,10 @@ class AdaptiveDspEngine @Inject constructor(
                 if (channels == 2) sampleR = localDeviceFilters[i].process(sampleR, 1)
             }
 
-            // FIX: Apply auto-makeup gain before active EQ to prevent SVF internal clipping
-            var eqSampleL = sampleL * autoMakeupGain
-            var eqSampleR = sampleR * autoMakeupGain
+            // FIX: Apply auto-makeup gain and ReplayGain preamp before active EQ to prevent SVF internal clipping
+            val totalInputGain = autoMakeupGain * replayGainLinear
+            var eqSampleL = sampleL * totalInputGain
+            var eqSampleR = sampleR * totalInputGain
 
             for (i in localActiveFilters.indices) {
                 eqSampleL = localActiveFilters[i].process(eqSampleL, 0)

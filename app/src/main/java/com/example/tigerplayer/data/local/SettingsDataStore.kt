@@ -51,6 +51,13 @@ enum class AudioReactiveHapticsProfile {
     AGGRESSIVE
 }
 
+enum class ReplayGainMode {
+    OFF,
+    TRACK,
+    ALBUM,
+    SMART
+}
+
 data class TigerSettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pureAmoledBlack: Boolean = false,
@@ -69,7 +76,10 @@ data class TigerSettingsState(
     val prismVocals: Float = 1f,
     val prismBeats: Float = 1f,
     val prismInstruments: Float = 1f,
-    val prismSpectralAnalysis: PrismSpectralAnalysis = PrismSpectralAnalysis.FFT
+    val prismSpectralAnalysis: PrismSpectralAnalysis = PrismSpectralAnalysis.FFT,
+    val replayGainMode: ReplayGainMode = ReplayGainMode.SMART,
+    val replayGainPreampDb: Float = 0f,
+    val replayGainPreventClipping: Boolean = true
 )
 
 @Singleton
@@ -99,7 +109,10 @@ class SettingsDataStore @Inject constructor(
             prismVocals = (prefs[PRISM_VOCALS] ?: 1f).coerceIn(0f, 1f),
             prismBeats = (prefs[PRISM_BEATS] ?: 1f).coerceIn(0f, 1f),
             prismInstruments = (prefs[PRISM_INSTRUMENTS] ?: 1f).coerceIn(0f, 1f),
-            prismSpectralAnalysis = enumOrDefault(prefs[PRISM_SPECTRAL_ANALYSIS], PrismSpectralAnalysis.FFT)
+            prismSpectralAnalysis = enumOrDefault(prefs[PRISM_SPECTRAL_ANALYSIS], PrismSpectralAnalysis.FFT),
+            replayGainMode = enumOrDefault(prefs[REPLAY_GAIN_MODE], ReplayGainMode.SMART),
+            replayGainPreampDb = (prefs[REPLAY_GAIN_PREAMP_DB] ?: 0f).coerceIn(-15f, 15f),
+            replayGainPreventClipping = prefs[REPLAY_GAIN_PREVENT_CLIPPING] ?: true
         )
     }
 
@@ -171,6 +184,18 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[PRISM_SPECTRAL_ANALYSIS] = mode.name }
     }
 
+    suspend fun setReplayGainMode(mode: ReplayGainMode) {
+        dataStore.edit { it[REPLAY_GAIN_MODE] = mode.name }
+    }
+
+    suspend fun setReplayGainPreampDb(preampDb: Float) {
+        dataStore.edit { it[REPLAY_GAIN_PREAMP_DB] = preampDb.coerceIn(-15f, 15f) }
+    }
+
+    suspend fun setReplayGainPreventClipping(enabled: Boolean) {
+        dataStore.edit { it[REPLAY_GAIN_PREVENT_CLIPPING] = enabled }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -199,6 +224,9 @@ class SettingsDataStore @Inject constructor(
         val PRISM_BEATS = floatPreferencesKey("prism_beats")
         val PRISM_INSTRUMENTS = floatPreferencesKey("prism_instruments")
         val PRISM_SPECTRAL_ANALYSIS = stringPreferencesKey("prism_spectral_analysis")
+        val REPLAY_GAIN_MODE = stringPreferencesKey("replay_gain_mode")
+        val REPLAY_GAIN_PREAMP_DB = floatPreferencesKey("replay_gain_preamp_db")
+        val REPLAY_GAIN_PREVENT_CLIPPING = booleanPreferencesKey("replay_gain_prevent_clipping")
     }
 }
 
