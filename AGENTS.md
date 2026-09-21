@@ -150,15 +150,15 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
 
 Do not treat existing code in these areas as a pattern to copy. Each has an open issue.
 
-| Area | Problem | Issue |
-|---|---|---|
-| `StatsEngine` / `HistoryRepository` | Plays recorded at track start with full duration; all analytics inflated | #42 |
-| `DatabaseModule` / `TigerDatabase` | No migrations, `exportSchema = false` | #43 |
-| `AudioRepository.toAudioTrack` | Malformed Navidrome URL; auth tokens cached into URIs | #44 |
-| `SpotifyAuthManager` | Client secret shipped in APK; no refresh-token handling | #46 |
-| `MediaControllerManager` | `release()` never called; receiver registered without export flag | #48 |
-| `PlayerViewModel` | 603-line god object shared across all screens | #72 |
-| `MediaControllerManager` queue serialization | 18 positional fields, index-parsed, untested | #73 |
+| Area                                         | Problem                                                                  | Issue |
+|----------------------------------------------|--------------------------------------------------------------------------|-------|
+| `StatsEngine` / `HistoryRepository`          | Plays recorded at track start with full duration; all analytics inflated | #42   |
+| `DatabaseModule` / `TigerDatabase`           | No migrations, `exportSchema = false`                                    | #43   |
+| `AudioRepository.toAudioTrack`               | Malformed Navidrome URL; auth tokens cached into URIs                    | #44   |
+| `SpotifyAuthManager`                         | Client secret shipped in APK; no refresh-token handling                  | #46   |
+| `MediaControllerManager`                     | `release()` never called; receiver registered without export flag        | #48   |
+| `PlayerViewModel`                            | 603-line god object shared across all screens                            | #72   |
+| `MediaControllerManager` queue serialization | 18 positional fields, index-parsed, untested                             | #73   |
 
 ---
 
