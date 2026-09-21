@@ -135,8 +135,8 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
 4. **Never** bump the Room `version` in `TigerDatabase` without adding a migration **and** a
    migration test. See issue #43 — there are currently no migrations at all.
 5. **Never** add a dependency version inline. Use `gradle/libs.versions.toml`.
-6. **Never** widen `configurations.all { resolutionStrategy { force(...) } }` in `app/build.gradle.kts`.
-   It is an existing workaround tracked in issue #75; do not build on it.
+6. **Never** reintroduce `configurations.all { resolutionStrategy { force(...) } }` in `app/build.gradle.kts`.
+   The legacy stdlib workaround has been decommissioned (issue #75).
 7. **Never** edit anything under `app/build/`, `build/`, or `.gradle/` — generated output.
 8. Do not "fix" unrelated files you happen to open. AIRP Phase 2 forbids out-of-scope changes.
 9. **Never** commit or push directly to `master`. It is branch-protected (PR + status checks

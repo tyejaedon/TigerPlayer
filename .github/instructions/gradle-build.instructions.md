@@ -19,23 +19,14 @@ implementation("androidx.media3:media3-exoplayer:1.4.1")
 Add a `[versions]` entry, then a `[libraries]` alias referencing it. Do not inline a version string
 in `build.gradle.kts`.
 
-## Do not extend the resolution-strategy workaround
+## Do not reintroduce resolution-strategy workarounds
 
-`app/build.gradle.kts` ends with:
+The legacy workaround that force-pinned the Kotlin stdlib across configurations to satisfy an
+alpha dependency (`androidx.compose.remote.creation`) has been decommissioned and removed (issue #75).
 
-```kotlin
-configurations.all {
-    resolutionStrategy { force("org.jetbrains.kotlin:kotlin-stdlib:2.2.20") /* ... */ }
-}
-```
-
-This force-pins the Kotlin stdlib across **every** configuration to satisfy an alpha dependency
-(`androidx.compose.remote.creation`). It is a known liability tracked in issue #75 and will mask
-genuine incompatibilities on the next Kotlin/KSP/AGP upgrade.
-
-- Do not add new `force(...)` entries.
-- Do not add new dependencies that require it.
-- If you can remove the need for it, do — that closes part of #75.
+- Do not add `configurations.all { resolutionStrategy { force(...) } }` entries.
+- Do not add dependencies requiring forced stdlib or compiler workarounds.
+- Rely on version catalog declarations and standard Gradle dependency resolution.
 
 ## Secrets
 
