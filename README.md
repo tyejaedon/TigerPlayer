@@ -168,10 +168,11 @@ TigerPlayer reads cloud/API secrets from a root-level `secrets.properties`.
 
 ```properties
 SPOTIFY_CLIENT_ID=your_client_id
-SPOTIFY_CLIENT_SECRET=your_client_secret
 LASTFM_API_KEY=your_lastfm_key
 YOUTUBE_API_KEY=your_youtube_key
 ```
+
+> Spotify auth uses Authorization Code + PKCE, so no client secret is read, stored, or needed.
 
 If this file is missing, the build still compiles with placeholder values, but cloud integrations will not work correctly.
 
