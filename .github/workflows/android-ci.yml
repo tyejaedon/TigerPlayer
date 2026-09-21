@@ -44,6 +44,12 @@ jobs:
   # Split into its own job because lintAnalyzeDebug takes ~4 minutes and
   # would otherwise delay test feedback on every PR.
   # Baseline at time of writing: 91 issues, 0 errors (84 warnings, 7 hints).
+  #
+  # `lintDebug` became ambiguous once the foss/full flavor dimension was
+  # added (app/build.gradle.kts) — Gradle now requires the flavor-qualified
+  # task name. Lint both flavors: they compile different source sets
+  # (src/foss vs src/full) and a lint error unique to one would otherwise
+  # go unnoticed.
   # ---------------------------------------------------------------
   lint:
     name: Lint
@@ -53,8 +59,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Android build
         uses: ./.github/actions/setup-android-build
-      - name: Lint
-        run: ./gradlew :app:lintDebug --stacktrace
+      - name: Lint (foss)
+        run: ./gradlew :app:lintFossDebug --stacktrace
+      - name: Lint (full)
+        run: ./gradlew :app:lintFullDebug --stacktrace
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -68,6 +76,13 @@ jobs:
 
   # ---------------------------------------------------------------
   # R8 release validation and deterministic emulator smoke coverage.
+  #
+  # R8/bundle validation targets the `foss` flavor: it's the flavor with no
+  # proprietary dependencies and no required secrets, so it's the
+  # reproducible build F-Droid will actually run (see
+  # docs/FDroid-Submission-Plan.md). Unit tests run for both flavors since
+  # src/foss and src/full each carry flavor-specific code
+  # (SpotifyAppRemoteClientImpl).
   # ---------------------------------------------------------------
   unit-test-and-release:
     name: Unit tests, R8, and bundle
@@ -79,12 +94,14 @@ jobs:
         uses: ./.github/actions/setup-android-build
       - name: Verify Gradle dependency checksums
         run: ./gradlew --dependency-verification=strict help --stacktrace
-      - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
-      - name: Validate R8 release shrinker
-        run: ./gradlew :app:minifyReleaseWithR8 --stacktrace
-      - name: Build unsigned release bundle
-        run: ./gradlew :app:bundleRelease --stacktrace
+      - name: Unit tests (foss)
+        run: ./gradlew :app:testFossDebugUnitTest --stacktrace
+      - name: Unit tests (full)
+        run: ./gradlew :app:testFullDebugUnitTest --stacktrace
+      - name: Validate R8 release shrinker (foss)
+        run: ./gradlew :app:minifyFossReleaseWithR8 --stacktrace
+      - name: Build unsigned release bundle (foss)
+        run: ./gradlew :app:bundleFossRelease --stacktrace
       - name: Upload test and release reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -93,7 +110,7 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/test-results/
-            app/build/outputs/mapping/release/
+            app/build/outputs/mapping/fossRelease/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -121,7 +138,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: >-
-            ./gradlew :app:connectedDebugAndroidTest --stacktrace
+            ./gradlew :app:connectedFossDebugAndroidTest --stacktrace
             --tests "com.example.tigerplayer.ExampleInstrumentedTest"
             --tests "com.example.tigerplayer.data.local.TigerDaoIntegrityTest"
       - name: Upload Android test report
