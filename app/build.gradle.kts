@@ -55,6 +55,26 @@ configure<ApplicationExtension> {
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
     }
 
+    // FOSS/F-Droid distributability (see docs/system-review.md and CONTRIBUTING.md):
+    //   - `foss`: no vendored proprietary AAR, no Spotify App Remote dependency. Builds and
+    //     runs fully with zero external API keys. This is the flavor submitted to F-Droid.
+    //   - `full`: current feature set, including Spotify App Remote playback.
+    // Spotify App Remote access is guarded behind the `SpotifyAppRemoteClient` interface
+    // (app/src/main/.../data/repository/SpotifyAppRemoteClient.kt), backed by a real
+    // implementation in src/full and a no-op stub in src/foss, so common code never imports
+    // the proprietary AAR directly.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("foss") {
+            dimension = "distribution"
+            buildConfigField("boolean", "SPOTIFY_APP_REMOTE_AVAILABLE", "false")
+        }
+        create("full") {
+            dimension = "distribution"
+            buildConfigField("boolean", "SPOTIFY_APP_REMOTE_AVAILABLE", "true")
+        }
+    }
+
     buildTypes {
         getByName("release") { // Safely scoped inside the new extension
             isMinifyEnabled = true
@@ -138,9 +158,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.window)
 
-    // Remote Compose (The Alpha Library)
-    implementation(libs.androidx.compose.remote.creation.compose)
-
     // --- Media3 (The Heart of TigerPlayer) ---
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
@@ -177,8 +194,11 @@ dependencies {
     implementation(libs.youtubePlayer)
 
     // --- Spotify Integration ---
-    implementation(libs.auth)
-    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
+    // Vendored proprietary AAR + auth SDK are `full`-only so the `foss` flavor never depends
+    // on, or ships, proprietary binaries (F-Droid requirement). See
+    // data/repository/SpotifyAppRemoteClient.kt for the flavor-guarded abstraction.
+    "fullImplementation"(libs.auth)
+    "fullImplementation"(files("libs/spotify-app-remote-release-0.8.0.aar"))
 
     // --- Google Play Services ---
     implementation(libs.play.services.location)
@@ -205,21 +225,6 @@ dependencies {
     debugImplementation(libs.leakcanary.android)
 }
 
-// =========================================================================
-// THE FIREWALL: KSP & KOTLIN VERSION SYNCHRONIZATION
-// =========================================================================
-// This forces all alpha libraries (like remote-creation-compose) to back down
-// and use the exact stable version of Kotlin that KSP is expecting.
-configurations.all {
-    resolutionStrategy {
-        // Hardcoded to 2.2.20 to match your KSP compiler exactly
-        val kotlinVersion = "2.4.20"
-        force("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
-        force("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
-        force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")
-        force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlinVersion")
-    }
-}
 
 // Robolectric's FileDescriptorInterceptor reflectively reaches into the JDK-internal
 // jdk.internal.access.SharedSecrets class while shimming android.os.SharedMemory on JDK 17+.
