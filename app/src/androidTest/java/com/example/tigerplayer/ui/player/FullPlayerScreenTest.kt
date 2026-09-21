@@ -1,12 +1,12 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify

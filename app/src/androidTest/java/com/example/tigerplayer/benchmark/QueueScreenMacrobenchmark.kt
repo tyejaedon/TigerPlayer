@@ -1,4 +1,4 @@
-package com.example.tigerplayer.benchmark
+package com.tigerplayer.benchmark
 
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.StartupMode
@@ -73,7 +73,7 @@ class QueueScreenMacrobenchmark {
     }
 
     private companion object {
-        const val TARGET_PACKAGE = "com.example.tigerplayer"
+        const val TARGET_PACKAGE = "com.tigerplayer"
     }
 }
 

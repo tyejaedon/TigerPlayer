@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.coverscreen
+package com.tigerplayer.ui.coverscreen
 
 import android.view.Display
 import androidx.activity.ComponentActivity

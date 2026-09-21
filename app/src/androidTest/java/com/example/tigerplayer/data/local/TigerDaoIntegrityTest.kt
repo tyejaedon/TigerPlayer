@@ -1,10 +1,10 @@
-package com.example.tigerplayer.data.local
+package com.tigerplayer.data.local
 
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.example.tigerplayer.data.local.entity.CachedTrackEntity
+import com.tigerplayer.data.local.entity.CachedTrackEntity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals

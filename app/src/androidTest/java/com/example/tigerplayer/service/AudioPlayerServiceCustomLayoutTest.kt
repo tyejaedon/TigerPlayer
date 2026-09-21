@@ -1,4 +1,4 @@
-package com.example.tigerplayer.service
+package com.tigerplayer.service
 
 import android.content.ComponentName
 import android.content.Context
@@ -12,7 +12,7 @@ import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.example.tigerplayer.R
+import com.tigerplayer.R
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.equalizer
+package com.tigerplayer.ui.equalizer
 
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
@@ -17,8 +17,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.example.tigerplayer.engine.AudioReactiveFrame
-import com.example.tigerplayer.engine.FilterType
+import com.tigerplayer.engine.AudioReactiveFrame
+import com.tigerplayer.engine.FilterType
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertTrue
 import org.junit.Rule

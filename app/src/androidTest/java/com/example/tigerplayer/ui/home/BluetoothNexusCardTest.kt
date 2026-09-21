@@ -1,10 +1,10 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import com.example.tigerplayer.ui.theme.TigerPlayerTheme
-import com.example.tigerplayer.utils.BluetoothDeviceInfo
+import com.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.utils.BluetoothDeviceInfo
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -37,7 +37,7 @@ class BluetoothNexusCardTest {
         }
 
         composeRule.onNodeWithText("AERO BUDS").assertIsDisplayed()
-        composeRule.onNodeWithText("AAC • A2DP • Dual").assertIsDisplayed()
+        composeRule.onNodeWithText("AAC â€¢ A2DP â€¢ Dual").assertIsDisplayed()
         composeRule.onNodeWithText("Audio/Video").assertIsDisplayed()
         composeRule.onNodeWithText("84%").assertIsDisplayed()
         composeRule.onNodeWithText("BATTERY").assertIsDisplayed()
@@ -66,7 +66,7 @@ class BluetoothNexusCardTest {
         }
 
         composeRule.onNodeWithText("Unknown").assertIsDisplayed()
-        composeRule.onNodeWithText("N/A • A2DP • Unknown").assertIsDisplayed()
+        composeRule.onNodeWithText("N/A â€¢ A2DP â€¢ Unknown").assertIsDisplayed()
         composeRule.onNodeWithText("Audio Device").assertIsDisplayed()
         composeRule.onNodeWithText("Hidden").assertIsDisplayed()
     }

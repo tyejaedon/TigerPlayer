@@ -1,16 +1,16 @@
-package com.example.tigerplayer.service
+package com.tigerplayer.service
 
 import androidx.media3.common.C
 import androidx.media3.session.MediaController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.example.tigerplayer.data.local.PlaybackPrefs
-import com.example.tigerplayer.data.local.SettingsDataStore
-import com.example.tigerplayer.data.local.TigerSettingsState
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.MediaDataRepository
-import com.example.tigerplayer.engine.SleepTimerController
-import com.example.tigerplayer.utils.BluetoothDeviceManager
+import com.tigerplayer.data.local.PlaybackPrefs
+import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.local.TigerSettingsState
+import com.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.repository.MediaDataRepository
+import com.tigerplayer.engine.SleepTimerController
+import com.tigerplayer.utils.BluetoothDeviceManager
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk

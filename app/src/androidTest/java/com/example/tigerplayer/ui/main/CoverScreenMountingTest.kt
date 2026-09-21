@@ -1,12 +1,12 @@
-package com.example.tigerplayer.ui.main
+package com.tigerplayer.ui.main
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import com.example.tigerplayer.ui.coverscreen.CoverScreenTestTags
-import com.example.tigerplayer.ui.coverscreen.CoverScreenWindowState
-import com.example.tigerplayer.ui.player.PlayerUiState
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.tigerplayer.ui.coverscreen.CoverScreenWindowState
+import com.tigerplayer.ui.player.PlayerUiState
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
