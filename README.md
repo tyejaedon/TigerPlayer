@@ -102,7 +102,14 @@ Data Layer
 
 ## 🔑 Setup
 
-Create a `secrets.properties` file in the project root:
+TigerPlayer ships two build flavors:
+
+- **`foss`** — no vendored proprietary binaries, no Spotify App Remote dependency, builds and
+  runs with zero API keys. This is the flavor submitted to F-Droid.
+- **`full`** — the current feature set, including Spotify App Remote playback.
+
+Create a `secrets.properties` file in the project root if you want Spotify / Last.fm / YouTube
+features (optional — the build succeeds without it, those features are simply disabled):
 
 ```properties
 SPOTIFY_CLIENT_ID=your_spotify_client_id
@@ -134,28 +141,34 @@ tigerplayer://callback
 
 ## 🔨 Build
 
-Debug build:
+FOSS build (no API keys, no proprietary AAR — this is what F-Droid builds):
 
 ```bash
-./gradlew :app:assembleDebug
+./gradlew :app:assembleFossDebug
+```
+
+Full build (includes Spotify App Remote):
+
+```bash
+./gradlew :app:assembleFullDebug
 ```
 
 Release build:
 
 ```bash
-./gradlew :app:assembleRelease
+./gradlew :app:assembleFossRelease
 ```
 
 Run tests:
 
 ```bash
-./gradlew :app:testDebugUnitTest
+./gradlew :app:testFossDebugUnitTest
 ```
 
 Run lint:
 
 ```bash
-./gradlew :app:lintDebug
+./gradlew :app:lintFossDebug
 ```
 
 ---

@@ -23,7 +23,6 @@ mockk = "1.14.11"
 mockkAndroid = "1.14.11"
 navigationCompose = "2.9.8"
 playServicesLocation = "21.4.0"
-remoteCreationCompose = "1.0.0-alpha19"
 
 # Dependencies
 hilt = "2.60.1"
@@ -79,7 +78,6 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime" }
 
 # Alpha / Standalone Compose / Extras
-androidx-compose-remote-creation-compose = { group = "androidx.compose.remote", name = "remote-creation-compose", version.ref = "remoteCreationCompose" }
 androidx-glance = { group = "androidx.glance", name = "glance", version.ref = "glance" }
 
 # Media, Network & Injection

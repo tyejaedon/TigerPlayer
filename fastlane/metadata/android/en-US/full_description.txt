@@ -1,0 +1,14 @@
+TigerPlayer is a modern Android music player built with Kotlin, Jetpack Compose, and AndroidX
+Media3.
+
+Features in this build (foss flavor):
+
+* Local audio playback via Media3 / ExoPlayer, including gapless queue management
+* On-device listening analytics: Day List, Discovery Weekly, Heavy Rotation, Sonic Footprint
+* Real-time GPU-powered fluid visualizer with audio-reactive effects
+* Room-backed library, playback history, and playlists
+* No tracking, no ads, no proprietary dependencies, no network account required
+
+This build does not include Spotify App Remote integration, which depends on a proprietary SDK
+that cannot ship in a FOSS build. See the project README for the full (non-FOSS) build.
+

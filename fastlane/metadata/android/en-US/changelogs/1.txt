@@ -1,0 +1,3 @@
+Initial FOSS release: local playback, on-device discovery, and the fluid visualizer, with no
+proprietary dependencies.
+

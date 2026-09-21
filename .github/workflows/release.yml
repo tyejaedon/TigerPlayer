@@ -29,8 +29,12 @@ jobs:
         with:
           cache-read-only: "false"
       - run: ./gradlew --dependency-verification=strict help --stacktrace
-      - run: ./gradlew :app:minifyReleaseWithR8 --stacktrace
-      - run: ./gradlew :app:bundleRelease --stacktrace
+      # `full` is the distributable flavor for tagged releases (includes Spotify App Remote).
+      # The reproducible `foss` build submitted to F-Droid is validated separately by
+      # android-ci.yml and built directly by F-Droid's own tooling — see
+      # docs/FDroid-Submission-Plan.md.
+      - run: ./gradlew :app:minifyFullReleaseWithR8 --stacktrace
+      - run: ./gradlew :app:bundleFullRelease --stacktrace
       - name: Generate checksums
         shell: bash
         run: |
@@ -47,8 +51,8 @@ jobs:
         with:
           name: unsigned-release-${{ github.sha }}
           path: |
-            app/build/outputs/bundle/release/*.aab
-            app/build/outputs/mapping/release/mapping.txt
+            app/build/outputs/bundle/fullRelease/*.aab
+            app/build/outputs/mapping/fullRelease/mapping.txt
             release-artifacts/SHA256SUMS.txt
             release-artifacts/tigerplayer-sbom.spdx.json
           if-no-files-found: error
