@@ -185,7 +185,7 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
             null
         }
 
-        if (displayManager != null && listener != null) {
+        if (displayManager != null) {
             try {
                 displayManager.registerDisplayListener(listener, null)
             } catch (e: Exception) {
@@ -194,7 +194,7 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         }
 
         onDispose {
-            if (displayManager != null && listener != null) {
+            if (displayManager != null) {
                 try {
                     displayManager.unregisterDisplayListener(listener)
                 } catch (e: Exception) {
@@ -497,6 +497,7 @@ fun CoverScreenMiniHub(
                     CoverQueueSheet(
                         queue = uiState.queue,
                         currentId = track?.id,
+                        currentIndex = uiState.currentQueueIndex,
                         onTrackTapped = {
                             playerViewModel.playTrack(it)
                             queueVisible = false
@@ -625,6 +626,7 @@ private fun CoverControlButton(
 private fun CoverQueueSheet(
     queue: List<com.example.tigerplayer.data.model.AudioTrack>,
     currentId: String?,
+    currentIndex: Int,
     onTrackTapped: (com.example.tigerplayer.data.model.AudioTrack) -> Unit
 ) {
     Box(
@@ -642,8 +644,8 @@ private fun CoverQueueSheet(
             )
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        val upcoming = remember(queue, currentId) {
-            queue.filter { it.id != currentId }.take(8)
+        val upcoming = remember(queue, currentIndex) {
+            if (currentIndex in queue.indices) queue.drop(currentIndex).take(9) else queue.take(9)
         }
 
         val queueListState = rememberLazyListState()
