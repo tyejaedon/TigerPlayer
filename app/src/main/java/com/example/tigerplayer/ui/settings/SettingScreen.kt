@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.settings
+package com.tigerplayer.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,23 +81,23 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
-import com.example.tigerplayer.BuildConfig
-import com.example.tigerplayer.data.backup.RestoreStrategy
-import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
-import com.example.tigerplayer.data.local.DefaultPlayerView
-import com.example.tigerplayer.data.local.SkipShortAudio
-import com.example.tigerplayer.data.local.ThemeMode
-import com.example.tigerplayer.data.local.TigerAccentStyle
-import com.example.tigerplayer.service.HapticsDebugEvent
-import com.example.tigerplayer.service.HapticsDebugState
-import com.example.tigerplayer.ui.theme.PremiumGlassCard
-import com.example.tigerplayer.ui.theme.TigerCyberCyan
-import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.TigerSpectralViolet
-import com.example.tigerplayer.ui.theme.TigerToxicLime
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.tigerGlow
+import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.backup.RestoreStrategy
+import com.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.tigerplayer.data.local.DefaultPlayerView
+import com.tigerplayer.data.local.SkipShortAudio
+import com.tigerplayer.data.local.ThemeMode
+import com.tigerplayer.data.local.TigerAccentStyle
+import com.tigerplayer.service.HapticsDebugEvent
+import com.tigerplayer.service.HapticsDebugState
+import com.tigerplayer.ui.theme.PremiumGlassCard
+import com.tigerplayer.ui.theme.TigerCyberCyan
+import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerSpectralViolet
+import com.tigerplayer.ui.theme.TigerToxicLime
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.tigerGlow
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -571,7 +571,7 @@ private fun BackupRestoreSection(viewModel: SettingsViewModel, accent: Color) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 "Saves playlists, listening history, and app settings to a JSON file you choose. " +
-                    "Navidrome/Spotify sign-in is never included — you'll sign back in after a restore.",
+                    "Navidrome/Spotify sign-in is never included â€” you'll sign back in after a restore.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
             )

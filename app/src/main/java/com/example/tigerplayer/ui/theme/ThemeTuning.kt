@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 enum class NeonContrastMode {
     BALANCED,

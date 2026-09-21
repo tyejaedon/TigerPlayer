@@ -1,10 +1,10 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
 import java.security.MessageDigest
 import java.util.UUID
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.remote.NavidromeUri
-import com.example.tigerplayer.data.remote.api.RemoteTrack
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.remote.NavidromeUri
+import com.tigerplayer.data.remote.api.RemoteTrack
 
 data class NavidromeAuth(
     val u: String,

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import java.security.MessageDigest
 import java.util.Base64 as JavaBase64

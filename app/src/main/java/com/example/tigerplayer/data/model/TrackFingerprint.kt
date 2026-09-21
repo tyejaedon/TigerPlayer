@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.model
+package com.tigerplayer.data.model
 
 /**
  * Cheap identity used for library-cache diffing (issue #49).

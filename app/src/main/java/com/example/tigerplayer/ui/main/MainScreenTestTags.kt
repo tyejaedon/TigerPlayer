@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.main
+package com.tigerplayer.ui.main
 
 /**
  * Centralized Compose test tags for MainScreen, following the PrismTestTags convention: tests

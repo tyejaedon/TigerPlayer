@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 import android.graphics.Bitmap
 import android.graphics.Canvas

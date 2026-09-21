@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.library
+package com.tigerplayer.ui.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,9 +21,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.R
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.R
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 
 // ==========================================
 // --- 1. THE MAIN GRID (Adaptive Layout) ---
@@ -48,7 +48,7 @@ fun AlbumGridCard(
     ) {
 
         // =========================
-        // 🎨 COVER ART
+        // ðŸŽ¨ COVER ART
         // =========================
         Box(
             modifier = Modifier
@@ -128,7 +128,7 @@ fun AlbumGridCard(
         Spacer(modifier = Modifier.height(12.dp))
 
         // =========================
-        // 🧾 METADATA
+        // ðŸ§¾ METADATA
         // =========================
 
         Text(

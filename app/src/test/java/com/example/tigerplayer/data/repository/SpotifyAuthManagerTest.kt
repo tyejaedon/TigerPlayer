@@ -1,8 +1,8 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
-import com.example.tigerplayer.data.local.SpotifyPrefs
-import com.example.tigerplayer.data.remote.api.SpotifyAuthApi
-import com.example.tigerplayer.data.remote.model.SpotifyTokenResponse
+import com.tigerplayer.data.local.SpotifyPrefs
+import com.tigerplayer.data.remote.api.SpotifyAuthApi
+import com.tigerplayer.data.remote.model.SpotifyTokenResponse
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every

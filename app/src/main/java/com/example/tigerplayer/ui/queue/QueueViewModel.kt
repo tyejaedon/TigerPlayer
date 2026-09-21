@@ -1,9 +1,9 @@
-package com.example.tigerplayer.ui.queue
+package com.tigerplayer.ui.queue
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.service.MediaControllerManager
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.service.MediaControllerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.components
+package com.tigerplayer.ui.components
 
 import android.os.Build
 import androidx.annotation.RequiresExtension
@@ -26,10 +26,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.theme.*
+import com.tigerplayer.R
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.theme.*
 
 private val AardBlue = Color(0xFF007AFF)
 

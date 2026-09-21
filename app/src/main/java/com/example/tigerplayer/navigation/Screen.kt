@@ -1,7 +1,7 @@
-package com.example.tigerplayer.navigation
+package com.tigerplayer.navigation
 
 import android.net.Uri
-import com.example.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.WitcherIcons
 import androidx.compose.ui.graphics.vector.ImageVector
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets

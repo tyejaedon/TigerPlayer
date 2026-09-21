@@ -1,11 +1,11 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
-import com.example.tigerplayer.data.local.MediaSource
-import com.example.tigerplayer.data.local.dao.ArtistStats
-import com.example.tigerplayer.data.local.dao.SonicFootprintStats
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.dao.TrackStats
-import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.tigerplayer.data.local.MediaSource
+import com.tigerplayer.data.local.dao.ArtistStats
+import com.tigerplayer.data.local.dao.SonicFootprintStats
+import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.dao.TrackStats
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest

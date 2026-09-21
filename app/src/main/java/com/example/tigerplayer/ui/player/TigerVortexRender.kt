@@ -1,5 +1,5 @@
 @file:SuppressLint("NewApi")
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
 import android.opengl.GLES30
@@ -8,7 +8,7 @@ import android.util.Log
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import com.example.tigerplayer.engine.AudioReactiveFrame
+import com.tigerplayer.engine.AudioReactiveFrame
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer

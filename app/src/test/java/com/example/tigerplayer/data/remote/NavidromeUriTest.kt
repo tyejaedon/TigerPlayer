@@ -1,7 +1,7 @@
-package com.example.tigerplayer.data.remote
+package com.tigerplayer.data.remote
 
 import android.net.Uri
-import com.example.tigerplayer.data.local.NavidromePrefs
+import com.tigerplayer.data.local.NavidromePrefs
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals

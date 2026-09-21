@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.remote.model
+package com.tigerplayer.data.remote.model
 
 import com.google.gson.annotations.SerializedName
 

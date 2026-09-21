@@ -1,13 +1,13 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.content.Context
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
-import com.example.tigerplayer.engine.graphics.FrameBuffer
-import com.example.tigerplayer.engine.graphics.PingPongBuffer
-import com.example.tigerplayer.engine.graphics.Shader
-import com.example.tigerplayer.engine.graphics.FluidMathUtils
-import com.example.tigerplayer.utils.FluidShaders
+import com.tigerplayer.engine.graphics.FrameBuffer
+import com.tigerplayer.engine.graphics.PingPongBuffer
+import com.tigerplayer.engine.graphics.Shader
+import com.tigerplayer.engine.graphics.FluidMathUtils
+import com.tigerplayer.utils.FluidShaders
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -220,7 +220,7 @@ class FluidRenderer @Inject constructor(
 
         val target = if (isDensity) densityRes else velocityRes
         target?.let {
-            // 🔥 FIX: Bind the texture to unit 0 and tell the shader to look at unit 0
+            // ðŸ”¥ FIX: Bind the texture to unit 0 and tell the shader to look at unit 0
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, it.readTexture)
             shader.setUniform("uTarget", 0)

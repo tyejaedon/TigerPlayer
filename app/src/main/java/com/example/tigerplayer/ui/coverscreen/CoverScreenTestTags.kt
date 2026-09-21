@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.coverscreen
+package com.tigerplayer.ui.coverscreen
 
 /**
  * Centralized Compose test tags for the cover-screen mini hub, following the [PrismTestTags]

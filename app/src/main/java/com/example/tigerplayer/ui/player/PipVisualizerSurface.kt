@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box

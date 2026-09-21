@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.youtube
+package com.tigerplayer.ui.youtube
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,8 +22,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import com.example.tigerplayer.data.remote.api.YouTubeTrack
-import com.example.tigerplayer.ui.theme.*
+import com.tigerplayer.data.remote.api.YouTubeTrack
+import com.tigerplayer.ui.theme.*
 
 @Composable
 fun YouTubeSearchScreen(

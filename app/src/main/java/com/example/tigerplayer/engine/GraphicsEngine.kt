@@ -1,4 +1,4 @@
-package com.example.tigerplayer.engine.graphics
+package com.tigerplayer.engine.graphics
 
 import android.opengl.GLES30
 import android.util.Log
@@ -7,7 +7,7 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /**
- * 📦 FRAMEBUFFER (FBO)
+ * ðŸ“¦ FRAMEBUFFER (FBO)
  * Manages off-screen rendering surfaces.
  */
 class FrameBuffer(
@@ -82,7 +82,7 @@ class FrameBuffer(
 }
 
 /**
- * 🏓 PING-PONG BUFFER
+ * ðŸ“ PING-PONG BUFFER
  * Essential for simulations where the next state depends on the previous state.
  */
 
@@ -120,7 +120,7 @@ class PingPongBuffer(
 }
 
 /**
- * 🔥 SHADER ENGINE
+ * ðŸ”¥ SHADER ENGINE
  * Manages compilation and cached uniform locations.
  */
 class Shader(vertexSource: String, fragmentSource: String) {

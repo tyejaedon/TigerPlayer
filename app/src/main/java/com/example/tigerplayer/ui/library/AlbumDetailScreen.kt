@@ -1,5 +1,5 @@
 @file:SuppressLint("NewApi")
-package com.example.tigerplayer.ui.library
+package com.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
 import android.graphics.drawable.BitmapDrawable
@@ -38,14 +38,14 @@ import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.theme.PremiumGlassCard
-import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.theme.PremiumGlassCard
+import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
 import kotlinx.coroutines.launch
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)

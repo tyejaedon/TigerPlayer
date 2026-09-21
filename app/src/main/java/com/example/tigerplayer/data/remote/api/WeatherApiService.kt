@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.remote.api
+package com.tigerplayer.data.remote.api
 
 import androidx.annotation.Keep
 import com.google.gson.annotations.SerializedName

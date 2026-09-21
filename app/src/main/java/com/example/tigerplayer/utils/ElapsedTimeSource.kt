@@ -1,4 +1,4 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
 /**
  * Monotonic elapsed-time source.

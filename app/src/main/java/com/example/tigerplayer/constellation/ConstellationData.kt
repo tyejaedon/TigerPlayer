@@ -1,9 +1,9 @@
-package com.example.tigerplayer.constellation
+package com.tigerplayer.constellation
 
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.HistoryRepository
-import com.example.tigerplayer.engine.MetadataEngine
-import com.example.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.engine.MetadataEngine
+import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +25,7 @@ class ConstellationDataEngine @Inject constructor(
     private val refreshNonce = MutableStateFlow(0L)
 
     /**
-     * 🔥 THE FIX: Returns a Flow instead of a one-shot suspend function.
+     * ðŸ”¥ THE FIX: Returns a Flow instead of a one-shot suspend function.
      * This combines history data with the live MetadataEngine details.
      */
     fun getGraphFlow(): Flow<ConstellationGraph> {
@@ -57,7 +57,7 @@ class ConstellationDataEngine @Inject constructor(
             val edges = mutableListOf<GraphEdge>()
 
             /* -----------------------------------
-               ☀️ 1. GALAXY CORE
+               â˜€ï¸ 1. GALAXY CORE
             ----------------------------------- */
             val coreId = "core_galaxy"
             nodes.add(GraphNode(
@@ -71,7 +71,7 @@ class ConstellationDataEngine @Inject constructor(
             ))
 
         /* -----------------------------------
-           🌠 2. ARTIST STARS (Reactive Mapping)
+           ðŸŒ  2. ARTIST STARS (Reactive Mapping)
         ----------------------------------- */
             val artistNodes = topArtists.map { artist ->
                 val normalized = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
@@ -98,7 +98,7 @@ class ConstellationDataEngine @Inject constructor(
             nodes.addAll(artistNodes)
 
         /* -----------------------------------
-           🪐 3. ALBUM ORBITAL SYSTEMS
+           ðŸª 3. ALBUM ORBITAL SYSTEMS
         ----------------------------------- */
             artistNodes.forEach { artist ->
                 val artistKey = ArtistUtils.getBaseArtist(artist.label).lowercase().trim()
@@ -127,7 +127,7 @@ class ConstellationDataEngine @Inject constructor(
             }
 
         /* -----------------------------------
-           ☄️ 4. TRACK DEBRIS FIELD
+           â˜„ï¸ 4. TRACK DEBRIS FIELD
         ----------------------------------- */
             val rogueCoreId = "core_rogue"
             nodes.add(GraphNode(

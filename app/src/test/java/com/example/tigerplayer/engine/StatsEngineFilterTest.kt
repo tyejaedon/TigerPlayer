@@ -1,6 +1,6 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
-import com.example.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.data.repository.HistoryRepository
 import io.mockk.mockk
 import java.time.DayOfWeek
 import java.time.Instant

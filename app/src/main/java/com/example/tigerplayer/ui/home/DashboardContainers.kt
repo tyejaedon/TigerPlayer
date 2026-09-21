@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,13 +27,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.PremiumGlassCard
-import com.example.tigerplayer.ui.theme.TigerCyberCyan
-import com.example.tigerplayer.ui.theme.TigerHotPink
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.tigerGlow
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.PremiumGlassCard
+import com.tigerplayer.ui.theme.TigerCyberCyan
+import com.tigerplayer.ui.theme.TigerHotPink
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.tigerGlow
 
 @Composable
 fun DashboardContainersSection(

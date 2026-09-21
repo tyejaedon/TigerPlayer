@@ -1,4 +1,4 @@
-package com.example.tigerplayer.navigation
+package com.tigerplayer.navigation
 
 /**
  * Controls top-level navigation behavior for different device contexts.

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush

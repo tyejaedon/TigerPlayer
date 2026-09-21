@@ -1,16 +1,16 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresExtension
-import com.example.tigerplayer.data.local.NavidromePrefs
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.NavidromeRepository
-import com.example.tigerplayer.data.repository.SpotifyAuthManager
-import com.example.tigerplayer.data.source.LocalAudioDataSource
-import com.example.tigerplayer.di.SubsonicHostManager
-import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
+import com.tigerplayer.data.local.NavidromePrefs
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.repository.NavidromeRepository
+import com.tigerplayer.data.repository.SpotifyAuthManager
+import com.tigerplayer.data.source.LocalAudioDataSource
+import com.tigerplayer.di.SubsonicHostManager
+import com.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 

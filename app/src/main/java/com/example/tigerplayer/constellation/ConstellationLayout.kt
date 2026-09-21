@@ -1,4 +1,4 @@
-package com.example.tigerplayer.constellation
+package com.tigerplayer.constellation
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -37,7 +37,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         )
 
         /* -----------------------------------
-           🌌 1. GALAXY CORE (Gravitational Center)
+           ðŸŒŒ 1. GALAXY CORE (Gravitational Center)
         ----------------------------------- */
         graph.nodes.find { it.type == NodeType.GALAXY_CORE && it.parentId == null }?.let { core ->
             result.add(
@@ -68,7 +68,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           🌠 2. ARTIST LAYER (Fibonacci Spiral Arms)
+           ðŸŒ  2. ARTIST LAYER (Fibonacci Spiral Arms)
         ----------------------------------- */
         val artists = graph.nodes.filter { it.type == NodeType.ARTIST }
         val goldenAngle = PI * (3.0 - sqrt(5.0))
@@ -108,7 +108,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           🪐 3. ALBUM LAYER (Orbital Chains)
+           ðŸª 3. ALBUM LAYER (Orbital Chains)
         ----------------------------------- */
         val albums = graph.nodes.filter { it.type == NodeType.ALBUM }
         albums.groupBy { it.parentId }.forEach { (artistId, group) ->
@@ -147,7 +147,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           ☄️ 4. TRACK LAYER (Debris Field)
+           â˜„ï¸ 4. TRACK LAYER (Debris Field)
         ----------------------------------- */
         graph.nodes.filter { it.type == NodeType.TRACK }.groupBy { it.parentId }.forEach { (parentId, group) ->
             val step = (2 * PI) / group.size.coerceAtLeast(1)
@@ -188,5 +188,5 @@ class OrbitalLayoutEngine @Inject constructor() {
 }
 
 /* -----------------------------------
-   🛠 DATA STRUCTURES
+   ðŸ›  DATA STRUCTURES
 ----------------------------------- */

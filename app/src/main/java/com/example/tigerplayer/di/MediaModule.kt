@@ -1,4 +1,4 @@
-package com.example.tigerplayer.di
+package com.tigerplayer.di
 
 import dagger.Module
 import dagger.hilt.InstallIn

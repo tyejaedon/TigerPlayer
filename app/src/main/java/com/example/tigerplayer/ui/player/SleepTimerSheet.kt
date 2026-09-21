@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 
 import androidx.compose.foundation.layout.*
@@ -8,10 +8,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.tigerplayer.engine.SleepTimerMode
-import com.example.tigerplayer.engine.SleepTimerState
-import com.example.tigerplayer.ui.theme.elevatedSurface
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.engine.SleepTimerMode
+import com.tigerplayer.engine.SleepTimerState
+import com.tigerplayer.ui.theme.elevatedSurface
+import com.tigerplayer.ui.theme.glassEffect
 
 private val DURATION_PRESETS_MIN = listOf(5, 15, 30, 45, 60)
 

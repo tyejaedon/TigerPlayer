@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 // This is the clean, UI-ready data courier
 data class WeatherInfo(

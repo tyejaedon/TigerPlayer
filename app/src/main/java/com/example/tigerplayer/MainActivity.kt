@@ -1,4 +1,4 @@
-package com.example.tigerplayer
+package com.tigerplayer
 
 import android.app.PictureInPictureParams
 import android.content.Context
@@ -33,15 +33,15 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.compose.rememberNavController
-import com.example.tigerplayer.data.local.SettingsDataStore
-import com.example.tigerplayer.data.local.ThemeMode
-import com.example.tigerplayer.data.repository.PkceGenerator
-import com.example.tigerplayer.data.repository.SpotifyAuthManager
-import com.example.tigerplayer.navigation.TigerPlayerNavGraph
-import com.example.tigerplayer.ui.player.PipVisualizerSurface
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.settings.SettingsViewModel
-import com.example.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.local.ThemeMode
+import com.tigerplayer.data.repository.PkceGenerator
+import com.tigerplayer.data.repository.SpotifyAuthManager
+import com.tigerplayer.navigation.TigerPlayerNavGraph
+import com.tigerplayer.ui.player.PipVisualizerSurface
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.settings.SettingsViewModel
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch

@@ -1,21 +1,21 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.model.MusicFolder
-import com.example.tigerplayer.data.model.Playlist
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.HistoryRepository
-import com.example.tigerplayer.data.repository.MediaDataRepository
-import com.example.tigerplayer.data.repository.MusicFolderRepository
-import com.example.tigerplayer.ui.home.HomeUiState
-import com.example.tigerplayer.ui.home.UserStatistics
-import com.example.tigerplayer.ui.player.LibraryArtist
-import com.example.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.MusicFolder
+import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.data.repository.MediaDataRepository
+import com.tigerplayer.data.repository.MusicFolderRepository
+import com.tigerplayer.ui.home.HomeUiState
+import com.tigerplayer.ui.home.UserStatistics
+import com.tigerplayer.ui.player.LibraryArtist
+import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -70,7 +70,7 @@ class LibraryEngine @Inject constructor(
         val allTracks: List<AudioTrack>
     )
 
-    // 🔥 THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
+    // ðŸ”¥ THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
     @OptIn(FlowPreview::class)
     fun getAggregatedLibraryFlow(
         unifiedTracksFlow: Flow<List<AudioTrack>>,
@@ -280,7 +280,7 @@ class LibraryEngine @Inject constructor(
      * Passes through the scan status flow so the ViewModel can update UI progress bars.
      */
 
-    fun getLocalAudioScanFlow(forceRefresh: Boolean = false): Flow<com.example.tigerplayer.data.source.LocalAudioDataSource.ScanStatus> {
+    fun getLocalAudioScanFlow(forceRefresh: Boolean = false): Flow<com.tigerplayer.data.source.LocalAudioDataSource.ScanStatus> {
         return audioRepository.getLocalTracksWithProgress(forceRefresh)
     }
 

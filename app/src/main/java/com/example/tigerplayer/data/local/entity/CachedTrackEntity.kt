@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.local.entity
+package com.tigerplayer.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity

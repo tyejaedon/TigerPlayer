@@ -1,7 +1,7 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
-import com.example.tigerplayer.data.local.PlaybackPrefs
-import com.example.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.PlaybackPrefs
+import com.tigerplayer.data.local.dao.TigerDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first

@@ -1,14 +1,14 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.net.Uri
 import android.util.Log
-import com.example.tigerplayer.BuildConfig
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.remote.api.SpotifyApiService
-import com.example.tigerplayer.data.remote.model.SpotifyAlbum
-import com.example.tigerplayer.data.remote.model.SpotifyImage
-import com.example.tigerplayer.data.remote.model.SpotifyPlaylist
-import com.example.tigerplayer.data.remote.model.SpotifyTrack
+import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.remote.api.SpotifyApiService
+import com.tigerplayer.data.remote.model.SpotifyAlbum
+import com.tigerplayer.data.remote.model.SpotifyImage
+import com.tigerplayer.data.remote.model.SpotifyPlaylist
+import com.tigerplayer.data.remote.model.SpotifyTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,7 +62,7 @@ class SpotifyRepository @Inject constructor(
 
     val currentSpotifyTrack: StateFlow<String?> = _spotifyPlaybackState
         .map { state ->
-            state?.track?.let { "${it.title} • ${it.artist}" } ?: "Not Playing"
+            state?.track?.let { "${it.title} â€¢ ${it.artist}" } ?: "Not Playing"
         }
         .stateIn(repositoryScope, SharingStarted.Eagerly, "Not Playing")
 

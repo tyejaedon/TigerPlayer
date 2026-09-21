@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 /**
  * Snapshot of Spotify App Remote playback state, decoupled from the proprietary SDK's own

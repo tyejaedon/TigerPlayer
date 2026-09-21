@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.equalizer
+package com.tigerplayer.ui.equalizer
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -28,9 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.tigerplayer.engine.AudioReactiveFrame
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.engine.AudioReactiveFrame
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)

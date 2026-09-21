@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -25,7 +25,7 @@ val TigerPaper = Color(0xFFFFFFFF)
 val TigerMutedSilk = Color(0xFFE8EDF5)
 
 // ------------------------------
-// ACCENTS (Samsung-style “clean neon”)
+// ACCENTS (Samsung-style â€œclean neonâ€)
 // ------------------------------
 val TigerNeonOrange = Color(0xFFFF7A1A)
 val TigerCyberCyan = Color(0xFF00E5FF)

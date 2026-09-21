@@ -1,16 +1,16 @@
-package com.example.tigerplayer.ui.constellation
+package com.tigerplayer.ui.constellation
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.constellation.ConstellationDataEngine
-import com.example.tigerplayer.constellation.GraphEdge
-import com.example.tigerplayer.constellation.NodeType
-import com.example.tigerplayer.constellation.OrbitalLayoutEngine
-import com.example.tigerplayer.constellation.PositionedNode
-import com.example.tigerplayer.data.repository.HistoryRepository
-import com.example.tigerplayer.engine.MetadataEngine
-import com.example.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.constellation.ConstellationDataEngine
+import com.tigerplayer.constellation.GraphEdge
+import com.tigerplayer.constellation.NodeType
+import com.tigerplayer.constellation.OrbitalLayoutEngine
+import com.tigerplayer.constellation.PositionedNode
+import com.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.engine.MetadataEngine
+import com.tigerplayer.utils.ArtistUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -19,7 +19,7 @@ import javax.inject.Inject
 import kotlin.math.roundToInt
 
 /* -----------------------------------
-   🌌 UI STATE
+   ðŸŒŒ UI STATE
 ----------------------------------- */
 
 sealed class ConstellationState {
@@ -47,7 +47,7 @@ data class ConstellationArtistReading(
 )
 
 /* -----------------------------------
-   🧠 VIEWMODEL
+   ðŸ§  VIEWMODEL
 ----------------------------------- */
 
 @HiltViewModel
@@ -59,7 +59,7 @@ class ConstellationViewModel @Inject constructor(
 ) : ViewModel() {
 
     /**
-     * 🔥 THE SUPREME REACTIVE PIPELINE
+     * ðŸ”¥ THE SUPREME REACTIVE PIPELINE
      * Converts the raw semantic graph into a physics-positioned UI state.
      * flowOn ensures the heavy layout math happens on the Default dispatcher.
      */
@@ -93,7 +93,7 @@ class ConstellationViewModel @Inject constructor(
         )
 
     /* -----------------------------------
-       🌌 INSIGHT ENGINE
+       ðŸŒŒ INSIGHT ENGINE
     ----------------------------------- */
 
     private fun generateGalaxyInsight(density: Float, layoutNodes: List<PositionedNode>): String {

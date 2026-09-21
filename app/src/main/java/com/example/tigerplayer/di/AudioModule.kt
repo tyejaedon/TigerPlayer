@@ -1,7 +1,7 @@
-package com.example.tigerplayer.di
+package com.tigerplayer.di
 
 import android.os.SystemClock
-import com.example.tigerplayer.utils.ElapsedTimeSource
+import com.tigerplayer.utils.ElapsedTimeSource
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

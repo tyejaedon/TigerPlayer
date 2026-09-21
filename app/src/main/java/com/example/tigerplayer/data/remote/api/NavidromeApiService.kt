@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.remote.api
+package com.tigerplayer.data.remote.api
 
 import com.google.gson.annotations.SerializedName
 import retrofit2.Response

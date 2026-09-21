@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.library
+package com.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
@@ -18,12 +18,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.R
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 import java.util.concurrent.TimeUnit
 
 

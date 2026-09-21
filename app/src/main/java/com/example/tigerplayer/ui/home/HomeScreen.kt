@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -41,23 +41,23 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImage
-import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.components.DiscoverCarousel
-import com.example.tigerplayer.ui.components.RecentlyPlayedRow
-import com.example.tigerplayer.ui.constellation.ConstellationScreen
-import com.example.tigerplayer.ui.constellation.ConstellationViewModel
-import com.example.tigerplayer.ui.dashboard.CurationFeedMeta
-import com.example.tigerplayer.ui.dashboard.DashboardViewModel
-import com.example.tigerplayer.ui.extras.NowBriefWidgetWrapper
-import com.example.tigerplayer.ui.library.*
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.prism.PrismInlineMixer
-import com.example.tigerplayer.ui.prism.PrismViewModel
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.R
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.components.DiscoverCarousel
+import com.tigerplayer.ui.components.RecentlyPlayedRow
+import com.tigerplayer.ui.constellation.ConstellationScreen
+import com.tigerplayer.ui.constellation.ConstellationViewModel
+import com.tigerplayer.ui.dashboard.CurationFeedMeta
+import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.extras.NowBriefWidgetWrapper
+import com.tigerplayer.ui.library.*
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.prism.PrismInlineMixer
+import com.tigerplayer.ui.prism.PrismViewModel
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 import kotlin.math.absoluteValue
 
 // --- VANGUARD THEME CONSTANTS ---

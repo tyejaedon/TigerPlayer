@@ -1,8 +1,8 @@
-package com.example.tigerplayer.data.local.entity
+package com.tigerplayer.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.example.tigerplayer.data.local.MediaSource
+import com.tigerplayer.data.local.MediaSource
 
 @Entity(tableName = "playback_history")
 data class PlaybackHistoryEntity(

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.equalizer
+package com.tigerplayer.ui.equalizer
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -60,9 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.tigerplayer.engine.AudioReactiveFrame
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.engine.AudioReactiveFrame
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 import kotlin.math.abs
 
 private val CyberCyan = Color(0xFF00E5FF)

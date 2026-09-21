@@ -1,4 +1,4 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

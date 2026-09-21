@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.library
+package com.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
 import android.widget.Toast
@@ -57,21 +57,21 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
-import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.model.Playlist
-import com.example.tigerplayer.data.repository.ArtistDetails
-import com.example.tigerplayer.engine.LibraryEngine
-import com.example.tigerplayer.engine.LibraryEngine.Companion.LIKED_SONGS_ID
-import com.example.tigerplayer.ui.player.LibraryArtist
-import com.example.tigerplayer.ui.player.PlayerUiState
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.ensureVisibleOn
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.R
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.data.repository.ArtistDetails
+import com.tigerplayer.engine.LibraryEngine
+import com.tigerplayer.engine.LibraryEngine.Companion.LIKED_SONGS_ID
+import com.tigerplayer.ui.player.LibraryArtist
+import com.tigerplayer.ui.player.PlayerUiState
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.ensureVisibleOn
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
@@ -86,7 +86,7 @@ fun LibraryScreen(
     onNavigateToPlaylist: (Long, String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    // 🔥 NEW: Pull pre-seeded artist profiles from the VM vault
+    // ðŸ”¥ NEW: Pull pre-seeded artist profiles from the VM vault
     val artistDetails by viewModel.artistDetails.collectAsState()
 
     val tabs = listOf("Songs", "Albums", "Artists", "Playlists", "Folders")
@@ -261,7 +261,7 @@ fun VanguardLibraryTabs(
     val hapticFeedback = LocalHapticFeedback.current
     val lazyListState = rememberLazyListState()
 
-    // 🔥 THE FIX: Smoothly auto-centers the active tab in the viewport
+    // ðŸ”¥ THE FIX: Smoothly auto-centers the active tab in the viewport
     LaunchedEffect(pagerState.currentPage) {
         if (tabs.isNotEmpty()) {
             lazyListState.animateScrollToItem(
@@ -485,7 +485,7 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                                         1f
                                     )
 
-                                // 🔥 TRUE 3D CYLINDER PHYSICS
+                                // ðŸ”¥ TRUE 3D CYLINDER PHYSICS
                                 translationX =
                                     (fraction * fraction) * 45f // Slides outwards at screen boundaries
                                 rotationX =
@@ -1011,7 +1011,7 @@ fun FoldersTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) 
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // --- ⏰ DURATION DISPLAY ---
+            // --- â° DURATION DISPLAY ---
             Text(
                 text = formatDuration(track.durationMs),
                 style = MaterialTheme.typography.bodyMedium,
@@ -1314,7 +1314,7 @@ fun LazyListScope.renderSearchResults(
         }
         items(matchedArtists, key = { "artist_${it.name}" }) { artist ->
 
-            // 🔥 THE FIX: Extract HD images using the identical Lore logic
+            // ðŸ”¥ THE FIX: Extract HD images using the identical Lore logic
             val normalizedKey = remember(artist.name) {
                 ArtistUtils.getBaseArtist(artist.name).lowercase().trim()
             }

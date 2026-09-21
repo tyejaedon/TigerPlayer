@@ -1,8 +1,8 @@
-package com.example.tigerplayer.data.remote.api
+package com.tigerplayer.data.remote.api
 
 import android.util.Log
-import com.example.tigerplayer.BuildConfig
-import com.example.tigerplayer.di.IoDispatcher
+import com.tigerplayer.BuildConfig
+import com.tigerplayer.di.IoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import javax.inject.Inject

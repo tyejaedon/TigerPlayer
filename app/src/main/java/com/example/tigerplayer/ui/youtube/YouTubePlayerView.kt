@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.youtube
+package com.tigerplayer.ui.youtube
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.content.Context
 import android.database.ContentObserver
@@ -8,16 +8,16 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
-import com.example.tigerplayer.data.local.dao.PlaylistDao
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.dao.TrackStats
-import com.example.tigerplayer.data.local.entity.CachedTrackEntity
-import com.example.tigerplayer.data.local.entity.PlaylistEntity
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.model.Playlist
-import com.example.tigerplayer.data.source.LocalAudioDataSource
-import com.example.tigerplayer.data.source.SafFolderScanner
-import com.example.tigerplayer.utils.NavidromeMapper.toAudioTrack
+import com.tigerplayer.data.local.dao.PlaylistDao
+import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.dao.TrackStats
+import com.tigerplayer.data.local.entity.CachedTrackEntity
+import com.tigerplayer.data.local.entity.PlaylistEntity
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.data.source.LocalAudioDataSource
+import com.tigerplayer.data.source.SafFolderScanner
+import com.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -301,7 +301,7 @@ class AudioRepository @Inject constructor(
         tigerDao.updateTrackLikeStatus(trackId, isLiked)
     }
 
-    // 🔥 NEW: Persist the HD Artwork
+    // ðŸ”¥ NEW: Persist the HD Artwork
     suspend fun updateTrackArtworkUri(trackId: String, newUri: String) {
         tigerDao.updateTrackArtworkUri(trackId, newUri)
     }
@@ -364,7 +364,7 @@ class AudioRepository @Inject constructor(
 
     // Inside LibraryEngine or AudioRepository
     suspend fun savePlaylistOrder(playlistId: Long, tracks: List<AudioTrack>) {
-        // 🛡️ STOP THE GHOST: Don't allow operations on ID -1 or 0
+        // ðŸ›¡ï¸ STOP THE GHOST: Don't allow operations on ID -1 or 0
         if (playlistId <= 0) {
             Log.e("LibraryEngine", "Abort! Attempted to reorder invalid playlist ID: $playlistId")
             return

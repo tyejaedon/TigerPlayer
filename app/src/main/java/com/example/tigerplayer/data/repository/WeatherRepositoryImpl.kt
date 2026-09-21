@@ -1,8 +1,8 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.content.Context
-import com.example.tigerplayer.data.remote.api.WeatherApiService
-import com.example.tigerplayer.utils.Resource
+import com.tigerplayer.data.remote.api.WeatherApiService
+import com.tigerplayer.utils.Resource
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// 🔥 THE FIX: Tell Hilt to bind the WeatherRepository interface to the WeatherRepositoryImpl implementation
+// ðŸ”¥ THE FIX: Tell Hilt to bind the WeatherRepository interface to the WeatherRepositoryImpl implementation
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class WeatherRepositoryModule {

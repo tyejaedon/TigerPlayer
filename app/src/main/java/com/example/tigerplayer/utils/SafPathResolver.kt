@@ -1,4 +1,4 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
 import android.net.Uri
 import android.provider.DocumentsContract

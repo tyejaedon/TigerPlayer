@@ -1,5 +1,5 @@
 @file:SuppressLint("NewApi")
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -51,15 +51,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
-import com.example.tigerplayer.ui.library.SongOptionsSheet
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.ensureVisibleOn
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.withSafeAlpha
-import com.example.tigerplayer.utils.AttributionTags
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
+import com.tigerplayer.ui.library.SongOptionsSheet
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.ensureVisibleOn
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.withSafeAlpha
+import com.tigerplayer.utils.AttributionTags
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration.Companion.seconds
@@ -67,7 +67,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
-import com.example.tigerplayer.engine.SleepTimerMode
+import com.tigerplayer.engine.SleepTimerMode
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -402,7 +402,7 @@ private fun PlayerMainContent(
                 )
             }
             MainViewState.YOUTUBE_VIEWPORT -> {
-                com.example.tigerplayer.ui.youtube.YouTubeSearchScreen(
+                com.tigerplayer.ui.youtube.YouTubeSearchScreen(
                     isEmbedded = true,
                     onBackClick = { viewModel.setMainViewState(MainViewState.ARTWORK) }
                 )
@@ -553,7 +553,7 @@ private fun PlayerMainContent(
                         }
 
                       /*  AnimatedVisibility(visible = !isAlbumClarityMode && uiState.visualMode == PlayerVisualMode.SONIC_PRISM) {
-                            com.example.tigerplayer.ui.prism.PrismInlineMixer(
+                            com.tigerplayer.ui.prism.PrismInlineMixer(
                                 state = prismState,
                                 onVocalsChange = prismViewModel::updateVocals,
                                 onBeatsChange = prismViewModel::updateBeats,

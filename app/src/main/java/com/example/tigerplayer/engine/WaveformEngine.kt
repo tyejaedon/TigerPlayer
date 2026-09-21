@@ -1,13 +1,13 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.util.Log
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
-import com.example.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.WaveformCacheEntity
+import com.tigerplayer.data.model.AudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import java.nio.ByteOrder

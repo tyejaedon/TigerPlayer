@@ -1,4 +1,4 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +17,7 @@ data class SleepTimerState(
 
 /**
  * Pure timer/state logic, deliberately with no Player reference so it is unit-testable
- * without a real MediaSession (see testing.instructions.md — prefer testing an engine class
+ * without a real MediaSession (see testing.instructions.md â€” prefer testing an engine class
  * directly; AudioPlayerService itself is hard to unit test).
  */
 @Singleton

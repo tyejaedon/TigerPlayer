@@ -1,8 +1,8 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.player.StatItem
-import com.example.tigerplayer.utils.BluetoothDeviceInfo
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.player.StatItem
+import com.tigerplayer.utils.BluetoothDeviceInfo
 
 /**
  * THE VANGUARD STATS
@@ -19,7 +19,7 @@ data class UserStatistics(
 
     val totalListeningTimeHours: Int = 0,
 
-    // 🔥 NEW: Top Artists mapped directly into the home state for the Constellation & Analytics
+    // ðŸ”¥ NEW: Top Artists mapped directly into the home state for the Constellation & Analytics
     val topArtists: List<StatItem> = emptyList()
 )
 

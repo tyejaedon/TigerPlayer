@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -31,10 +31,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tigerplayer.ui.theme.TigerCyberCyan
-import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.utils.BluetoothDeviceInfo
+import com.tigerplayer.ui.theme.TigerCyberCyan
+import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.utils.BluetoothDeviceInfo
 import androidx.compose.ui.util.lerp
 
 @Composable
@@ -116,7 +116,7 @@ fun BluetoothNexusCard(
                 }
                 
                 Text(
-                    text = if (isExpanded) "Bluetooth nexus online" else "$codecLabel • $profileLabel",
+                    text = if (isExpanded) "Bluetooth nexus online" else "$codecLabel â€¢ $profileLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     maxLines = 1,
@@ -210,7 +210,7 @@ fun BluetoothNexusCard(
             }
         }
 
-        BluetoothStatusChip(label = if (isExpanded) "NEXUS CONNECTED" else "CONNECTED · TAP TO EXPAND")
+        BluetoothStatusChip(label = if (isExpanded) "NEXUS CONNECTED" else "CONNECTED Â· TAP TO EXPAND")
     }
 }
 

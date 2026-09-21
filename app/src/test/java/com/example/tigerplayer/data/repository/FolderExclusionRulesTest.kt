@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -6,7 +6,7 @@ import org.junit.Test
 
 /**
  * Coverage for issue #50's exclusion rules - the single decision point shared by
- * [com.example.tigerplayer.data.source.SafFolderScanner] (walking custom directories) and
+ * [com.tigerplayer.data.source.SafFolderScanner] (walking custom directories) and
  * [AudioRepository] (filtering MediaStore-derived tracks), so `.nomedia` and the exclude list
  * behave identically across scan, search and playback regardless of which source found a file.
  */

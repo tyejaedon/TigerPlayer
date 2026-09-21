@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tigerplayer.ui.prism.PrismUiState
+import com.tigerplayer.ui.prism.PrismUiState
 
 @Composable
 fun PrismInlineMixer(

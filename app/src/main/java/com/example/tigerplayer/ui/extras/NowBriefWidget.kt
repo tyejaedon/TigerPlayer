@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.extras
+package com.tigerplayer.ui.extras
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -33,9 +33,9 @@ import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tigerplayer.ui.home.WeatherUiState
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.home.WeatherUiState
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.bounceClick
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.Calendar
@@ -173,7 +173,7 @@ fun NowBriefWidget(
                                 append(weatherState.temperature)
                             }
                             withStyle(SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ambientGlowColor, baselineShift = BaselineShift.Superscript)) {
-                                append("°")
+                                append("Â°")
                             }
                         }
                     )

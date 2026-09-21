@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.local
+package com.tigerplayer.data.local
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences

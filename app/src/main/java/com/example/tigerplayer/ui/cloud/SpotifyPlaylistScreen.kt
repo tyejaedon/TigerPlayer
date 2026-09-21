@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.cloud
+package com.tigerplayer.ui.cloud
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -21,13 +21,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.tigerplayer.data.remote.model.SpotifyTrack
-import com.example.tigerplayer.ui.theme.DominantColorExtractor
-import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import com.tigerplayer.data.remote.model.SpotifyTrack
+import com.tigerplayer.ui.theme.DominantColorExtractor
+import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)

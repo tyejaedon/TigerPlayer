@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.local
+package com.tigerplayer.data.local
 
 import android.content.Context
 import android.content.SharedPreferences

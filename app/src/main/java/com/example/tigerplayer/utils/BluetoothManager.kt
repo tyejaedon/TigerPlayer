@@ -1,4 +1,4 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
 import android.annotation.SuppressLint
 import android.Manifest
@@ -17,7 +17,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import androidx.annotation.RequiresPermission
-import com.example.tigerplayer.data.local.PlaybackPrefs
+import com.tigerplayer.data.local.PlaybackPrefs
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*

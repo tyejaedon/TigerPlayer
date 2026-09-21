@@ -1,9 +1,9 @@
-package com.example.tigerplayer.data.remote
+package com.tigerplayer.data.remote
 
 import android.net.Uri
 import androidx.core.net.toUri
-import com.example.tigerplayer.data.local.NavidromePrefs
-import com.example.tigerplayer.utils.NavidromeSecurity
+import com.tigerplayer.data.local.NavidromePrefs
+import com.tigerplayer.utils.NavidromeSecurity
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,7 +24,7 @@ object NavidromeUri {
     const val HOST_ART = "art"
 
     /**
-     * Prefix applied to [com.example.tigerplayer.data.model.AudioTrack.id] for remote tracks.
+     * Prefix applied to [com.tigerplayer.data.model.AudioTrack.id] for remote tracks.
      *
      * Deliberately `navidrome_`, matching what `NavidromeMapper` already emitted before issue #44.
      * Track ids are foreign keys in `playlist_track_cross_ref`, `playback_history`, `lyrics_cache`

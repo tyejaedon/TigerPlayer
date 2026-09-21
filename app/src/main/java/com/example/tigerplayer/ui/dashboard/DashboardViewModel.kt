@@ -1,12 +1,12 @@
-package com.example.tigerplayer.ui.dashboard
+package com.tigerplayer.ui.dashboard
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.SpotifyAuthManager
-import com.example.tigerplayer.data.repository.SpotifyRepository
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.repository.SpotifyAuthManager
+import com.tigerplayer.data.repository.SpotifyRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject

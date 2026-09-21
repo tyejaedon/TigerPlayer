@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes

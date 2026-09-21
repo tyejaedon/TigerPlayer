@@ -1,8 +1,8 @@
-package com.example.tigerplayer.di
+package com.tigerplayer.di
 
-import com.example.tigerplayer.data.remote.api.OfficialYouTubeDataSource
-import com.example.tigerplayer.data.remote.api.YouTubeRepository
-import com.example.tigerplayer.data.remote.api.YouTubeRepositoryImpl
+import com.tigerplayer.data.remote.api.OfficialYouTubeDataSource
+import com.tigerplayer.data.remote.api.YouTubeRepository
+import com.tigerplayer.data.remote.api.YouTubeRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.Provides

@@ -1,7 +1,7 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
 /**
- * 🌊 High-Performance GLSL 3.0 Shaders for Navier-Stokes Fluid Dynamics
+ * ðŸŒŠ High-Performance GLSL 3.0 Shaders for Navier-Stokes Fluid Dynamics
  * Optimized for TigerPlayer's FluidVortex visualizer.
  *
  * FIXES:
