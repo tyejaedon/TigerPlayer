@@ -18,6 +18,10 @@ Execute the following phased lifecycle for each assigned issue in strict sequent
   - Derive branch name using the pattern: `fix/issue-<ID>-<kebab-case-slug>`.
   - Ensure the slug is descriptive, lowercase, and strictly alphanumeric with hyphens (e.g., `fix/issue-142-null-auth-token`).
   - Create and switch to the branch: `git checkout -b <branch-name>`.
+  - **`master` is branch-protected.** Never write code, stage, or commit while checked out on
+    `master`, and never push directly to it — GitHub rejects it (`GH013: Repository rule
+    violations`). All work happens on the branch created above; it reaches `master` only through
+    the pull request opened in Phase 4. See `.github/instructions/git-workflow.instructions.md`.
 
 ---
 
