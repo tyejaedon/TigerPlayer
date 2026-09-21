@@ -9,6 +9,7 @@ import com.example.tigerplayer.data.local.SettingsDataStore
 import com.example.tigerplayer.data.local.TigerSettingsState
 import com.example.tigerplayer.data.repository.AudioRepository
 import com.example.tigerplayer.data.repository.MediaDataRepository
+import com.example.tigerplayer.engine.SleepTimerController
 import com.example.tigerplayer.utils.BluetoothDeviceManager
 import io.mockk.coVerify
 import io.mockk.every
@@ -56,7 +57,8 @@ class MediaControllerManagerTest {
             settingsDataStore,
             audioRepository,
             mediaDataRepository,
-            bluetoothDeviceManager
+            bluetoothDeviceManager,
+            SleepTimerController()
         )
     }
 

@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +36,9 @@ import com.example.tigerplayer.ui.home.HomeScreen
 import com.example.tigerplayer.ui.home.HomeViewModel
 import com.example.tigerplayer.ui.library.LibraryScreen
 import com.example.tigerplayer.ui.library.ScanningOverlay
+import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
+import com.example.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.example.tigerplayer.ui.coverscreen.CoverScreenWindowState
 import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.example.tigerplayer.ui.player.FullPlayerScreen
 import com.example.tigerplayer.ui.player.MiniPlayer
@@ -63,13 +67,36 @@ fun MainScreen(
     onNavigateToDaylistDetail: () -> Unit,
     onNavigateToDiscoverWeeklyDetail: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToQueue: () -> Unit
+    onNavigateToQueue: () -> Unit,
+    // Test-only seam: rememberCoverScreenWindowState() needs a real Activity/display to produce a
+    // genuine cover-screen Configuration, which an instrumented Compose test can't simulate. Left
+    // null in production so real callers are unaffected (see CoverScreenMountingTest).
+    windowStateOverride: CoverScreenWindowState? = null
 ) {
-    val windowState = rememberCoverScreenWindowState()
+    val windowState = windowStateOverride ?: rememberCoverScreenWindowState()
     val isCoverScreen = windowState.isCoverScreen
-    val navigationPreset = remember(isCoverScreen) {
-        if (isCoverScreen) MainNavigationPresets.CoverOneHand else MainNavigationPresets.Default
+
+    // Audio must load regardless of shell: the cover-screen mini hub reads the same
+    // playerViewModel.uiState as the full shell.
+    LaunchedEffect(Unit) {
+        playerViewModel.loadLocalAudio(forceRefresh = false)
     }
+
+    if (isCoverScreen) {
+        // Cover-screen users get the purpose-built gesture-first mini hub instead of the full
+        // app shell (Scaffold + bottom NavigationBar) squeezed into a ~1.9-3.4in panel.
+        CoverScreenMiniHub(
+            playerViewModel = playerViewModel,
+            windowState = windowState,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(CoverScreenTestTags.MINI_HUB_ROOT)
+        )
+        return
+    }
+
+    // isCoverScreen is always false past this point (the cover-screen branch already returned).
+    val navigationPreset = MainNavigationPresets.Default
 
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
@@ -166,7 +193,9 @@ fun MainScreen(
                     NavigationBar(
                         containerColor = Color.Transparent,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.background(Color.Transparent)
+                        modifier = Modifier
+                            .background(Color.Transparent)
+                            .testTag(MainScreenTestTags.BOTTOM_NAVIGATION_BAR)
                     ) {
                         val backStack by tabNavController.currentBackStackEntryAsState()
                         val destination = backStack?.destination
@@ -374,13 +403,6 @@ fun MainScreen(
                 progress = uiState.scanProgress,
                 total = uiState.totalFilesToScan
             )
-        }
-
-        // ==============================
-        // INIT
-        // ==============================
-        LaunchedEffect(Unit) {
-            playerViewModel.loadLocalAudio(forceRefresh = false)
         }
     }
 }
