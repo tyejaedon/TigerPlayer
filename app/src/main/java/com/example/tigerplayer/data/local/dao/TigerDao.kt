@@ -62,6 +62,23 @@ abstract class TigerDao {
     @Query("SELECT COUNT(*) FROM playback_history")
     abstract suspend fun getHistoryCountSync(): Int
 
+    // --- BACKUP & RESTORE (one-shot reads / destructive writes, used only by BackupManager) ---
+
+    /** One-shot snapshot of the entire history table, for export. Never observed by the UI. */
+    @Query("SELECT * FROM playback_history ORDER BY timestamp ASC")
+    abstract suspend fun getAllHistorySync(): List<PlaybackHistoryEntity>
+
+    /**
+     * Appends restored rows with fresh auto-generated ids (callers must pass `id = 0`).
+     * Never used to satisfy normal playback recording — see [insertHistory].
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertHistoryBatch(history: List<PlaybackHistoryEntity>): List<Long>
+
+    /** Wipes every history row. Only ever called for a "replace" restore. */
+    @Query("DELETE FROM playback_history")
+    abstract suspend fun clearHistory(): Int
+
     @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history")
     abstract fun getTotalListeningTimeMs(): Flow<Long>
 

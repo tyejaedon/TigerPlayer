@@ -3,6 +3,8 @@ package com.example.tigerplayer.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
+import com.example.tigerplayer.data.backup.BackupManager
+import com.example.tigerplayer.data.backup.RestoreStrategy
 import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.example.tigerplayer.data.local.DefaultPlayerView
 import com.example.tigerplayer.data.local.SettingsDataStore
@@ -33,12 +35,21 @@ data class LibraryRescanState(
     val lastRunCompletedAtMs: Long? = null
 )
 
+/** One-shot outcome of the last export/import, surfaced by the Settings screen then cleared. */
+sealed interface BackupUiEvent {
+    data class ExportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
+    data class ImportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
+    data class Failed(val message: String) : BackupUiEvent
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val libraryEngine: LibraryEngine,
-    private val hapticsDebugMonitor: HapticsDebugMonitor
+    private val hapticsDebugMonitor: HapticsDebugMonitor,
+    private val backupManager: BackupManager
 ) : ViewModel() {
+
 
     val settingsState: StateFlow<TigerSettingsState> = settingsDataStore.settingsFlow
         .stateIn(
@@ -74,6 +85,41 @@ class SettingsViewModel @Inject constructor(
         )
 
     private var rescanJob: Job? = null
+
+    private val _backupEvent = MutableStateFlow<BackupUiEvent?>(null)
+    val backupEvent: StateFlow<BackupUiEvent?> = _backupEvent.asStateFlow()
+
+    /** Export playlists, history, and settings as a JSON file at [destination] (from a SAF picker). */
+    fun exportBackup(destination: Uri) {
+        viewModelScope.launch {
+            backupManager.exportTo(destination).fold(
+                onSuccess = { summary ->
+                    _backupEvent.value = BackupUiEvent.ExportSucceeded(summary.playlistCount, summary.historyCount)
+                },
+                onFailure = { error ->
+                    _backupEvent.value = BackupUiEvent.Failed(error.message ?: "Export failed")
+                }
+            )
+        }
+    }
+
+    /** Restore playlists, history, and settings from the JSON file at [source] (from a SAF picker). */
+    fun importBackup(source: Uri, strategy: RestoreStrategy) {
+        viewModelScope.launch {
+            backupManager.importFrom(source, strategy).fold(
+                onSuccess = { summary ->
+                    _backupEvent.value = BackupUiEvent.ImportSucceeded(summary.playlistCount, summary.historyCount)
+                },
+                onFailure = { error ->
+                    _backupEvent.value = BackupUiEvent.Failed(error.message ?: "Import failed")
+                }
+            )
+        }
+    }
+
+    fun consumeBackupEvent() {
+        _backupEvent.value = null
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { settingsDataStore.setThemeMode(mode) }
@@ -161,7 +207,7 @@ class SettingsViewModel @Inject constructor(
 
     fun triggerLibraryRescan() {
         if (rescanJob?.isActive == true) return
-        
+
         rescanJob = viewModelScope.launch {
             libraryEngine.getLocalAudioScanFlow(forceRefresh = true).collect { status ->
                 when (status) {
