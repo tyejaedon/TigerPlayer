@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.remote.api
+package com.tigerplayer.data.remote.api
 
 // Wrapper for the iTunes JSON response
 data class ITunesSearchResponse(

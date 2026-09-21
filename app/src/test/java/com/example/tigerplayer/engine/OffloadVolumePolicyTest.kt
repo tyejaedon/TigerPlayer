@@ -1,4 +1,4 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

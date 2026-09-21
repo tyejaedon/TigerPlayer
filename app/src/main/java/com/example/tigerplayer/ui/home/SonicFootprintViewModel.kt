@@ -1,11 +1,11 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.local.dao.ArtistStats
-import com.example.tigerplayer.data.local.dao.SonicFootprintStats
-import com.example.tigerplayer.data.repository.HistoryRepository
-import com.example.tigerplayer.data.repository.LastFmRepository
+import com.tigerplayer.data.local.dao.ArtistStats
+import com.tigerplayer.data.local.dao.SonicFootprintStats
+import com.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.data.repository.LastFmRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.async

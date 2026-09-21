@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -58,9 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.dashboard.DashboardViewModel
-import com.example.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.player.PlayerViewModel
 import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -369,7 +369,7 @@ private fun DaylistTrackRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${track.artist} • ${track.album}",
+                    text = "${track.artist} â€¢ ${track.album}",
                     color = Color.White.copy(alpha = 0.68f),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,

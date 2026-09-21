@@ -1,13 +1,13 @@
-package com.example.tigerplayer.data.source
+package com.tigerplayer.data.source
 
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.FolderExclusionRules
-import com.example.tigerplayer.utils.SafPathResolver
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.FolderExclusionRules
+import com.tigerplayer.utils.SafPathResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,7 +18,7 @@ import javax.inject.Singleton
  * Walks a user-selected SAF tree (issue #50), picking up audio files MediaStore has not indexed.
  *
  * Honours `.nomedia` markers and the exclude list via [FolderExclusionRules] - the same rule
- * [com.example.tigerplayer.data.repository.AudioRepository] applies to MediaStore-derived tracks,
+ * [com.tigerplayer.data.repository.AudioRepository] applies to MediaStore-derived tracks,
  * so exclusion behaves identically regardless of which source found a file.
  */
 @Singleton

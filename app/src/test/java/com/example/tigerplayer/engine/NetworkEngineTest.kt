@@ -1,10 +1,10 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
-import com.example.tigerplayer.data.local.NavidromePrefs
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.NavidromeRepository
-import com.example.tigerplayer.data.repository.SpotifyAuthManager
-import com.example.tigerplayer.di.SubsonicHostManager
+import com.tigerplayer.data.local.NavidromePrefs
+import com.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.repository.NavidromeRepository
+import com.tigerplayer.data.repository.SpotifyAuthManager
+import com.tigerplayer.di.SubsonicHostManager
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

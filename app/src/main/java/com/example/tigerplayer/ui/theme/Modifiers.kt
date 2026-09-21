@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 import android.annotation.SuppressLint
 import android.graphics.BlurMaskFilter
@@ -38,7 +38,7 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
             scaleX = scale
             scaleY = scale
         }
-        // 🔥 THE CRASH FIX: Bypasses the broken Foundation `clickable` node
+        // ðŸ”¥ THE CRASH FIX: Bypasses the broken Foundation `clickable` node
         // causing the "getPan" crash by using lower-level raw pointer inputs.
         .pointerInput(Unit) {
             detectTapGestures(

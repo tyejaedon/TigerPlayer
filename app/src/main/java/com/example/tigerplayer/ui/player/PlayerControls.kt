@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -17,11 +17,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
-import com.example.tigerplayer.R
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.igniRed
+import com.tigerplayer.R
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.igniRed
 
 @Composable
 fun PlaybackControls(

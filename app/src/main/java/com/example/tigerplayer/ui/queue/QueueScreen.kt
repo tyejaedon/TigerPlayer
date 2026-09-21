@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.queue
+package com.tigerplayer.ui.queue
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,7 +51,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import coil.compose.AsyncImage
-import com.example.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.AudioTrack
 
 @Composable
 fun QueueScreen(
@@ -288,7 +288,7 @@ private fun QueueTrackRow(
                         .then(dragHandleModifier),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("≡", color = Color.White.copy(alpha = 0.78f), fontWeight = FontWeight.Bold)
+                    Text("â‰¡", color = Color.White.copy(alpha = 0.78f), fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -1,16 +1,16 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.util.Log
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
-import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.remote.api.LastFmApi
-import com.example.tigerplayer.data.remote.api.SpotifyApiService
-import com.example.tigerplayer.data.remote.model.LastFmImage
-import com.example.tigerplayer.data.remote.model.SpotifyArtistDetail
-import com.example.tigerplayer.data.remote.model.SpotifyTrack
-import com.example.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.ArtistCacheEntity
+import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.remote.api.LastFmApi
+import com.tigerplayer.data.remote.api.SpotifyApiService
+import com.tigerplayer.data.remote.model.LastFmImage
+import com.tigerplayer.data.remote.model.SpotifyArtistDetail
+import com.tigerplayer.data.remote.model.SpotifyTrack
+import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

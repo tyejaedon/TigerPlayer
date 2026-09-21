@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.model
+package com.tigerplayer.data.model
 
 import android.net.Uri
 

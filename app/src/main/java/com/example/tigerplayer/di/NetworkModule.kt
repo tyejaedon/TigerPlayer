@@ -1,6 +1,6 @@
-package com.example.tigerplayer.di
+package com.tigerplayer.di
 
-import com.example.tigerplayer.data.remote.api.*
+import com.tigerplayer.data.remote.api.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

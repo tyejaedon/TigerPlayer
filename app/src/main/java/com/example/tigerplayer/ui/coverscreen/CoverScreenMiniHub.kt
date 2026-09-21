@@ -1,5 +1,5 @@
 @file:SuppressLint("NewApi")
-package com.example.tigerplayer.ui.coverscreen
+package com.tigerplayer.ui.coverscreen
 
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -61,11 +61,11 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
 import coil.compose.AsyncImage
-import com.example.tigerplayer.ui.player.LyricsDisplay
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.TigerSurfaceCharcoal
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.player.LyricsDisplay
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerSurfaceCharcoal
+import com.tigerplayer.ui.theme.glassEffect
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -119,7 +119,7 @@ fun isSecondaryDisplayIdentity(displayId: Int): Boolean {
 /**
  * Combines the displayId identity signal with the dp/hinge heuristic and rejects ordinary
  * user-resize states. Precedence:
- * 1. A true secondary display ([isSecondaryDisplay]) is authoritative — there is no ambiguity,
+ * 1. A true secondary display ([isSecondaryDisplay]) is authoritative â€” there is no ambiguity,
  *    so it wins even if the window happens to also report multi-window mode.
  * 2. Multi-window mode (split-screen, freeform/desktop-mode, Samsung DeX pop-up view) means the
  *    small size is a user resize choice on the *same* display, not a real device posture, so it
@@ -511,7 +511,7 @@ fun CoverScreenMiniHub(
 
 @Composable
 private fun TrackInfoText(
-    track: com.example.tigerplayer.data.model.AudioTrack?,
+    track: com.tigerplayer.data.model.AudioTrack?,
     subtitle: String,
     lyrics: String?,
     currentPosition: Long,
@@ -624,10 +624,10 @@ private fun CoverControlButton(
 
 @Composable
 private fun CoverQueueSheet(
-    queue: List<com.example.tigerplayer.data.model.AudioTrack>,
+    queue: List<com.tigerplayer.data.model.AudioTrack>,
     currentId: String?,
     currentIndex: Int,
-    onTrackTapped: (com.example.tigerplayer.data.model.AudioTrack) -> Unit
+    onTrackTapped: (com.tigerplayer.data.model.AudioTrack) -> Unit
 ) {
     Box(
         modifier = Modifier

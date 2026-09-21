@@ -1,4 +1,4 @@
-package com.example.tigerplayer.service
+package com.tigerplayer.service
 
 import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothProfile
@@ -28,15 +28,15 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
-import com.example.tigerplayer.data.local.PlaybackPrefs
-import com.example.tigerplayer.data.local.SettingsDataStore
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.AudioRepository
-import com.example.tigerplayer.data.repository.MediaDataRepository
-import com.example.tigerplayer.engine.SleepTimerController
-import com.example.tigerplayer.engine.SleepTimerMode
-import com.example.tigerplayer.engine.SleepTimerState
-import com.example.tigerplayer.utils.BluetoothDeviceManager
+import com.tigerplayer.data.local.PlaybackPrefs
+import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.repository.MediaDataRepository
+import com.tigerplayer.engine.SleepTimerController
+import com.tigerplayer.engine.SleepTimerMode
+import com.tigerplayer.engine.SleepTimerState
+import com.tigerplayer.utils.BluetoothDeviceManager
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*

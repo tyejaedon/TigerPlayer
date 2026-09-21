@@ -1,4 +1,4 @@
-package com.example.tigerplayer.service
+package com.tigerplayer.service
 
 import androidx.annotation.OptIn
 import androidx.media3.common.C

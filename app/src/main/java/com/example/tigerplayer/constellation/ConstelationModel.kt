@@ -1,5 +1,5 @@
 
-package com.example.tigerplayer.constellation
+package com.tigerplayer.constellation
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color

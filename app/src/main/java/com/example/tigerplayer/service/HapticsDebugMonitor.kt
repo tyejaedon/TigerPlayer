@@ -1,6 +1,6 @@
-package com.example.tigerplayer.service
+package com.tigerplayer.service
 
-import com.example.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.tigerplayer.data.local.AudioReactiveHapticsProfile
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow

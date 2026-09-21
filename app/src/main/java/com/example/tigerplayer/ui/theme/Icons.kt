@@ -1,9 +1,9 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.*
 import androidx.compose.material.icons.rounded.*
-import com.example.tigerplayer.R
+import com.tigerplayer.R
 
 /**
  * THE VANGUARD ICON ARCHIVE

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.remote
+package com.tigerplayer.data.remote
 
 import android.net.Uri
 import androidx.core.net.toUri

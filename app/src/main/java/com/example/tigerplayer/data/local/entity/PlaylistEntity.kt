@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.local.entity
+package com.tigerplayer.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
@@ -15,7 +15,7 @@ data class PlaylistEntity(
 
     val name: String,
 
-    // 🔥 THE FIX: Stored safely as a String. Added default = null for cleaner object creation.
+    // ðŸ”¥ THE FIX: Stored safely as a String. Added default = null for cleaner object creation.
     val artworkUri: String? = null,
 
     val createdAt: Long = System.currentTimeMillis(),

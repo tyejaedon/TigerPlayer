@@ -1,8 +1,8 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import com.example.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow

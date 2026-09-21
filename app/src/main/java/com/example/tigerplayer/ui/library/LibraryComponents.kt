@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.library
+package com.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
@@ -23,14 +23,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.TigerTextHigh
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.TigerTextHigh
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 import java.util.concurrent.TimeUnit
 
-import com.example.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.aardBlue
 
 // --- THE VANGUARD PALETTE (High Visibility) ---
 val AardBlue = Color(0xFF4FC3F7) // Brighter blue for better dark-mode contrast

@@ -1,13 +1,13 @@
-package com.example.tigerplayer
+package com.tigerplayer
 
 import android.app.Application
 import android.os.StrictMode
 import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
-import com.example.tigerplayer.data.remote.NavidromeArtInterceptor
-import com.example.tigerplayer.data.remote.NavidromeUrlSigner
-import com.example.tigerplayer.data.repository.StatsEpoch
+import com.tigerplayer.data.remote.NavidromeArtInterceptor
+import com.tigerplayer.data.remote.NavidromeUrlSigner
+import com.tigerplayer.data.repository.StatsEpoch
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope

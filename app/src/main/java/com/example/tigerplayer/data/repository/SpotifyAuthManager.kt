@@ -1,9 +1,9 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.util.Log
-import com.example.tigerplayer.BuildConfig
-import com.example.tigerplayer.data.local.SpotifyPrefs
-import com.example.tigerplayer.data.remote.api.SpotifyAuthApi
+import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.local.SpotifyPrefs
+import com.tigerplayer.data.remote.api.SpotifyAuthApi
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -28,7 +28,7 @@ class SpotifyAuthManager @Inject constructor(
     private var expiresInMs: Long = 3600_000L
     private var refreshToken: String = ""
 
-    // Public client identifier only — no secret. PKCE requires no client authentication.
+    // Public client identifier only â€” no secret. PKCE requires no client authentication.
     private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
 
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -90,7 +90,7 @@ class SpotifyAuthManager @Inject constructor(
                 val errorBody = response.errorBody()?.string()
                 Log.e("SpotifyAuth", "Refresh failed with code ${response.code()}: $errorBody")
                 if (response.code() == 400 || response.code() == 401) {
-                    // Refresh token itself is dead — force the user to log in again.
+                    // Refresh token itself is dead â€” force the user to log in again.
                     logout()
                 }
                 ""
@@ -131,7 +131,7 @@ class SpotifyAuthManager @Inject constructor(
 
     /**
      * Exchanges the temporary Authorization Code for an Access Token using PKCE.
-     * No client secret is required or sent — [codeVerifier] proves possession of the
+     * No client secret is required or sent â€” [codeVerifier] proves possession of the
      * original code_challenge instead.
      */
     suspend fun exchangeCodeForToken(

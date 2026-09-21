@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.prism
+package com.tigerplayer.ui.prism
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -11,8 +11,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
-import com.example.tigerplayer.data.local.PrismSpectralAnalysis
-import com.example.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.data.local.PrismSpectralAnalysis
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Rule

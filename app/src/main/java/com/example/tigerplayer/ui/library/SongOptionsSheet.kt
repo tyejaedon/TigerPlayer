@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.library
+package com.tigerplayer.ui.library
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -25,14 +25,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.model.Playlist
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.elevatedSurface
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.igniRed
+import com.tigerplayer.R
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.elevatedSurface
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.igniRed
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

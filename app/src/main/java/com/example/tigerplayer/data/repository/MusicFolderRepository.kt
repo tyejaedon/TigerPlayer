@@ -1,4 +1,4 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.content.Context
 import android.content.Intent
@@ -6,10 +6,10 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
-import com.example.tigerplayer.data.local.dao.MusicFolderDao
-import com.example.tigerplayer.data.local.entity.MusicFolderEntity
-import com.example.tigerplayer.data.model.MusicFolder
-import com.example.tigerplayer.utils.SafPathResolver
+import com.tigerplayer.data.local.dao.MusicFolderDao
+import com.tigerplayer.data.local.entity.MusicFolderEntity
+import com.tigerplayer.data.model.MusicFolder
+import com.tigerplayer.utils.SafPathResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -18,7 +18,7 @@ import javax.inject.Singleton
 
 /**
  * Owns the persisted set of user-selected music directories (issue #50): "include" roots that
- * [com.example.tigerplayer.data.source.SafFolderScanner] walks for tracks, and "exclude" entries
+ * [com.tigerplayer.data.source.SafFolderScanner] walks for tracks, and "exclude" entries
  * that must be hidden everywhere. Handles taking/releasing the persistable SAF URI permission so
  * granted access survives reboots.
  */

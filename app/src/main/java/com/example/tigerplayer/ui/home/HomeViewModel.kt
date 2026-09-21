@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import android.annotation.SuppressLint
 import android.app.Application
@@ -6,9 +6,9 @@ import android.location.Location
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.repository.WeatherRepository
-import com.example.tigerplayer.utils.Resource
-import com.example.tigerplayer.utils.AttributionTags
+import com.tigerplayer.data.repository.WeatherRepository
+import com.tigerplayer.utils.Resource
+import com.tigerplayer.utils.AttributionTags
 import com.google.android.gms.location.LocationServices
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

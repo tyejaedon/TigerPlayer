@@ -1,9 +1,9 @@
-package com.example.tigerplayer.data.local.dao
+package com.tigerplayer.data.local.dao
 
 import androidx.room.*
-import com.example.tigerplayer.data.local.entity.PlaylistEntity
-import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
-import com.example.tigerplayer.data.model.Playlist
+import com.tigerplayer.data.local.entity.PlaylistEntity
+import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.tigerplayer.data.model.Playlist
 import kotlinx.coroutines.flow.Flow
 
 /**

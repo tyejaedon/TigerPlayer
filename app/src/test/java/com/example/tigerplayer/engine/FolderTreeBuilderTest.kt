@@ -1,7 +1,7 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.net.Uri
-import com.example.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.AudioTrack
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

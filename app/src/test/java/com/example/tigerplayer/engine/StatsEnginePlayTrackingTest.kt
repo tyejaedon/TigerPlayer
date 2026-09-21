@@ -1,10 +1,10 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.net.Uri
-import com.example.tigerplayer.data.local.MediaSource
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.HistoryRepository
-import com.example.tigerplayer.utils.ElapsedTimeSource
+import com.tigerplayer.data.local.MediaSource
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.utils.ElapsedTimeSource
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.theme
+package com.tigerplayer.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.example.tigerplayer.data.local.TigerAccentStyle
+import com.tigerplayer.data.local.TigerAccentStyle
 
 // ------------------------------
 // DARK / LIGHT SYSTEM SCHEMES

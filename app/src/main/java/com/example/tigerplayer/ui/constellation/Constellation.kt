@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.constellation
+package com.tigerplayer.ui.constellation
 
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.core.*
@@ -36,10 +36,10 @@ import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
-import com.example.tigerplayer.constellation.NodeType
-import com.example.tigerplayer.constellation.PositionedNode
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.constellation.NodeType
+import com.tigerplayer.constellation.PositionedNode
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlin.math.cos
@@ -98,7 +98,7 @@ fun ConstellationScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        // 🔥 MULTI-TOUCH GESTURE DETECTOR
+                        // ðŸ”¥ MULTI-TOUCH GESTURE DETECTOR
                         .pointerInput(Unit) {
                             detectTransformGestures { _, panChange, zoomChange, _ ->
                                 scope.launch {
@@ -108,7 +108,7 @@ fun ConstellationScreen(
                                 }
                             }
                         }
-                        // 🔥 DOUBLE-TAP TO WARP
+                        // ðŸ”¥ DOUBLE-TAP TO WARP
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onDoubleTap = { tapOffset ->
@@ -456,7 +456,7 @@ fun ConstellationOverlay(
                 if (selectedArtistReading != null) {
                     val artist = selectedArtistReading
                     Text(
-                        text = "${artist.artistName} • ${artist.playCount} plays • ${artist.minutesListened} min",
+                        text = "${artist.artistName} â€¢ ${artist.playCount} plays â€¢ ${artist.minutesListened} min",
                         style = MaterialTheme.typography.titleSmall,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
@@ -468,7 +468,7 @@ fun ConstellationOverlay(
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.78f)
                     )
-                    val genreLabel = artist.genres.take(3).joinToString(" • ")
+                    val genreLabel = artist.genres.take(3).joinToString(" â€¢ ")
                     if (genreLabel.isNotBlank()) {
                         Text(
                             text = genreLabel,

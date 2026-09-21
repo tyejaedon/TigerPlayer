@@ -1,17 +1,17 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.net.Uri
 import android.util.Log
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.ArtistDetails
-import com.example.tigerplayer.data.repository.LyricsRepository
-import com.example.tigerplayer.data.repository.MediaDataRepository
-import com.example.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.ArtistDetails
+import com.tigerplayer.data.repository.LyricsRepository
+import com.tigerplayer.data.repository.MediaDataRepository
+import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import androidx.core.net.toUri
-import com.example.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.dao.TigerDao
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -23,7 +23,7 @@ class MetadataEngine @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // 🔥 THE FIX: artistDetails is now reactive to the database ground truth.
+    // ðŸ”¥ THE FIX: artistDetails is now reactive to the database ground truth.
     // This ensures that images fetched on the Artist Screen appear in the Constellation instantly.
     val artistDetails: StateFlow<Map<String, ArtistDetails>> = tigerDao.getAllArtistCache()
         .map { list ->
@@ -117,7 +117,7 @@ class MetadataEngine @Inject constructor(
     }
 
     /**
-     * 🔥 THE FIX 2: Non-destructive refresh.
+     * ðŸ”¥ THE FIX 2: Non-destructive refresh.
      * We no longer clear the whole cache. We just trigger fresh fetches for requested artists.
      */
     @OptIn(FlowPreview::class)

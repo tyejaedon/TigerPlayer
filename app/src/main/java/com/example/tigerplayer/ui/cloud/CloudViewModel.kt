@@ -1,12 +1,12 @@
-package com.example.tigerplayer.ui.cloud
+package com.tigerplayer.ui.cloud
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.remote.model.SpotifyTrack
-import com.example.tigerplayer.engine.PlaybackEngine
-import com.example.tigerplayer.data.repository.SpotifyRepository
-import com.example.tigerplayer.data.repository.SpotifyAuthManager
+import com.tigerplayer.data.remote.model.SpotifyTrack
+import com.tigerplayer.engine.PlaybackEngine
+import com.tigerplayer.data.repository.SpotifyRepository
+import com.tigerplayer.data.repository.SpotifyAuthManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
@@ -67,7 +67,7 @@ class CloudViewModel @Inject constructor(
 
     init {
         // CONTINUOUS MONITORING
-        // 🔥 THE FIX: Replaced mutable boolean flag with elegant .take(1) stream operation
+        // ðŸ”¥ THE FIX: Replaced mutable boolean flag with elegant .take(1) stream operation
         viewModelScope.launch {
             authManager.token
                 .filter { it.isNotEmpty() }
@@ -112,7 +112,7 @@ class CloudViewModel @Inject constructor(
             try {
                 _currentPlaylistTracks.value = spotifyRepository.fetchPlaylistTracks(token, playlistId)
             } catch (e: Exception) {
-                // 🔥 THE FIX: Never swallow CancellationExceptions in Coroutines!
+                // ðŸ”¥ THE FIX: Never swallow CancellationExceptions in Coroutines!
                 if (e is CancellationException) throw e
                 _uiError.value = "Failed to manifest tracks."
             } finally {

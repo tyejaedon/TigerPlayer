@@ -1,7 +1,7 @@
 @file:Suppress("AssignedValueIsNeverRead")
 @file:SuppressLint("NewApi")
 
-package com.example.tigerplayer.ui.main
+package com.tigerplayer.ui.main
 
 import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
@@ -28,23 +28,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
-import com.example.tigerplayer.navigation.BottomNavTab
-import com.example.tigerplayer.navigation.MainNavigationPresets
-import com.example.tigerplayer.ui.cloud.CloudScreen
-import com.example.tigerplayer.ui.youtube.YouTubeSearchScreen
-import com.example.tigerplayer.ui.home.HomeScreen
-import com.example.tigerplayer.ui.home.HomeViewModel
-import com.example.tigerplayer.ui.library.LibraryScreen
-import com.example.tigerplayer.ui.library.ScanningOverlay
-import com.example.tigerplayer.ui.coverscreen.CoverScreenMiniHub
-import com.example.tigerplayer.ui.coverscreen.CoverScreenTestTags
-import com.example.tigerplayer.ui.coverscreen.CoverScreenWindowState
-import com.example.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
-import com.example.tigerplayer.ui.player.FullPlayerScreen
-import com.example.tigerplayer.ui.player.MiniPlayer
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.prism.PrismViewModel
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.navigation.BottomNavTab
+import com.tigerplayer.navigation.MainNavigationPresets
+import com.tigerplayer.ui.cloud.CloudScreen
+import com.tigerplayer.ui.youtube.YouTubeSearchScreen
+import com.tigerplayer.ui.home.HomeScreen
+import com.tigerplayer.ui.home.HomeViewModel
+import com.tigerplayer.ui.library.LibraryScreen
+import com.tigerplayer.ui.library.ScanningOverlay
+import com.tigerplayer.ui.coverscreen.CoverScreenMiniHub
+import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.tigerplayer.ui.coverscreen.CoverScreenWindowState
+import com.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
+import com.tigerplayer.ui.player.FullPlayerScreen
+import com.tigerplayer.ui.player.MiniPlayer
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.prism.PrismViewModel
+import com.tigerplayer.ui.theme.glassEffect
 
 // ------------------------------
 // UI STATE MACHINE (CLEAN CONTROL)
@@ -147,7 +147,7 @@ fun MainScreen(
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
         // ==============================
-        // LAYER 1 — APP SHELL (WITH Z-AXIS PUSHBACK)
+        // LAYER 1 â€” APP SHELL (WITH Z-AXIS PUSHBACK)
         // ==============================
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
@@ -247,7 +247,7 @@ fun MainScreen(
         ) { padding ->
 
             // ==============================
-            // LAYER 2 — NAVIGATION STAGE
+            // LAYER 2 â€” NAVIGATION STAGE
             // ==============================
             Box(
                 modifier = Modifier
@@ -283,7 +283,7 @@ fun MainScreen(
                     }
                 ) {
                     composable(BottomNavTab.Home.route) {
-                        // 🔥 HILT INTEGRATION: The HomeViewModel is dynamically scoped right here!
+                        // ðŸ”¥ HILT INTEGRATION: The HomeViewModel is dynamically scoped right here!
                         // It will live as long as the NavHost exists.
                         val homeViewModel: HomeViewModel = hiltViewModel()
 
@@ -315,12 +315,12 @@ fun MainScreen(
                             onNavigateToSpotifyAlbum = onNavigateToSpotifyAlbum,
                             onNavigateToNavidromeLogin = onNavigateToNavidromeLogin,
                             onNavigateToYouTubeSearch = {
-                                tabNavController.navigate(com.example.tigerplayer.navigation.Screen.YouTubeSearch.route)
+                                tabNavController.navigate(com.tigerplayer.navigation.Screen.YouTubeSearch.route)
                             }
                         )
                     }
 
-                    composable(com.example.tigerplayer.navigation.Screen.YouTubeSearch.route) {
+                    composable(com.tigerplayer.navigation.Screen.YouTubeSearch.route) {
                         YouTubeSearchScreen(
                             onBackClick = {
                                 tabNavController.popBackStack()
@@ -332,7 +332,7 @@ fun MainScreen(
         }
 
         // ==============================
-        // LAYER 3 — FULL PLAYER SHEET
+        // LAYER 3 â€” FULL PLAYER SHEET
         // ==============================
         AnimatedVisibility(
             visible = isExpanded,
@@ -396,7 +396,7 @@ fun MainScreen(
         }
 
         // ==============================
-        // LAYER 4 — SYSTEM OVERLAY
+        // LAYER 4 â€” SYSTEM OVERLAY
         // ==============================
         if (uiState.isScanning) {
             ScanningOverlay(

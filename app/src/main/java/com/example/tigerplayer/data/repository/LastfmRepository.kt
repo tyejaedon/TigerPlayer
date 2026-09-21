@@ -1,7 +1,7 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.util.Log
-import com.example.tigerplayer.data.remote.api.LastFmApi
+import com.tigerplayer.data.remote.api.LastFmApi
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers

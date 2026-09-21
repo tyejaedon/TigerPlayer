@@ -1,7 +1,7 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.model.TrackFingerprint
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.TrackFingerprint
 
 /**
  * THE SINGLE SOURCE OF DIFF TRUTH (issue #49)

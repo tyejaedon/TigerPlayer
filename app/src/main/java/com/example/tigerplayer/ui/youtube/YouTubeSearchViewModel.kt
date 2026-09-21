@@ -1,9 +1,9 @@
-package com.example.tigerplayer.ui.youtube
+package com.tigerplayer.ui.youtube
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.remote.api.YouTubeRepository
-import com.example.tigerplayer.data.remote.api.YouTubeTrack
+import com.tigerplayer.data.remote.api.YouTubeRepository
+import com.tigerplayer.data.remote.api.YouTubeTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview

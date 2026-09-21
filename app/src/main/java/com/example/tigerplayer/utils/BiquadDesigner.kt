@@ -1,10 +1,10 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
-import com.example.tigerplayer.engine.FilterType
+import com.tigerplayer.engine.FilterType
 import kotlin.math.*
 
 /**
- * 📐 HIGH-PRECISION BIQUAD FILTER DESIGNER
+ * ðŸ“ HIGH-PRECISION BIQUAD FILTER DESIGNER
  * Implements Robert Bristow-Johnson's Audio EQ Cookbook equations with strict
  * bounding guards to prevent NaN/Infinity leaks on both visualizer and DSP.
  */

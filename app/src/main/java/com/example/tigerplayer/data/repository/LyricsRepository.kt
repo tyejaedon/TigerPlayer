@@ -1,10 +1,10 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.util.Log
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.remote.api.LrclibApi
+import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.LyricsCacheEntity
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.remote.api.LrclibApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -35,7 +35,7 @@ class LyricsRepository @Inject constructor(
         // 2. CACHE MISS: CONSULT LRCLIB
         Log.d("LyricsRepo", "Cache miss. Hunting LRCLIB for ${track.title}...")
 
-        // 🔥 THE FIX: Isolate the try-catch block from the emit function to prevent Flow crashes
+        // ðŸ”¥ THE FIX: Isolate the try-catch block from the emit function to prevent Flow crashes
         val fetchedLyrics = try {
             val response = lrclibApi.getLyrics(
                 trackName = track.title,
@@ -69,14 +69,14 @@ class LyricsRepository @Inject constructor(
                 null
             }
         } catch (e: Exception) {
-            // 🔥 THE FIX: Allow coroutine cancellations to pass through silently
+            // ðŸ”¥ THE FIX: Allow coroutine cancellations to pass through silently
             if (e is CancellationException) throw e
 
             Log.e("LyricsRepo", "Failed to fetch lyrics: ${e.message}")
             null
         }
 
-        // 🔥 THE FIX: Safely emit only after all try/catch blocks are resolved
+        // ðŸ”¥ THE FIX: Safely emit only after all try/catch blocks are resolved
         emit(fetchedLyrics)
 
     }.flowOn(Dispatchers.IO)

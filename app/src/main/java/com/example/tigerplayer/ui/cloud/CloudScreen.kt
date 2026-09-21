@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.cloud
+package com.tigerplayer.ui.cloud
 
 import android.widget.Toast
 import androidx.compose.animation.*
@@ -28,11 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
-import com.example.tigerplayer.MainActivity
-import com.example.tigerplayer.ui.theme.SpotifyGreen
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.MainActivity
+import com.tigerplayer.ui.theme.SpotifyGreen
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)

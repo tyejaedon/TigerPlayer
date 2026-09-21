@@ -1,4 +1,4 @@
-package com.example.tigerplayer.di
+package com.tigerplayer.di
 
 import android.content.Context
 import androidx.datastore.core.DataStore

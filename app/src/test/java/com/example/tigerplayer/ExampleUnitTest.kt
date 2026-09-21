@@ -1,4 +1,4 @@
-package com.example.tigerplayer
+package com.tigerplayer
 
 import org.junit.Test
 

@@ -1,6 +1,6 @@
-package com.example.tigerplayer.data.remote.api
+package com.tigerplayer.data.remote.api
 
-import com.example.tigerplayer.data.remote.model.*
+import com.tigerplayer.data.remote.model.*
 import retrofit2.Response
 import retrofit2.http.*
 

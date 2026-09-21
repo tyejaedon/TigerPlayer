@@ -1,10 +1,10 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 import android.util.Log
-import com.example.tigerplayer.data.remote.api.NavidromeApiService
-import com.example.tigerplayer.data.remote.api.RemotePlaylist
-import com.example.tigerplayer.data.remote.api.RemoteTrack
-import com.example.tigerplayer.utils.NavidromeSecurity
+import com.tigerplayer.data.remote.api.NavidromeApiService
+import com.tigerplayer.data.remote.api.RemotePlaylist
+import com.tigerplayer.data.remote.api.RemoteTrack
+import com.tigerplayer.utils.NavidromeSecurity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject

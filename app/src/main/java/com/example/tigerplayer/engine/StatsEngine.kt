@@ -1,13 +1,13 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
-import com.example.tigerplayer.data.local.MediaSource
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.ArtistDetails
-import com.example.tigerplayer.data.repository.HistoryRepository
-import com.example.tigerplayer.ui.player.DetailedStatsUiState
-import com.example.tigerplayer.ui.player.StatItem
-import com.example.tigerplayer.utils.ArtistUtils
-import com.example.tigerplayer.utils.ElapsedTimeSource
+import com.tigerplayer.data.local.MediaSource
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.ArtistDetails
+import com.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.ui.player.DetailedStatsUiState
+import com.tigerplayer.ui.player.StatItem
+import com.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.utils.ElapsedTimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import java.util.Calendar
@@ -50,7 +50,7 @@ class StatsEngine @Inject constructor(
 
             combine(
                 listeningTotals,
-                // 🔥 FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
+                // ðŸ”¥ FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
                 historyRepository.getTopArtists(startTime, limit = 50),
                 historyRepository.getTopTracks(startTime, limit = 50),
                 allTracksFlow,
@@ -75,7 +75,7 @@ class StatsEngine @Inject constructor(
                     globalListeningSharePercent = sharePercent,
                     statsEpochMs = statsEpochMs,
                     topArtists = topArtistsDb.map { artist ->
-                        // 🔥 FIX 2: Normalize the key to safely extract the High-Res API image
+                        // ðŸ”¥ FIX 2: Normalize the key to safely extract the High-Res API image
                         val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
 
                         // Fallback: If API image is missing, grab the first local album cover for this artist
@@ -224,7 +224,7 @@ class StatsEngine @Inject constructor(
     }
 
     /**
-     * 🔥 UPGRADED TEMPORAL ENGINE
+     * ðŸ”¥ UPGRADED TEMPORAL ENGINE
      * Replaces rolling math (e.g. 24 hours ago) with absolute Calendar boundaries.
      * "Today" now accurately begins at 12:00 AM.
      */

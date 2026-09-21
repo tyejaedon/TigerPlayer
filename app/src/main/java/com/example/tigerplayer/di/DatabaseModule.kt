@@ -1,11 +1,11 @@
-package com.example.tigerplayer.di
+package com.tigerplayer.di
 
 import android.content.Context
 import androidx.room.Room
-import com.example.tigerplayer.data.local.TigerDatabase
-import com.example.tigerplayer.data.local.dao.MusicFolderDao
-import com.example.tigerplayer.data.local.dao.PlaylistDao
-import com.example.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.TigerDatabase
+import com.tigerplayer.data.local.dao.MusicFolderDao
+import com.tigerplayer.data.local.dao.PlaylistDao
+import com.tigerplayer.data.local.dao.TigerDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

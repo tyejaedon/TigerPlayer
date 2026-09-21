@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.equalizer
+package com.tigerplayer.ui.equalizer
 
 import android.os.Bundle
 import androidx.annotation.OptIn
@@ -6,11 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.SessionCommand
-import com.example.tigerplayer.data.local.PlaybackPrefs
-import com.example.tigerplayer.engine.AcousticEnvironmentMode
-import com.example.tigerplayer.engine.AdaptiveDspEngine
-import com.example.tigerplayer.service.AudioPlayerService
-import com.example.tigerplayer.service.MediaControllerManager
+import com.tigerplayer.data.local.PlaybackPrefs
+import com.tigerplayer.engine.AcousticEnvironmentMode
+import com.tigerplayer.engine.AdaptiveDspEngine
+import com.tigerplayer.service.AudioPlayerService
+import com.tigerplayer.service.MediaControllerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow

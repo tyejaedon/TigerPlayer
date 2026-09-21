@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.cloud
+package com.tigerplayer.ui.cloud
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -17,7 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.bounceClick
 
 @Composable
 fun SpotifyAlbumCard(

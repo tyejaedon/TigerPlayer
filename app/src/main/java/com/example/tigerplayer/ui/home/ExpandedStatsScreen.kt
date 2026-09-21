@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import android.os.Build
 import androidx.annotation.RequiresExtension
@@ -39,10 +39,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.player.StatItem
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.player.StatItem
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.bounceClick
 
 // --- VANGUARD THEME CONSTANTS ---
 private val AardBlue = Color(0xFF4FC3F7)
@@ -581,7 +581,7 @@ private fun StatRow(rank: Int, item: StatItem) {
             )
             Text(
                 text = if (item.secondaryText.isNotBlank()) {
-                    "${item.playCount} SUMMONS • ${item.secondaryText.uppercase()}"
+                    "${item.playCount} SUMMONS â€¢ ${item.secondaryText.uppercase()}"
                 } else {
                     "${item.playCount} SUMMONS"
                 },

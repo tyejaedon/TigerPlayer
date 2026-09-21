@@ -1,4 +1,4 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers

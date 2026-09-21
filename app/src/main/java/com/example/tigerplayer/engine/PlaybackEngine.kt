@@ -1,10 +1,10 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.util.Log
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.SpotifyPlaybackState
-import com.example.tigerplayer.data.repository.SpotifyRepository
-import com.example.tigerplayer.service.MediaControllerManager
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.SpotifyPlaybackState
+import com.tigerplayer.data.repository.SpotifyRepository
+import com.tigerplayer.service.MediaControllerManager
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 

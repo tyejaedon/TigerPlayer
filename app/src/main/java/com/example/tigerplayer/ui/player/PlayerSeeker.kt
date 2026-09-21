@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
@@ -16,9 +16,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.igniRed
-import com.example.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.igniRed
+import com.tigerplayer.ui.theme.aardBlue
 import java.util.concurrent.TimeUnit
 import kotlin.math.sin
 

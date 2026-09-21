@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -17,7 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tigerplayer.ui.theme.igniRed
+import com.tigerplayer.ui.theme.igniRed
 import kotlin.math.abs
 
 data class LyricLine(val timeMs: Long, val text: String)
@@ -101,7 +101,7 @@ fun LyricsDisplay(
                     )
 
                     Text(
-                        text = line.text.ifBlank { "•••" },
+                        text = line.text.ifBlank { "â€¢â€¢â€¢" },
                         color = if (isActive) activeColor else textColor.copy(0.4f),
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.Black,

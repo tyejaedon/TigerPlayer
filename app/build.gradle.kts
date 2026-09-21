@@ -20,13 +20,13 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
-// 🔥 THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
+// ðŸ”¥ THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
 configure<ApplicationExtension> {
-    namespace = "com.example.tigerplayer"
+    namespace = "com.tigerplayer"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.tigerplayer"
+        applicationId = "com.tigerplayer"
         minSdk = 29
         //noinspection OldTargetApi
         targetSdk = 36

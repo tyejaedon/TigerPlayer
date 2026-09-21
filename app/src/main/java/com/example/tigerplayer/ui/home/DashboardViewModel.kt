@@ -1,9 +1,9 @@
-package com.example.tigerplayer.ui.home
+package com.tigerplayer.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.data.repository.AudioRepository
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.repository.AudioRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject

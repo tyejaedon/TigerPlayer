@@ -1,17 +1,17 @@
-package com.example.tigerplayer.data.local.dao
+package com.tigerplayer.data.local.dao
 
 import androidx.room.*
-import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
-import com.example.tigerplayer.data.local.entity.CachedTrackEntity
-import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
-import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
-import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
-import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
-import com.example.tigerplayer.data.model.TrackFingerprint
+import com.tigerplayer.data.local.entity.ArtistCacheEntity
+import com.tigerplayer.data.local.entity.CachedTrackEntity
+import com.tigerplayer.data.local.entity.LyricsCacheEntity
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.tigerplayer.data.local.entity.WaveformCacheEntity
+import com.tigerplayer.data.model.TrackFingerprint
 import kotlinx.coroutines.flow.Flow
 
 /**
- * 📊 ANALYTICAL DATA MODELS
+ * ðŸ“Š ANALYTICAL DATA MODELS
  */
 data class ArtistStats(
     val artistName: String,
@@ -38,7 +38,7 @@ data class SonicFootprintStats(
 )
 
 /**
- * 🐅 TIGER DAO: THE ARCHIVE ENGINE
+ * ðŸ… TIGER DAO: THE ARCHIVE ENGINE
  * Optimized for high-frequency audio processing and real-time statistics.
  */
 @Dao
@@ -70,7 +70,7 @@ abstract class TigerDao {
 
     /**
      * Appends restored rows with fresh auto-generated ids (callers must pass `id = 0`).
-     * Never used to satisfy normal playback recording — see [insertHistory].
+     * Never used to satisfy normal playback recording â€” see [insertHistory].
      */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertHistoryBatch(history: List<PlaybackHistoryEntity>): List<Long>
@@ -565,7 +565,7 @@ abstract class TigerDao {
     // ==========================================
 
     /**
-     * 🔥 THE VISIBILITY FIX: The Missing Retrieval Query
+     * ðŸ”¥ THE VISIBILITY FIX: The Missing Retrieval Query
      * You need this in your main DAO to feed the Home/Library screens.
      * Note the 'AS id' to match your Playlist data class.
      */
@@ -674,7 +674,7 @@ abstract class TigerDao {
     // ==========================================
 
 
-    // 🔥 THE FIX: Restoring the Lyric Maintenance Rituals
+    // ðŸ”¥ THE FIX: Restoring the Lyric Maintenance Rituals
     @Query("UPDATE lyrics_cache SET lastAccessed = :timestamp WHERE trackId = :trackId")
     abstract suspend fun updateLyricsAccessTime(
         trackId: String,

@@ -234,7 +234,7 @@ Observed status in this environment:
 
 Instrumentation execution note:
 
-- `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.tigerplayer.ui.prism.PrismInlineMixerTest --console=plain`
+- `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.tigerplayer.ui.prism.PrismInlineMixerTest --console=plain`
   - Fails in this environment due to no connected device/emulator.
 
 ## Practical Audio Tuning Notes

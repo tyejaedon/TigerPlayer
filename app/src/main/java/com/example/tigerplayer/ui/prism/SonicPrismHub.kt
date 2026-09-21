@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.prism
+package com.tigerplayer.ui.prism
 
 import android.graphics.BlurMaskFilter
 import androidx.compose.foundation.Canvas
@@ -52,12 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.tigerplayer.data.local.PrismSpectralAnalysis
-import com.example.tigerplayer.ui.theme.TigerCyberCyan
-import com.example.tigerplayer.ui.theme.TigerNeonOrange
-import com.example.tigerplayer.ui.theme.TigerSurfaceFloating
-import com.example.tigerplayer.ui.theme.TigerToxicLime
-import com.example.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.data.local.PrismSpectralAnalysis
+import com.tigerplayer.ui.theme.TigerCyberCyan
+import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerSurfaceFloating
+import com.tigerplayer.ui.theme.TigerToxicLime
+import com.tigerplayer.ui.theme.bounceClick
 import java.util.Locale
 
 private val PrismBackdrop = Color(0xFF06070A)

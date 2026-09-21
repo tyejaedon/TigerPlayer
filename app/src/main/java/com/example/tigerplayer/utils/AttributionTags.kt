@@ -1,4 +1,4 @@
-package com.example.tigerplayer.utils
+package com.tigerplayer.utils
 
 object AttributionTags {
     const val BLUETOOTH_DEVICE_MANAGEMENT = "bluetooth_device_management"

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.equalizer
+package com.tigerplayer.ui.equalizer
 
 import androidx.annotation.OptIn
 import androidx.compose.ui.geometry.Offset
@@ -6,12 +6,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.engine.AcousticNode
-import com.example.tigerplayer.engine.AdaptiveDspEngine
-import com.example.tigerplayer.engine.AudioReactiveFrame
-import com.example.tigerplayer.engine.FilterType
-import com.example.tigerplayer.utils.BiquadDesigner
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.engine.AcousticNode
+import com.tigerplayer.engine.AdaptiveDspEngine
+import com.tigerplayer.engine.AudioReactiveFrame
+import com.tigerplayer.engine.FilterType
+import com.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

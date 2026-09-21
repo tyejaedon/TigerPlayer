@@ -1,4 +1,4 @@
-package com.example.tigerplayer.navigation
+package com.tigerplayer.navigation
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -27,21 +27,21 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.*
 import androidx.navigation.compose.*
-import com.example.tigerplayer.R
-import com.example.tigerplayer.ui.cloud.*
-import com.example.tigerplayer.ui.home.DaylistDetailScreen
-import com.example.tigerplayer.ui.home.DiscoverWeeklyDetailScreen
-import com.example.tigerplayer.ui.library.*
-import com.example.tigerplayer.ui.main.MainScreen
-import com.example.tigerplayer.ui.permissions.PermissionScreen
-import com.example.tigerplayer.ui.player.PlayerViewModel
-import com.example.tigerplayer.ui.queue.QueueScreen
-import com.example.tigerplayer.ui.settings.SettingsScreen
+import com.tigerplayer.R
+import com.tigerplayer.ui.cloud.*
+import com.tigerplayer.ui.home.DaylistDetailScreen
+import com.tigerplayer.ui.home.DiscoverWeeklyDetailScreen
+import com.tigerplayer.ui.library.*
+import com.tigerplayer.ui.main.MainScreen
+import com.tigerplayer.ui.permissions.PermissionScreen
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.queue.QueueScreen
+import com.tigerplayer.ui.settings.SettingsScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 // ----------------------------------
-// 🔹 Branding
+// ðŸ”¹ Branding
 // ----------------------------------
 
 @Composable
@@ -57,14 +57,14 @@ fun TigerBranding() {
 }
 
 // ----------------------------------
-// 🔹 Navigation Graph
+// ðŸ”¹ Navigation Graph
 // ----------------------------------
 
 @SuppressLint("NewApi")
 @Composable
 fun TigerPlayerNavGraph(
     navController: NavHostController,
-    // 🔥 THE FIX: HomeViewModel is gone! Only the global PlayerViewModel remains.
+    // ðŸ”¥ THE FIX: HomeViewModel is gone! Only the global PlayerViewModel remains.
     playerViewModel: PlayerViewModel
 ) {
     val context = LocalContext.current
@@ -73,7 +73,7 @@ fun TigerPlayerNavGraph(
         navController = navController,
         startDestination = Screen.Splash.route,
 
-        // ✨ Smooth modern motion (Samsung-like)
+        // âœ¨ Smooth modern motion (Samsung-like)
         enterTransition = {
             slideInHorizontally(
                 initialOffsetX = { it / 2 },
@@ -101,7 +101,7 @@ fun TigerPlayerNavGraph(
     ) {
 
         // ----------------------------------
-        // 🔹 Splash Screen
+        // ðŸ”¹ Splash Screen
         // ----------------------------------
 
         composable(Screen.Splash.route) {
@@ -129,7 +129,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Permission
+        // ðŸ”¹ Permission
         // ----------------------------------
 
         composable(Screen.Permission.route) {
@@ -143,7 +143,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Main App Shell
+        // ðŸ”¹ Main App Shell
         // ----------------------------------
 
         composable(Screen.MainApp.route) {
@@ -183,7 +183,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Settings
+        // ðŸ”¹ Settings
         // ----------------------------------
 
         composable(Screen.Settings.route) {
@@ -243,7 +243,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Artist
+        // ðŸ”¹ Artist
         // ----------------------------------
 
         composable(
@@ -263,7 +263,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Album
+        // ðŸ”¹ Album
         // ----------------------------------
 
         composable(
@@ -280,7 +280,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Local Playlist
+        // ðŸ”¹ Local Playlist
         // ----------------------------------
 
         composable(
@@ -302,7 +302,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Navidrome
+        // ðŸ”¹ Navidrome
         // ----------------------------------
 
         composable(Screen.NavidromeLogin.route) {
@@ -314,7 +314,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Spotify Album
+        // ðŸ”¹ Spotify Album
         // ----------------------------------
 
         composable(
@@ -335,7 +335,7 @@ fun TigerPlayerNavGraph(
         }
 
         // ----------------------------------
-        // 🔹 Spotify Playlist
+        // ðŸ”¹ Spotify Playlist
         // ----------------------------------
 
         composable(
@@ -358,7 +358,7 @@ fun TigerPlayerNavGraph(
 }
 
 // ----------------------------------
-// 🔹 Splash UI (cleaned)
+// ðŸ”¹ Splash UI (cleaned)
 // ----------------------------------
 
 @Composable
@@ -384,7 +384,7 @@ private fun SplashContent() {
 }
 
 // ----------------------------------
-// 🔹 Helpers (BIG CLEANUP WIN)
+// ðŸ”¹ Helpers (BIG CLEANUP WIN)
 // ----------------------------------
 
 private fun NavBackStackEntry.getStringArg(key: String): String {

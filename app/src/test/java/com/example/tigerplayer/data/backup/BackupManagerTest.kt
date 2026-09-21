@@ -1,17 +1,17 @@
-package com.example.tigerplayer.data.backup
+package com.tigerplayer.data.backup
 
 import android.content.ContentResolver
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
-import com.example.tigerplayer.data.local.SettingsDataStore
-import com.example.tigerplayer.data.local.TigerSettingsState
-import com.example.tigerplayer.data.local.dao.PlaylistDao
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.entity.PlaylistEntity
-import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
-import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.local.TigerSettingsState
+import com.tigerplayer.data.local.dao.PlaylistDao
+import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.PlaylistEntity
+import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -46,8 +46,8 @@ class BackupManagerTest {
         every { context.contentResolver } returns contentResolver
         val packageManager = mockk<PackageManager>()
         every { context.packageManager } returns packageManager
-        every { context.packageName } returns "com.example.tigerplayer"
-        every { packageManager.getPackageInfo("com.example.tigerplayer", 0) } returns
+        every { context.packageName } returns "com.tigerplayer"
+        every { packageManager.getPackageInfo("com.tigerplayer", 0) } returns
             PackageInfo().apply { versionName = "2.0.0" }
 
         every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
@@ -57,18 +57,18 @@ class BackupManagerTest {
 
     @Test
     fun `export writes a JSON manifest that round-trips unicode playlist and track names`() = runTest {
-        val playlist = PlaylistEntity(playlistId = 1L, name = "夜のドライブ \u001F mix", artworkUri = null, createdAt = 100L, position = 0)
+        val playlist = PlaylistEntity(playlistId = 1L, name = "å¤œã®ãƒ‰ãƒ©ã‚¤ãƒ– \u001F mix", artworkUri = null, createdAt = 100L, position = 0)
         val crossRef = PlaylistTrackCrossRef(playlistId = 1L, trackId = "track-\u001E-1", dateAdded = 200L, position = 0)
         val history = PlaybackHistoryEntity(
             id = 5L,
             trackId = "track-1",
-            title = "Título",
+            title = "TÃ­tulo",
             artist = "Artist",
             album = "Album",
             imageUrl = null,
             durationListenedMs = 250_000L,
             timestamp = 300L,
-            source = com.example.tigerplayer.data.local.MediaSource.LOCAL
+            source = com.tigerplayer.data.local.MediaSource.LOCAL
         )
 
         coEvery { playlistDao.getAllPlaylistsSync() } returns listOf(playlist)
@@ -89,9 +89,9 @@ class BackupManagerTest {
         // Re-parse what was actually written, proving it's valid, round-trippable JSON.
         val writtenJson = output.toString(Charsets.UTF_8.name())
         val reparsed = com.google.gson.Gson().fromJson(writtenJson, BackupManifest::class.java)
-        assertEquals("夜のドライブ \u001F mix", reparsed.playlists.single().name)
+        assertEquals("å¤œã®ãƒ‰ãƒ©ã‚¤ãƒ– \u001F mix", reparsed.playlists.single().name)
         assertEquals("track-\u001E-1", reparsed.playlists.single().tracks.single().trackId)
-        assertEquals("Título", reparsed.history.single().title)
+        assertEquals("TÃ­tulo", reparsed.history.single().title)
     }
 
     @Test

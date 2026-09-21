@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import android.graphics.fonts.FontStyle
 import androidx.compose.animation.*
@@ -31,10 +31,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.TigerCyberCyan
-import com.example.tigerplayer.ui.theme.igniRed
-import com.example.tigerplayer.utils.BluetoothDeviceInfo
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.TigerCyberCyan
+import com.tigerplayer.ui.theme.igniRed
+import com.tigerplayer.utils.BluetoothDeviceInfo
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

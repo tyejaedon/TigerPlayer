@@ -1,5 +1,5 @@
 @file:SuppressLint("NewApi")
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.*
@@ -41,18 +41,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.bounceClick
-import com.example.tigerplayer.ui.theme.glassEffect
-import com.example.tigerplayer.ui.theme.igniRed
+import com.tigerplayer.R
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.igniRed
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * ⚡️ HIGH-PERFORMANCE INTERACTIVE MINI PLAYER
+ * âš¡ï¸ HIGH-PERFORMANCE INTERACTIVE MINI PLAYER
  * Features:
  * 1. Swipe Left/Right to skip tracks with carousel-carousel transition animations.
  * 2. Double Tap to Favorite with an on-screen flying heart animation.

@@ -1,11 +1,11 @@
-package com.example.tigerplayer.data.repository
+package com.tigerplayer.data.repository
 
 /**
  * THE SINGLE SOURCE OF EXCLUSION TRUTH (issue #50)
  *
  * Decides whether a directory - or a track living in one - should be dropped from the library.
  * Kept as a pure, framework-free object (mirroring [LibraryCacheDiffer]) so the same rule can be
- * unit-tested once and reused by both [com.example.tigerplayer.data.source.SafFolderScanner]
+ * unit-tested once and reused by both [com.tigerplayer.data.source.SafFolderScanner]
  * (walking custom directories) and [AudioRepository] (filtering MediaStore-derived tracks), which
  * is what makes exclusion consistent across scan, search and playback.
  */

@@ -1,11 +1,11 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import io.mockk.confirmVerified
 import io.mockk.mockk
 import io.mockk.verify

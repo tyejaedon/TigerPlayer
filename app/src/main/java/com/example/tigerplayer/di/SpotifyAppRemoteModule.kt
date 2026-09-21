@@ -1,7 +1,7 @@
-package com.example.tigerplayer.di
+package com.tigerplayer.di
 
-import com.example.tigerplayer.data.repository.SpotifyAppRemoteClient
-import com.example.tigerplayer.data.repository.SpotifyAppRemoteClientImpl
+import com.tigerplayer.data.repository.SpotifyAppRemoteClient
+import com.tigerplayer.data.repository.SpotifyAppRemoteClientImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn

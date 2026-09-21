@@ -1,4 +1,4 @@
-package com.example.tigerplayer.engine
+package com.tigerplayer.engine
 
 import android.content.Context
 import android.media.AudioDeviceInfo
@@ -803,7 +803,7 @@ data class AcousticNode(
 )
 
 /**
- * 🎨 STATE VARIABLE FILTER (SVF)
+ * ðŸŽ¨ STATE VARIABLE FILTER (SVF)
  * The Gold Standard for real-time studio equipment.
  * Inherently stable, perfectly coherent, and allows smooth parameter sweeps
  * without the "zipper noise" or "pops" of standard Biquads.

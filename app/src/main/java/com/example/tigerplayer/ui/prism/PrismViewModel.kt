@@ -1,14 +1,14 @@
-package com.example.tigerplayer.ui.prism
+package com.tigerplayer.ui.prism
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
-import com.example.tigerplayer.data.local.PrismSpectralAnalysis
-import com.example.tigerplayer.data.local.SettingsDataStore
-import com.example.tigerplayer.engine.AdaptiveDspEngine
-import com.example.tigerplayer.engine.PrismMixLevels
-import com.example.tigerplayer.engine.PrismMode
-import com.example.tigerplayer.engine.SpectralAnalysisMode
+import com.tigerplayer.data.local.PrismSpectralAnalysis
+import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.engine.AdaptiveDspEngine
+import com.tigerplayer.engine.PrismMixLevels
+import com.tigerplayer.engine.PrismMode
+import com.tigerplayer.engine.SpectralAnalysisMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.FlowPreview

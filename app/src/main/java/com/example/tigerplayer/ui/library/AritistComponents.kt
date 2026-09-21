@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.library
+package com.tigerplayer.ui.library
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
@@ -31,11 +31,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.data.repository.ArtistDetails
-import com.example.tigerplayer.ui.theme.TigerElectricAmber
-import com.example.tigerplayer.ui.theme.TigerTextHigh
-import com.example.tigerplayer.ui.theme.aardBlue
-import com.example.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.data.repository.ArtistDetails
+import com.tigerplayer.ui.theme.TigerElectricAmber
+import com.tigerplayer.ui.theme.TigerTextHigh
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.glassEffect
 import java.util.Locale
 
 
@@ -61,8 +61,8 @@ fun ArtistHeroImage(model: Any?, artistName: String) {
         model = model,
         contentDescription = "Image of $artistName",
         // Fallback to the Tiger logo if Last.fm fails
-        fallback = painterResource(com.example.tigerplayer.R.drawable.ic_tiger_logo),
-        error = painterResource(com.example.tigerplayer.R.drawable.ic_tiger_logo),
+        fallback = painterResource(com.tigerplayer.R.drawable.ic_tiger_logo),
+        error = painterResource(com.tigerplayer.R.drawable.ic_tiger_logo),
         modifier = Modifier
             .fillMaxWidth()
             .height(340.dp)

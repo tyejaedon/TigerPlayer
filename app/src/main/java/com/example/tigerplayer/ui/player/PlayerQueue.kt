@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.player
+package com.tigerplayer.ui.player
 
 import androidx.compose.ui.platform.testTag
 import android.view.HapticFeedbackConstants
@@ -29,10 +29,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.tigerplayer.R
-import com.example.tigerplayer.data.model.AudioTrack
-import com.example.tigerplayer.ui.theme.WitcherIcons
-import com.example.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.R
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.bounceClick
 
 @Composable
 fun QueueDisplay(
@@ -280,7 +280,7 @@ fun QueueDisplay(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        "≡",
+                                        "â‰¡",
                                         color = dynamicTextColor.copy(alpha = if (isDragging) 0.9f else 0.65f),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 18.sp

@@ -1,4 +1,4 @@
-package com.example.tigerplayer.ui.prism
+package com.tigerplayer.ui.prism
 
 object PrismTestTags {
     const val ENABLE_SWITCH = "prism_enable_switch"

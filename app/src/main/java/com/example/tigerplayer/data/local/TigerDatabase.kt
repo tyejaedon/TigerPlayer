@@ -1,20 +1,20 @@
-package com.example.tigerplayer.data.local
+package com.tigerplayer.data.local
 
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import com.example.tigerplayer.data.local.dao.MusicFolderDao
-import com.example.tigerplayer.data.local.dao.PlaylistDao
-import com.example.tigerplayer.data.local.dao.TigerDao
-import com.example.tigerplayer.data.local.entity.ArtistCacheEntity
-import com.example.tigerplayer.data.local.entity.CachedTrackEntity // NEW
-import com.example.tigerplayer.data.local.entity.MusicFolderEntity
-import com.example.tigerplayer.data.local.entity.PlaybackHistoryEntity
-import com.example.tigerplayer.data.local.entity.PlaylistEntity
-import com.example.tigerplayer.data.local.entity.PlaylistTrackCrossRef
-import com.example.tigerplayer.data.local.entity.LyricsCacheEntity
-import com.example.tigerplayer.data.local.entity.WaveformCacheEntity
+import com.tigerplayer.data.local.dao.MusicFolderDao
+import com.tigerplayer.data.local.dao.PlaylistDao
+import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.ArtistCacheEntity
+import com.tigerplayer.data.local.entity.CachedTrackEntity // NEW
+import com.tigerplayer.data.local.entity.MusicFolderEntity
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.tigerplayer.data.local.entity.PlaylistEntity
+import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.tigerplayer.data.local.entity.LyricsCacheEntity
+import com.tigerplayer.data.local.entity.WaveformCacheEntity
 
 @Database(
     entities = [
