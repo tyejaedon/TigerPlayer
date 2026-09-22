@@ -67,6 +67,9 @@ import kotlin.math.pow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Close
 import java.util.Locale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -747,13 +750,13 @@ private fun PlayerControlsContent(
         }
 
         if (showAdvancedRateDialog) {
-            PlaybackRateDialog(
+            PlaybackRateBottomSheet(
                 initialSpeed = uiState.playbackSpeed,
                 initialPitchRatio = uiState.pitch,
-                onDismissRequest = { showAdvancedRateDialog = false },
-                onSpeedChangeFinished = { newSpeed -> viewModel.setPlaybackSpeed(newSpeed) },
-                onPitchChangeFinished = { newPitchRatio -> viewModel.setPitch(newPitchRatio) },
-                onConfirm = { speed, pitch ->
+                onDismiss = { showAdvancedRateDialog = false },
+                onSpeedChangeFinished = { newSpeed: Float -> viewModel.setPlaybackSpeed(newSpeed) },
+                onPitchChangeFinished = { newPitchRatio: Float -> viewModel.setPitch(newPitchRatio) },
+                onConfirm = { speed: Float, pitch: Float ->
                     viewModel.setPlaybackSpeed(speed)
                     viewModel.setPitch(pitch)
                     showAdvancedRateDialog = false
@@ -763,90 +766,138 @@ private fun PlayerControlsContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlaybackRateDialog(
+private fun PlaybackRateBottomSheet(
     initialSpeed: Float,
     initialPitchRatio: Float,
-    onDismissRequest: () -> Unit,
+    onDismiss: () -> Unit,
     onSpeedChangeFinished: (Float) -> Unit,
     onPitchChangeFinished: (Float) -> Unit,
     onConfirm: (Float, Float) -> Unit
 ) {
     val speedMin = PlaybackRatePolicy.MIN_VALUE
     val speedMax = PlaybackRatePolicy.MAX_VALUE
-    val speedStep = PlaybackRatePolicy.STEP
-    val sliderSteps = (((speedMax - speedMin) / speedStep) - 1f).coerceAtLeast(0f).toInt()
+    val coarseStep = PlaybackRatePolicy.STEP
+    val fineStep = 0.05f
+    val sliderSteps = (((speedMax - speedMin) / fineStep) - 1f).coerceAtLeast(0f).toInt()
 
     fun semitonesToRatio(st: Float): Float = 2.0.pow((st / 12.0)).toFloat()
     fun ratioToSemitones(r: Float): Float = ((ln(r.toDouble()) / ln(2.0)) * 12.0).toFloat()
 
-    var tempSpeed by rememberSaveable { mutableStateOf(initialSpeed) }
-    var speedDragging by remember { mutableStateOf(false) }
+    var tempSpeed by rememberSaveable { mutableFloatStateOf(initialSpeed) }
+    var tempSemitones by rememberSaveable { mutableFloatStateOf(ratioToSemitones(initialPitchRatio).coerceIn(-12f, 12f)) }
 
-    // Represent pitch in semitones for a perceptual control
-    var tempSemitones by rememberSaveable { mutableStateOf(ratioToSemitones(initialPitchRatio).coerceIn(-12f, 12f)) }
-    var pitchDragging by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(text = "Playback Speed & Pitch") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Speed
-                Column {
-                    Text(text = "Speed")
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Slider(
-                            value = tempSpeed,
-                            onValueChange = { tempSpeed = it; speedDragging = true },
-                            onValueChangeFinished = {
-                                speedDragging = false
-                                val snapped = (( (tempSpeed - speedMin) / speedStep ).roundToInt() * speedStep + speedMin).coerceIn(speedMin, speedMax)
-                                tempSpeed = snapped
-                                onSpeedChangeFinished(snapped)
-                            },
-                            valueRange = speedMin..speedMax,
-                            steps = sliderSteps,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = String.format(Locale.US, "%.2fx", tempSpeed), modifier = Modifier.width(64.dp), textAlign = TextAlign.Center)
-                    }
-                }
-
-                // Pitch (semitone-based)
-                Column {
-                    Text(text = "Pitch")
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Slider(
-                            value = tempSemitones,
-                            onValueChange = { tempSemitones = it; pitchDragging = true },
-                            onValueChangeFinished = {
-                                pitchDragging = false
-                                tempSemitones = tempSemitones.roundToInt().toFloat().coerceIn(-12f, 12f)
-                                val ratio = semitonesToRatio(tempSemitones)
-                                onPitchChangeFinished(ratio)
-                            },
-                            valueRange = -12f..12f,
-                            steps = 24,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        val ratioPreview = semitonesToRatio(tempSemitones)
-                        Text(text = String.format(Locale.US, "%+dst (%.2fx)", tempSemitones.roundToInt(), ratioPreview), modifier = Modifier.width(110.dp), textAlign = TextAlign.Center)
-                    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "Playback Speed & Pitch", style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Close")
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(tempSpeed.coerceIn(speedMin, speedMax), semitonesToRatio(tempSemitones)); }) {
-                Text("Apply")
+
+            // Speed
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.GraphicEq, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "Speed")
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) { Text("Cancel") }
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                IconButton(onClick = {
+                    tempSpeed = (tempSpeed - coarseStep).coerceIn(speedMin, speedMax)
+                    onSpeedChangeFinished(tempSpeed)
+                }) { Icon(Icons.Rounded.Remove, contentDescription = "Decrease speed") }
+
+                IconButton(onClick = {
+                    tempSpeed = (tempSpeed - fineStep).coerceIn(speedMin, speedMax)
+                    onSpeedChangeFinished(tempSpeed)
+                }) { Icon(Icons.Rounded.Remove, contentDescription = "Fine decrease speed") }
+
+                Slider(
+                    value = tempSpeed,
+                    onValueChange = { tempSpeed = it },
+                    onValueChangeFinished = {
+                        val snapped = (( (tempSpeed - speedMin) / fineStep ).roundToInt() * fineStep + speedMin).coerceIn(speedMin, speedMax)
+                        tempSpeed = snapped
+                        onSpeedChangeFinished(snapped)
+                    },
+                    valueRange = speedMin..speedMax,
+                    steps = sliderSteps,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Text(text = String.format(Locale.US, "%.2fx", tempSpeed), modifier = Modifier.width(64.dp), textAlign = TextAlign.Center)
+
+                IconButton(onClick = {
+                    tempSpeed = (tempSpeed + fineStep).coerceIn(speedMin, speedMax)
+                    onSpeedChangeFinished(tempSpeed)
+                }) { Icon(Icons.Rounded.Add, contentDescription = "Fine increase speed") }
+
+                IconButton(onClick = {
+                    tempSpeed = (tempSpeed + coarseStep).coerceIn(speedMin, speedMax)
+                    onSpeedChangeFinished(tempSpeed)
+                }) { Icon(Icons.Rounded.Add, contentDescription = "Increase speed") }
+            }
+
+            // Pitch
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Tune, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "Pitch")
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                IconButton(onClick = {
+                    tempSemitones = (tempSemitones - 1f).coerceIn(-12f, 12f)
+                    onPitchChangeFinished(semitonesToRatio(tempSemitones))
+                }) { Icon(Icons.Rounded.Remove, contentDescription = "Decrease pitch (1 semitone)") }
+
+                IconButton(onClick = {
+                    tempSemitones = (tempSemitones - 0.25f).coerceIn(-12f, 12f)
+                    onPitchChangeFinished(semitonesToRatio(tempSemitones))
+                }) { Icon(Icons.Rounded.Remove, contentDescription = "Fine decrease pitch (0.25 st)") }
+
+                Slider(
+                    value = tempSemitones,
+                    onValueChange = { tempSemitones = it },
+                    onValueChangeFinished = {
+                        tempSemitones = tempSemitones.roundToInt().toFloat().coerceIn(-12f, 12f)
+                        onPitchChangeFinished(semitonesToRatio(tempSemitones))
+                    },
+                    valueRange = -12f..12f,
+                    steps = 24,
+                    modifier = Modifier.weight(1f)
+                )
+
+                val ratioPreview = semitonesToRatio(tempSemitones)
+                Text(text = String.format(Locale.US, "%+dst (%.2fx)", tempSemitones.roundToInt(), ratioPreview), modifier = Modifier.width(110.dp), textAlign = TextAlign.Center)
+
+                IconButton(onClick = {
+                    tempSemitones = (tempSemitones + 0.25f).coerceIn(-12f, 12f)
+                    onPitchChangeFinished(semitonesToRatio(tempSemitones))
+                }) { Icon(Icons.Rounded.Add, contentDescription = "Fine increase pitch (0.25 st)") }
+
+                IconButton(onClick = {
+                    tempSemitones = (tempSemitones + 1f).coerceIn(-12f, 12f)
+                    onPitchChangeFinished(semitonesToRatio(tempSemitones))
+                }) { Icon(Icons.Rounded.Add, contentDescription = "Increase pitch (1 semitone)") }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text(text = "Cancel") }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = { onConfirm(tempSpeed.coerceIn(speedMin, speedMax), semitonesToRatio(tempSemitones)) }) { Text(text = "Apply") }
+            }
         }
-    )
+    }
 }
 
 @Composable
