@@ -859,7 +859,7 @@ data class AcousticNode(
 )
 
 /**
- * ðŸŽ¨ STATE VARIABLE FILTER (SVF)
+ * 🎨 STATE VARIABLE FILTER (SVF)
  * The Gold Standard for real-time studio equipment.
  * Inherently stable, perfectly coherent, and allows smooth parameter sweeps
  * without the "zipper noise" or "pops" of standard Biquads.

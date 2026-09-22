@@ -23,7 +23,7 @@ class MetadataEngine @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // ðŸ”¥ THE FIX: artistDetails is now reactive to the database ground truth.
+    // 🔥 THE FIX: artistDetails is now reactive to the database ground truth.
     // This ensures that images fetched on the Artist Screen appear in the Constellation instantly.
     val artistDetails: StateFlow<Map<String, ArtistDetails>> = tigerDao.getAllArtistCache()
         .map { list ->
@@ -117,7 +117,7 @@ class MetadataEngine @Inject constructor(
     }
 
     /**
-     * ðŸ”¥ THE FIX 2: Non-destructive refresh.
+     * 🔥 THE FIX 2: Non-destructive refresh.
      * We no longer clear the whole cache. We just trigger fresh fetches for requested artists.
      */
     @OptIn(FlowPreview::class)

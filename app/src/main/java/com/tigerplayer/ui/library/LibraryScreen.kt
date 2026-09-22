@@ -86,7 +86,7 @@ fun LibraryScreen(
     onNavigateToPlaylist: (Long, String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    // ðŸ”¥ NEW: Pull pre-seeded artist profiles from the VM vault
+    // 🔥 NEW: Pull pre-seeded artist profiles from the VM vault
     val artistDetails by viewModel.artistDetails.collectAsState()
 
     val tabs = listOf("Songs", "Albums", "Artists", "Playlists", "Folders")
@@ -213,7 +213,7 @@ fun AnimatedLibraryHeader(
                 OutlinedTextField(
                     value = query,
                     onValueChange = onQueryChange,
-                    placeholder = { Text("Search grimoires...", style = MaterialTheme.typography.bodyMedium) },
+                    placeholder = { Text("Search your library...", style = MaterialTheme.typography.bodyMedium) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
@@ -261,7 +261,7 @@ fun VanguardLibraryTabs(
     val hapticFeedback = LocalHapticFeedback.current
     val lazyListState = rememberLazyListState()
 
-    // ðŸ”¥ THE FIX: Smoothly auto-centers the active tab in the viewport
+    // 🔥 THE FIX: Smoothly auto-centers the active tab in the viewport
     LaunchedEffect(pagerState.currentPage) {
         if (tabs.isNotEmpty()) {
             lazyListState.animateScrollToItem(
@@ -485,7 +485,7 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                                         1f
                                     )
 
-                                // ðŸ”¥ TRUE 3D CYLINDER PHYSICS
+                                // 🔥 TRUE 3D CYLINDER PHYSICS
                                 translationX =
                                     (fraction * fraction) * 45f // Slides outwards at screen boundaries
                                 rotationX =
@@ -701,7 +701,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
     if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            title = { Text("FORGE NEW GRIMOIRE", fontWeight = FontWeight.Black) },
+            title = { Text("NEW PLAYLIST", fontWeight = FontWeight.Black) },
             text = {
                 OutlinedTextField(
                     value = newPlaylistName,
@@ -772,7 +772,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
             if (userPlaylists.isNotEmpty()) {
                 item(key = "header_grimoires") {
                     Text(
-                        text = "YOUR GRIMOIRES",
+                        text = "YOUR PLAYLISTS",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                         fontWeight = FontWeight.Black,
@@ -1011,7 +1011,7 @@ fun FoldersTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) 
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // --- â° DURATION DISPLAY ---
+            // --- ⏰ DURATION DISPLAY ---
             Text(
                 text = formatDuration(track.durationMs),
                 style = MaterialTheme.typography.bodyMedium,
@@ -1314,7 +1314,7 @@ fun LazyListScope.renderSearchResults(
         }
         items(matchedArtists, key = { "artist_${it.name}" }) { artist ->
 
-            // ðŸ”¥ THE FIX: Extract HD images using the identical Lore logic
+            // 🔥 THE FIX: Extract HD images using the identical Lore logic
             val normalizedKey = remember(artist.name) {
                 ArtistUtils.getBaseArtist(artist.name).lowercase().trim()
             }

@@ -116,7 +116,7 @@ fun BluetoothNexusCard(
                 }
                 
                 Text(
-                    text = if (isExpanded) "Bluetooth nexus online" else "$codecLabel â€¢ $profileLabel",
+                    text = if (isExpanded) "Bluetooth nexus online" else "$codecLabel • $profileLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     maxLines = 1,
@@ -210,7 +210,7 @@ fun BluetoothNexusCard(
             }
         }
 
-        BluetoothStatusChip(label = if (isExpanded) "NEXUS CONNECTED" else "CONNECTED Â· TAP TO EXPAND")
+        BluetoothStatusChip(label = if (isExpanded) "NEXUS CONNECTED" else "CONNECTED · TAP TO EXPAND")
     }
 }
 

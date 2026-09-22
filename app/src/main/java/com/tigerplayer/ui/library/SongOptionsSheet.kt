@@ -181,7 +181,7 @@ fun SongOptionsSheet(
 
                     if (playlists.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No grimoires forged yet.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                            Text("No playlists yet.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                         }
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {

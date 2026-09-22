@@ -7,7 +7,7 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /**
- * ðŸ“¦ FRAMEBUFFER (FBO)
+ * 📦 FRAMEBUFFER (FBO)
  * Manages off-screen rendering surfaces.
  */
 class FrameBuffer(
@@ -82,7 +82,7 @@ class FrameBuffer(
 }
 
 /**
- * ðŸ“ PING-PONG BUFFER
+ * 🏓 PING-PONG BUFFER
  * Essential for simulations where the next state depends on the previous state.
  */
 
@@ -120,7 +120,7 @@ class PingPongBuffer(
 }
 
 /**
- * ðŸ”¥ SHADER ENGINE
+ * 🔥 SHADER ENGINE
  * Manages compilation and cached uniform locations.
  */
 class Shader(vertexSource: String, fragmentSource: String) {

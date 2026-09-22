@@ -4,7 +4,7 @@ import com.tigerplayer.engine.FilterType
 import kotlin.math.*
 
 /**
- * ðŸ“ HIGH-PRECISION BIQUAD FILTER DESIGNER
+ * 📐 HIGH-PRECISION BIQUAD FILTER DESIGNER
  * Implements Robert Bristow-Johnson's Audio EQ Cookbook equations with strict
  * bounding guards to prevent NaN/Infinity leaks on both visualizer and DSP.
  */

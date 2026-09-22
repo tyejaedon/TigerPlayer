@@ -35,7 +35,7 @@ class LyricsRepository @Inject constructor(
         // 2. CACHE MISS: CONSULT LRCLIB
         Log.d("LyricsRepo", "Cache miss. Hunting LRCLIB for ${track.title}...")
 
-        // ðŸ”¥ THE FIX: Isolate the try-catch block from the emit function to prevent Flow crashes
+        // 🔥 THE FIX: Isolate the try-catch block from the emit function to prevent Flow crashes
         val fetchedLyrics = try {
             val response = lrclibApi.getLyrics(
                 trackName = track.title,
@@ -69,14 +69,14 @@ class LyricsRepository @Inject constructor(
                 null
             }
         } catch (e: Exception) {
-            // ðŸ”¥ THE FIX: Allow coroutine cancellations to pass through silently
+            // 🔥 THE FIX: Allow coroutine cancellations to pass through silently
             if (e is CancellationException) throw e
 
             Log.e("LyricsRepo", "Failed to fetch lyrics: ${e.message}")
             null
         }
 
-        // ðŸ”¥ THE FIX: Safely emit only after all try/catch blocks are resolved
+        // 🔥 THE FIX: Safely emit only after all try/catch blocks are resolved
         emit(fetchedLyrics)
 
     }.flowOn(Dispatchers.IO)

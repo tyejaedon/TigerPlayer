@@ -25,7 +25,7 @@ class ConstellationDataEngine @Inject constructor(
     private val refreshNonce = MutableStateFlow(0L)
 
     /**
-     * ðŸ”¥ THE FIX: Returns a Flow instead of a one-shot suspend function.
+     * 🔥 THE FIX: Returns a Flow instead of a one-shot suspend function.
      * This combines history data with the live MetadataEngine details.
      */
     fun getGraphFlow(): Flow<ConstellationGraph> {
@@ -57,7 +57,7 @@ class ConstellationDataEngine @Inject constructor(
             val edges = mutableListOf<GraphEdge>()
 
             /* -----------------------------------
-               â˜€ï¸ 1. GALAXY CORE
+               ☀️ 1. GALAXY CORE
             ----------------------------------- */
             val coreId = "core_galaxy"
             nodes.add(GraphNode(
@@ -71,7 +71,7 @@ class ConstellationDataEngine @Inject constructor(
             ))
 
         /* -----------------------------------
-           ðŸŒ  2. ARTIST STARS (Reactive Mapping)
+           🌠 2. ARTIST STARS (Reactive Mapping)
         ----------------------------------- */
             val artistNodes = topArtists.map { artist ->
                 val normalized = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
@@ -98,7 +98,7 @@ class ConstellationDataEngine @Inject constructor(
             nodes.addAll(artistNodes)
 
         /* -----------------------------------
-           ðŸª 3. ALBUM ORBITAL SYSTEMS
+           🪐 3. ALBUM ORBITAL SYSTEMS
         ----------------------------------- */
             artistNodes.forEach { artist ->
                 val artistKey = ArtistUtils.getBaseArtist(artist.label).lowercase().trim()
@@ -127,7 +127,7 @@ class ConstellationDataEngine @Inject constructor(
             }
 
         /* -----------------------------------
-           â˜„ï¸ 4. TRACK DEBRIS FIELD
+           ☄️ 4. TRACK DEBRIS FIELD
         ----------------------------------- */
             val rogueCoreId = "core_rogue"
             nodes.add(GraphNode(

@@ -11,7 +11,7 @@ import com.tigerplayer.data.model.TrackFingerprint
 import kotlinx.coroutines.flow.Flow
 
 /**
- * ðŸ“Š ANALYTICAL DATA MODELS
+ * 📊 ANALYTICAL DATA MODELS
  */
 data class ArtistStats(
     val artistName: String,
@@ -38,7 +38,7 @@ data class SonicFootprintStats(
 )
 
 /**
- * ðŸ… TIGER DAO: THE ARCHIVE ENGINE
+ * 🐅 TIGER DAO: THE ARCHIVE ENGINE
  * Optimized for high-frequency audio processing and real-time statistics.
  */
 @Dao
@@ -70,7 +70,7 @@ abstract class TigerDao {
 
     /**
      * Appends restored rows with fresh auto-generated ids (callers must pass `id = 0`).
-     * Never used to satisfy normal playback recording â€” see [insertHistory].
+     * Never used to satisfy normal playback recording — see [insertHistory].
      */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertHistoryBatch(history: List<PlaybackHistoryEntity>): List<Long>
@@ -584,7 +584,7 @@ abstract class TigerDao {
     // ==========================================
 
     /**
-     * ðŸ”¥ THE VISIBILITY FIX: The Missing Retrieval Query
+     * 🔥 THE VISIBILITY FIX: The Missing Retrieval Query
      * You need this in your main DAO to feed the Home/Library screens.
      * Note the 'AS id' to match your Playlist data class.
      */
@@ -693,7 +693,7 @@ abstract class TigerDao {
     // ==========================================
 
 
-    // ðŸ”¥ THE FIX: Restoring the Lyric Maintenance Rituals
+    // 🔥 THE FIX: Restoring the Lyric Maintenance Rituals
     @Query("UPDATE lyrics_cache SET lastAccessed = :timestamp WHERE trackId = :trackId")
     abstract suspend fun updateLyricsAccessTime(
         trackId: String,

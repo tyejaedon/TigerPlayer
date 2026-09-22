@@ -15,7 +15,7 @@ data class PlaylistEntity(
 
     val name: String,
 
-    // ðŸ”¥ THE FIX: Stored safely as a String. Added default = null for cleaner object creation.
+    // 🔥 THE FIX: Stored safely as a String. Added default = null for cleaner object creation.
     val artworkUri: String? = null,
 
     val createdAt: Long = System.currentTimeMillis(),

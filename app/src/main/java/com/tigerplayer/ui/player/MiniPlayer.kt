@@ -52,7 +52,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * âš¡ï¸ HIGH-PERFORMANCE INTERACTIVE MINI PLAYER
+ * ⚡️ HIGH-PERFORMANCE INTERACTIVE MINI PLAYER
  * Features:
  * 1. Swipe Left/Right to skip tracks with carousel-carousel transition animations.
  * 2. Double Tap to Favorite with an on-screen flying heart animation.

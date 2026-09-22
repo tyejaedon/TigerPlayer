@@ -62,7 +62,7 @@ class BackupManagerTest {
         val history = PlaybackHistoryEntity(
             id = 5L,
             trackId = "track-1",
-            title = "TÃ­tulo",
+            title = "Título",
             artist = "Artist",
             album = "Album",
             imageUrl = null,
@@ -91,7 +91,7 @@ class BackupManagerTest {
         val reparsed = com.google.gson.Gson().fromJson(writtenJson, BackupManifest::class.java)
         assertEquals("å¤œã®ãƒ‰ãƒ©ã‚¤ãƒ– \u001F mix", reparsed.playlists.single().name)
         assertEquals("track-\u001E-1", reparsed.playlists.single().tracks.single().trackId)
-        assertEquals("TÃ­tulo", reparsed.history.single().title)
+        assertEquals("Título", reparsed.history.single().title)
     }
 
     @Test

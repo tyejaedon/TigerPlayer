@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
  *
  * This class only ever performs file I/O against a caller-supplied [Uri] (expected to come from
  * SAF's `ACTION_CREATE_DOCUMENT` / `ACTION_OPEN_DOCUMENT`, obtained by the UI layer) and delegates
- * all persistence to [PlaylistDao], [TigerDao], and [SettingsDataStore] â€” it never touches the
+ * all persistence to [PlaylistDao], [TigerDao], and [SettingsDataStore] — it never touches the
  * database or DataStore directly.
  */
 @Singleton
