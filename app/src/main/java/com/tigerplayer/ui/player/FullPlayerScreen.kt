@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -642,156 +643,42 @@ private fun PlayerControlsContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Advanced dialog toggle (declared at function scope so dialog can be shown outside the Box lambda)
-        var showAdvancedRateDialog by remember { mutableStateOf(false) }
-
-        // Playback speed & pitch controls (issue #52): collapsed by default behind a compact
-        // summary row. The two full-width sliders used to always be expanded inline, which on
-        // shorter screens pushed the control stack past the visible player area and clipped or
-        // overlapped whatever sat below it. Collapsing by default removes that footprint while
-        // keeping the same fine-tuning UI one tap away; the "Advanced" dialog still exists for
-        // precise numeric entry.
-        var isSpeedPanelExpanded by rememberSaveable { mutableStateOf(false) }
+        // Playback speed & pitch (issue #52): a compact row that opens a dedicated glass-styled
+        // dialog for adjustment, rather than permanently expanding two full-width sliders inline
+        // (which used to clip/overlap the controls below it on shorter screens).
+        var showPlaybackRateDialog by remember { mutableStateOf(false) }
 
         Box(modifier = Modifier.padding(horizontal = 24.dp)) {
-            // Slider configuration
-            val speedMin = PlaybackRatePolicy.MIN_VALUE
-            val speedMax = PlaybackRatePolicy.MAX_VALUE
-            val stepSize = PlaybackRatePolicy.STEP
-            val sliderSteps = (((speedMax - speedMin) / stepSize) - 1f).coerceAtLeast(0f).toInt()
-
-            var speedDragging by remember { mutableStateOf(false) }
-            var speedSliderValue by remember { mutableStateOf(uiState.playbackSpeed) }
-            LaunchedEffect(uiState.playbackSpeed) {
-                if (!speedDragging) speedSliderValue = uiState.playbackSpeed
-            }
-
-            var pitchDragging by remember { mutableStateOf(false) }
-            var pitchSliderValue by remember { mutableStateOf(uiState.pitch) }
-            LaunchedEffect(uiState.pitch) {
-                if (!pitchDragging) pitchSliderValue = uiState.pitch
-            }
-
-            // Advanced dialog toggle (moved to function scope)
-
-            fun snapToStep(value: Float, min: Float, step: Float): Float {
-                val steps = ((value - min) / step).roundToInt()
-                return (min + steps * step).coerceIn(min, min + (((speedMax - speedMin)/stepSize).roundToInt()) * step)
-            }
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { isSpeedPanelExpanded = !isSpeedPanelExpanded }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = WitcherIcons.Speed, contentDescription = null, tint = secondaryTextColor, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = String.format(Locale.US, "Speed %.2fx  \u2022  Pitch %.2fx", uiState.playbackSpeed, uiState.pitch),
-                        color = dynamicTextColor,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Icon(
-                        imageVector = if (isSpeedPanelExpanded) WitcherIcons.Collapse else WitcherIcons.Expand,
-                        contentDescription = if (isSpeedPanelExpanded) "Collapse speed and pitch controls" else "Expand speed and pitch controls",
-                        tint = secondaryTextColor
-                    )
-                }
-
-                AnimatedVisibility(visible = isSpeedPanelExpanded) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Speed control
-                Column {
-                    Text(text = "Speed", color = secondaryTextColor)
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        IconButton(onClick = { viewModel.decreasePlaybackSpeed() }) {
-                            Icon(imageVector = Icons.Rounded.Remove, contentDescription = "Decrease speed", tint = dynamicTextColor)
-                        }
-
-                        Slider(
-                            value = speedSliderValue,
-                            onValueChange = { speedSliderValue = it; speedDragging = true },
-                            onValueChangeFinished = {
-                                speedDragging = false
-                                val snapped = snapToStep(speedSliderValue, speedMin, stepSize)
-                                viewModel.setPlaybackSpeed(snapped)
-                            },
-                            valueRange = speedMin..speedMax,
-                            steps = sliderSteps,
-                            modifier = Modifier.weight(1f),
-                            colors = SliderDefaults.colors(
-                                thumbColor = dynamicTextColor,
-                                activeTrackColor = dynamicTextColor
-                            )
-                        )
-
-                        Text(text = String.format(Locale.US, "%.2fx", if (speedDragging) speedSliderValue else uiState.playbackSpeed), color = dynamicTextColor, modifier = Modifier.width(56.dp), textAlign = TextAlign.Center)
-
-                        IconButton(onClick = { viewModel.increasePlaybackSpeed() }) {
-                            Icon(imageVector = Icons.Rounded.Add, contentDescription = "Increase speed", tint = dynamicTextColor)
-                        }
-                    }
-                }
-
-                // Pitch control
-                Column {
-                    Text(text = "Pitch", color = secondaryTextColor)
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        IconButton(onClick = { viewModel.decreasePitch() }) {
-                            Icon(imageVector = Icons.Rounded.Remove, contentDescription = "Decrease pitch", tint = dynamicTextColor)
-                        }
-
-                        Slider(
-                            value = pitchSliderValue,
-                            onValueChange = { pitchSliderValue = it; pitchDragging = true },
-                            onValueChangeFinished = {
-                                pitchDragging = false
-                                val snapped = snapToStep(pitchSliderValue, speedMin, stepSize)
-                                viewModel.setPitch(snapped)
-                            },
-                            valueRange = speedMin..speedMax,
-                            steps = sliderSteps,
-                            modifier = Modifier.weight(1f),
-                            colors = SliderDefaults.colors(
-                                thumbColor = dynamicTextColor,
-                                activeTrackColor = dynamicTextColor
-                            )
-                        )
-
-                        Text(text = String.format(Locale.US, "%.2fx", if (pitchDragging) pitchSliderValue else uiState.pitch), color = dynamicTextColor, modifier = Modifier.width(56.dp), textAlign = TextAlign.Center)
-
-                        IconButton(onClick = { viewModel.increasePitch() }) {
-                            Icon(imageVector = Icons.Rounded.Add, contentDescription = "Increase pitch", tint = dynamicTextColor)
-                        }
-                    }
-                }
-                // Advanced dialog launcher
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { showAdvancedRateDialog = true }) {
-                        Text(text = "Advanced", color = dynamicTextColor)
-                    }
-                }
-                    }
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { showPlaybackRateDialog = true }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(imageVector = WitcherIcons.Speed, contentDescription = null, tint = secondaryTextColor, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = String.format(Locale.US, "Speed %.2fx  \u2022  Pitch %.2fx", uiState.playbackSpeed, uiState.pitch),
+                    color = dynamicTextColor,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = WitcherIcons.ChevronRight,
+                    contentDescription = "Adjust playback speed and pitch",
+                    tint = secondaryTextColor
+                )
             }
         }
 
-        if (showAdvancedRateDialog) {
+        if (showPlaybackRateDialog) {
             PlaybackRateDialog(
                 initialSpeed = uiState.playbackSpeed,
                 initialPitchRatio = uiState.pitch,
-                onDismissRequest = { showAdvancedRateDialog = false },
+                onDismissRequest = { showPlaybackRateDialog = false },
                 onSpeedChangeFinished = { newSpeed -> viewModel.setPlaybackSpeed(newSpeed) },
-                onPitchChangeFinished = { newPitchRatio -> viewModel.setPitch(newPitchRatio) },
-                onConfirm = { speed, pitch ->
-                    viewModel.setPlaybackSpeed(speed)
-                    viewModel.setPitch(pitch)
-                    showAdvancedRateDialog = false
-                }
+                onPitchChangeFinished = { newPitchRatio -> viewModel.setPitch(newPitchRatio) }
             )
         }
     }
@@ -803,8 +690,7 @@ private fun PlaybackRateDialog(
     initialPitchRatio: Float,
     onDismissRequest: () -> Unit,
     onSpeedChangeFinished: (Float) -> Unit,
-    onPitchChangeFinished: (Float) -> Unit,
-    onConfirm: (Float, Float) -> Unit
+    onPitchChangeFinished: (Float) -> Unit
 ) {
     val speedMin = PlaybackRatePolicy.MIN_VALUE
     val speedMax = PlaybackRatePolicy.MAX_VALUE
@@ -813,74 +699,176 @@ private fun PlaybackRateDialog(
 
     fun semitonesToRatio(st: Float): Float = 2.0.pow((st / 12.0)).toFloat()
     fun ratioToSemitones(r: Float): Float = ((ln(r.toDouble()) / ln(2.0)) * 12.0).toFloat()
+    fun snapSpeed(value: Float): Float =
+        (((value - speedMin) / speedStep).roundToInt() * speedStep + speedMin).coerceIn(speedMin, speedMax)
 
     var tempSpeed by rememberSaveable { mutableStateOf(initialSpeed) }
-    var speedDragging by remember { mutableStateOf(false) }
+    var tempSemitones by rememberSaveable {
+        mutableStateOf(ratioToSemitones(initialPitchRatio).roundToInt().toFloat().coerceIn(-12f, 12f))
+    }
 
-    // Represent pitch in semitones for a perceptual control
-    var tempSemitones by rememberSaveable { mutableStateOf(ratioToSemitones(initialPitchRatio).coerceIn(-12f, 12f)) }
-    var pitchDragging by remember { mutableStateOf(false) }
+    val dialogTextColor = Color(0xFFE9EEF8)
+    val dialogSecondaryColor = dialogTextColor.copy(alpha = 0.65f)
+    val accentColor = Color(0xFF4FC3F7)
+    val dialogShape = RoundedCornerShape(28.dp)
 
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(text = "Playback Speed & Pitch") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    fun restoreDefaults() {
+        tempSpeed = PlaybackRatePolicy.DEFAULT_VALUE
+        tempSemitones = 0f
+        onSpeedChangeFinished(PlaybackRatePolicy.DEFAULT_VALUE)
+        onPitchChangeFinished(PlaybackRatePolicy.DEFAULT_VALUE)
+    }
+
+    Dialog(onDismissRequest = onDismissRequest) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(dialogShape)
+                .background(Color(0xFF121212).copy(alpha = 0.94f))
+                .glassEffect(dialogShape)
+                .border(1.dp, Color.White.copy(alpha = 0.14f), dialogShape)
+                .padding(24.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "SPEED & PITCH",
+                        color = dialogTextColor,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
+                    IconButton(
+                        onClick = { restoreDefaults() },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.08f))
+                    ) {
+                        Icon(
+                            imageVector = WitcherIcons.Refresh,
+                            contentDescription = "Restore default speed and pitch",
+                            tint = dialogSecondaryColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
                 // Speed
-                Column {
-                    Text(text = "Speed")
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            text = "SPEED",
+                            color = dialogSecondaryColor,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = String.format(Locale.US, "%.2fx", tempSpeed),
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = {
+                            val snapped = PlaybackRatePolicy.adjust(tempSpeed, -speedStep)
+                            tempSpeed = snapped
+                            onSpeedChangeFinished(snapped)
+                        }) {
+                            Icon(imageVector = Icons.Rounded.Remove, contentDescription = "Decrease speed", tint = dialogTextColor)
+                        }
                         Slider(
                             value = tempSpeed,
-                            onValueChange = { tempSpeed = it; speedDragging = true },
+                            onValueChange = { tempSpeed = it },
                             onValueChangeFinished = {
-                                speedDragging = false
-                                val snapped = (( (tempSpeed - speedMin) / speedStep ).roundToInt() * speedStep + speedMin).coerceIn(speedMin, speedMax)
+                                val snapped = snapSpeed(tempSpeed)
                                 tempSpeed = snapped
                                 onSpeedChangeFinished(snapped)
                             },
                             valueRange = speedMin..speedMax,
                             steps = sliderSteps,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = accentColor,
+                                activeTrackColor = accentColor,
+                                inactiveTrackColor = dialogTextColor.copy(alpha = 0.16f)
+                            )
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = String.format(Locale.US, "%.2fx", tempSpeed), modifier = Modifier.width(64.dp), textAlign = TextAlign.Center)
+                        IconButton(onClick = {
+                            val snapped = PlaybackRatePolicy.adjust(tempSpeed, speedStep)
+                            tempSpeed = snapped
+                            onSpeedChangeFinished(snapped)
+                        }) {
+                            Icon(imageVector = Icons.Rounded.Add, contentDescription = "Increase speed", tint = dialogTextColor)
+                        }
                     }
                 }
 
                 // Pitch (semitone-based)
-                Column {
-                    Text(text = "Pitch")
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            text = "PITCH",
+                            color = dialogSecondaryColor,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        val ratioPreview = semitonesToRatio(tempSemitones)
+                        Text(
+                            text = String.format(Locale.US, "%+dst (%.2fx)", tempSemitones.roundToInt(), ratioPreview),
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = {
+                            val snapped = (tempSemitones - 1f).coerceIn(-12f, 12f)
+                            tempSemitones = snapped
+                            onPitchChangeFinished(semitonesToRatio(snapped))
+                        }) {
+                            Icon(imageVector = Icons.Rounded.Remove, contentDescription = "Decrease pitch", tint = dialogTextColor)
+                        }
                         Slider(
                             value = tempSemitones,
-                            onValueChange = { tempSemitones = it; pitchDragging = true },
+                            onValueChange = { tempSemitones = it },
                             onValueChangeFinished = {
-                                pitchDragging = false
-                                tempSemitones = tempSemitones.roundToInt().toFloat().coerceIn(-12f, 12f)
-                                val ratio = semitonesToRatio(tempSemitones)
-                                onPitchChangeFinished(ratio)
+                                val snapped = tempSemitones.roundToInt().toFloat().coerceIn(-12f, 12f)
+                                tempSemitones = snapped
+                                onPitchChangeFinished(semitonesToRatio(snapped))
                             },
                             valueRange = -12f..12f,
                             steps = 24,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = accentColor,
+                                activeTrackColor = accentColor,
+                                inactiveTrackColor = dialogTextColor.copy(alpha = 0.16f)
+                            )
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        val ratioPreview = semitonesToRatio(tempSemitones)
-                        Text(text = String.format(Locale.US, "%+dst (%.2fx)", tempSemitones.roundToInt(), ratioPreview), modifier = Modifier.width(110.dp), textAlign = TextAlign.Center)
+                        IconButton(onClick = {
+                            val snapped = (tempSemitones + 1f).coerceIn(-12f, 12f)
+                            tempSemitones = snapped
+                            onPitchChangeFinished(semitonesToRatio(snapped))
+                        }) {
+                            Icon(imageVector = Icons.Rounded.Add, contentDescription = "Increase pitch", tint = dialogTextColor)
+                        }
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismissRequest) {
+                        Text(text = "DONE", color = accentColor, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(tempSpeed.coerceIn(speedMin, speedMax), semitonesToRatio(tempSemitones)); }) {
-                Text("Apply")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) { Text("Cancel") }
         }
-    )
+    }
 }
 
 @Composable

@@ -717,6 +717,7 @@ object PlaybackRatePolicy {
     const val MIN_VALUE = 0.5f
     const val MAX_VALUE = 2.0f
     const val STEP = 0.25f
+    const val DEFAULT_VALUE = 1.0f
 
     fun normalize(value: Float): Float = value.coerceIn(MIN_VALUE, MAX_VALUE)
     fun adjust(current: Float, delta: Float): Float = normalize(current + delta)
