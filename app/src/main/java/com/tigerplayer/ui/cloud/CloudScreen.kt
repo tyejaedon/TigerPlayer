@@ -31,6 +31,7 @@ import coil.compose.AsyncImage
 import com.tigerplayer.MainActivity
 import com.tigerplayer.ui.theme.SpotifyGreen
 import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.YouTubeRed
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.launch
@@ -209,7 +210,7 @@ private fun CloudHeader(
                         .size(42.dp)
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
                 ) {
-                    Icon(WitcherIcons.Search, "YouTube Search", tint = MaterialTheme.colorScheme.primary)
+                    Icon(WitcherIcons.YouTube, "YouTube Search", tint = YouTubeRed)
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))

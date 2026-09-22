@@ -35,6 +35,7 @@ val TigerElectricAmber = Color(0xFFFFB347)
 val TigerSpectralViolet = Color(0xFF6C5CE7)
 
 val SpotifyGreen = Color(0xFF1DB954)
+val YouTubeRed = Color(0xFFFF0000)
 
 // ------------------------------
 // TEXT TOKENS
