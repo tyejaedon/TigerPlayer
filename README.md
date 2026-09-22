@@ -198,6 +198,14 @@ Before submitting a PR:
 2. Keep changes focused and scoped.
 3. Run tests and lint checks.
 4. Update documentation when needed.
+5. Add an entry to [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]`.
+
+---
+
+## 📝 Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md) for a running list of notable changes, or
+[`docs/Release-Notes-2.0.md`](docs/Release-Notes-2.0.md) for a prose-style summary of the 2.0 milestone.
 
 ---
 

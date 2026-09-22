@@ -74,3 +74,7 @@ particular: stable release (not alpha/beta) unless justified, no vendored binari
 Use [Conventional Commits](https://www.conventionalcommits.org/) (`fix:`, `feat:`, `docs:`,
 `chore:`, ...). Reference the issue you're closing (`Closes #123`).
 
+Add an entry to [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]` in the same PR, describing the
+user-visible effect of the change (not the implementation). Purely internal refactors, tests, and
+CI-only changes don't need an entry.
+

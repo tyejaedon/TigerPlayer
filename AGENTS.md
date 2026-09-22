@@ -186,4 +186,5 @@ Do not treat existing code in these areas as a pattern to copy. Each has an open
 - [ ] No debug logging of user content left in shipping code
 - [ ] Room schema change (if any) has a migration + migration test
 - [ ] Change is scoped to the issue; no drive-by refactors
+- [ ] User-visible change has an entry in `CHANGELOG.md` under `[Unreleased]`
 
