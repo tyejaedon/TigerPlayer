@@ -1,6 +1,7 @@
 @file:SuppressLint("NewApi")
 package com.tigerplayer.ui.player
 
+// ...existing code...
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.BitmapDrawable
@@ -9,23 +10,65 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.Subject
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,14 +87,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.engine.SleepTimerMode
 import com.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.theme.WitcherIcons
@@ -60,22 +108,13 @@ import com.tigerplayer.ui.theme.ensureVisibleOn
 import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.withSafeAlpha
 import com.tigerplayer.utils.AttributionTags
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-// ...existing code...
-import kotlin.math.roundToInt
+import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.pow
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Remove
-import java.util.Locale
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
-import com.tigerplayer.engine.SleepTimerMode
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -237,7 +276,7 @@ fun FullPlayerScreen(
                         onCancel = viewModel::cancelSleepTimer
                     )
                 }
-
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (windowState.hasSeparatingHinge && !shouldUseUnifiedLyricsLayout) {
                 // FLEX MODE: Visuals on TOP, Controls on BOTTOM
@@ -285,7 +324,7 @@ fun FullPlayerScreen(
                 // STANDARD MODE: Unified vertical flow
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(0.95f)
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
@@ -302,6 +341,7 @@ fun FullPlayerScreen(
                         isCoverOptimized = useCoverOptimizedUi
                     )
                 }
+                Spacer(modifier = Modifier.weight(0.05f)) // takes 5% of the leftover vertical space
 
                 // --- DOCK GLASS ---
                 PlayerControlsContent(
@@ -609,13 +649,13 @@ private fun PlayerControlsContent(
             .padding(bottom = 24.dp)
             .clip(controlShape)
             .glassEffect(controlShape)
-            .padding(vertical = 24.dp)
+            .padding(vertical = 18.dp)
     }
 
     Column(
         modifier = controlsContainerModifier
     ) {
-        Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+        Box(modifier = Modifier.padding(horizontal = 18.dp)) {
             TrackInfoCard(
                 track = currentTrack,
                 textColor = dynamicTextColor,
@@ -623,7 +663,11 @@ private fun PlayerControlsContent(
                 showTechnicalInfo = showTechnicalInfo,
                 bluetoothDevice = uiState.connectedBluetoothDevice,
                 onToggleTechInfo = onShowTechnicalInfoChange,
-                onToggleLike = { viewModel.toggleTrackLikeStatus(currentTrack) }
+                onToggleLike = { viewModel.toggleTrackLikeStatus(currentTrack) },
+                playbackSpeed = uiState.playbackSpeed,
+                pitchRatio = uiState.pitch,
+                onSpeedChangeFinished = viewModel::setPlaybackSpeed,
+                onPitchChangeFinished = viewModel::setPitch
             )
         }
         Spacer(modifier = Modifier.height(20.dp))
@@ -641,51 +685,15 @@ private fun PlayerControlsContent(
             textColor = dynamicTextColor
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
         // Playback speed & pitch (issue #52): a compact row that opens a dedicated glass-styled
         // dialog for adjustment, rather than permanently expanding two full-width sliders inline
         // (which used to clip/overlap the controls below it on shorter screens).
-        var showPlaybackRateDialog by remember { mutableStateOf(false) }
 
-        Box(modifier = Modifier.padding(horizontal = 24.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { showPlaybackRateDialog = true }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(imageVector = WitcherIcons.Speed, contentDescription = null, tint = secondaryTextColor, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = String.format(Locale.US, "Speed %.2fx  \u2022  Pitch %.2fx", uiState.playbackSpeed, uiState.pitch),
-                    color = dynamicTextColor,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = WitcherIcons.ChevronRight,
-                    contentDescription = "Adjust playback speed and pitch",
-                    tint = secondaryTextColor
-                )
-            }
-        }
-
-        if (showPlaybackRateDialog) {
-            PlaybackRateDialog(
-                initialSpeed = uiState.playbackSpeed,
-                initialPitchRatio = uiState.pitch,
-                onDismissRequest = { showPlaybackRateDialog = false },
-                onSpeedChangeFinished = { newSpeed -> viewModel.setPlaybackSpeed(newSpeed) },
-                onPitchChangeFinished = { newPitchRatio -> viewModel.setPitch(newPitchRatio) }
-            )
-        }
     }
 }
 
 @Composable
-private fun PlaybackRateDialog(
+internal fun PlaybackRateDialog(
     initialSpeed: Float,
     initialPitchRatio: Float,
     onDismissRequest: () -> Unit,
@@ -998,7 +1006,7 @@ fun HeaderRitual(
             )
         }
 
-        if (!isCoverOptimized) {
+     /*   if (!isCoverOptimized) {
             Spacer(modifier = Modifier.height(10.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1014,10 +1022,12 @@ fun HeaderRitual(
                 FilterChip(
                     selected = isAlbumClarityMode,
                     onClick = onToggleAlbumClarityMode,
-                    label = { Text("Clear Album", color = dynamicSecondaryTextColor) }
+                    label = { Text("Clear Mode", color = dynamicSecondaryTextColor) }
                 )
             }
         }
+
+      */
     }
 }
 

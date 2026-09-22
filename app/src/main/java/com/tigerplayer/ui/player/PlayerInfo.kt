@@ -1,41 +1,58 @@
 package com.tigerplayer.ui.player
 
-import android.graphics.fonts.FontStyle
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import android.annotation.SuppressLint
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.theme.TigerCyberCyan
+import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.igniRed
 import com.tigerplayer.utils.BluetoothDeviceInfo
 
+@SuppressLint("DefaultLocale")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackInfoCard(
@@ -45,8 +62,23 @@ fun TrackInfoCard(
     showTechnicalInfo: Boolean,
     bluetoothDevice: BluetoothDeviceInfo = BluetoothDeviceInfo(),
     onToggleTechInfo: (Boolean) -> Unit,
-    onToggleLike: () -> Unit
+    onToggleLike: () -> Unit,
+    playbackSpeed: Float = 1f,
+    pitchRatio: Float = 1f,
+    onSpeedChangeFinished: (Float) -> Unit = {},
+    onPitchChangeFinished: (Float) -> Unit = {}
 ) {
+    var showPlaybackRateDialog by remember { mutableStateOf(false) }
+
+    if (showPlaybackRateDialog) {
+        PlaybackRateDialog(
+            initialSpeed = playbackSpeed,
+            initialPitchRatio = pitchRatio,
+            onDismissRequest = { showPlaybackRateDialog = false },
+            onSpeedChangeFinished = onSpeedChangeFinished,
+            onPitchChangeFinished = onPitchChangeFinished
+        )
+    }
     if (showTechnicalInfo) {
         AlertDialog(
             onDismissRequest = { onToggleTechInfo(false) },
@@ -69,7 +101,7 @@ fun TrackInfoCard(
                     TechRow("Sample Rate", "${track.sampleRate} Hz", textColor)
                     TechRow("Bitrate", "${track.bitrate / 1000} kbps", textColor)
                     TechRow("Format", track.mimeType, textColor)
-                    
+
                     if (bluetoothDevice.isConnected) {
                         HorizontalDivider(
                             Modifier,
@@ -154,6 +186,19 @@ fun TrackInfoCard(
                     Icon(
                         imageVector = Icons.Rounded.Tune,
                         contentDescription = "Audio details",
+                        tint = Color.White
+                    )
+                }
+
+                IconButton(
+                    onClick = { showPlaybackRateDialog = true },
+                    modifier = Modifier
+                        .padding(start = 2.dp)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = WitcherIcons.Speed,
+                        contentDescription = "Adjust playback speed and pitch",
                         tint = Color.White
                     )
                 }
