@@ -29,12 +29,12 @@ data class TrackStats(
 )
 
 data class SonicFootprintStats(
-    val acoustic: Int,
-    val electronic: Int,
-    val bassHeavy: Int,
-    val vocal: Int,
-    val atmospheric: Int,
-    val total: Int
+    val acoustic: Long,
+    val electronic: Long,
+    val bassHeavy: Long,
+    val vocal: Long,
+    val atmospheric: Long,
+    val total: Long
 )
 
 /**
@@ -85,59 +85,78 @@ abstract class TigerDao {
     @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history WHERE timestamp >= :startTime")
     abstract fun getTotalListeningTimeMs(startTime: Long): Flow<Long>
 
+    /**
+     * Classifies each play into 5 sonic axes and weights every axis by the actual time listened
+     * ([PlaybackHistoryEntity.durationListenedMs]) rather than a raw play count, so a 20-second
+     * skip no longer counts the same as a 40-minute loop.
+     *
+     * Prefers curated Last.fm genre tags cached in `artist_cache` (joined by normalized artist
+     * name, same shape as [getTopArtists]) over guessing from free-text title/artist/album
+     * keywords. The keyword heuristic is used only as a fallback for artists with no cached
+     * genre data, since genre tags are considerably more reliable than title substring matches.
+     */
     @Query(
         """
+        WITH NormalizedHistory AS (
+            SELECT
+                trim(CASE
+                    WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
+                    WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
+                    WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
+                    WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
+                    WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
+                    WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
+                    WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
+                    ELSE artist
+                END) as artistName,
+                title, artist, album, durationListenedMs
+            FROM playback_history
+            WHERE timestamp >= :startTime
+        ),
+        Classified AS (
+            SELECT
+                h.durationListenedMs,
+                ',' || lower(coalesce(ac.genres, '')) || ',' as genreTags,
+                (ac.genres IS NOT NULL AND trim(ac.genres) != '') as hasGenres,
+                lower(h.title || ' ' || h.artist || ' ' || h.album) as freeText
+            FROM NormalizedHistory h
+            LEFT JOIN artist_cache ac ON ac.artistName = lower(trim(h.artistName))
+        )
         SELECT
             COALESCE(SUM(
                 CASE WHEN (
-                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%acoustic%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%unplugged%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%folk%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%guitar%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%singer songwriter%'
-                ) THEN 1 ELSE 0 END
+                    (hasGenres AND (genreTags LIKE '%acoustic%' OR genreTags LIKE '%folk%' OR genreTags LIKE '%unplugged%' OR genreTags LIKE '%singer-songwriter%' OR genreTags LIKE '%singer/songwriter%' OR genreTags LIKE '%americana%'))
+                    OR (NOT hasGenres AND (freeText LIKE '%acoustic%' OR freeText LIKE '%unplugged%' OR freeText LIKE '%folk%' OR freeText LIKE '%guitar%' OR freeText LIKE '%singer songwriter%'))
+                ) THEN durationListenedMs ELSE 0 END
             ), 0) AS acoustic,
             COALESCE(SUM(
                 CASE WHEN (
-                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%electro%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%edm%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%house%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%techno%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%synth%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%trance%'
-                ) THEN 1 ELSE 0 END
+                    (hasGenres AND (genreTags LIKE '%electro%' OR genreTags LIKE '%edm%' OR genreTags LIKE '%house%' OR genreTags LIKE '%techno%' OR genreTags LIKE '%synth%' OR genreTags LIKE '%trance%' OR genreTags LIKE '%dance%'))
+                    OR (NOT hasGenres AND (freeText LIKE '%electro%' OR freeText LIKE '%edm%' OR freeText LIKE '%house%' OR freeText LIKE '%techno%' OR freeText LIKE '%synth%' OR freeText LIKE '%trance%'))
+                ) THEN durationListenedMs ELSE 0 END
             ), 0) AS electronic,
             COALESCE(SUM(
                 CASE WHEN (
-                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%bass%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%trap%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%drill%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%808%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%dubstep%'
-                ) THEN 1 ELSE 0 END
+                    (hasGenres AND (genreTags LIKE '%bass%' OR genreTags LIKE '%trap%' OR genreTags LIKE '%drill%' OR genreTags LIKE '%dubstep%' OR genreTags LIKE '%drum and bass%' OR genreTags LIKE '%grime%'))
+                    OR (NOT hasGenres AND (freeText LIKE '%bass%' OR freeText LIKE '%trap%' OR freeText LIKE '%drill%' OR freeText LIKE '%808%' OR freeText LIKE '%dubstep%'))
+                ) THEN durationListenedMs ELSE 0 END
             ), 0) AS bassHeavy,
             COALESCE(SUM(
                 CASE WHEN (
-                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%vocal%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%choir%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%ballad%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%aria%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%soul%'
-                ) THEN 1 ELSE 0 END
+                    (hasGenres AND (genreTags LIKE '%vocal%' OR genreTags LIKE '%soul%' OR genreTags LIKE '%r&b%' OR genreTags LIKE '%gospel%' OR genreTags LIKE '%a cappella%' OR genreTags LIKE '%choir%'))
+                    OR (NOT hasGenres AND (freeText LIKE '%vocal%' OR freeText LIKE '%choir%' OR freeText LIKE '%ballad%' OR freeText LIKE '%aria%' OR freeText LIKE '%soul%'))
+                ) THEN durationListenedMs ELSE 0 END
             ), 0) AS vocal,
             COALESCE(SUM(
                 CASE WHEN (
-                    LOWER(title || ' ' || artist || ' ' || album) LIKE '%ambient%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%chill%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%cinematic%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%space%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%dream%'
-                    OR LOWER(title || ' ' || artist || ' ' || album) LIKE '%lofi%'
-                ) THEN 1 ELSE 0 END
+                    (hasGenres AND (genreTags LIKE '%ambient%' OR genreTags LIKE '%chill%' OR genreTags LIKE '%cinematic%' OR genreTags LIKE '%dream%' OR genreTags LIKE '%lofi%' OR genreTags LIKE '%lo-fi%' OR genreTags LIKE '%post-rock%' OR genreTags LIKE '%shoegaze%'))
+                    OR (NOT hasGenres AND (freeText LIKE '%ambient%' OR freeText LIKE '%chill%' OR freeText LIKE '%cinematic%' OR freeText LIKE '%space%' OR freeText LIKE '%dream%' OR freeText LIKE '%lofi%'))
+                ) THEN durationListenedMs ELSE 0 END
             ), 0) AS atmospheric,
-            COUNT(*) AS total
-        FROM playback_history
-        WHERE timestamp >= :startTime
+            COALESCE(SUM(durationListenedMs), 0) AS total
+        FROM Classified
     """
     )
     abstract fun getSonicFootprintStats(startTime: Long): Flow<SonicFootprintStats>
