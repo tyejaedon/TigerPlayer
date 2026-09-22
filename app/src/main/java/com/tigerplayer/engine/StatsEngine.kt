@@ -50,7 +50,7 @@ class StatsEngine @Inject constructor(
 
             combine(
                 listeningTotals,
-                // ðŸ”¥ FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
+                // 🔥 FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
                 historyRepository.getTopArtists(startTime, limit = 50),
                 historyRepository.getTopTracks(startTime, limit = 50),
                 allTracksFlow,
@@ -75,7 +75,7 @@ class StatsEngine @Inject constructor(
                     globalListeningSharePercent = sharePercent,
                     statsEpochMs = statsEpochMs,
                     topArtists = topArtistsDb.map { artist ->
-                        // ðŸ”¥ FIX 2: Normalize the key to safely extract the High-Res API image
+                        // 🔥 FIX 2: Normalize the key to safely extract the High-Res API image
                         val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
 
                         // Fallback: If API image is missing, grab the first local album cover for this artist
@@ -224,7 +224,7 @@ class StatsEngine @Inject constructor(
     }
 
     /**
-     * ðŸ”¥ UPGRADED TEMPORAL ENGINE
+     * 🔥 UPGRADED TEMPORAL ENGINE
      * Replaces rolling math (e.g. 24 hours ago) with absolute Calendar boundaries.
      * "Today" now accurately begins at 12:00 AM.
      */

@@ -19,7 +19,7 @@ data class UserStatistics(
 
     val totalListeningTimeHours: Int = 0,
 
-    // ðŸ”¥ NEW: Top Artists mapped directly into the home state for the Constellation & Analytics
+    // 🔥 NEW: Top Artists mapped directly into the home state for the Constellation & Analytics
     val topArtists: List<StatItem> = emptyList()
 )
 

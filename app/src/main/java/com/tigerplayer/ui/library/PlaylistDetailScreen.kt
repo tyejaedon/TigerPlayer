@@ -157,7 +157,7 @@ fun PlaylistDetailsScreen(
             }
 
             if (mutableTracks.isEmpty()) {
-                item { EmptyArchiveState("The grimoire is empty.") }
+                item { EmptyArchiveState("This playlist is empty.") }
             } else {
                 itemsIndexed(items = mutableTracks, key = { _, track -> track.id }) { index, track ->
                     val isCurrent = uiState.currentTrack?.id == track.id

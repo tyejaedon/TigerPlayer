@@ -48,7 +48,7 @@ fun AlbumGridCard(
     ) {
 
         // =========================
-        // ðŸŽ¨ COVER ART
+        // 🎨 COVER ART
         // =========================
         Box(
             modifier = Modifier
@@ -128,7 +128,7 @@ fun AlbumGridCard(
         Spacer(modifier = Modifier.height(12.dp))
 
         // =========================
-        // ðŸ§¾ METADATA
+        // 🧾 METADATA
         // =========================
 
         Text(

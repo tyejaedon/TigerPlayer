@@ -644,7 +644,7 @@ private fun BackupRestoreSection(viewModel: SettingsViewModel, accent: Color) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 "Saves playlists, listening history, and app settings to a JSON file you choose. " +
-                    "Navidrome/Spotify sign-in is never included â€” you'll sign back in after a restore.",
+                    "Navidrome/Spotify sign-in is never included — you'll sign back in after a restore.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
             )

@@ -70,7 +70,7 @@ class LibraryEngine @Inject constructor(
         val allTracks: List<AudioTrack>
     )
 
-    // ðŸ”¥ THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
+    // 🔥 THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
     @OptIn(FlowPreview::class)
     fun getAggregatedLibraryFlow(
         unifiedTracksFlow: Flow<List<AudioTrack>>,

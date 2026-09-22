@@ -62,7 +62,7 @@ class SpotifyRepository @Inject constructor(
 
     val currentSpotifyTrack: StateFlow<String?> = _spotifyPlaybackState
         .map { state ->
-            state?.track?.let { "${it.title} â€¢ ${it.artist}" } ?: "Not Playing"
+            state?.track?.let { "${it.title} • ${it.artist}" } ?: "Not Playing"
         }
         .stateIn(repositoryScope, SharingStarted.Eagerly, "Not Playing")
 

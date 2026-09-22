@@ -67,7 +67,7 @@ class CloudViewModel @Inject constructor(
 
     init {
         // CONTINUOUS MONITORING
-        // ðŸ”¥ THE FIX: Replaced mutable boolean flag with elegant .take(1) stream operation
+        // 🔥 THE FIX: Replaced mutable boolean flag with elegant .take(1) stream operation
         viewModelScope.launch {
             authManager.token
                 .filter { it.isNotEmpty() }
@@ -82,7 +82,7 @@ class CloudViewModel @Inject constructor(
     private suspend fun ensureValidToken(): String? {
         val token = authManager.getValidToken()
         if (token.isEmpty()) {
-            _uiError.value = "The oracle requires authentication."
+            _uiError.value = "Please sign in to Spotify to continue."
             return null
         }
         return token
@@ -112,9 +112,9 @@ class CloudViewModel @Inject constructor(
             try {
                 _currentPlaylistTracks.value = spotifyRepository.fetchPlaylistTracks(token, playlistId)
             } catch (e: Exception) {
-                // ðŸ”¥ THE FIX: Never swallow CancellationExceptions in Coroutines!
+                // 🔥 THE FIX: Never swallow CancellationExceptions in Coroutines!
                 if (e is CancellationException) throw e
-                _uiError.value = "Failed to manifest tracks."
+                _uiError.value = "Couldn't load tracks. Please try again."
             } finally {
                 _isLoadingTracks.value = false
             }
@@ -131,7 +131,7 @@ class CloudViewModel @Inject constructor(
                 _currentPlaylistTracks.value = spotifyRepository.fetchAlbumTracks(token, albumId)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                _uiError.value = "Failed to manifest album."
+                _uiError.value = "Couldn't load album tracks. Please try again."
             } finally {
                 _isLoadingTracks.value = false
             }
@@ -146,7 +146,7 @@ class CloudViewModel @Inject constructor(
                 spotifyRepository.fetchUserSavedAlbums(token)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                _uiError.value = "Failed to retrieve your album grimoires."
+                _uiError.value = "Couldn't load your saved albums. Please try again."
             } finally {
                 _isLoadingAlbums.value = false
             }
@@ -161,7 +161,7 @@ class CloudViewModel @Inject constructor(
                 spotifyRepository.fetchUserPlaylists(token)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                _uiError.value = "Failed to retrieve your playlist grimoires."
+                _uiError.value = "Couldn't load your playlists. Please try again."
             } finally {
                 _isLoadingTracks.value = false
             }

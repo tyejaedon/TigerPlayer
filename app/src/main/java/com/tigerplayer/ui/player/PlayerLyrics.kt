@@ -136,7 +136,7 @@ fun LyricsDisplay(
                     )
 
                     Text(
-                        text = line.text.ifBlank { "â€¢â€¢â€¢" },
+                        text = line.text.ifBlank { "•••" },
                         color = if (isActive) activeColor else textColor.copy(0.4f),
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.Black,

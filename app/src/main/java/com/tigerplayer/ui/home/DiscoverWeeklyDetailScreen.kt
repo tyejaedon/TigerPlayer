@@ -405,7 +405,7 @@ private fun DiscoverTrackCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${track.artist} â€¢ ${track.album}",
+                    text = "${track.artist} • ${track.album}",
                     color = Color.White.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,

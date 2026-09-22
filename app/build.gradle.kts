@@ -20,7 +20,7 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
-// ðŸ”¥ THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
+// 🔥 THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
 configure<ApplicationExtension> {
     namespace = "com.tigerplayer"
     compileSdk = 36

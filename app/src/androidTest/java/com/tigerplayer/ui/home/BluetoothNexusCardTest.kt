@@ -37,7 +37,7 @@ class BluetoothNexusCardTest {
         }
 
         composeRule.onNodeWithText("AERO BUDS").assertIsDisplayed()
-        composeRule.onNodeWithText("AAC â€¢ A2DP â€¢ Dual").assertIsDisplayed()
+        composeRule.onNodeWithText("AAC • A2DP • Dual").assertIsDisplayed()
         composeRule.onNodeWithText("Audio/Video").assertIsDisplayed()
         composeRule.onNodeWithText("84%").assertIsDisplayed()
         composeRule.onNodeWithText("BATTERY").assertIsDisplayed()
@@ -66,7 +66,7 @@ class BluetoothNexusCardTest {
         }
 
         composeRule.onNodeWithText("Unknown").assertIsDisplayed()
-        composeRule.onNodeWithText("N/A â€¢ A2DP â€¢ Unknown").assertIsDisplayed()
+        composeRule.onNodeWithText("N/A • A2DP • Unknown").assertIsDisplayed()
         composeRule.onNodeWithText("Audio Device").assertIsDisplayed()
         composeRule.onNodeWithText("Hidden").assertIsDisplayed()
     }

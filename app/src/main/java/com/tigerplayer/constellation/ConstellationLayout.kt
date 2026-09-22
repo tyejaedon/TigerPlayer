@@ -37,7 +37,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         )
 
         /* -----------------------------------
-           ðŸŒŒ 1. GALAXY CORE (Gravitational Center)
+           🌌 1. GALAXY CORE (Gravitational Center)
         ----------------------------------- */
         graph.nodes.find { it.type == NodeType.GALAXY_CORE && it.parentId == null }?.let { core ->
             result.add(
@@ -68,7 +68,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           ðŸŒ  2. ARTIST LAYER (Fibonacci Spiral Arms)
+           🌠 2. ARTIST LAYER (Fibonacci Spiral Arms)
         ----------------------------------- */
         val artists = graph.nodes.filter { it.type == NodeType.ARTIST }
         val goldenAngle = PI * (3.0 - sqrt(5.0))
@@ -108,7 +108,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           ðŸª 3. ALBUM LAYER (Orbital Chains)
+           🪐 3. ALBUM LAYER (Orbital Chains)
         ----------------------------------- */
         val albums = graph.nodes.filter { it.type == NodeType.ALBUM }
         albums.groupBy { it.parentId }.forEach { (artistId, group) ->
@@ -147,7 +147,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           â˜„ï¸ 4. TRACK LAYER (Debris Field)
+           ☄️ 4. TRACK LAYER (Debris Field)
         ----------------------------------- */
         graph.nodes.filter { it.type == NodeType.TRACK }.groupBy { it.parentId }.forEach { (parentId, group) ->
             val step = (2 * PI) / group.size.coerceAtLeast(1)
@@ -188,5 +188,5 @@ class OrbitalLayoutEngine @Inject constructor() {
 }
 
 /* -----------------------------------
-   ðŸ›  DATA STRUCTURES
+   🛠 DATA STRUCTURES
 ----------------------------------- */

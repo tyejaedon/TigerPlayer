@@ -147,7 +147,7 @@ fun MainScreen(
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
         // ==============================
-        // LAYER 1 â€” APP SHELL (WITH Z-AXIS PUSHBACK)
+        // LAYER 1 — APP SHELL (WITH Z-AXIS PUSHBACK)
         // ==============================
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
@@ -247,7 +247,7 @@ fun MainScreen(
         ) { padding ->
 
             // ==============================
-            // LAYER 2 â€” NAVIGATION STAGE
+            // LAYER 2 — NAVIGATION STAGE
             // ==============================
             Box(
                 modifier = Modifier
@@ -283,7 +283,7 @@ fun MainScreen(
                     }
                 ) {
                     composable(BottomNavTab.Home.route) {
-                        // ðŸ”¥ HILT INTEGRATION: The HomeViewModel is dynamically scoped right here!
+                        // 🔥 HILT INTEGRATION: The HomeViewModel is dynamically scoped right here!
                         // It will live as long as the NavHost exists.
                         val homeViewModel: HomeViewModel = hiltViewModel()
 
@@ -332,7 +332,7 @@ fun MainScreen(
         }
 
         // ==============================
-        // LAYER 3 â€” FULL PLAYER SHEET
+        // LAYER 3 — FULL PLAYER SHEET
         // ==============================
         AnimatedVisibility(
             visible = isExpanded,
@@ -396,7 +396,7 @@ fun MainScreen(
         }
 
         // ==============================
-        // LAYER 4 â€” SYSTEM OVERLAY
+        // LAYER 4 — SYSTEM OVERLAY
         // ==============================
         if (uiState.isScanning) {
             ScanningOverlay(

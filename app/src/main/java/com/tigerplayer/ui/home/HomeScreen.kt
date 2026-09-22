@@ -804,7 +804,7 @@ fun HomeHeader(
                     onValueChange = onSearchQueryChange,
                     placeholder = {
                         Text(
-                            "Search grimoires...",
+                            "Search your library...",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },

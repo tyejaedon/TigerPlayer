@@ -119,7 +119,7 @@ fun isSecondaryDisplayIdentity(displayId: Int): Boolean {
 /**
  * Combines the displayId identity signal with the dp/hinge heuristic and rejects ordinary
  * user-resize states. Precedence:
- * 1. A true secondary display ([isSecondaryDisplay]) is authoritative â€” there is no ambiguity,
+ * 1. A true secondary display ([isSecondaryDisplay]) is authoritative — there is no ambiguity,
  *    so it wins even if the window happens to also report multi-window mode.
  * 2. Multi-window mode (split-screen, freeform/desktop-mode, Samsung DeX pop-up view) means the
  *    small size is a user resize choice on the *same* display, not a real device posture, so it

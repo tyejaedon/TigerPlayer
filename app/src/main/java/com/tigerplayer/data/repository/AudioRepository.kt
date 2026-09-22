@@ -301,7 +301,7 @@ class AudioRepository @Inject constructor(
         tigerDao.updateTrackLikeStatus(trackId, isLiked)
     }
 
-    // ðŸ”¥ NEW: Persist the HD Artwork
+    // 🔥 NEW: Persist the HD Artwork
     suspend fun updateTrackArtworkUri(trackId: String, newUri: String) {
         tigerDao.updateTrackArtworkUri(trackId, newUri)
     }
@@ -364,7 +364,7 @@ class AudioRepository @Inject constructor(
 
     // Inside LibraryEngine or AudioRepository
     suspend fun savePlaylistOrder(playlistId: Long, tracks: List<AudioTrack>) {
-        // ðŸ›¡ï¸ STOP THE GHOST: Don't allow operations on ID -1 or 0
+        // 🛡️ STOP THE GHOST: Don't allow operations on ID -1 or 0
         if (playlistId <= 0) {
             Log.e("LibraryEngine", "Abort! Attempted to reorder invalid playlist ID: $playlistId")
             return

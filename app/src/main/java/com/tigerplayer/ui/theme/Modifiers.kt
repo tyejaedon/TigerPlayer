@@ -38,7 +38,7 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
             scaleX = scale
             scaleY = scale
         }
-        // ðŸ”¥ THE CRASH FIX: Bypasses the broken Foundation `clickable` node
+        // 🔥 THE CRASH FIX: Bypasses the broken Foundation `clickable` node
         // causing the "getPan" crash by using lower-level raw pointer inputs.
         .pointerInput(Unit) {
             detectTapGestures(

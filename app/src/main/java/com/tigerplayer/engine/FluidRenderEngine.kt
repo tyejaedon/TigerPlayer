@@ -220,7 +220,7 @@ class FluidRenderer @Inject constructor(
 
         val target = if (isDensity) densityRes else velocityRes
         target?.let {
-            // ðŸ”¥ FIX: Bind the texture to unit 0 and tell the shader to look at unit 0
+            // 🔥 FIX: Bind the texture to unit 0 and tell the shader to look at unit 0
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, it.readTexture)
             shader.setUniform("uTarget", 0)

@@ -581,7 +581,7 @@ private fun StatRow(rank: Int, item: StatItem) {
             )
             Text(
                 text = if (item.secondaryText.isNotBlank()) {
-                    "${item.playCount} SUMMONS â€¢ ${item.secondaryText.uppercase()}"
+                    "${item.playCount} SUMMONS • ${item.secondaryText.uppercase()}"
                 } else {
                     "${item.playCount} SUMMONS"
                 },

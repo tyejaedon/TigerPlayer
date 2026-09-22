@@ -108,7 +108,7 @@ fun ConstellationScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        // ðŸ”¥ MULTI-TOUCH GESTURE DETECTOR
+                        // 🔥 MULTI-TOUCH GESTURE DETECTOR
                         .pointerInput(Unit) {
                             detectTransformGestures { _, panChange, zoomChange, _ ->
                                 scope.launch {
@@ -118,7 +118,7 @@ fun ConstellationScreen(
                                 }
                             }
                         }
-                        // ðŸ”¥ DOUBLE-TAP TO WARP
+                        // 🔥 DOUBLE-TAP TO WARP
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onDoubleTap = { tapOffset ->
@@ -555,7 +555,7 @@ fun ConstellationOverlay(
                     if (selectedArtistReading != null) {
                         val artist = selectedArtistReading
                         Text(
-                            text = "${artist.artistName} â€¢ ${artist.playCount} plays â€¢ ${artist.minutesListened} min",
+                            text = "${artist.artistName} • ${artist.playCount} plays • ${artist.minutesListened} min",
                             style = MaterialTheme.typography.titleSmall,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
@@ -567,7 +567,7 @@ fun ConstellationOverlay(
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.78f)
                         )
-                        val genreLabel = artist.genres.take(3).joinToString(" â€¢ ")
+                        val genreLabel = artist.genres.take(3).joinToString(" • ")
                         if (genreLabel.isNotBlank()) {
                             Text(
                                 text = genreLabel,

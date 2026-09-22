@@ -173,7 +173,7 @@ fun NowBriefWidget(
                                 append(weatherState.temperature)
                             }
                             withStyle(SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ambientGlowColor, baselineShift = BaselineShift.Superscript)) {
-                                append("Â°")
+                                append("°")
                             }
                         }
                     )

@@ -25,7 +25,7 @@ val TigerPaper = Color(0xFFFFFFFF)
 val TigerMutedSilk = Color(0xFFE8EDF5)
 
 // ------------------------------
-// ACCENTS (Samsung-style â€œclean neonâ€)
+// ACCENTS (Samsung-style “clean neon”)
 // ------------------------------
 val TigerNeonOrange = Color(0xFFFF7A1A)
 val TigerCyberCyan = Color(0xFF00E5FF)

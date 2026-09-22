@@ -19,7 +19,7 @@ import javax.inject.Inject
 import kotlin.math.roundToInt
 
 /* -----------------------------------
-   ðŸŒŒ UI STATE
+   🌌 UI STATE
 ----------------------------------- */
 
 sealed class ConstellationState {
@@ -47,7 +47,7 @@ data class ConstellationArtistReading(
 )
 
 /* -----------------------------------
-   ðŸ§  VIEWMODEL
+   🧠 VIEWMODEL
 ----------------------------------- */
 
 @HiltViewModel
@@ -59,7 +59,7 @@ class ConstellationViewModel @Inject constructor(
 ) : ViewModel() {
 
     /**
-     * ðŸ”¥ THE SUPREME REACTIVE PIPELINE
+     * 🔥 THE SUPREME REACTIVE PIPELINE
      * Converts the raw semantic graph into a physics-positioned UI state.
      * flowOn ensures the heavy layout math happens on the Default dispatcher.
      */
@@ -93,7 +93,7 @@ class ConstellationViewModel @Inject constructor(
         )
 
     /* -----------------------------------
-       ðŸŒŒ INSIGHT ENGINE
+       🌌 INSIGHT ENGINE
     ----------------------------------- */
 
     private fun generateGalaxyInsight(density: Float, layoutNodes: List<PositionedNode>): String {

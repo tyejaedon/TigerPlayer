@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// ðŸ”¥ THE FIX: Tell Hilt to bind the WeatherRepository interface to the WeatherRepositoryImpl implementation
+// 🔥 THE FIX: Tell Hilt to bind the WeatherRepository interface to the WeatherRepositoryImpl implementation
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class WeatherRepositoryModule {
