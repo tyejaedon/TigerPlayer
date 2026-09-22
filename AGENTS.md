@@ -55,7 +55,7 @@ Instrumented tests require a connected device or emulator and are **not** part o
 Run a single test class:
 
 ```powershell
-.\gradlew.bat :app:testDebugUnitTest --tests "com.example.tigerplayer.engine.StatsEngineFilterTest"
+.\gradlew.bat :app:testDebugUnitTest --tests "com.tigerplayer.engine.StatsEngineFilterTest"
 ```
 
 > **Note:** `README.md` contains hardcoded macOS paths

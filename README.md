@@ -127,7 +127,7 @@ YOUTUBE_API_KEY=your_youtube_api_key
 2. Use package name:
 
 ```text
-com.example.tigerplayer
+com.tigerplayer
 ```
 
 3. Add your signing SHA-1 fingerprints.

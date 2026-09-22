@@ -7,13 +7,13 @@
 # --- Media3 / ExoPlayer ---
 -keep class * extends androidx.media3.session.MediaSessionService { *; }
 -keep class * implements androidx.media3.common.audio.AudioProcessor { *; }
--keep class com.example.tigerplayer.service.AudioPlayerService { *; }
--keep class com.example.tigerplayer.service.MediaControllerManager { *; }
--keep class com.example.tigerplayer.engine.AdaptiveDspEngine { *; }
+-keep class com.tigerplayer.service.AudioPlayerService { *; }
+-keep class com.tigerplayer.service.MediaControllerManager { *; }
+-keep class com.tigerplayer.engine.AdaptiveDspEngine { *; }
 -dontwarn androidx.media3.**
 
 # --- OpenGL renderer entry points (reflection-safe) ---
--keep class com.example.tigerplayer.ui.player.TigerVortexRenderer { *; }
+-keep class com.tigerplayer.ui.player.TigerVortexRenderer { *; }
 
 # --- Coil ---
 -keep class coil.request.ImageRequest$Builder { *; }
@@ -31,8 +31,8 @@
 -dontwarn retrofit2.**
 -dontwarn okhttp3.**
 
--keep class com.example.tigerplayer.data.remote.model.** { *; }
--keepclassmembers class com.example.tigerplayer.data.remote.model.** {
+-keep class com.tigerplayer.data.remote.model.** { *; }
+-keepclassmembers class com.tigerplayer.data.remote.model.** {
 	<fields>;
 }
 
