@@ -24,6 +24,11 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Changed
 
+- **Sonic Prism**: the mixer moved from a cramped expandable Home dashboard card to its own
+  full-screen destination, where the faders scale to the available height (up to 360 dp) instead of
+  being clamped to 180 dp. The Home feed now shows a compact entry card with a quick enable toggle
+  that opens the new screen on tap. Removed the dead, commented-out mixer block from the full
+  player. (#173)
 - **Sonic Prism**: removed the developer-only FFT-vs-Bandpass spectral analysis toggle and its
   profiler readout from the shipped Home screen card (still available in debug builds); hid dead,
   unreachable "Sonic Prism full-screen hub" and duplicate mixer code paths that had been superseding

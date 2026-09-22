@@ -18,11 +18,11 @@ Implemented in these areas:
 - Prism state orchestration and persistence:
   - `app/src/main/java/com/example/tigerplayer/ui/prism/PrismViewModel.kt`
   - `app/src/main/java/com/example/tigerplayer/data/local/SettingsDataStore.kt`
-- UI wiring and controls (Home + Full Player + Prism Hub):
-  - `app/src/main/java/com/example/tigerplayer/ui/home/HomeScreen.kt`
-  - `app/src/main/java/com/example/tigerplayer/ui/player/FullPlayerScreen.kt`
-  - `app/src/main/java/com/example/tigerplayer/ui/main/MainScreen.kt`
-  - `app/src/main/java/com/example/tigerplayer/ui/prism/SonicPrismHub.kt`
+- UI wiring and controls (Home entry point + dedicated Prism screen):
+  - `app/src/main/java/com/tigerplayer/ui/home/HomeScreen.kt`
+  - `app/src/main/java/com/tigerplayer/ui/prism/SonicPrismScreen.kt`
+  - `app/src/main/java/com/tigerplayer/ui/main/MainScreen.kt`
+  - `app/src/main/java/com/tigerplayer/ui/prism/SonicPrismHub.kt`
 - DSP tests:
   - `app/src/test/java/com/example/tigerplayer/engine/PrismIsolatorTest.kt`
 
@@ -151,20 +151,20 @@ Rationale:
 
 ## Interface Upgrade
 
-### Shared Prism ViewModel across Home and Full Player
+### Shared Prism ViewModel across surfaces
 
-`MainScreen` now provides one shared `PrismViewModel` instance to:
+`MainScreen` owns one `PrismViewModel` instance and provides it to:
 
-- `HomeScreen`
-- `FullPlayerScreen`
+- `HomeScreen` (entry card + quick enable toggle)
+- `SonicPrismScreen` (the full mixer)
 
-This prevents state divergence between surfaces and keeps Prism behavior coherent across navigation and sheet transitions.
+This prevents state divergence between surfaces and keeps Prism behavior coherent across navigation.
 
 ### Enhanced Prism mixer controls
 
 `PrismInlineMixer` (in `ui/prism/SonicPrismHub.kt`) now supports:
 
-- Prism enable/disable switch
+- Prism enable/disable switch (optional — omitted when the host already renders one)
 - Preset chips
 - Reset-to-balanced action
 - Spectral analysis mode chips (`FFT` / `Bandpass`) for A/B profiling
@@ -172,18 +172,26 @@ This prevents state divergence between surfaces and keeps Prism behavior coheren
 - Live spectral bars and dominant-band readout
 - Existing neon vertical fader interaction
 
-### Home card behavior
+### Full-screen Prism destination
 
-`SonicPrismHubCard` now binds switch visibility and expansion directly to `state.isPrismEnabled`, removing local-only UI drift.
+The mixer lives on its own route, `Screen.SonicPrism` (`"sonic_prism"`), registered on the tab
+`NavHost` inside `MainScreen` so it shares the MainScreen-scoped `PrismViewModel`.
 
-### Full Player behavior
+`SonicPrismScreen` is a stateless composable driven by `PrismUiState`; `SonicPrismRoute` is the
+stateful binder that collects the ViewModel. The screen:
 
-`FullPlayerScreen` now uses the Prism package mixer explicitly and wires:
+- sizes the faders from the available height (46% of it, clamped to 180–360 dp) instead of the
+  fixed 180 dp a dashboard card could spare;
+- hosts the enable switch in its `CenterAlignedTopAppBar` and therefore passes
+  `onEnabledChange = null` to `PrismInlineMixer`, so only one switch carries `ENABLE_SWITCH`;
+- gates the spectral-analysis A/B chips behind `BuildConfig.DEBUG`, since they are a profiling aid.
 
-- slider events
-- enable/disable
-- preset selection
-- reset action
+### Home entry card behavior
+
+`SonicPrismEntryCard` replaced the old expandable `SonicPrismHubCard`. It is a compact row that
+shows the active preset (or a bypassed hint), offers a quick enable switch, and navigates to the
+full-screen destination when tapped. Both the card and its switch read directly from
+`state.isPrismEnabled`, so there is no local-only UI drift.
 
 ## Testing and Verification
 
@@ -198,31 +206,34 @@ This prevents state divergence between surfaces and keeps Prism behavior coheren
 
 New Compose/instrumentation hardening tests:
 
-- `app/src/androidTest/java/com/example/tigerplayer/ui/prism/PrismInlineMixerTest.kt`
+- `app/src/androidTest/java/com/tigerplayer/ui/prism/PrismInlineMixerTest.kt`
   - Verifies Prism UI callbacks for:
     - enable/disable switch
     - preset chip selection
     - reset action
     - spectral analysis mode chip selection (`FFT` vs `Bandpass`)
   - Verifies spectral visual readout reacts differently for low-tone vs high-tone synthetic input.
-- `app/src/androidTest/java/com/example/tigerplayer/ui/player/FullPlayerScreenTest.kt`
+- `app/src/androidTest/java/com/tigerplayer/ui/prism/SonicPrismScreenTest.kt`
+  - Verifies the full-screen destination renders the mixer, spectral section, and reset action.
+  - Verifies the back button reports navigation and the app-bar switch reflects/toggles enablement.
+- `app/src/androidTest/java/com/tigerplayer/ui/player/FullPlayerScreenTest.kt`
   - Verifies visual mode transition wiring toggles Prism enable binding:
     - `SONIC_PRISM` -> enabled
     - non-Prism visual mode -> disabled
 
 Supporting test tags were added in:
 
-- `app/src/main/java/com/example/tigerplayer/ui/prism/PrismTestTags.kt`
-- `app/src/main/java/com/example/tigerplayer/ui/prism/SonicPrismHub.kt`
+- `app/src/main/java/com/tigerplayer/ui/prism/PrismTestTags.kt`
+- `app/src/main/java/com/tigerplayer/ui/prism/SonicPrismHub.kt`
 
 ### Commands run during implementation
 
-```zsh
-cd /Users/tyejaedon/StudioProjects/TigerPlayer
-./gradlew :app:testDebugUnitTest --console=plain
-./gradlew :app:assembleDebug --console=plain
-./gradlew :app:lintDebug --console=plain
-./gradlew :app:assembleDebugAndroidTest --console=plain
+```powershell
+cd C:\TigerPlayer
+.\gradlew.bat :app:testFullDebugUnitTest --console=plain
+.\gradlew.bat :app:assembleFullDebug --console=plain
+.\gradlew.bat :app:lintFullDebug --console=plain
+.\gradlew.bat :app:assembleFullDebugAndroidTest --console=plain
 ```
 
 Observed status in this environment:

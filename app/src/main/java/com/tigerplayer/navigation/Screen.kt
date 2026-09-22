@@ -46,6 +46,9 @@ sealed class Screen(val route: String) {
 
     object YouTubeSearch : Screen("youtube_search")
 
+    /** Full-screen Sonic Prism mixer, hosted on the tab NavHost so it shares MainScreen's PrismViewModel. */
+    object SonicPrism : Screen("sonic_prism")
+
     object SpotifyPlaylist : Screen("spotify_playlist/{playlistId}/{playlistName}?imageUrl={imageUrl}") {
         fun createRoute(id: String, name: String, url: String?): String {
             val encodedName = Uri.encode(name)
