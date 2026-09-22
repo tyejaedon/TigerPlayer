@@ -1,0 +1,3 @@
+2.1.1: Open-source release readiness — versionCode/versionName bump for F-Droid submission,
+finalized foss/full flavor split, and documentation updates ahead of the fdroiddata merge request.
+
