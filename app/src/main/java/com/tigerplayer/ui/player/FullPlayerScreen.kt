@@ -237,7 +237,7 @@ fun FullPlayerScreen(
                         onCancel = viewModel::cancelSleepTimer
                     )
                 }
-
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (windowState.hasSeparatingHinge && !shouldUseUnifiedLyricsLayout) {
                 // FLEX MODE: Visuals on TOP, Controls on BOTTOM
@@ -285,7 +285,7 @@ fun FullPlayerScreen(
                 // STANDARD MODE: Unified vertical flow
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(0.95f)
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
@@ -302,6 +302,7 @@ fun FullPlayerScreen(
                         isCoverOptimized = useCoverOptimizedUi
                     )
                 }
+                Spacer(modifier = Modifier.weight(0.05f)) // takes 5% of the leftover vertical space
 
                 // --- DOCK GLASS ---
                 PlayerControlsContent(
@@ -609,13 +610,13 @@ private fun PlayerControlsContent(
             .padding(bottom = 24.dp)
             .clip(controlShape)
             .glassEffect(controlShape)
-            .padding(vertical = 24.dp)
+            .padding(vertical = 18.dp)
     }
 
     Column(
         modifier = controlsContainerModifier
     ) {
-        Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+        Box(modifier = Modifier.padding(horizontal = 18.dp)) {
             TrackInfoCard(
                 track = currentTrack,
                 textColor = dynamicTextColor,
@@ -623,7 +624,11 @@ private fun PlayerControlsContent(
                 showTechnicalInfo = showTechnicalInfo,
                 bluetoothDevice = uiState.connectedBluetoothDevice,
                 onToggleTechInfo = onShowTechnicalInfoChange,
-                onToggleLike = { viewModel.toggleTrackLikeStatus(currentTrack) }
+                onToggleLike = { viewModel.toggleTrackLikeStatus(currentTrack) },
+                playbackSpeed = uiState.playbackSpeed,
+                pitchRatio = uiState.pitch,
+                onSpeedChangeFinished = viewModel::setPlaybackSpeed,
+                onPitchChangeFinished = viewModel::setPitch
             )
         }
         Spacer(modifier = Modifier.height(20.dp))
@@ -641,51 +646,15 @@ private fun PlayerControlsContent(
             textColor = dynamicTextColor
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
         // Playback speed & pitch (issue #52): a compact row that opens a dedicated glass-styled
         // dialog for adjustment, rather than permanently expanding two full-width sliders inline
         // (which used to clip/overlap the controls below it on shorter screens).
-        var showPlaybackRateDialog by remember { mutableStateOf(false) }
 
-        Box(modifier = Modifier.padding(horizontal = 24.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { showPlaybackRateDialog = true }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(imageVector = WitcherIcons.Speed, contentDescription = null, tint = secondaryTextColor, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = String.format(Locale.US, "Speed %.2fx  \u2022  Pitch %.2fx", uiState.playbackSpeed, uiState.pitch),
-                    color = dynamicTextColor,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = WitcherIcons.ChevronRight,
-                    contentDescription = "Adjust playback speed and pitch",
-                    tint = secondaryTextColor
-                )
-            }
-        }
-
-        if (showPlaybackRateDialog) {
-            PlaybackRateDialog(
-                initialSpeed = uiState.playbackSpeed,
-                initialPitchRatio = uiState.pitch,
-                onDismissRequest = { showPlaybackRateDialog = false },
-                onSpeedChangeFinished = { newSpeed -> viewModel.setPlaybackSpeed(newSpeed) },
-                onPitchChangeFinished = { newPitchRatio -> viewModel.setPitch(newPitchRatio) }
-            )
-        }
     }
 }
 
 @Composable
-private fun PlaybackRateDialog(
+internal fun PlaybackRateDialog(
     initialSpeed: Float,
     initialPitchRatio: Float,
     onDismissRequest: () -> Unit,
@@ -998,7 +967,7 @@ fun HeaderRitual(
             )
         }
 
-        if (!isCoverOptimized) {
+     /*   if (!isCoverOptimized) {
             Spacer(modifier = Modifier.height(10.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1014,10 +983,12 @@ fun HeaderRitual(
                 FilterChip(
                     selected = isAlbumClarityMode,
                     onClick = onToggleAlbumClarityMode,
-                    label = { Text("Clear Album", color = dynamicSecondaryTextColor) }
+                    label = { Text("Clear Mode", color = dynamicSecondaryTextColor) }
                 )
             }
         }
+
+      */
     }
 }
 

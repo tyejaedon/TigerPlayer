@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.theme.TigerCyberCyan
+import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.igniRed
 import com.tigerplayer.utils.BluetoothDeviceInfo
 
@@ -45,8 +46,23 @@ fun TrackInfoCard(
     showTechnicalInfo: Boolean,
     bluetoothDevice: BluetoothDeviceInfo = BluetoothDeviceInfo(),
     onToggleTechInfo: (Boolean) -> Unit,
-    onToggleLike: () -> Unit
+    onToggleLike: () -> Unit,
+    playbackSpeed: Float = 1f,
+    pitchRatio: Float = 1f,
+    onSpeedChangeFinished: (Float) -> Unit = {},
+    onPitchChangeFinished: (Float) -> Unit = {}
 ) {
+    var showPlaybackRateDialog by remember { mutableStateOf(false) }
+
+    if (showPlaybackRateDialog) {
+        PlaybackRateDialog(
+            initialSpeed = playbackSpeed,
+            initialPitchRatio = pitchRatio,
+            onDismissRequest = { showPlaybackRateDialog = false },
+            onSpeedChangeFinished = onSpeedChangeFinished,
+            onPitchChangeFinished = onPitchChangeFinished
+        )
+    }
     if (showTechnicalInfo) {
         AlertDialog(
             onDismissRequest = { onToggleTechInfo(false) },
@@ -69,7 +85,7 @@ fun TrackInfoCard(
                     TechRow("Sample Rate", "${track.sampleRate} Hz", textColor)
                     TechRow("Bitrate", "${track.bitrate / 1000} kbps", textColor)
                     TechRow("Format", track.mimeType, textColor)
-                    
+
                     if (bluetoothDevice.isConnected) {
                         HorizontalDivider(
                             Modifier,
@@ -154,6 +170,19 @@ fun TrackInfoCard(
                     Icon(
                         imageVector = Icons.Rounded.Tune,
                         contentDescription = "Audio details",
+                        tint = Color.White
+                    )
+                }
+
+                IconButton(
+                    onClick = { showPlaybackRateDialog = true },
+                    modifier = Modifier
+                        .padding(start = 2.dp)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = WitcherIcons.Speed,
+                        contentDescription = "Adjust playback speed and pitch",
                         tint = Color.White
                     )
                 }
