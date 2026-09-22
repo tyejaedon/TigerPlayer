@@ -34,6 +34,10 @@ coil = "2.7.0"
 playServicesAuth = "21.6.0"
 glance = "1.1.1"
 roomTesting = "2.8.5"
+# androidx.sqlite artifacts version independently from androidx.room (transitively resolved to
+# 2.6.2 via sqlite-android/sqlite-framework-android at roomVersion 2.8.5). Keep in sync with
+# whatever version those transitive artifacts resolve to; do not assume it tracks roomVersion.
+sqlite = "2.6.2"
 uiautomator = "2.4.0"
 youtubePlayer = "13.0.0"
 
@@ -91,6 +95,18 @@ androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref =
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomVersion" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomVersion" }
 androidx-room-testing = { module = "androidx.room:room-testing", version.ref = "roomTesting" }
+# Room's own native SQLite implementation. Used explicitly by Robolectric-backed migration
+# tests: Robolectric doesn't shadow android.database.sqlite in a way that's compatible with
+# Room 2.7+'s default AndroidSQLiteDriver-based MigrationTestHelper path (it throws
+# "This driver is configured to open a database named '<name>' but '<absolute-sandboxed-path>'
+# was requested"). BundledSQLiteDriver bypasses the Android SQLiteOpenHelper layer entirely,
+# so it works identically on the JVM and on-device. See TigerDatabaseMigrationTest (src/test).
+# Depend on the JVM-specific artifact by name, not the "androidx.sqlite:sqlite-bundled" umbrella
+# module: inside an Android Gradle module, every configuration (including testImplementation) is
+# tagged org.gradle.jvm.environment=android, so the umbrella module always resolves to the Android
+# AAR variant (containing arm/x86 .so files) even for the JVM/Robolectric unit test classpath,
+# causing UnsatisfiedLinkError on desktop. sqlite-bundled-jvm carries real desktop native binaries.
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled-jvm", version.ref = "sqlite" }
 androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 auth = { module = "com.spotify.android:auth", version.ref = "auth" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }

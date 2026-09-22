@@ -114,6 +114,9 @@ configure<ApplicationExtension> {
         getByName("debug") {
             assets.srcDir("$projectDir/schemas")
         }
+        getByName("test") {
+            assets.srcDir("$projectDir/schemas")
+        }
         getByName("androidTest") {
             assets.srcDir("$projectDir/schemas")
         }
@@ -214,6 +217,8 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.room.testing)
+    // Backs BundledSQLiteDriver for Robolectric migration tests (see libs.versions.toml).
+    testImplementation(libs.androidx.sqlite.bundled)
     // Robolectric provides a real android.net.Uri on the JVM, so URI/signing logic can be unit
     // tested without a device. Test-only; ships nothing.
     testImplementation(libs.robolectric)
