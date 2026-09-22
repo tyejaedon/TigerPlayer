@@ -24,6 +24,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
@@ -115,6 +116,12 @@ class MediaControllerManager @Inject constructor(
 
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode
+
+    private val _playbackSpeed = MutableStateFlow(1f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed
+
+    private val _pitch = MutableStateFlow(1f)
+    val pitch: StateFlow<Float> = _pitch
 
     private val _mediaControllerState = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val mediaControllerState: SharedFlow<Unit> = _mediaControllerState
@@ -287,6 +294,7 @@ class MediaControllerManager @Inject constructor(
 
                 setupPlayerListener(controller)
                 restorePlaybackState(controller)
+                restoreSavedPlaybackParameters(controller)
 
                 if (controller.isPlaying) {
                     startPositionTicker()
@@ -361,6 +369,14 @@ class MediaControllerManager @Inject constructor(
 
                 maybeScheduleInfinitePlay(item?.mediaId)
                 saveCurrentState()
+            }
+
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+                _playbackSpeed.value = playbackParameters.speed
+                _pitch.value = playbackParameters.pitch
+                managerScope.launch {
+                    playbackPrefs.savePlaybackParameters(playbackParameters.speed, playbackParameters.pitch)
+                }
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
@@ -1049,5 +1065,26 @@ class MediaControllerManager @Inject constructor(
         controllerFuture?.let { MediaController.releaseFuture(it) }
         mediaController = null
         managerScope.cancel()
+    }
+
+    fun setPlaybackParameters(speed: Float, pitch: Float) {
+        val controller = mediaController ?: return
+        val nextSpeed = speed.coerceIn(0.5f, 2.0f)
+        val nextPitch = pitch.coerceIn(0.5f, 2.0f)
+        _playbackSpeed.value = nextSpeed
+        _pitch.value = nextPitch
+        controller.setPlaybackParameters(PlaybackParameters(nextSpeed, nextPitch))
+        managerScope.launch { playbackPrefs.savePlaybackParameters(nextSpeed, nextPitch) }
+    }
+
+    private fun restoreSavedPlaybackParameters(controller: MediaController) {
+        managerScope.launch {
+            val savedSpeed = playbackPrefs.playbackSpeed.first().coerceIn(0.5f, 2.0f)
+            val savedPitch = playbackPrefs.pitch.first().coerceIn(0.5f, 2.0f)
+            _playbackSpeed.value = savedSpeed
+            _pitch.value = savedPitch
+            controller.setPlaybackParameters(PlaybackParameters(savedSpeed, savedPitch))
+            playbackPrefs.savePlaybackParameters(savedSpeed, savedPitch)
+        }
     }
 }

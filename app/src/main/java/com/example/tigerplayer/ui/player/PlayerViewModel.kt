@@ -70,6 +70,8 @@ data class PlayerUiState(
     val artistImageUrl: String? = null,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val playbackSpeed: Float = 1f,
+    val pitch: Float = 1f,
     val allTracks: List<AudioTrack> = emptyList(),
     val tracks: List<AudioTrack> = emptyList(),
     val artists: List<LibraryArtist> = emptyList(),
@@ -258,6 +260,19 @@ class PlayerViewModel @Inject constructor(
                 .collect { isPlaying -> statsEngine.onPlayingChanged(isPlaying) }
         }
 
+        // --- PLAYBACK PARAMETERS (speed & pitch) ---
+        viewModelScope.launch {
+            mediaControllerManager.playbackSpeed.collect { speed ->
+                _uiState.update { it.copy(playbackSpeed = speed) }
+            }
+        }
+
+        viewModelScope.launch {
+            mediaControllerManager.pitch.collect { pitch ->
+                _uiState.update { it.copy(pitch = pitch) }
+            }
+        }
+
         // --- 2. LIBRARY SYNCHRONIZATION ---
         viewModelScope.launch {
             libraryEngine.getAggregatedLibraryFlow(
@@ -411,6 +426,37 @@ class PlayerViewModel @Inject constructor(
 
     fun toggleRepeat() {
         playbackEngine.toggleRepeat(_uiState.value.currentTrack)
+    }
+
+    // --- PLAYBACK SPEED & PITCH CONTROLS (issue #52) ---
+    fun setPlaybackSpeed(speed: Float) {
+        val normalized = PlaybackRatePolicy.normalize(speed)
+        viewModelScope.launch { mediaControllerManager.setPlaybackParameters(normalized, _uiState.value.pitch) }
+    }
+
+    fun increasePlaybackSpeed() {
+        val next = PlaybackRatePolicy.adjust(_uiState.value.playbackSpeed, PlaybackRatePolicy.STEP)
+        setPlaybackSpeed(next)
+    }
+
+    fun decreasePlaybackSpeed() {
+        val next = PlaybackRatePolicy.adjust(_uiState.value.playbackSpeed, -PlaybackRatePolicy.STEP)
+        setPlaybackSpeed(next)
+    }
+
+    fun setPitch(pitch: Float) {
+        val normalized = PlaybackRatePolicy.normalize(pitch)
+        viewModelScope.launch { mediaControllerManager.setPlaybackParameters(_uiState.value.playbackSpeed, normalized) }
+    }
+
+    fun increasePitch() {
+        val next = PlaybackRatePolicy.adjust(_uiState.value.pitch, PlaybackRatePolicy.STEP)
+        setPitch(next)
+    }
+
+    fun decreasePitch() {
+        val next = PlaybackRatePolicy.adjust(_uiState.value.pitch, -PlaybackRatePolicy.STEP)
+        setPitch(next)
     }
 
     // ==========================================
@@ -636,4 +682,13 @@ class PlayerViewModel @Inject constructor(
     ): Result<Unit> {
         return networkEngine.connectToNavidrome(url, user, pass, allowCleartext)
     }
+}
+
+object PlaybackRatePolicy {
+    const val MIN_VALUE = 0.5f
+    const val MAX_VALUE = 2.0f
+    const val STEP = 0.25f
+
+    fun normalize(value: Float): Float = value.coerceIn(MIN_VALUE, MAX_VALUE)
+    fun adjust(current: Float, delta: Float): Float = normalize(current + delta)
 }
