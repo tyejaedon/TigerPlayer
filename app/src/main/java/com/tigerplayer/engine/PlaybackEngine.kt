@@ -35,6 +35,23 @@ class PlaybackEngine @Inject constructor(
     fun setSleepTimerEndOfQueue() = mediaControllerManager.setSleepTimerEndOfQueue()
     fun cancelSleepTimer() = mediaControllerManager.cancelSleepTimer()
 
+    /**
+     * Opens the Spotify App Remote session so [SpotifyRepository.isConnected] reflects reality.
+     * Safe to call repeatedly - [SpotifyRepository.connect] is a no-op while already connected.
+     */
+    fun connectSpotifyRemote() = spotifyRepository.connect()
+
+    /**
+     * Opens the Spotify App Remote session only if a token is already present, for the cold-start
+     * case where the user authenticated in a previous app session.
+     */
+    fun connectSpotifyRemoteIfAuthenticated() {
+        if (spotifyRepository.isAuthenticated.value) spotifyRepository.connect()
+    }
+
+    /** Tears down the Spotify App Remote session and any cached remote playback state. */
+    fun disconnectSpotifyRemote() = spotifyRepository.disconnect()
+
 
     // Resolve queue directly from MediaController so queue state is not coupled to library filtering.
     fun getQueueFlow(): Flow<List<AudioTrack>> {

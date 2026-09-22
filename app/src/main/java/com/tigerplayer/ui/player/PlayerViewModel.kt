@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.DefaultPlayerView
+import com.tigerplayer.data.local.MediaSource
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.model.AudioTrack
@@ -119,6 +120,15 @@ class PlayerViewModel @Inject constructor(
     private var scanJob: Job? = null
     private var metadataJob: Job? = null
     private var lastHandledSpotifyTrackId: String? = null
+
+    /**
+     * Authoritative source of truth for which transport currently drives [uiState], set
+     * explicitly at every playback-initiating call rather than inferred by sniffing
+     * `currentTrack?.id` for a "spotify:" prefix. That inference used to race with
+     * [SpotifyRepository.pause] re-emitting stale Spotify state as a side effect of starting local
+     * playback, which could permanently block the UI from ever switching back to a local track.
+     */
+    private val activeSource = MutableStateFlow(MediaSource.LOCAL)
     private val libraryRefreshTrigger = MutableStateFlow(0)
     private var preferredDefaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D
 
@@ -157,14 +167,14 @@ class PlayerViewModel @Inject constructor(
         // --- 1. MEDIA CONTROLLER STATE BINDINGS ---
         viewModelScope.launch {
             mediaControllerManager.isPlaying.collect { isPlaying ->
-                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) return@collect
+                if (activeSource.value == MediaSource.SPOTIFY) return@collect
                 _uiState.update { it.copy(isPlaying = isPlaying) }
             }
         }
 
         viewModelScope.launch {
             mediaControllerManager.currentPosition.collect { pos ->
-                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) return@collect
+                if (activeSource.value == MediaSource.SPOTIFY) return@collect
                 _uiState.update { it.copy(currentPosition = pos) }
             }
         }
@@ -174,7 +184,7 @@ class PlayerViewModel @Inject constructor(
                 val spotifyTrack = spotifyState?.track
 
                 if (spotifyTrack == null) {
-                    if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) {
+                    if (activeSource.value == MediaSource.SPOTIFY) {
                         _uiState.update {
                             it.copy(
                                 currentTrack = null,
@@ -186,13 +196,28 @@ class PlayerViewModel @Inject constructor(
                                 currentWaveform = emptyList()
                             )
                         }
+                        activeSource.value = MediaSource.LOCAL
                     }
                     lastHandledSpotifyTrackId = null
                     return@collectLatest
                 }
 
-                val previousTrackId = _uiState.value.currentTrack?.id
-                val trackChanged = previousTrackId != spotifyTrack.id
+                // lastHandledSpotifyTrackId is only ever advanced from inside this collector, so
+                // it is immune to whatever the queue-transition collector below concurrently does
+                // to uiState.currentTrack - unlike comparing against currentTrack directly, this
+                // can't race.
+                val isNewSpotifyTrack = lastHandledSpotifyTrackId != spotifyTrack.id
+                val isGenuineSpotifyEvent =
+                    activeSource.value == MediaSource.SPOTIFY || isNewSpotifyTrack || spotifyState.isPlaying
+
+                if (!isGenuineSpotifyEvent) {
+                    // Stale echo: SpotifyRepository.pause() was called as a side effect of the
+                    // user starting local playback (see PlaybackEngine.playTrack). Local is
+                    // already the active source, so this must not resurrect the old Spotify track.
+                    return@collectLatest
+                }
+
+                activeSource.value = MediaSource.SPOTIFY
 
                 _uiState.update { state ->
                     state.copy(
@@ -200,13 +225,13 @@ class PlayerViewModel @Inject constructor(
                         isPlaying = spotifyState.isPlaying,
                         currentPosition = spotifyState.positionMs,
                         isShuffleEnabled = spotifyState.isShuffleEnabled,
-                        currentLyrics = if (trackChanged) null else state.currentLyrics,
-                        artistImageUrl = if (trackChanged) null else state.artistImageUrl,
-                        currentWaveform = if (trackChanged) emptyList() else state.currentWaveform
+                        currentLyrics = if (isNewSpotifyTrack) null else state.currentLyrics,
+                        artistImageUrl = if (isNewSpotifyTrack) null else state.artistImageUrl,
+                        currentWaveform = if (isNewSpotifyTrack) emptyList() else state.currentWaveform
                     )
                 }
 
-                if (trackChanged && lastHandledSpotifyTrackId != spotifyTrack.id) {
+                if (isNewSpotifyTrack) {
                     lastHandledSpotifyTrackId = spotifyTrack.id
                     metadataEngine.clearTrackMetadata()
                     metadataJob?.cancel()
@@ -226,7 +251,7 @@ class PlayerViewModel @Inject constructor(
 
         viewModelScope.launch {
             mediaControllerManager.shuffleModeEnabled.collect { shuffle ->
-                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) return@collect
+                if (activeSource.value == MediaSource.SPOTIFY) return@collect
                 _uiState.update { it.copy(isShuffleEnabled = shuffle) }
             }
         }
@@ -345,7 +370,7 @@ class PlayerViewModel @Inject constructor(
                  old.first == new.first && old.second?.id == new.second?.id
              }
              .collectLatest { (_, resolvedTrack) ->
-                if (_uiState.value.currentTrack?.id?.startsWith("spotify:") == true) {
+                if (activeSource.value == MediaSource.SPOTIFY) {
                     return@collectLatest
                 }
 
@@ -401,10 +426,12 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playTrack(track: AudioTrack) {
+        if (!track.id.startsWith("spotify:")) activeSource.value = MediaSource.LOCAL
         playbackEngine.playTrack(track, _uiState.value.tracks)
     }
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int) {
+        activeSource.value = MediaSource.LOCAL
         playbackEngine.setPlaylistAndPlay(tracks, startIndex)
     }
 
@@ -480,6 +507,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playQueueItem(index: Int) {
+        activeSource.value = MediaSource.LOCAL
         playbackEngine.playQueueItem(index)
     }
 
@@ -668,6 +696,7 @@ class PlayerViewModel @Inject constructor(
 
     fun onAuthSuccess(token: String) {
         networkEngine.onAuthSuccess(token)
+        playbackEngine.connectSpotifyRemote()
     }
 
     fun refreshBluetoothRouteState() {
