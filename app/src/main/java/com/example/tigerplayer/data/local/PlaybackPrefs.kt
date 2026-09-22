@@ -33,6 +33,8 @@ class PlaybackPrefs @Inject constructor(
         val FLOW_STATE_TRUE_OVERLAP = booleanPreferencesKey("flow_state_true_overlap")
         val FULL_PLAYER_ACTIVE = booleanPreferencesKey("full_player_active")
         val STATS_EPOCH_MS = longPreferencesKey("stats_epoch_ms")
+        val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
+        val PLAYBACK_PITCH = floatPreferencesKey("playback_pitch")
     }
 
     val lastTrackId: Flow<String?> = dataStore.data.map { it[LAST_TRACK_ID] }
@@ -63,6 +65,8 @@ class PlaybackPrefs @Inject constructor(
     val fullPlayerActive: Flow<Boolean> = dataStore.data.map {
         it[FULL_PLAYER_ACTIVE] ?: false
     }
+    val playbackSpeed: Flow<Float> = dataStore.data.map { it[PLAYBACK_SPEED] ?: 1f }
+    val pitch: Flow<Float> = dataStore.data.map { it[PLAYBACK_PITCH] ?: 1f }
 
     /**
      * Point in time from which listening analytics are trustworthy (issue #80).
@@ -169,5 +173,12 @@ class PlaybackPrefs @Inject constructor(
 
     suspend fun saveRepeatMode(mode: Int) {
         dataStore.edit { it[REPEAT_MODE] = mode }
+    }
+
+    suspend fun savePlaybackParameters(speed: Float, pitch: Float) {
+        dataStore.edit { prefs ->
+            prefs[PLAYBACK_SPEED] = speed.coerceIn(0.5f, 2.0f)
+            prefs[PLAYBACK_PITCH] = pitch.coerceIn(0.5f, 2.0f)
+        }
     }
 }
