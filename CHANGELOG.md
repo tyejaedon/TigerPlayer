@@ -22,6 +22,10 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Changed
 
+- **Sonic Prism**: removed the developer-only FFT-vs-Bandpass spectral analysis toggle and its
+  profiler readout from the shipped Home screen card (still available in debug builds); hid dead,
+  unreachable "Sonic Prism full-screen hub" and duplicate mixer code paths that had been superseding
+  each other.
 - **Sonic Footprint**: the acoustic/electronic/bass-heavy/vocal/atmospheric axes are now weighted by
   actual time listened instead of raw play count, and prefer cached Last.fm genre tags over
   guessing from track title text when genre data is available for the artist. (#162)
@@ -35,6 +39,14 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+- **Sonic Prism**: fixed a bug where the isolation mix could be silently disabled (with playback
+  continuing unaffected/unannounced) purely as a side effect of the controlling screen's ViewModel
+  being torn down - e.g. when the system destroys the Activity in the background while a foreground
+  playback service keeps the music going. The DSP engine's enabled/disabled state is now driven only
+  by the user's persisted setting, never reset by UI lifecycle.
+- **Sonic Prism**: fixed a layout bug where the Home screen mixer card clipped its own vertical
+  fader and controls (the card was capped at a fixed height shorter than the fader itself). The
+  card now sizes to its content and uses a more compact fader suited to a dashboard card.
 - **Spotify connection**: the Spotify App Remote session is now actually opened after a successful
   login. Previously `isSpotifyRemoteConnected` stayed `false` indefinitely post-auth, leaving the
   Cloud screen stuck on "reconnecting". (#162)

@@ -41,6 +41,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImage
+import com.tigerplayer.BuildConfig
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.components.DiscoverCarousel
@@ -458,10 +459,16 @@ fun SonicPrismHubCard(viewModel: PrismViewModel) {
                     onEnabledChange = viewModel::setPrismEnabled,
                     onPresetSelected = viewModel::applyPreset,
                     onResetRequested = viewModel::resetMixToBalanced,
-                    onSpectralAnalysisChange = viewModel::setSpectralAnalysis,
+                    // Spectral analysis mode (FFT vs. Bandpass) is a DSP A/B profiling tool for
+                    // development, not something a listener needs to choose - keep it out of the
+                    // shipped UI.
+                    onSpectralAnalysisChange = if (BuildConfig.DEBUG) viewModel::setSpectralAnalysis else null,
+                    // A fixed 200.dp here used to clip the 330.dp-tall fader and everything below
+                    // it (issue: Sonic Prism card overflow). Let the card size to its content, and
+                    // use a shorter fader that fits a dashboard card instead of the full-size one.
+                    faderHeight = 180.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
                         .clip(MaterialTheme.shapes.large)
                         .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f))
                         .padding(vertical = 12.dp)

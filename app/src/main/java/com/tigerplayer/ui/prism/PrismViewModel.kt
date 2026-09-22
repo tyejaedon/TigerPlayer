@@ -198,19 +198,6 @@ class PrismViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(spectralAnalysis = mode)
     }
 
-    @androidx.annotation.OptIn(UnstableApi::class)
-    fun disablePrismAndReset() {
-        // Preserve user mix and preset; only disable processing when requested.
-        _uiState.value = _uiState.value.copy(isPrismEnabled = false)
-    }
-
-    @androidx.annotation.OptIn(UnstableApi::class)
-    override fun onCleared() {
-        adaptiveDspEngine.updatePrismMix(_uiState.value.vocals, _uiState.value.beats, _uiState.value.instruments)
-        adaptiveDspEngine.setPrismMode(PrismMode.BYPASS)
-        super.onCleared()
-    }
-
     private fun resolvePreset(vocals: Float, beats: Float, instruments: Float): PrismPreset {
         val tolerance = 0.025f
         return PrismPreset.entries.firstOrNull { preset ->

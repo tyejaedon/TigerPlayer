@@ -9,16 +9,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -29,7 +26,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -38,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
@@ -48,111 +43,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.data.local.PrismSpectralAnalysis
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerSurfaceFloating
 import com.tigerplayer.ui.theme.TigerToxicLime
-import com.tigerplayer.ui.theme.bounceClick
 import java.util.Locale
 
-private val PrismBackdrop = Color(0xFF06070A)
-private val PrismPanel = Color(0xFF11131A)
 private val PrismText = Color(0xFFE9EEF8)
-
-@Composable
-fun SonicPrismHub(
-    viewModel: PrismViewModel = hiltViewModel(),
-    onClose: () -> Unit
-) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
-
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.disablePrismAndReset()
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(PrismBackdrop, Color(0xFF0D1018), PrismBackdrop)
-                )
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "SONIC PRISM",
-                        color = PrismText,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp
-                    )
-                    Text(
-                        text = if (state.isPrismEnabled) "${state.preset.displayName.uppercase()} PROFILE ACTIVE" else "ISOLATE VOCALS, BEATS, AND MELODY",
-                        color = PrismText.copy(alpha = 0.65f),
-                        style = MaterialTheme.typography.labelMedium,
-                        letterSpacing = 1.sp
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(PrismText.copy(alpha = 0.08f))
-                        .bounceClick {
-                            viewModel.disablePrismAndReset()
-                            onClose()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close Sonic Prism",
-                        tint = PrismText
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            PrismInlineMixer(
-                state = state,
-                onVocalsChange = viewModel::updateVocals,
-                onBeatsChange = viewModel::updateBeats,
-                onInstrumentsChange = viewModel::updateInstruments,
-                onEnabledChange = viewModel::setPrismEnabled,
-                onPresetSelected = viewModel::applyPreset,
-                onResetRequested = viewModel::resetMixToBalanced,
-                onSpectralAnalysisChange = viewModel::setSpectralAnalysis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(PrismPanel)
-                    .padding(horizontal = 18.dp, vertical = 24.dp)
-            )
-        }
-    }
-}
 
 @Composable
 fun PrismInlineMixer(
@@ -160,11 +61,12 @@ fun PrismInlineMixer(
     onVocalsChange: (Float) -> Unit,
     onBeatsChange: (Float) -> Unit,
     onInstrumentsChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
     onEnabledChange: ((Boolean) -> Unit)? = null,
     onPresetSelected: ((PrismPreset) -> Unit)? = null,
     onResetRequested: (() -> Unit)? = null,
     onSpectralAnalysisChange: ((PrismSpectralAnalysis) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    faderHeight: Dp = 330.dp
 ) {
     val dominantBandIndex = state.spectralBands.indices.maxByOrNull { state.spectralBands[it] } ?: 0
     val dominantLabel = when (dominantBandIndex) {
@@ -351,19 +253,22 @@ fun PrismInlineMixer(
                 label = "VOCALS",
                 value = state.vocals,
                 activeColor = TigerNeonOrange,
-                onValueChange = onVocalsChange
+                onValueChange = onVocalsChange,
+                faderHeight = faderHeight
             )
             PrismFader(
                 label = "BEATS",
                 value = state.beats,
                 activeColor = TigerCyberCyan,
-                onValueChange = onBeatsChange
+                onValueChange = onBeatsChange,
+                faderHeight = faderHeight
             )
             PrismFader(
                 label = "MELODY",
                 value = state.instruments,
                 activeColor = TigerToxicLime,
-                onValueChange = onInstrumentsChange
+                onValueChange = onInstrumentsChange,
+                faderHeight = faderHeight
             )
         }
     }
@@ -374,7 +279,8 @@ private fun PrismFader(
     label: String,
     value: Float,
     activeColor: Color,
-    onValueChange: (Float) -> Unit
+    onValueChange: (Float) -> Unit,
+    faderHeight: Dp = 330.dp
 ) {
     val haptic = LocalHapticFeedback.current
     val isMuted = value <= 0.001f
@@ -400,7 +306,8 @@ private fun PrismFader(
         NeonVerticalFader(
             value = value,
             color = tubeColor,
-            onValueChange = onValueChange
+            onValueChange = onValueChange,
+            height = faderHeight
         )
 
         Text(
@@ -417,11 +324,12 @@ private fun PrismFader(
 private fun NeonVerticalFader(
     value: Float,
     color: Color,
-    onValueChange: (Float) -> Unit
+    onValueChange: (Float) -> Unit,
+    height: Dp = 330.dp
 ) {
     val density = LocalDensity.current
     val widthPx = with(density) { 76.dp.toPx() }
-    val heightPx = with(density) { 330.dp.toPx() }
+    val heightPx = with(density) { height.toPx() }
     val knobRadius = with(density) { 16.dp.toPx() }
     val glowPaint = remember {
         android.graphics.Paint().apply {
@@ -433,13 +341,13 @@ private fun NeonVerticalFader(
 
     Canvas(
         modifier = Modifier
-            .size(width = 76.dp, height = 330.dp)
+            .size(width = 76.dp, height = height)
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onVerticalDrag = { change, _ ->
-                        val height = size.height.toFloat()
-                        val clampedY = change.position.y.coerceIn(0f, height)
-                        val newValue = 1f - (clampedY / height)
+                        val dragHeight = size.height.toFloat()
+                        val clampedY = change.position.y.coerceIn(0f, dragHeight)
+                        val newValue = 1f - (clampedY / dragHeight)
                         onValueChange(newValue.coerceIn(0f, 1f))
                     },
                     onDragEnd = {
