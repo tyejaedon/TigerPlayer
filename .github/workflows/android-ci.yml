@@ -38,6 +38,22 @@ jobs:
             printf '%s\n' "::error::Forbidden credential or generated artifact is tracked:" "$forbidden"
             exit 1
           fi
+      - name: Verify Room database schema JSON exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_file="app/src/main/java/com/example/tigerplayer/data/local/TigerDatabase.kt"
+          db_version=$(sed -nE 's/.*version[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "$db_file" | head -n1)
+          if [[ -z "$db_version" ]]; then
+            echo "::error::Could not determine Room database version from $db_file"
+            exit 1
+          fi
+          schema_file="app/schemas/com.tigerplayer.data.local.TigerDatabase/${db_version}.json"
+          if [[ ! -f "$schema_file" ]]; then
+            echo "::error::Room schema file $schema_file missing for version $db_version!"
+            exit 1
+          fi
+          echo "Verified Room schema file $schema_file exists for version $db_version."
 
   # ---------------------------------------------------------------
   # AIRP Phase 3, step 1: static analysis.
@@ -102,6 +118,16 @@ jobs:
         run: ./gradlew :app:minifyFossReleaseWithR8 --stacktrace
       - name: Build unsigned release bundle (foss)
         run: ./gradlew :app:bundleFossRelease --stacktrace
+      - name: Verify no uncommitted Room schema drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain app/schemas)" ]]; then
+            echo "::error::Uncommitted Room schema changes detected! Commit the generated schema JSON under app/schemas/."
+            git status --porcelain app/schemas
+            git diff app/schemas
+            exit 1
+          fi
       - name: Upload test and release reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -13,6 +13,8 @@ import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.UnstableApi
@@ -33,6 +35,7 @@ import androidx.media3.session.SessionResult
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.tigerplayer.data.local.PlaybackPrefs
+import com.tigerplayer.data.local.ReplayGainMode
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.remote.NavidromeUri
 import com.tigerplayer.data.remote.NavidromeUrlSigner
@@ -43,6 +46,7 @@ import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.FilterType
 import com.tigerplayer.engine.OffloadVolumePolicy
+import com.tigerplayer.utils.ReplayGainTagParser
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
@@ -83,6 +87,13 @@ class AudioPlayerService : MediaSessionService() {
     @Inject lateinit var navidromeUrlSigner: NavidromeUrlSigner
 
     private var isBitPerfectMode = false // Initial state to ensure first call triggers
+    private var lastReplayGainMode = ReplayGainMode.OFF
+    private var lastReplayGainPreampDb = 0.0f
+    private var lastReplayGainPreventClipping = true
+    private var currentTrackGainDb: Double? = null
+    private var currentAlbumGainDb: Double? = null
+    private var currentTrackPeak: Double? = null
+    private var currentAlbumPeak: Double? = null
     private var routeToSystemDecoderDsp = false
     private var audioReactiveHapticsEnabled = false
     private var fullPlayerActive = false
@@ -277,9 +288,50 @@ class AudioPlayerService : MediaSessionService() {
             }
         }
 
+        serviceScope.launch {
+            settingsDataStore.settingsFlow
+                .map { Triple(it.replayGainMode, it.replayGainPreampDb, it.replayGainPreventClipping) }
+                .distinctUntilChanged()
+                .collect { (mode, preampDb, preventClipping) ->
+                    lastReplayGainMode = mode
+                    lastReplayGainPreampDb = preampDb
+                    lastReplayGainPreventClipping = preventClipping
+                    adaptiveDspEngine.setReplayGainConfig(
+                        mode = mode,
+                        preampDb = preampDb,
+                        preventClipping = preventClipping,
+                        isBitPerfect = isBitPerfectMode
+                    )
+                }
+        }
+
         player.addListener(object : Player.Listener {
             override fun onRepeatModeChanged(repeatMode: Int) = invalidateCustomLayout()
-            override fun onShuffleModeEnabledChanged(enabled: Boolean) = invalidateCustomLayout()
+            override fun onShuffleModeEnabledChanged(enabled: Boolean) {
+                invalidateCustomLayout()
+                updateReplayGainForMediaItem(player.currentMediaItem)
+            }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                updateReplayGainForMediaItem(mediaItem)
+            }
+            override fun onMetadata(metadata: Metadata) {
+                val info = ReplayGainTagParser.parseFromMetadata(metadata)
+                if (info.hasGainData) {
+                    currentTrackGainDb = info.trackGainDb ?: currentTrackGainDb
+                    currentAlbumGainDb = info.albumGainDb ?: currentAlbumGainDb
+                    currentTrackPeak = info.trackPeak ?: currentTrackPeak
+                    currentAlbumPeak = info.albumPeak ?: currentAlbumPeak
+
+                    val isSequential = !player.shuffleModeEnabled && isPlayingAlbumSequentially()
+                    adaptiveDspEngine.setReplayGainTrackData(
+                        trackGainDb = currentTrackGainDb,
+                        albumGainDb = currentAlbumGainDb,
+                        trackPeak = currentTrackPeak,
+                        albumPeak = currentAlbumPeak,
+                        isSequentialAlbumPlay = isSequential
+                    )
+                }
+            }
         })
 
         val intent = Intent(this, MainActivity::class.java)
@@ -336,6 +388,12 @@ class AudioPlayerService : MediaSessionService() {
     private fun setAudioOffloadEnabled(enabled: Boolean) {
         if (isBitPerfectMode == enabled) return
         isBitPerfectMode = enabled
+        adaptiveDspEngine.setReplayGainConfig(
+            mode = lastReplayGainMode,
+            preampDb = lastReplayGainPreampDb,
+            preventClipping = lastReplayGainPreventClipping,
+            isBitPerfect = isBitPerfectMode
+        )
 
         val offloadMode = if (enabled) {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
@@ -766,6 +824,51 @@ class AudioPlayerService : MediaSessionService() {
             CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY)).setIconResId(repeatIcon).setDisplayName("Repeat").setEnabled(true).build(),
             CommandButton.Builder().setSessionCommand(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY)).setIconResId(dspIcon).setDisplayName(if (isBitPerfectMode) "Bit-Perfect" else "Aural Nexus Active").setEnabled(true).build()
         )
+    }
+
+    private fun updateReplayGainForMediaItem(mediaItem: MediaItem?) {
+        val extras = mediaItem?.mediaMetadata?.extras
+        val trackDb = if (extras?.containsKey(MediaControllerManager.META_REPLAYGAIN_TRACK_DB) == true) {
+            extras.getDouble(MediaControllerManager.META_REPLAYGAIN_TRACK_DB)
+        } else null
+        val albumDb = if (extras?.containsKey(MediaControllerManager.META_REPLAYGAIN_ALBUM_DB) == true) {
+            extras.getDouble(MediaControllerManager.META_REPLAYGAIN_ALBUM_DB)
+        } else null
+        val trackPeak = if (extras?.containsKey(MediaControllerManager.META_REPLAYGAIN_TRACK_PEAK) == true) {
+            extras.getDouble(MediaControllerManager.META_REPLAYGAIN_TRACK_PEAK)
+        } else null
+        val albumPeak = if (extras?.containsKey(MediaControllerManager.META_REPLAYGAIN_ALBUM_PEAK) == true) {
+            extras.getDouble(MediaControllerManager.META_REPLAYGAIN_ALBUM_PEAK)
+        } else null
+
+        currentTrackGainDb = trackDb
+        currentAlbumGainDb = albumDb
+        currentTrackPeak = trackPeak
+        currentAlbumPeak = albumPeak
+
+        val isSequential = !player.shuffleModeEnabled && isPlayingAlbumSequentially()
+        adaptiveDspEngine.setReplayGainTrackData(
+            trackGainDb = trackDb,
+            albumGainDb = albumDb,
+            trackPeak = trackPeak,
+            albumPeak = albumPeak,
+            isSequentialAlbumPlay = isSequential
+        )
+    }
+
+    private fun isPlayingAlbumSequentially(): Boolean {
+        val currentItem = player.currentMediaItem ?: return false
+        val currentAlbum = currentItem.mediaMetadata.albumTitle?.toString() ?: return false
+        if (currentAlbum.isBlank()) return false
+
+        val currentIndex = player.currentMediaItemIndex
+        if (currentIndex < 0) return false
+        val nextItem = if (currentIndex + 1 < player.mediaItemCount) player.getMediaItemAt(currentIndex + 1) else null
+        val prevItem = if (currentIndex - 1 >= 0) player.getMediaItemAt(currentIndex - 1) else null
+
+        val nextMatches = nextItem?.mediaMetadata?.albumTitle?.toString()?.equals(currentAlbum, ignoreCase = true) == true
+        val prevMatches = prevItem?.mediaMetadata?.albumTitle?.toString()?.equals(currentAlbum, ignoreCase = true) == true
+        return nextMatches || prevMatches
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession

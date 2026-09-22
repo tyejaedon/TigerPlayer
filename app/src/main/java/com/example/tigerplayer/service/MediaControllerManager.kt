@@ -89,6 +89,10 @@ class MediaControllerManager @Inject constructor(
         const val META_DATE_ADDED = "tp_meta_date_added"
         const val META_IS_LIKED = "tp_meta_is_liked"
         const val META_PATH = "tp_meta_path"
+        const val META_REPLAYGAIN_TRACK_DB = "tp_meta_rg_track_db"
+        const val META_REPLAYGAIN_ALBUM_DB = "tp_meta_rg_album_db"
+        const val META_REPLAYGAIN_TRACK_PEAK = "tp_meta_rg_track_peak"
+        const val META_REPLAYGAIN_ALBUM_PEAK = "tp_meta_rg_album_peak"
     }
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -696,7 +700,11 @@ class MediaControllerManager @Inject constructor(
             path = extras?.getString(META_PATH),
             year = extras?.getString(META_YEAR),
             dateAdded = extras?.getLong(META_DATE_ADDED, 0L) ?: 0L,
-            isLiked = extras?.getBoolean(META_IS_LIKED, false) ?: false
+            isLiked = extras?.getBoolean(META_IS_LIKED, false) ?: false,
+            replayGainTrackDb = if (extras?.containsKey(META_REPLAYGAIN_TRACK_DB) == true) extras.getDouble(META_REPLAYGAIN_TRACK_DB) else null,
+            replayGainAlbumDb = if (extras?.containsKey(META_REPLAYGAIN_ALBUM_DB) == true) extras.getDouble(META_REPLAYGAIN_ALBUM_DB) else null,
+            replayGainTrackPeak = if (extras?.containsKey(META_REPLAYGAIN_TRACK_PEAK) == true) extras.getDouble(META_REPLAYGAIN_TRACK_PEAK) else null,
+            replayGainAlbumPeak = if (extras?.containsKey(META_REPLAYGAIN_ALBUM_PEAK) == true) extras.getDouble(META_REPLAYGAIN_ALBUM_PEAK) else null
         )
     }
 
@@ -730,6 +738,10 @@ class MediaControllerManager @Inject constructor(
             putLong(META_DATE_ADDED, track.dateAdded)
             putBoolean(META_IS_LIKED, track.isLiked)
             putString(META_PATH, track.path)
+            track.replayGainTrackDb?.let { putDouble(META_REPLAYGAIN_TRACK_DB, it) }
+            track.replayGainAlbumDb?.let { putDouble(META_REPLAYGAIN_ALBUM_DB, it) }
+            track.replayGainTrackPeak?.let { putDouble(META_REPLAYGAIN_TRACK_PEAK, it) }
+            track.replayGainAlbumPeak?.let { putDouble(META_REPLAYGAIN_ALBUM_PEAK, it) }
         }
     }
 
@@ -856,7 +868,11 @@ class MediaControllerManager @Inject constructor(
                 Uri.encode(extras?.getString(META_YEAR).orEmpty()),
                 Uri.encode((extras?.getLong(META_DATE_ADDED, 0L) ?: 0L).toString()),
                 Uri.encode((extras?.getBoolean(META_IS_LIKED, false) ?: false).toString()),
-                Uri.encode(extras?.getString(META_PATH).orEmpty())
+                Uri.encode(extras?.getString(META_PATH).orEmpty()),
+                Uri.encode(if (extras?.containsKey(META_REPLAYGAIN_TRACK_DB) == true) extras.getDouble(META_REPLAYGAIN_TRACK_DB).toString() else ""),
+                Uri.encode(if (extras?.containsKey(META_REPLAYGAIN_ALBUM_DB) == true) extras.getDouble(META_REPLAYGAIN_ALBUM_DB).toString() else ""),
+                Uri.encode(if (extras?.containsKey(META_REPLAYGAIN_TRACK_PEAK) == true) extras.getDouble(META_REPLAYGAIN_TRACK_PEAK).toString() else ""),
+                Uri.encode(if (extras?.containsKey(META_REPLAYGAIN_ALBUM_PEAK) == true) extras.getDouble(META_REPLAYGAIN_ALBUM_PEAK).toString() else "")
             ).joinToString(QUEUE_FIELD_SEPARATOR)
         }
     }
@@ -891,6 +907,10 @@ class MediaControllerManager @Inject constructor(
                 val dateAdded = fields.getOrNull(15)?.let(Uri::decode)?.toLongOrNull() ?: 0L
                 val isLiked = fields.getOrNull(16)?.let(Uri::decode)?.toBooleanStrictOrNull() ?: false
                 val path = fields.getOrNull(17)?.let(Uri::decode)?.ifBlank { null }
+                val replayGainTrackDb = fields.getOrNull(18)?.let(Uri::decode)?.toDoubleOrNull()
+                val replayGainAlbumDb = fields.getOrNull(19)?.let(Uri::decode)?.toDoubleOrNull()
+                val replayGainTrackPeak = fields.getOrNull(20)?.let(Uri::decode)?.toDoubleOrNull()
+                val replayGainAlbumPeak = fields.getOrNull(21)?.let(Uri::decode)?.toDoubleOrNull()
 
                 AudioTrack(
                     id = id,
@@ -910,7 +930,11 @@ class MediaControllerManager @Inject constructor(
                     year = year,
                     dateAdded = dateAdded,
                     isLiked = isLiked,
-                    path = path
+                    path = path,
+                    replayGainTrackDb = replayGainTrackDb,
+                    replayGainAlbumDb = replayGainAlbumDb,
+                    replayGainTrackPeak = replayGainTrackPeak,
+                    replayGainAlbumPeak = replayGainAlbumPeak
                 )
             }
     }
