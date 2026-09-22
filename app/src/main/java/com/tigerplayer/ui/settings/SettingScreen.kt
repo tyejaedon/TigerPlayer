@@ -28,12 +28,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BluetoothAudio
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headset
@@ -45,6 +48,7 @@ import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -91,6 +95,7 @@ import com.tigerplayer.data.local.TigerAccentStyle
 import com.tigerplayer.service.HapticsDebugEvent
 import com.tigerplayer.service.HapticsDebugState
 import com.tigerplayer.ui.theme.PremiumGlassCard
+import com.tigerplayer.ui.theme.SpotifyGreen
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerSpectralViolet
@@ -472,6 +477,9 @@ fun SettingsScreen(
             // --- MUSIC FOLDERS SECTION (issue #50) ---
             MusicFoldersSection(viewModel = viewModel, accent = accent)
 
+            // --- CONNECTED ACCOUNTS (Spotify / Navidrome sign-out) ---
+            ConnectedAccountsSection(viewModel = viewModel, accent = accent)
+
             // --- BACKUP & RESTORE ---
             BackupRestoreSection(viewModel = viewModel, accent = accent)
 
@@ -551,6 +559,71 @@ private fun MusicFoldersSection(viewModel: SettingsViewModel, accent: Color) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color) {
+    val accounts by viewModel.connectedAccountsState.collectAsStateWithLifecycle()
+    var pendingLogout by remember { mutableStateOf<String?>(null) }
+
+    MatrixSection(title = "Connected Accounts", icon = Icons.Rounded.AccountCircle, accent = accent) {
+        ListItem(
+            headlineContent = { Text("SPOTIFY", fontWeight = FontWeight.Bold) },
+            supportingContent = { Text(if (accounts.isSpotifyConnected) "Connected" else "Not connected") },
+            leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = if (accounts.isSpotifyConnected) SpotifyGreen else accent.copy(alpha = 0.4f)) },
+            trailingContent = {
+                if (accounts.isSpotifyConnected) {
+                    TextButton(onClick = { pendingLogout = "Spotify" }) {
+                        Text("LOG OUT")
+                    }
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        )
+
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+        ListItem(
+            headlineContent = { Text("NAVIDROME", fontWeight = FontWeight.Bold) },
+            supportingContent = {
+                Text(accounts.navidromeServerUrl?.takeIf { it.isNotBlank() } ?: "Not connected")
+            },
+            leadingContent = { Icon(Icons.Rounded.Dns, null, tint = if (accounts.isNavidromeConnected) accent else accent.copy(alpha = 0.4f)) },
+            trailingContent = {
+                if (accounts.isNavidromeConnected) {
+                    TextButton(onClick = { pendingLogout = "Navidrome" }) {
+                        Text("LOG OUT")
+                    }
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        )
+    }
+
+    val serviceToLogOut = pendingLogout
+    if (serviceToLogOut != null) {
+        AlertDialog(
+            onDismissRequest = { pendingLogout = null },
+            title = { Text("Log out of $serviceToLogOut?") },
+            text = { Text("You'll need to sign back in to use $serviceToLogOut again.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    when (serviceToLogOut) {
+                        "Spotify" -> viewModel.logoutSpotify()
+                        "Navidrome" -> viewModel.logoutNavidrome()
+                    }
+                    pendingLogout = null
+                }) {
+                    Text("LOG OUT")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingLogout = null }) {
+                    Text("CANCEL")
+                }
+            }
+        )
     }
 }
 
