@@ -279,11 +279,11 @@ fun QueueDisplay(
                                         .testTag("drag_handle_$index"),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        "â‰¡",
-                                        color = dynamicTextColor.copy(alpha = if (isDragging) 0.9f else 0.65f),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
+                                    Icon(
+                                        WitcherIcons.DragHandle,
+                                        contentDescription = "Drag to reorder",
+                                        tint = dynamicTextColor.copy(alpha = if (isDragging) 0.9f else 0.65f),
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }

@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import coil.compose.AsyncImage
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.theme.WitcherIcons
 
 @Composable
 fun QueueScreen(
@@ -288,7 +289,12 @@ private fun QueueTrackRow(
                         .then(dragHandleModifier),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("â‰¡", color = Color.White.copy(alpha = 0.78f), fontWeight = FontWeight.Bold)
+                    Icon(
+                        WitcherIcons.DragHandle,
+                        contentDescription = "Drag to reorder",
+                        tint = Color.White.copy(alpha = 0.78f),
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }
