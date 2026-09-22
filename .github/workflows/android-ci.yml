@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          db_file="app/src/main/java/com/example/tigerplayer/data/local/TigerDatabase.kt"
+          db_file="app/src/main/java/com/tigerplayer/data/local/TigerDatabase.kt"
           db_version=$(sed -nE 's/.*version[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "$db_file" | head -n1)
           if [[ -z "$db_version" ]]; then
             echo "::error::Could not determine Room database version from $db_file"
