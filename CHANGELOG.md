@@ -13,6 +13,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+- **Full player**: the Speed/Pitch dialog has a restore-to-default action that resets both to
+  `1.0x` in one tap. (#167)
 - **Connected Accounts**: a new Settings section to log out of Spotify and Navidrome independently,
   with a confirm-before-logout prompt. Logging out of Navidrome also triggers a library rescan so
   its tracks disappear from the unified library immediately. (#162)
@@ -27,9 +29,10 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   guessing from track title text when genre data is available for the artist. (#162)
 - **Cloud screen**: the YouTube search entry point now uses a distinct video icon instead of
   reusing the same magnifying-glass icon as the search field next to it. (#162)
-- **Full player**: the Speed/Pitch controls are now collapsed by default behind a compact summary
-  row (e.g. "Speed 1.25x - Pitch 1.00x"), expandable on tap, fixing a layout overlap on shorter
-  screens where the sliders used to always be expanded inline. (#162)
+- **Full player**: the Speed/Pitch controls are now a compact summary row (e.g. "Speed 1.25x -
+  Pitch 1.00x") that opens a dedicated glass-styled dialog on tap, instead of permanently reserving
+  space for two full-width sliders inline - fixes a layout overlap on shorter screens where the
+  sliders used to always be expanded. (#162, #167)
 - **Queue screens**: the drag-to-reorder handle now renders as a proper icon instead of a raw text
   glyph that had been mangled into mojibake. (#163)
 
