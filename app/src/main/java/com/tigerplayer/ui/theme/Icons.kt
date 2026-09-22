@@ -67,6 +67,7 @@ object WitcherIcons {
     val Refresh = Icons.Rounded.Refresh
     val Sort = Icons.AutoMirrored.Rounded.Sort
     val SleepTimer = Icons.Rounded.Bedtime
+    val DragHandle = Icons.Rounded.DragHandle
 
     // --- SYSTEM & STATUS: The Bestiary ---
     val VolumeUp = Icons.AutoMirrored.Rounded.VolumeUp
