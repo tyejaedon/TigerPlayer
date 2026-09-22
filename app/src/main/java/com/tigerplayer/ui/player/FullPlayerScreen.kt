@@ -14,6 +14,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -644,7 +645,14 @@ private fun PlayerControlsContent(
         // Advanced dialog toggle (declared at function scope so dialog can be shown outside the Box lambda)
         var showAdvancedRateDialog by remember { mutableStateOf(false) }
 
-        // Playback speed & pitch controls (issue #52): slider + +/- for fine tuning.
+        // Playback speed & pitch controls (issue #52): collapsed by default behind a compact
+        // summary row. The two full-width sliders used to always be expanded inline, which on
+        // shorter screens pushed the control stack past the visible player area and clipped or
+        // overlapped whatever sat below it. Collapsing by default removes that footprint while
+        // keeping the same fine-tuning UI one tap away; the "Advanced" dialog still exists for
+        // precise numeric entry.
+        var isSpeedPanelExpanded by rememberSaveable { mutableStateOf(false) }
+
         Box(modifier = Modifier.padding(horizontal = 24.dp)) {
             // Slider configuration
             val speedMin = PlaybackRatePolicy.MIN_VALUE
@@ -671,7 +679,31 @@ private fun PlayerControlsContent(
                 return (min + steps * step).coerceIn(min, min + (((speedMax - speedMin)/stepSize).roundToInt()) * step)
             }
 
-            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { isSpeedPanelExpanded = !isSpeedPanelExpanded }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(imageVector = WitcherIcons.Speed, contentDescription = null, tint = secondaryTextColor, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = String.format(Locale.US, "Speed %.2fx  \u2022  Pitch %.2fx", uiState.playbackSpeed, uiState.pitch),
+                        color = dynamicTextColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = if (isSpeedPanelExpanded) WitcherIcons.Collapse else WitcherIcons.Expand,
+                        contentDescription = if (isSpeedPanelExpanded) "Collapse speed and pitch controls" else "Expand speed and pitch controls",
+                        tint = secondaryTextColor
+                    )
+                }
+
+                AnimatedVisibility(visible = isSpeedPanelExpanded) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Speed control
                 Column {
                     Text(text = "Speed", color = secondaryTextColor)
@@ -741,6 +773,8 @@ private fun PlayerControlsContent(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = { showAdvancedRateDialog = true }) {
                         Text(text = "Advanced", color = dynamicTextColor)
+                    }
+                }
                     }
                 }
             }

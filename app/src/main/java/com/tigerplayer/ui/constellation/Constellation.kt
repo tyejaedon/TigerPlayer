@@ -1,10 +1,12 @@
 package com.tigerplayer.ui.constellation
 
 import android.graphics.drawable.BitmapDrawable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -17,6 +19,7 @@ import androidx.compose.material.icons.rounded.FilterCenterFocus
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,12 +41,14 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.tigerplayer.constellation.NodeType
 import com.tigerplayer.constellation.PositionedNode
+import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.random.Random
 
 @Composable
 fun ConstellationScreen(
@@ -57,6 +62,11 @@ fun ConstellationScreen(
     // Start zoomed out so the vast universe fits
     val cameraScale = remember { Animatable(0.15f) }
     val cameraPan = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+
+    // Static background depth layers - generated once per screen instance, never touched by the
+    // camera engine directly, only read with a slower parallax factor at draw time.
+    val farStarfield = remember { generateStarfield(count = 90, seed = 1, radius = 4000f) }
+    val nearStarfield = remember { generateStarfield(count = 50, seed = 2, radius = 2500f) }
 
     var focusedNodeId by remember { mutableStateOf<String?>(null) }
 
@@ -142,6 +152,25 @@ fun ConstellationScreen(
                             )
                         }
                 ) {
+                    // --- 0. PARALLAX STARFIELD (DEPTH BACKDROP) ---
+                    // Two depth layers drifting slower than the foreground nodes, plus a gentle
+                    // twinkle, so panning/zooming reads as moving through real depth rather than
+                    // a flat plane of icons.
+                    val starTwinkle by infiniteTransition.animateFloat(
+                        initialValue = 0f, targetValue = 1f,
+                        animationSpec = infiniteRepeatable(tween(4000, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+                        label = "StarTwinkle"
+                    )
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        farStarfield.forEach { star ->
+                            drawStar(star, center, cameraScale.value, cameraPan.value, starTwinkle, depthFactor = 0.12f)
+                        }
+                        nearStarfield.forEach { star ->
+                            drawStar(star, center, cameraScale.value, cameraPan.value, starTwinkle, depthFactor = 0.32f)
+                        }
+                    }
+
                     // --- 1. ASTRONOMICAL TRAJECTORIES & LINKS (CANVAS) ---
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val center = Offset(size.width / 2f, size.height / 2f)
@@ -286,6 +315,49 @@ private fun calculatePosition(node: PositionedNode, time: Float, allNodes: Map<S
     return Offset(rx, ry)
 }
 
+/** A single background star for the parallax depth backdrop, in fixed "world" coordinates. */
+private data class ParallaxStar(
+    val worldPos: Offset,
+    val radius: Float,
+    val baseAlpha: Float,
+    val twinklePhase: Float
+)
+
+/** Deterministic (seeded) star scatter across a wide field, so it never flickers on recomposition. */
+private fun generateStarfield(count: Int, seed: Int, radius: Float): List<ParallaxStar> {
+    val random = Random(seed)
+    return List(count) {
+        val angle = random.nextFloat() * (2 * Math.PI).toFloat()
+        val distance = random.nextFloat() * radius
+        ParallaxStar(
+            worldPos = Offset(cos(angle) * distance, sin(angle) * distance),
+            radius = 0.6f + random.nextFloat() * 1.8f,
+            baseAlpha = 0.25f + random.nextFloat() * 0.5f,
+            twinklePhase = random.nextFloat()
+        )
+    }
+}
+
+/**
+ * Draws one background star at [depthFactor] of the foreground camera's scale/pan, so shallower
+ * layers appear to drift past faster than deeper ones - a cheap but effective parallax depth cue.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStar(
+    star: ParallaxStar,
+    center: Offset,
+    cameraScale: Float,
+    cameraPan: Offset,
+    twinkle: Float,
+    depthFactor: Float
+) {
+    val screenPos = Offset(
+        center.x + (star.worldPos.x * cameraScale * depthFactor) + (cameraPan.x * depthFactor),
+        center.y + (star.worldPos.y * cameraScale * depthFactor) + (cameraPan.y * depthFactor)
+    )
+    val twinkleAlpha = star.baseAlpha * (0.6f + 0.4f * kotlin.math.sin((twinkle + star.twinklePhase) * 2 * Math.PI.toFloat()).let { (it + 1f) / 2f })
+    drawCircle(color = Color.White.copy(alpha = twinkleAlpha.coerceIn(0f, 1f)), radius = star.radius, center = screenPos)
+}
+
 // =====================================================================
 // RENDERING COMPONENTS
 // =====================================================================
@@ -412,6 +484,8 @@ fun ConstellationOverlay(
     onRefresh: () -> Unit,
     onRecenter: () -> Unit
 ) {
+    var isInsightExpanded by rememberSaveable { mutableStateOf(true) }
+
     Column(
         modifier = Modifier.fillMaxSize().statusBarsPadding().padding(24.dp)
     ) {
@@ -432,68 +506,94 @@ fun ConstellationOverlay(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        Row(
+        // Collapsible so the starfield can be viewed unobstructed - defaults open, but the user's
+        // choice persists across configuration changes via rememberSaveable.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(24.dp, RoundedCornerShape(20.dp), spotColor = Color(0xFFB388FF))
                 .background(Color(0xFF121212).copy(alpha = 0.8f), RoundedCornerShape(20.dp))
                 .border(1.dp, Color(0xFFB388FF).copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .clickable(enabled = !isInsightExpanded) { isInsightExpanded = true }
+                .padding(if (isInsightExpanded) 20.dp else 12.dp)
         ) {
-            Box(modifier = Modifier.size(48.dp).background(Color(0xFFB388FF).copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFFB388FF))
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("COSMIC INSIGHT", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB388FF), fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                Text(insight, style = MaterialTheme.typography.bodyMedium, color = Color.White, lineHeight = 20.sp)
-
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                Spacer(modifier = Modifier.height(10.dp))
-
-                if (selectedArtistReading != null) {
-                    val artist = selectedArtistReading
-                    Text(
-                        text = "${artist.artistName} â€¢ ${artist.playCount} plays â€¢ ${artist.minutesListened} min",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${formatPercent(artist.listeningSharePercent)} of lifetime listening",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.78f)
-                    )
-                    val genreLabel = artist.genres.take(3).joinToString(" â€¢ ")
-                    if (genreLabel.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(if (isInsightExpanded) 48.dp else 36.dp).background(Color(0xFFB388FF).copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFFB388FF))
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("COSMIC INSIGHT", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB388FF), fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    if (!isInsightExpanded) {
                         Text(
-                            text = genreLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color(0xFFB388FF),
+                            text = selectedArtistReading?.artistName ?: insight,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    artist.bioSnippet?.let { bio ->
-                        Spacer(modifier = Modifier.height(4.dp))
+                }
+                IconButton(onClick = { isInsightExpanded = !isInsightExpanded }) {
+                    Icon(
+                        imageVector = if (isInsightExpanded) WitcherIcons.Collapse else WitcherIcons.Expand,
+                        contentDescription = if (isInsightExpanded) "Collapse insight panel" else "Expand insight panel",
+                        tint = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = isInsightExpanded) {
+                Column {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(insight, style = MaterialTheme.typography.bodyMedium, color = Color.White, lineHeight = 20.sp)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (selectedArtistReading != null) {
+                        val artist = selectedArtistReading
                         Text(
-                            text = bio,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.72f),
-                            maxLines = 3,
+                            text = "${artist.artistName} â€¢ ${artist.playCount} plays â€¢ ${artist.minutesListened} min",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        Text(
+                            text = "${formatPercent(artist.listeningSharePercent)} of lifetime listening",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.78f)
+                        )
+                        val genreLabel = artist.genres.take(3).joinToString(" â€¢ ")
+                        if (genreLabel.isNotBlank()) {
+                            Text(
+                                text = genreLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFB388FF),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        artist.bioSnippet?.let { bio ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = bio,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.72f),
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Tap an artist star to inspect your real listening totals. Universe currently maps $artistNodeCount artists, $albumNodeCount albums, and $trackNodeCount tracks.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.78f)
+                        )
                     }
-                } else {
-                    Text(
-                        text = "Tap an artist star to inspect your real listening totals. Universe currently maps $artistNodeCount artists, $albumNodeCount albums, and $trackNodeCount tracks.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.78f)
-                    )
                 }
             }
         }

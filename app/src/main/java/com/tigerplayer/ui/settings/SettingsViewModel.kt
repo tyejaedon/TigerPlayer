@@ -7,12 +7,15 @@ import com.tigerplayer.data.backup.BackupManager
 import com.tigerplayer.data.backup.RestoreStrategy
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.tigerplayer.data.local.DefaultPlayerView
+import com.tigerplayer.data.local.NavidromePrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.SkipShortAudio
 import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.MusicFolder
+import com.tigerplayer.data.repository.SpotifyAuthManager
+import com.tigerplayer.data.repository.SpotifyRepository
 import com.tigerplayer.data.source.LocalAudioDataSource
 import com.tigerplayer.engine.LibraryEngine
 import com.tigerplayer.service.HapticsDebugMonitor
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -42,12 +46,23 @@ sealed interface BackupUiEvent {
     data class Failed(val message: String) : BackupUiEvent
 }
 
+/** Connection status for the third-party accounts surfaced in the Settings "Connected Accounts" section. */
+data class ConnectedAccountsState(
+    val isSpotifyConnected: Boolean = false,
+    val navidromeServerUrl: String? = null
+) {
+    val isNavidromeConnected: Boolean get() = !navidromeServerUrl.isNullOrBlank()
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val libraryEngine: LibraryEngine,
     private val hapticsDebugMonitor: HapticsDebugMonitor,
-    private val backupManager: BackupManager
+    private val backupManager: BackupManager,
+    private val spotifyAuthManager: SpotifyAuthManager,
+    private val spotifyRepository: SpotifyRepository,
+    private val navidromePrefs: NavidromePrefs
 ) : ViewModel() {
 
 
@@ -83,6 +98,20 @@ class SettingsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000L),
             initialValue = emptyList()
         )
+
+    val connectedAccountsState: StateFlow<ConnectedAccountsState> = combine(
+        spotifyAuthManager.token,
+        navidromePrefs.serverUrl
+    ) { token, serverUrl ->
+        ConnectedAccountsState(
+            isSpotifyConnected = token.isNotEmpty(),
+            navidromeServerUrl = serverUrl
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000L),
+        initialValue = ConnectedAccountsState()
+    )
 
     private var rescanJob: Job? = null
 
@@ -235,6 +264,26 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    /** Signs out of Spotify: tears down the App Remote session, then clears the stored token. */
+    fun logoutSpotify() {
+        viewModelScope.launch {
+            spotifyRepository.disconnect()
+            spotifyAuthManager.logout()
+        }
+    }
+
+    /**
+     * Signs out of Navidrome: clears the stored server/credentials, then rescans the library so
+     * unified-library tracks sourced from Navidrome disappear immediately rather than lingering
+     * from a stale cache.
+     */
+    fun logoutNavidrome() {
+        viewModelScope.launch {
+            navidromePrefs.clearCredentials()
+            triggerLibraryRescan()
         }
     }
 }

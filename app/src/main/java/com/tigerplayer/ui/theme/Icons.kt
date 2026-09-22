@@ -68,6 +68,9 @@ object WitcherIcons {
     val Sort = Icons.AutoMirrored.Rounded.Sort
     val SleepTimer = Icons.Rounded.Bedtime
 
+    // --- BRAND-STYLE ENTRY POINTS: distinct from generic Search so intent is obvious at a glance ---
+    val YouTube = Icons.Rounded.SmartDisplay
+
     // --- SYSTEM & STATUS: The Bestiary ---
     val VolumeUp = Icons.AutoMirrored.Rounded.VolumeUp
     val VolumeDown = Icons.AutoMirrored.Rounded.VolumeDown
