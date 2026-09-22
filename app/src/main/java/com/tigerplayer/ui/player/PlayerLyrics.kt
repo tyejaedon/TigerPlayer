@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -13,12 +15,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tigerplayer.ui.theme.igniRed
 import kotlin.math.abs
+
+/**
+ * Centralized Compose test tags for the lyrics screen, following the PrismTestTags convention
+ * (see AGENTS.md / testing.instructions.md).
+ */
+object LyricsTestTags {
+    const val NO_LYRICS_FOUND = "lyrics_no_lyrics_found"
+    const val PLAIN_LYRICS_TEXT = "lyrics_plain_text"
+    const val SYNCED_LYRICS_LIST = "lyrics_synced_list"
+}
 
 data class LyricLine(val timeMs: Long, val text: String)
 
@@ -47,8 +60,10 @@ fun LyricsDisplay(
     textColor: Color,
     activeColor: Color = Color.Red
 ) {
+    val parsed = remember(lyrics) { parseLrc(lyrics) }
+
     if (lyrics.isNullOrBlank()) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) {
+        Box(Modifier.fillMaxSize().testTag(LyricsTestTags.NO_LYRICS_FOUND), Alignment.Center) {
             Text(
                 "NO LYRICS FOUND",
                 color = textColor.copy(0.4f),
@@ -56,8 +71,28 @@ fun LyricsDisplay(
                 fontWeight = FontWeight.Black
             )
         }
+    } else if (parsed.isEmpty()) {
+        // ISSUE #159 FIX: LRCLIB frequently only has plain (unsynced) lyrics, with no [mm:ss.xx]
+        // tags for parseLrc to key on. Previously this fell through to an empty LazyColumn,
+        // rendering a blank screen even though real lyrics text was available. Render it as
+        // plain, non-highlighted scrollable text instead.
+        val scrollState = rememberScrollState()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .testTag(LyricsTestTags.PLAIN_LYRICS_TEXT),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Text(
+                text = lyrics.trim(),
+                color = textColor.copy(0.8f),
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 32.dp, horizontal = 24.dp)
+            )
+        }
     } else {
-        val parsed = remember(lyrics) { parseLrc(lyrics) }
         val listState = rememberLazyListState()
         val activeIndex = remember(currentPosition, parsed) {
             parsed.indexOfLast { it.timeMs <= currentPosition }.coerceAtLeast(0)
@@ -86,7 +121,7 @@ fun LyricsDisplay(
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag(LyricsTestTags.SYNCED_LYRICS_LIST),
                 contentPadding = PaddingValues(vertical = edgePadding),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
