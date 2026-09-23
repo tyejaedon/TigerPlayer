@@ -34,14 +34,16 @@ jobs:
           cache-read-only: "false"
       - run: ./gradlew --dependency-verification=strict help --stacktrace
       # `full` is the distributable flavor for tagged releases (includes Spotify App Remote).
-      # The reproducible `foss` build submitted to F-Droid is validated separately by
-      # android-ci.yml and built directly by F-Droid's own tooling — see
-      # docs/FDroid-Submission-Plan.md.
-      - run: ./gradlew :app:minifyFullReleaseWithR8 --stacktrace
+      # `foss` is F-Droid's reproducible flavor (no proprietary deps/keys required) — it's built
+      # here too purely so both flavors' APKs are attached to the GitHub Release; F-Droid's own
+      # infrastructure independently builds and signs `foss` from source (see
+      # docs/FDroid-Submission-Plan.md), this job's foss APK is just unsigned convenience evidence.
+      - run: ./gradlew :app:minifyFullReleaseWithR8 :app:minifyFossReleaseWithR8 --stacktrace
       - run: ./gradlew :app:bundleFullRelease --stacktrace
-      # Sideloadable unsigned APK, in addition to the Play-style AAB, so the
-      # release-candidate evidence is directly installable for manual verification.
-      - run: ./gradlew :app:assembleFullRelease --stacktrace
+      # Sideloadable unsigned APKs, in addition to the Play-style AAB, so the
+      # release-candidate evidence is directly installable for manual verification —
+      # one per distribution flavor (AGP names each file with its flavor already).
+      - run: ./gradlew :app:assembleFullRelease :app:assembleFossRelease --stacktrace
       - name: Generate checksums
         shell: bash
         run: |
@@ -59,8 +61,10 @@ jobs:
           name: unsigned-release-${{ github.sha }}
           path: |
             app/build/outputs/apk/full/release/*.apk
+            app/build/outputs/apk/foss/release/*.apk
             app/build/outputs/bundle/fullRelease/*.aab
             app/build/outputs/mapping/fullRelease/mapping.txt
+            app/build/outputs/mapping/fossRelease/mapping.txt
             release-artifacts/SHA256SUMS.txt
             release-artifacts/tigerplayer-sbom.spdx.json
           if-no-files-found: error
@@ -79,8 +83,10 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           assets=(
             app/build/outputs/apk/full/release/*.apk
+            app/build/outputs/apk/foss/release/*.apk
             app/build/outputs/bundle/fullRelease/*.aab
             app/build/outputs/mapping/fullRelease/mapping.txt
+            app/build/outputs/mapping/fossRelease/mapping.txt
             release-artifacts/SHA256SUMS.txt
             release-artifacts/tigerplayer-sbom.spdx.json
           )
@@ -91,5 +97,5 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --title "$tag" \
               --verify-tag \
-              --notes "Unsigned release-candidate evidence for ${tag}: APK, AAB, R8 mapping, SHA-256 checksums, and SPDX SBOM. These artifacts are unsigned build output for verification only — not a signed production distribution."
+              --notes "Unsigned release-candidate evidence for ${tag}: full and foss flavor APKs, the full flavor AAB, R8 mapping files, SHA-256 checksums, and SPDX SBOM. These artifacts are unsigned build output for verification only — not a signed production distribution."
           fi

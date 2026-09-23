@@ -32,6 +32,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   (`assembleFullRelease`), and for a `v*` tag push attaches the APK/AAB/mapping/checksums/SBOM
   directly to the GitHub Release for that tag, in addition to the existing workflow-artifact
   upload. No signing keys are read; assets remain clearly labeled as unsigned evidence.
+- **CI/CD**: the `Release candidate` workflow now additionally builds and attaches an unsigned
+  `foss`-flavor APK (and its R8 mapping file) to the same GitHub Release, so both distribution
+  flavors are available as release assets without any manual build/upload step.
 - **Constellation**: increased minimum node sizes so low-importance artist/album/track artwork
   stays legible at any zoom level, and artist/track name plates no longer clip the label to the
   node's own bounding box, so full names are always visible.
