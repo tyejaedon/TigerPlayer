@@ -9,6 +9,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -34,8 +35,10 @@ class SpotifyPlaybackStateTest {
     private val apiService = mockk<SpotifyApiService>(relaxed = true)
 
     // A real auth manager over relaxed prefs/api mocks — matching SpotifyAuthManagerTest. Mocking
-    // the manager itself does not survive Robolectric's classloader.
-    private val authManager = SpotifyAuthManager(mockk(relaxed = true), mockk(relaxed = true))
+    // the manager itself does not survive Robolectric's classloader. An UnconfinedTestDispatcher
+    // runs the manager's internal persistence coroutine eagerly/synchronously, so no test in this
+    // class races a real background dispatcher.
+    private val authManager = SpotifyAuthManager(mockk(relaxed = true), mockk(relaxed = true), UnconfinedTestDispatcher())
 
     /** Records interactions and lets a test drive the App Remote callbacks by hand. */
     private class FakeAppRemoteClient(override val isSupported: Boolean = true) : SpotifyAppRemoteClient {
