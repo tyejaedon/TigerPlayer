@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: release-candidate
     timeout-minutes: 45
+    # Override the workflow-level `contents: read` so the tag-triggered run can
+    # publish artifacts to the GitHub Release. Still no signing secrets are read.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,6 +39,9 @@ jobs:
       # docs/FDroid-Submission-Plan.md.
       - run: ./gradlew :app:minifyFullReleaseWithR8 --stacktrace
       - run: ./gradlew :app:bundleFullRelease --stacktrace
+      # Sideloadable unsigned APK, in addition to the Play-style AAB, so the
+      # release-candidate evidence is directly installable for manual verification.
+      - run: ./gradlew :app:assembleFullRelease --stacktrace
       - name: Generate checksums
         shell: bash
         run: |
@@ -51,9 +58,38 @@ jobs:
         with:
           name: unsigned-release-${{ github.sha }}
           path: |
+            app/build/outputs/apk/full/release/*.apk
             app/build/outputs/bundle/fullRelease/*.aab
             app/build/outputs/mapping/fullRelease/mapping.txt
             release-artifacts/SHA256SUMS.txt
             release-artifacts/tigerplayer-sbom.spdx.json
           if-no-files-found: error
           retention-days: 30
+      # Attach the same unsigned evidence to the GitHub Release for the pushed
+      # tag. Manual `workflow_dispatch` runs (no tag) skip this — there is no
+      # release to attach to. No signing keys are read; assets are clearly
+      # unsigned build evidence, not a production distribution artifact.
+      - name: Publish unsigned APK/AAB to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          assets=(
+            app/build/outputs/apk/full/release/*.apk
+            app/build/outputs/bundle/fullRelease/*.aab
+            app/build/outputs/mapping/fullRelease/mapping.txt
+            release-artifacts/SHA256SUMS.txt
+            release-artifacts/tigerplayer-sbom.spdx.json
+          )
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --verify-tag \
+              --notes "Unsigned release-candidate evidence for ${tag}: APK, AAB, R8 mapping, SHA-256 checksums, and SPDX SBOM. These artifacts are unsigned build output for verification only — not a signed production distribution."
+          fi
