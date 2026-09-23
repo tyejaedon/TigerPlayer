@@ -84,6 +84,15 @@ class ConstellationDataEngine @Inject constructor(
 
                 val mass = log10(max(1f, artist.playCount.toFloat() + 1f))
 
+                // Top 3 most-played local songs for this artist, shown in the expanded UI
+                // in place of a bio snippet.
+                val topSongs = artistTracks
+                    .distinctBy { it.id }
+                    .map { track -> track to (trackPlayMap[track.id]?.playCount ?: 0) }
+                    .sortedByDescending { it.second }
+                    .take(3)
+                    .map { (track, playCount) -> TopTrackEntry(title = track.title, playCount = playCount) }
+
                 GraphNode(
                     id = safeId("artist", artist.artistName),
                     label = artist.artistName,
@@ -92,7 +101,8 @@ class ConstellationDataEngine @Inject constructor(
                     imageUrl = imageUrl,
                     parentId = coreId,
                     importance = mass,
-                    audioEnergyBias = mass * 0.6f
+                    audioEnergyBias = mass * 0.6f,
+                    topTracks = topSongs
                 )
             }
             nodes.addAll(artistNodes)
@@ -152,7 +162,8 @@ class ConstellationDataEngine @Inject constructor(
                     imageUrl = track.imageUrl,
                     parentId = rogueCoreId,
                     importance = mass,
-                    audioEnergyBias = mass * 0.8f
+                    audioEnergyBias = mass * 0.8f,
+                    artistName = track.artist
                 ))
 
                 edges.add(GraphEdge(sourceId = rogueCoreId, targetId = trackNodeId, strength = mass))
