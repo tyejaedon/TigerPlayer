@@ -141,6 +141,13 @@ ksp {
 }
 
 dependencies {
+    // --- Coroutines ---
+    // Declared explicitly for every flavor. The Compose runtime constrains
+    // kotlinx-coroutines-android to 1.9.0, and coroutines-play-services (which used to pull it
+    // up to 1.11.0) is now `full`-only, so without this the `foss` flavor would silently ship a
+    // different coroutines runtime than the one built, tested, and checksum-verified.
+    implementation(libs.kotlinx.coroutines.android)
+
     // --- Compose & UI (Using Version Catalog) ---
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.animation)
