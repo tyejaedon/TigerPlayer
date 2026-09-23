@@ -30,6 +30,10 @@ Built with **Kotlin**, **Jetpack Compose**, **AndroidX Media3**, **Room**, and *
 |-----------------------------------------------------|------------------------------------------------------|-------------------------------------------------------------|
 | ![Discover Weekly](screenshots/Discover_Weekly.png) | ![Fluid Visualizer](screenshots/Fluid_Visulizer.png) | ![Waveform Visualizer](screenshots/Waveform_Visualizer.png) |
 
+| Galaxy View (Full)                                       | Galaxy View (Artist)                                         | YouTube Integration                                             |
+|-----------------------------------------------------------|----------------------------------------------------------------|-------------------------------------------------------------------|
+| ![Galaxy View Full](screenshots/Galaxy_View_Full.png) | ![Galaxy View Artist](screenshots/Galaxy_View_Artist.png) | ![YouTube Integration](screenshots/Youtube_Integration.png) |
+
 ---
 
 ## 🚀 Key Features
