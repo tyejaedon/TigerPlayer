@@ -1,5 +1,6 @@
 package com.tigerplayer.ui.cloud
 
+import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -41,8 +43,18 @@ fun SpotifyPlaylistScreen(
 ) {
     val tracks by viewModel.currentPlaylistTracks.collectAsState()
     val isLoading by viewModel.isLoadingTracks.collectAsState()
+    val uiError by viewModel.uiError.collectAsState()
     val context = LocalContext.current
     val colorScope = rememberCoroutineScope()
+
+    // Failures raised while on this screen (track fetch, Spotify App Remote) would otherwise only
+    // reach CloudScreen's toast, which is not in the composition here.
+    LaunchedEffect(uiError) {
+        uiError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
+        }
+    }
 
     var dominantColor by remember(playlistId, playlistImageUrl) { mutableStateOf(TigerNeonOrange) }
 
@@ -123,19 +135,40 @@ fun SpotifyPlaylistScreen(
                     contentPadding = PaddingValues(bottom = 140.dp)
                 ) {
                     item {
-                        Box(modifier = Modifier
-                            .size(260.dp)
-                            // SHADOW MUST BE BEFORE CLIP
-                            .shadow(32.dp, MaterialTheme.shapes.extraLarge, spotColor = accentColor)
-                            .clip(MaterialTheme.shapes.extraLarge),) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             AsyncImage(
                                 model = imageRequest,
-                                contentDescription = "Playlist Art",
+                                contentDescription = "Cover for $playlistName",
                                 modifier = Modifier
                                     .size(260.dp)
-                                    .clip(MaterialTheme.shapes.extraLarge)
-                                    .shadow(32.dp, MaterialTheme.shapes.extraLarge, spotColor = accentColor),
+                                    // Shadow must precede clip for the neon spot colour to bleed.
+                                    .shadow(32.dp, MaterialTheme.shapes.extraLarge, spotColor = accentColor)
+                                    .clip(MaterialTheme.shapes.extraLarge),
                                 contentScale = ContentScale.Crop
+                            )
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Text(
+                                text = playlistName,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Text(
+                                text = if (tracks.size == 1) "1 track" else "${tracks.size} tracks",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(top = 4.dp)
                             )
                         }
                     }
@@ -148,8 +181,17 @@ fun SpotifyPlaylistScreen(
                             index = index + 1,
                             track = track,
                             accentColor = accentColor,
-                            onClick = { viewModel.playSpotifyUri(track.uri) }
+                            onClick = { viewModel.playSpotifyTrack(track) }
                         )
+                    }
+
+                    if (tracks.isEmpty()) {
+                        item {
+                            SpotifyEmptyTrackList(
+                                message = "This playlist has no tracks that can be played here.",
+                                accentColor = accentColor
+                            )
+                        }
                     }
                 }
             }
@@ -158,7 +200,9 @@ fun SpotifyPlaylistScreen(
         // Floating Action Portal
         if (tracks.isNotEmpty()) {
             Button(
-                onClick = { viewModel.playSpotifyUri("spotify:playlist:$playlistId") },
+                onClick = {
+                    viewModel.playSpotifyCollection("spotify:playlist:$playlistId", playlistName)
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 48.dp)
@@ -175,6 +219,30 @@ fun SpotifyPlaylistScreen(
         }
     }
 }
+@Composable
+fun SpotifyEmptyTrackList(message: String, accentColor: Color) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = WitcherIcons.Play,
+            contentDescription = null,
+            tint = accentColor.copy(alpha = 0.5f),
+            modifier = Modifier.size(40.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
 @Composable
 fun SpotifyTrackRow(index: Int, track: SpotifyTrack, accentColor: Color, onClick: () -> Unit) {
     Surface(

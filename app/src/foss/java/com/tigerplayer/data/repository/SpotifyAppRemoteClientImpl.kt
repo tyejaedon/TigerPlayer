@@ -25,6 +25,11 @@ class SpotifyAppRemoteClientImpl @Inject constructor() : SpotifyAppRemoteClient 
     ) {
         Log.w(tag, "Spotify App Remote is not available in this build; ignoring connect().")
         onConnectionChanged(false)
+        // Report the failure too, so a caller that isn't gating on isSupported can't be left
+        // waiting on a callback that will never arrive (issue #170).
+        onConnectionFailed(
+            UnsupportedOperationException("Spotify App Remote is unavailable in the foss flavor.")
+        )
     }
 
     override fun disconnect() = Unit

@@ -1,5 +1,6 @@
 package com.tigerplayer.ui.cloud
 
+import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -43,8 +44,16 @@ fun SpotifyAlbumDetailScreen(
 ) {
     val tracks by viewModel.currentPlaylistTracks.collectAsState()
     val isLoading by viewModel.isLoadingTracks.collectAsState()
+    val uiError by viewModel.uiError.collectAsState()
     val context = LocalContext.current
     val colorScope = rememberCoroutineScope()
+
+    LaunchedEffect(uiError) {
+        uiError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
+        }
+    }
 
     // THE AMBIENT GLOW RITUAL (Ported from Playlist Screen)
     var dominantColor by remember(albumId, albumImageUrl) { mutableStateOf(TigerNeonOrange) }
@@ -149,7 +158,9 @@ fun SpotifyAlbumDetailScreen(
                         )
 
                         Button(
-                            onClick = { viewModel.playSpotifyUri("spotify:album:$albumId") },
+                            onClick = {
+                                viewModel.playSpotifyCollection("spotify:album:$albumId", albumName)
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                             modifier = Modifier
                                 .padding(top = 16.dp)
@@ -173,14 +184,28 @@ fun SpotifyAlbumDetailScreen(
                 } else {
                     itemsIndexed(
                         items = tracks,
-                        // THE FIX: Add keys to prevent UI stutter
-                        key = { _, track -> track.id }
+                        // Spotify can return the same track id twice in one collection, and a
+                        // duplicate key is a hard crash in LazyColumn - so index it (issue #171).
+                        key = { index, track -> "${track.id}_$index" }
                     ) { index, track ->
                         SpotifyAlbumTrackRow(
                             index = index + 1,
                             track = track,
-                            onClick = { viewModel.playSpotifyUri(track.uri) }
+                            accentColor = accentColor,
+                            // The album-tracks endpoint returns simplified objects with no album
+                            // reference, so the artwork has to come from the screen.
+                            artworkUrl = albumImageUrl,
+                            onClick = { viewModel.playSpotifyTrack(track) }
                         )
+                    }
+
+                    if (tracks.isEmpty()) {
+                        item {
+                            SpotifyEmptyTrackList(
+                                message = "This album has no tracks that can be played here.",
+                                accentColor = accentColor
+                            )
+                        }
                     }
                 }
             }
@@ -189,7 +214,13 @@ fun SpotifyAlbumDetailScreen(
 }
 
 @Composable
-fun SpotifyAlbumTrackRow(index: Int, track: SpotifyTrack, onClick: () -> Unit) {
+fun SpotifyAlbumTrackRow(
+    index: Int,
+    track: SpotifyTrack,
+    accentColor: Color,
+    artworkUrl: String?,
+    onClick: () -> Unit
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -206,10 +237,23 @@ fun SpotifyAlbumTrackRow(index: Int, track: SpotifyTrack, onClick: () -> Unit) {
             Text(
                 text = index.toString(),
                 modifier = Modifier.width(32.dp),
-                color = Color(0xFF00E5FF).copy(alpha = 0.8f),
+                color = accentColor.copy(alpha = 0.8f),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black
             )
+
+            AsyncImage(
+                model = track.album?.images?.firstOrNull()?.url ?: artworkUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.name,

@@ -42,6 +42,21 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+- **Spotify**: starting a Spotify track no longer shows a meaningless string (the raw Spotify
+  track ID) stuck at `0:00`. The player now shows the real title, artist, album art, and duration
+  the moment playback is requested, because the metadata already on screen is passed through to
+  the interim state instead of being re-derived from the URI. (#169)
+- **Spotify**: a Spotify App Remote connection that fails — the Spotify app isn't installed or
+  running, the account isn't Premium, or the IPC connection is refused — now shows an explanatory
+  message instead of silently leaving the player parked at `0:00` forever. Playback that is never
+  confirmed by the Spotify app is also timed out and reported rather than left hanging, and builds
+  without App Remote support say so. (#170)
+- **Spotify playlist screen**: the header artwork is now centred and captioned with the playlist
+  name and track count, and no longer draws its glow shadow twice. Both the playlist and album
+  detail screens now show an explicit empty state, surface errors that occur while they are open,
+  and can no longer crash on a collection that lists the same track ID more than once. Album track
+  rows gained artwork and now follow the screen's extracted accent colour. (#171)
+
 - **Sonic Prism**: fixed a bug where the isolation mix could be silently disabled (with playback
   continuing unaffected/unannounced) purely as a side effect of the controlling screen's ViewModel
   being torn down - e.g. when the system destroys the Activity in the background while a foreground

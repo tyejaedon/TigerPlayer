@@ -77,6 +77,18 @@ class CloudViewModel @Inject constructor(
                     forceRefreshArchives()
                 }
         }
+
+        // App Remote failures used to be logcat-only, which is what made a failed connection look
+        // like playback silently stuck at 0:00 (issue #170). Route them into the existing error
+        // channel so the UI reports them like any other failure.
+        viewModelScope.launch {
+            spotifyRepository.connectionError
+                .filterNotNull()
+                .collect { message ->
+                    _uiError.value = message
+                    spotifyRepository.clearConnectionError()
+                }
+        }
     }
 
     private suspend fun ensureValidToken(): String? {
@@ -168,9 +180,15 @@ class CloudViewModel @Inject constructor(
         }
     }
 
-    fun playSpotifyUri(uri: String) {
+    fun playSpotifyTrack(track: SpotifyTrack) {
         viewModelScope.launch {
-            playbackEngine.playSpotifyUri(uri)
+            playbackEngine.playSpotifyTrack(track)
+        }
+    }
+
+    fun playSpotifyCollection(uri: String, displayName: String) {
+        viewModelScope.launch {
+            playbackEngine.playSpotifyCollection(uri, displayName)
         }
     }
 

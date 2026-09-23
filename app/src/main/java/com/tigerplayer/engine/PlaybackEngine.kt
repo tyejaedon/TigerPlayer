@@ -2,6 +2,7 @@ package com.tigerplayer.engine
 
 import android.util.Log
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.remote.model.SpotifyTrack
 import com.tigerplayer.data.repository.SpotifyPlaybackState
 import com.tigerplayer.data.repository.SpotifyRepository
 import com.tigerplayer.service.MediaControllerManager
@@ -68,7 +69,9 @@ class PlaybackEngine @Inject constructor(
         val isSpotifyTrack = track.id.startsWith("spotify:")
         if (isSpotifyTrack) {
             mediaControllerManager.pause()
-            spotifyRepository.playUri(track.id)
+            // Seed the placeholder with the metadata we already hold so the player never shows a
+            // raw Spotify id at 0:00 while App Remote connects (issue #169).
+            spotifyRepository.playUri(track.id, track)
         } else {
             spotifyRepository.pause()
             val startIndex = libraryTracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
@@ -79,9 +82,16 @@ class PlaybackEngine @Inject constructor(
         }
     }
 
-    fun playSpotifyUri(uri: String) {
+    /** Plays a Spotify track whose full metadata is already known (e.g. a playlist listing row). */
+    fun playSpotifyTrack(track: SpotifyTrack) {
         mediaControllerManager.pause()
-        spotifyRepository.playUri(uri)
+        spotifyRepository.playTrack(track)
+    }
+
+    /** Plays a Spotify playlist/album URI, using [displayName] for the interim placeholder. */
+    fun playSpotifyCollection(uri: String, displayName: String) {
+        mediaControllerManager.pause()
+        spotifyRepository.playCollection(uri, displayName)
     }
 
     fun togglePlayPause(currentTrack: AudioTrack?, isCurrentlyPlaying: Boolean) {
