@@ -18,6 +18,7 @@ class SpotifyPrefs @Inject constructor(
         const val ACCESS_TOKEN = "access_token"
         const val TOKEN_TIMESTAMP = "token_timestamp"
         const val REFRESH_TOKEN = "refresh_token"
+        const val GRANTED_SCOPE = "granted_scope"
         const val KEYSTORE_ALIAS = "tigerplayer_spotify_key"
     }
 
@@ -35,23 +36,36 @@ class SpotifyPrefs @Inject constructor(
     private val _accessToken = MutableStateFlow(readEncrypted(ACCESS_TOKEN))
     private val _tokenTimestamp = MutableStateFlow(readLongOrNull(TOKEN_TIMESTAMP))
     private val _refreshToken = MutableStateFlow(readEncrypted(REFRESH_TOKEN))
+    private val _grantedScope = MutableStateFlow(readEncrypted(GRANTED_SCOPE))
 
     val accessToken: Flow<String?> = _accessToken
     val tokenTimestamp: Flow<Long?> = _tokenTimestamp
     val refreshToken: Flow<String?> = _refreshToken
+    val grantedScope: Flow<String?> = _grantedScope
 
-    suspend fun saveToken(token: String, timestamp: Long, refreshToken: String? = null) {
+    suspend fun saveToken(
+        token: String,
+        timestamp: Long,
+        refreshToken: String? = null,
+        grantedScope: String? = null
+    ) {
         securePrefs.edit {
             putString(ACCESS_TOKEN, cipher.encrypt(token))
             putString(TOKEN_TIMESTAMP, cipher.encrypt(timestamp.toString()))
             if (refreshToken != null) {
                 putString(REFRESH_TOKEN, cipher.encrypt(refreshToken))
             }
+            if (grantedScope != null) {
+                putString(GRANTED_SCOPE, cipher.encrypt(grantedScope))
+            }
         }
         _accessToken.value = token
         _tokenTimestamp.value = timestamp
         if (refreshToken != null) {
             _refreshToken.value = refreshToken
+        }
+        if (grantedScope != null) {
+            _grantedScope.value = grantedScope
         }
     }
 
@@ -60,9 +74,11 @@ class SpotifyPrefs @Inject constructor(
             remove(ACCESS_TOKEN)
             remove(TOKEN_TIMESTAMP)
             remove(REFRESH_TOKEN)
+            remove(GRANTED_SCOPE)
         }
         _accessToken.value = null
         _tokenTimestamp.value = null
         _refreshToken.value = null
+        _grantedScope.value = null
     }
 }

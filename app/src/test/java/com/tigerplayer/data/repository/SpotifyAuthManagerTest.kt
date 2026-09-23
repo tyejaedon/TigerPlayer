@@ -53,19 +53,21 @@ class SpotifyAuthManagerTest {
         every { spotifyPrefs.accessToken } returns flowOf(null)
         every { spotifyPrefs.tokenTimestamp } returns flowOf(null)
         every { spotifyPrefs.refreshToken } returns flowOf(null)
+        every { spotifyPrefs.grantedScope } returns flowOf(null)
         return SpotifyAuthManager(spotifyPrefs, spotifyAuthApi, dispatcher)
     }
 
     private fun tokenResponse(
         accessToken: String,
         expiresIn: Int = 3600,
-        refreshToken: String? = null
+        refreshToken: String? = null,
+        scope: String? = null
     ) = SpotifyTokenResponse(
         accessToken = accessToken,
         tokenType = "Bearer",
         expiresIn = expiresIn,
         refreshToken = refreshToken,
-        scope = null
+        scope = scope
     )
 
     private fun errorResponse(code: Int): Response<SpotifyTokenResponse> =
@@ -94,7 +96,34 @@ class SpotifyAuthManagerTest {
 
         assertEquals("access-1", result)
         assertEquals("access-1", sut.getToken())
-        coVerify(exactly = 1) { spotifyPrefs.saveToken("access-1", any(), "refresh-1") }
+        coVerify(exactly = 1) { spotifyPrefs.saveToken("access-1", any(), "refresh-1", null) }
+    }
+
+    @Test
+    fun `exchangeCodeForToken persists the granted scopes so remote playback can detect legacy auth`() = runTest {
+        val sut = manager()
+        val grantedScopes = "playlist-read-private app-remote-control streaming"
+        coEvery {
+            spotifyAuthApi.getUserToken(
+                clientId = any(),
+                code = "auth-code",
+                redirectUri = "tigerplayer://callback",
+                codeVerifier = "the-verifier"
+            )
+        } returns Response.success(
+            tokenResponse(
+                accessToken = "access-1",
+                refreshToken = "refresh-1",
+                scope = grantedScopes
+            )
+        )
+
+        sut.exchangeCodeForToken("auth-code", "tigerplayer://callback", "the-verifier")
+
+        assertFalse(sut.requiresAppRemoteReauth())
+        coVerify(exactly = 1) {
+            spotifyPrefs.saveToken("access-1", any(), "refresh-1", grantedScopes)
+        }
     }
 
     @Test
@@ -171,6 +200,19 @@ class SpotifyAuthManagerTest {
         assertEquals("access-2", result)
         assertEquals("access-2", sut.getToken())
         coVerify(exactly = 1) { spotifyAuthApi.refreshToken(any(), any(), refreshToken = "refresh-1") }
+    }
+
+    @Test
+    fun `requiresAppRemoteReauth is true when a stored session is known to lack the remote scope`() {
+        val now = System.currentTimeMillis()
+        every { spotifyPrefs.accessToken } returns flowOf("access-1")
+        every { spotifyPrefs.tokenTimestamp } returns flowOf(now)
+        every { spotifyPrefs.refreshToken } returns flowOf("refresh-1")
+        every { spotifyPrefs.grantedScope } returns flowOf("playlist-read-private user-library-read")
+
+        val sut = SpotifyAuthManager(spotifyPrefs, spotifyAuthApi, UnconfinedTestDispatcher())
+
+        assertTrue(sut.requiresAppRemoteReauth())
     }
 
     @Test
@@ -266,4 +308,3 @@ class SpotifyAuthManagerTest {
         assertTrue(sut.isTokenExpired(now - 7_200_000L))
     }
 }
-

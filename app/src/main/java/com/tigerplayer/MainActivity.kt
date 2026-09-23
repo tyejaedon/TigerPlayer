@@ -236,10 +236,7 @@ class MainActivity : ComponentActivity() {
         val challenge = PkceGenerator.generateCodeChallenge(verifier)
         pendingCodeVerifier = verifier
 
-        val scopes = listOf(
-            "playlist-read-private", "playlist-read-collaborative",
-            "user-library-read", "user-read-private", "streaming"
-        ).joinToString(" ")
+        val scopes = SpotifyAuthManager.REQUESTED_SCOPES.joinToString(" ")
 
         val uri = Uri.parse("https://accounts.spotify.com/authorize").buildUpon()
             .appendQueryParameter("client_id", clientId)

@@ -244,6 +244,11 @@ class SpotifyRepository @Inject constructor(
 
     fun connect() {
         if (!appRemoteClient.isSupported || _isRemoteConnected.value) return
+        if (authManager.requiresAppRemoteReauth()) {
+            _isRemoteConnected.value = false
+            failPendingPlayback(ERROR_REMOTE_REAUTH_REQUIRED)
+            return
+        }
 
         appRemoteClient.connect(
             clientId = clientId,
@@ -291,7 +296,7 @@ class SpotifyRepository @Inject constructor(
             onConnectionFailed = { throwable ->
                 Log.e(TAG, "App Remote connection failed", throwable)
                 _isRemoteConnected.value = false
-                failPendingPlayback(ERROR_CONNECTION_FAILED)
+                failPendingPlayback(classifyConnectionFailure(throwable))
             }
         )
     }
@@ -472,6 +477,23 @@ class SpotifyRepository @Inject constructor(
             ?.url
     }
 
+    private fun classifyConnectionFailure(throwable: Throwable): String {
+        var current: Throwable? = throwable
+        while (current != null) {
+            val message = current.message.orEmpty()
+            val className = current.javaClass.name
+            if (
+                className.endsWith("UserNotAuthorizedException") ||
+                message.contains("Explicit user authorization is required", ignoreCase = true)
+            ) {
+                return ERROR_REMOTE_REAUTH_REQUIRED
+            }
+            current = current.cause
+        }
+
+        return ERROR_CONNECTION_FAILED
+    }
+
     private companion object {
         const val TAG = "SpotifyRepo"
 
@@ -483,6 +505,8 @@ class SpotifyRepository @Inject constructor(
 
         const val ERROR_CONNECTION_FAILED =
             "Couldn't reach the Spotify app. Make sure it's installed, open, and signed in with Premium."
+        const val ERROR_REMOTE_REAUTH_REQUIRED =
+            "Spotify playback needs one-time reauthorization. In Settings > Connected Accounts, disconnect Spotify, then sign in again."
         const val ERROR_PLAYBACK_UNCONFIRMED =
             "Spotify didn't start playback. Open the Spotify app, then try again."
         const val ERROR_APP_REMOTE_UNSUPPORTED =

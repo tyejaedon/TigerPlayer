@@ -24,9 +24,23 @@ class SpotifyAuthManager @Inject constructor(
     private val spotifyAuthApi: SpotifyAuthApi,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
+    companion object {
+        const val APP_REMOTE_CONTROL_SCOPE = "app-remote-control"
+
+        val REQUESTED_SCOPES = listOf(
+            APP_REMOTE_CONTROL_SCOPE,
+            "playlist-read-private",
+            "playlist-read-collaborative",
+            "user-library-read",
+            "user-read-private",
+            "streaming"
+        )
+    }
+
     // --- USER AUTH STATE ---
     private val _token = MutableStateFlow("")
     val token: StateFlow<String> = _token.asStateFlow()
+    private val _grantedScope = MutableStateFlow<String?>(null)
     private var tokenTimestamp: Long = 0L
     private var expiresInMs: Long = 3600_000L
     private var refreshToken: String = ""
@@ -49,6 +63,7 @@ class SpotifyAuthManager @Inject constructor(
                 tokenTimestamp = cachedTimestamp
             }
             refreshToken = spotifyPrefs.refreshToken.firstOrNull() ?: ""
+            _grantedScope.value = spotifyPrefs.grantedScope.firstOrNull()
         }
     }
 
@@ -86,7 +101,12 @@ class SpotifyAuthManager @Inject constructor(
                 if (body != null) {
                     // Spotify may or may not rotate the refresh token on refresh.
                     val newRefreshToken = body.refreshToken ?: refreshToken
-                    updateToken(body.accessToken, body.expiresIn, newRefreshToken)
+                    updateToken(
+                        newToken = body.accessToken,
+                        expiresInSeconds = body.expiresIn,
+                        newRefreshToken = newRefreshToken,
+                        grantedScope = body.scope ?: _grantedScope.value
+                    )
                     Log.d("SpotifyAuth", "Access token refreshed successfully.")
                     body.accessToken
                 } else {
@@ -109,13 +129,37 @@ class SpotifyAuthManager @Inject constructor(
         }
     }
 
-    private fun updateToken(newToken: String, expiresInSeconds: Int, newRefreshToken: String) {
+    fun requiresAppRemoteReauth(): Boolean {
+        val grantedScope = _grantedScope.value ?: return false
+        return _token.value.isNotEmpty() && !containsScope(grantedScope, APP_REMOTE_CONTROL_SCOPE)
+    }
+
+    private fun containsScope(grantedScope: String, requiredScope: String): Boolean {
+        return grantedScope
+            .split(' ')
+            .any { it.equals(requiredScope, ignoreCase = false) }
+    }
+
+    private fun updateToken(
+        newToken: String,
+        expiresInSeconds: Int,
+        newRefreshToken: String,
+        grantedScope: String? = _grantedScope.value
+    ) {
         _token.value = newToken
         tokenTimestamp = System.currentTimeMillis()
         expiresInMs = expiresInSeconds * 1000L
         refreshToken = newRefreshToken
+        if (grantedScope != null) {
+            _grantedScope.value = grantedScope
+        }
         scope.launch {
-            spotifyPrefs.saveToken(newToken, tokenTimestamp, newRefreshToken)
+            spotifyPrefs.saveToken(
+                token = newToken,
+                timestamp = tokenTimestamp,
+                refreshToken = newRefreshToken,
+                grantedScope = grantedScope
+            )
         }
     }
 
@@ -129,6 +173,7 @@ class SpotifyAuthManager @Inject constructor(
 
     fun logout() {
         _token.value = ""
+        _grantedScope.value = null
         tokenTimestamp = 0L
         refreshToken = ""
         scope.launch {
@@ -157,7 +202,12 @@ class SpotifyAuthManager @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null) {
-                    updateToken(body.accessToken, body.expiresIn, body.refreshToken.orEmpty())
+                    updateToken(
+                        newToken = body.accessToken,
+                        expiresInSeconds = body.expiresIn,
+                        newRefreshToken = body.refreshToken.orEmpty(),
+                        grantedScope = body.scope
+                    )
                     Log.d("SpotifyAuth", "Token forged successfully from Code!")
                     body.accessToken
                 } else {
