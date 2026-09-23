@@ -44,6 +44,7 @@ import com.tigerplayer.ui.player.FullPlayerScreen
 import com.tigerplayer.ui.player.MiniPlayer
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.prism.PrismViewModel
+import com.tigerplayer.ui.prism.SonicPrismRoute
 import com.tigerplayer.ui.theme.glassEffect
 
 // ------------------------------
@@ -291,6 +292,9 @@ fun MainScreen(
                             viewModel = playerViewModel,
                             homeViewModel = homeViewModel,
                             prismViewModel = prismViewModel,
+                            onNavigateToSonicPrism = {
+                                tabNavController.navigate(com.tigerplayer.navigation.Screen.SonicPrism.route)
+                            },
                             onNavigateToAlbum = onNavigateToAlbum,
                             onNavigateToSettings = onNavigateToSettings,
                             onNavigatetoArtist = onNavigateToArtist,
@@ -317,6 +321,15 @@ fun MainScreen(
                             onNavigateToYouTubeSearch = {
                                 tabNavController.navigate(com.tigerplayer.navigation.Screen.YouTubeSearch.route)
                             }
+                        )
+                    }
+
+                    composable(com.tigerplayer.navigation.Screen.SonicPrism.route) {
+                        SonicPrismRoute(
+                            // Deliberately the MainScreen-owned instance, not a fresh
+                            // hiltViewModel() - Home and this screen must not diverge.
+                            viewModel = prismViewModel,
+                            onBackClick = { tabNavController.popBackStack() }
                         )
                     }
 

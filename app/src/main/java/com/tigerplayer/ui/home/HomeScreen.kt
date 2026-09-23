@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,7 +42,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImage
-import com.tigerplayer.BuildConfig
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.components.DiscoverCarousel
@@ -53,7 +53,7 @@ import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.extras.NowBriefWidgetWrapper
 import com.tigerplayer.ui.library.*
 import com.tigerplayer.ui.player.PlayerViewModel
-import com.tigerplayer.ui.prism.PrismInlineMixer
+import com.tigerplayer.ui.prism.PrismTestTags
 import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
@@ -83,6 +83,7 @@ fun HomeScreen(
     onNavigateToDiscoverWeekly: () -> Unit,
     homeViewModel: HomeViewModel,
     prismViewModel: PrismViewModel,
+    onNavigateToSonicPrism: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val homeState by viewModel.homeUiState.collectAsStateWithLifecycle()
@@ -224,7 +225,10 @@ fun HomeScreen(
                 }
 
                 item {
-                    SonicPrismHubCard(viewModel = prismViewModel)
+                    SonicPrismEntryCard(
+                        viewModel = prismViewModel,
+                        onOpen = onNavigateToSonicPrism
+                    )
                 }
 
                 if (homeState.discoverTracks.isNotEmpty()) {
@@ -406,75 +410,62 @@ fun NexusGatewayCard(
 }
 
 @Composable
-fun SonicPrismHubCard(viewModel: PrismViewModel) {
+fun SonicPrismEntryCard(
+    viewModel: PrismViewModel,
+    onOpen: () -> Unit
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 16.dp)
             .clip(MaterialTheme.shapes.extraLarge)
             .background(MaterialTheme.colorScheme.background)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), MaterialTheme.shapes.extraLarge)
-            .padding(16.dp)
+            .bounceClick { onOpen() }
+            .testTag(PrismTestTags.HOME_ENTRY_CARD)
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .shadow(4.dp, CircleShape, ambientColor = Color.Transparent, spotColor = SonicCyan.copy(alpha = 0.2f))
-                        .border(1.dp, SonicCyan.copy(alpha = 0.2f), CircleShape)
-                        .background(SonicCyan.copy(alpha = 0.55f),CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Rounded.GraphicEq, null, tint = SonicCyan, modifier = Modifier.size(20.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text("SONIC PRISM", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground)
-                    Text("Real-time isolation hub", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f))
-                }
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .shadow(4.dp, CircleShape, ambientColor = Color.Transparent, spotColor = SonicCyan.copy(alpha = 0.2f))
+                    .border(1.dp, SonicCyan.copy(alpha = 0.2f), CircleShape)
+                    .background(SonicCyan.copy(alpha = 0.55f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.GraphicEq, null, tint = SonicCyan, modifier = Modifier.size(20.dp))
             }
-
-            Switch(
-                checked = state.isPrismEnabled,
-                onCheckedChange = viewModel::setPrismEnabled,
-                colors = SwitchDefaults.colors(checkedThumbColor = SonicCyan, checkedTrackColor = SonicCyan.copy(alpha = 0.3f))
-            )
-        }
-
-        AnimatedVisibility(visible = state.isPrismEnabled) {
+            Spacer(modifier = Modifier.width(12.dp))
             Column {
-                Spacer(modifier = Modifier.height(24.dp))
-                PrismInlineMixer(
-                    state = state,
-                    onVocalsChange = viewModel::updateVocals,
-                    onBeatsChange = viewModel::updateBeats,
-                    onInstrumentsChange = viewModel::updateInstruments,
-                    onEnabledChange = viewModel::setPrismEnabled,
-                    onPresetSelected = viewModel::applyPreset,
-                    onResetRequested = viewModel::resetMixToBalanced,
-                    // Spectral analysis mode (FFT vs. Bandpass) is a DSP A/B profiling tool for
-                    // development, not something a listener needs to choose - keep it out of the
-                    // shipped UI.
-                    onSpectralAnalysisChange = if (BuildConfig.DEBUG) viewModel::setSpectralAnalysis else null,
-                    // A fixed 200.dp here used to clip the 330.dp-tall fader and everything below
-                    // it (issue: Sonic Prism card overflow). Let the card size to its content, and
-                    // use a shorter fader that fits a dashboard card instead of the full-size one.
-                    faderHeight = 180.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.large)
-                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f))
-                        .padding(vertical = 12.dp)
+                Text("SONIC PRISM", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground)
+                Text(
+                    text = if (state.isPrismEnabled) {
+                        "${state.preset.displayName} mix - tap to open the mixer"
+                    } else {
+                        "Bypassed - tap to open the mixer"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
+
+        Switch(
+            checked = state.isPrismEnabled,
+            onCheckedChange = viewModel::setPrismEnabled,
+            modifier = Modifier.testTag(PrismTestTags.HOME_ENTRY_SWITCH),
+            colors = SwitchDefaults.colors(checkedThumbColor = SonicCyan, checkedTrackColor = SonicCyan.copy(alpha = 0.3f))
+        )
     }
 }
 

@@ -599,24 +599,6 @@ private fun PlayerMainContent(
                             }
                         }
 
-                      /*  AnimatedVisibility(visible = !isAlbumClarityMode && uiState.visualMode == PlayerVisualMode.SONIC_PRISM) {
-                            com.tigerplayer.ui.prism.PrismInlineMixer(
-                                state = prismState,
-                                onVocalsChange = prismViewModel::updateVocals,
-                                onBeatsChange = prismViewModel::updateBeats,
-                                onInstrumentsChange = prismViewModel::updateInstruments,
-                                onEnabledChange = prismViewModel::setPrismEnabled,
-                                onPresetSelected = prismViewModel::applyPreset,
-                                onResetRequested = prismViewModel::resetMixToBalanced,
-                                onSpectralAnalysisChange = prismViewModel::setSpectralAnalysis,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(if (isLightTheme) Color.Black.copy(alpha = 0.68f) else Color.Black.copy(alpha = 0.78f))
-                                    .padding(18.dp)
-                            )
-                        }
-
-                       */
                     }
                 }
             }
