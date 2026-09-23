@@ -84,15 +84,33 @@ class MediaDataRepository @Inject constructor(
                             val spotifyDeferred = async {
                                 val token = authManager.getValidToken()
                                 if (token.isNotEmpty()) {
-                                    val response = spotifyApiService.searchArtist("Bearer $token", cleanArtist)
-                                    if (response.isSuccessful) response.body()?.artists?.items?.firstOrNull() else null
+                                    // Request a handful of candidates (not just 1) so we can pick the
+                                    // one that actually matches the requested name, rather than blindly
+                                    // trusting Spotify's relevance/popularity-ranked top hit — which for
+                                    // short or partial names is frequently a *different, more popular*
+                                    // artist (issue: wrong artist image/bio surfacing).
+                                    val response = spotifyApiService.searchArtist(
+                                        token = "Bearer $token",
+                                        query = cleanArtist,
+                                        limit = 5
+                                    )
+                                    if (response.isSuccessful) {
+                                        response.body()?.artists?.items.orEmpty()
+                                            .firstOrNull { isSameArtist(it.name, cleanArtist) }
+                                    } else null
                                 } else null
                             }
 
                             val lastFmDeferred = async {
                                 try {
                                     val response = lastFmApi.getArtistInfo(artistName = cleanArtist)
-                                    if (response.isSuccessful) response.body()?.artist else null
+                                    if (response.isSuccessful) {
+                                        // autocorrect=1 can silently substitute an unrelated artist for a
+                                        // fuzzy/misspelled query. Reject the result if the name it actually
+                                        // resolved to doesn't match what we asked for.
+                                        response.body()?.artist
+                                            ?.takeIf { isSameArtist(it.name, cleanArtist) }
+                                    } else null
                                 } catch (e: Exception) { null }
                             }
 
@@ -166,6 +184,26 @@ class MediaDataRepository @Inject constructor(
         if (artistMinutes <= 0 || lifetimeMinutes <= 0) return 0f
         return ((artistMinutes.toFloat() / lifetimeMinutes.toFloat()) * 100f)
             .coerceIn(0f, 100f)
+    }
+
+    /**
+     * Identity guard for the Dual-Oracle fetch: both Spotify's fuzzy search and Last.fm's
+     * autocorrect can resolve a query to a *different* artist entirely. Comparing raw strings
+     * with `equals(ignoreCase = true)` is too strict (accents, punctuation), so both names are
+     * normalized to bare lowercase alphanumerics before comparing. This is the guard that
+     * prevents one artist's image/bio from being cached under a different artist's key.
+     */
+    private fun isSameArtist(candidateName: String?, requestedName: String): Boolean {
+        val normalizedCandidate = normalizeArtistNameForComparison(candidateName)
+        val normalizedRequested = normalizeArtistNameForComparison(requestedName)
+        return normalizedCandidate.isNotEmpty() && normalizedCandidate == normalizedRequested
+    }
+
+    private fun normalizeArtistNameForComparison(name: String?): String {
+        if (name.isNullOrBlank()) return ""
+        val withoutDiacritics = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+        return withoutDiacritics.lowercase().replace(Regex("[^a-z0-9]"), "")
     }
 
     private fun List<LastFmImage>.getBestImage(): String? {
