@@ -54,6 +54,12 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+- **Build (F-Droid)**: removed the `org.gradle.toolchains.foojay-resolver` plugin, scoped Google
+  Play Services Location and the Spotify App Remote AAR to the `full` flavor only (via a new
+  `LocationProvider` abstraction with a no-op `foss` implementation), and pinned
+  `kotlinx-coroutines-android` so the `foss` and `full` flavors resolve the same coroutines runtime.
+  The `v2.1.1` tag F-Droid attempted to build predates this fix and never produced a working build,
+  so `versionCode`/`versionName` are bumped to 3 / `2.1.2` for a fresh, buildable tag. (#71)
 - **Spotify**: starting a Spotify track no longer shows a meaningless string (the raw Spotify
   track ID) stuck at `0:00`. The player now shows the real title, artist, album art, and duration
   the moment playback is requested, because the metadata already on screen is passed through to
