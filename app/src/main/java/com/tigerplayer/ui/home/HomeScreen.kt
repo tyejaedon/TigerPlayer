@@ -232,7 +232,6 @@ fun HomeScreen(
                 }
 
                 if (homeState.discoverTracks.isNotEmpty()) {
-                    item { SectionTitle("VANGUARD DISCOVERY") }
                     item { DiscoverCarousel(tracks = homeState.discoverTracks, onTrackClick = { viewModel.playTrack(it) }) }
                 }
 
@@ -303,7 +302,6 @@ fun HomeScreen(
                 }
 
                 if (homeState.recentlyPlayedTracks.isNotEmpty()) {
-                    item { SectionTitle("RECENT RITUALS") }
                     item {
                         RecentlyPlayedRow(
                             tracks = homeState.recentlyPlayedTracks,
@@ -721,18 +719,18 @@ fun StatGlassWidget(
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
             .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.shapes.large)
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.Center
         ) {
             Box(
                 modifier = Modifier.size(if (isFullWidth) 40.dp else 44.dp).background(accentColor.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                Icon(icon, null, tint = accentColor, modifier = Modifier.size(18.dp))
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column(verticalArrangement = Arrangement.Center) {
                 Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, maxLines = 1)
@@ -797,7 +795,7 @@ fun HomeHeader(
             }, label = "HeaderSearchAnimation"
         ) { searchactive ->
             if (searchactive) {
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     placeholder = {
