@@ -8,6 +8,11 @@ gson = "2.14.0"
 jtransforms = "3.2"
 kotlin = "2.4.20"
 ksp = "2.3.12"
+# Keep every kotlinx-coroutines artifact on one version. The Compose runtime carries a
+# constraint on kotlinx-coroutines-android 1.9.0, so without an explicit declaration the
+# resolved version differs per product flavor (the `full`-only coroutines-play-services
+# dependency used to pull it up to 1.11.0, `foss` was left on 1.9.0).
+kotlinxCoroutines = "1.11.0"
 kotlinxCoroutinesPlayServices = "1.11.0"
 kotlinxCoroutinesTest = "1.11.0"
 
@@ -112,6 +117,7 @@ auth = { module = "com.spotify.android:auth", version.ref = "auth" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 jtransforms = { module = "com.github.wendykierp:JTransforms", version.ref = "jtransforms" }
 kotlin-youtubeextractor = { module = "com.github.maxrave-dev:kotlin-youtubeExtractor", version.ref = "kotlinYoutubeextractor" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutinesPlayServices" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
 leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanaryAndroid" }

@@ -141,6 +141,13 @@ ksp {
 }
 
 dependencies {
+    // --- Coroutines ---
+    // Declared explicitly for every flavor. The Compose runtime constrains
+    // kotlinx-coroutines-android to 1.9.0, and coroutines-play-services (which used to pull it
+    // up to 1.11.0) is now `full`-only, so without this the `foss` flavor would silently ship a
+    // different coroutines runtime than the one built, tested, and checksum-verified.
+    implementation(libs.kotlinx.coroutines.android)
+
     // --- Compose & UI (Using Version Catalog) ---
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.animation)
@@ -209,8 +216,10 @@ dependencies {
     "fullImplementation"(files("libs/spotify-app-remote-release-0.8.0.aar"))
 
     // --- Google Play Services ---
-    implementation(libs.play.services.location)
-    implementation(libs.kotlinx.coroutines.play.services)
+    // Google Play Services are proprietary and only available in `full` flavor.
+    // The `foss` flavor (F-Droid) builds without these dependencies.
+    "fullImplementation"(libs.play.services.location)
+    "fullImplementation"(libs.kotlinx.coroutines.play.services)
 
     // --- Testing ---
     testImplementation(libs.junit)
