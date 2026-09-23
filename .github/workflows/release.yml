@@ -69,18 +69,37 @@ jobs:
             release-artifacts/tigerplayer-sbom.spdx.json
           if-no-files-found: error
           retention-days: 30
-      # Attach the same unsigned evidence to the GitHub Release for the pushed
-      # tag. Manual `workflow_dispatch` runs (no tag) skip this — there is no
-      # release to attach to. No signing keys are read; assets are clearly
-      # unsigned build evidence, not a production distribution artifact.
+      # Attach the same unsigned evidence to the GitHub Release for the resolved
+      # tag. Two ways to reach a tag here:
+      #   1. A real `push: tags: [v*]` event — `github.ref` is `refs/tags/<tag>`.
+      #   2. A manual `workflow_dispatch` re-run to backfill assets onto a tag
+      #      whose original run predates this publishing step (or predates a
+      #      later addition like the foss APK) — `github.ref` is whatever ref
+      #      the run was dispatched from, which does NOT reflect the `ref`
+      #      input, so it's resolved from `inputs.ref` instead when that looks
+      #      like a `v*` tag. Dispatch with `-f ref=v2.1.2` (and no need to
+      #      change the "Use workflow from" branch, since checkout already
+      #      uses `inputs.ref`) to backfill an existing tag's release.
+      # A `workflow_dispatch` run left at the default `master` ref intentionally
+      # does not publish anywhere — there is no tag to attach to. No signing
+      # keys are read either way; assets are clearly unsigned build evidence,
+      # not a production distribution artifact.
       - name: Publish unsigned APK/AAB to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF#refs/tags/}"
+          tag=""
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          elif [[ "${{ inputs.ref }}" == v* ]]; then
+            tag="${{ inputs.ref }}"
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "No tag resolved from github.ref or the 'ref' input; skipping GitHub Release publish."
+            exit 0
+          fi
           assets=(
             app/build/outputs/apk/full/release/*.apk
             app/build/outputs/apk/foss/release/*.apk
