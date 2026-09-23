@@ -49,6 +49,11 @@ jobs:
         run: |
           mkdir -p release-artifacts
           find app/build/outputs -type f \( -name '*.aab' -o -name '*.apk' \) -print0 | sort -z | xargs -0 -r sha256sum > release-artifacts/SHA256SUMS.txt
+          # Both flavors' R8 mapping files are literally named "mapping.txt" — copy them to
+          # distinct names before upload, since GitHub Release assets must have unique names
+          # within a release (uploading two same-named files in one batch 404s on the second).
+          cp app/build/outputs/mapping/fullRelease/mapping.txt release-artifacts/mapping-full.txt
+          cp app/build/outputs/mapping/fossRelease/mapping.txt release-artifacts/mapping-foss.txt
       - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: .
@@ -63,8 +68,8 @@ jobs:
             app/build/outputs/apk/full/release/*.apk
             app/build/outputs/apk/foss/release/*.apk
             app/build/outputs/bundle/fullRelease/*.aab
-            app/build/outputs/mapping/fullRelease/mapping.txt
-            app/build/outputs/mapping/fossRelease/mapping.txt
+            release-artifacts/mapping-full.txt
+            release-artifacts/mapping-foss.txt
             release-artifacts/SHA256SUMS.txt
             release-artifacts/tigerplayer-sbom.spdx.json
           if-no-files-found: error
@@ -104,8 +109,8 @@ jobs:
             app/build/outputs/apk/full/release/*.apk
             app/build/outputs/apk/foss/release/*.apk
             app/build/outputs/bundle/fullRelease/*.aab
-            app/build/outputs/mapping/fullRelease/mapping.txt
-            app/build/outputs/mapping/fossRelease/mapping.txt
+            release-artifacts/mapping-full.txt
+            release-artifacts/mapping-foss.txt
             release-artifacts/SHA256SUMS.txt
             release-artifacts/tigerplayer-sbom.spdx.json
           )
