@@ -28,6 +28,10 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Changed
 
+- **CI/CD**: the `Release candidate` workflow now also builds an unsigned release APK
+  (`assembleFullRelease`), and for a `v*` tag push attaches the APK/AAB/mapping/checksums/SBOM
+  directly to the GitHub Release for that tag, in addition to the existing workflow-artifact
+  upload. No signing keys are read; assets remain clearly labeled as unsigned evidence.
 - **Constellation**: increased minimum node sizes so low-importance artist/album/track artwork
   stays legible at any zoom level, and artist/track name plates no longer clip the label to the
   node's own bounding box, so full names are always visible.
