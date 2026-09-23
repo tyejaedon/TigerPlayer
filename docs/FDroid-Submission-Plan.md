@@ -64,10 +64,18 @@ blur/crop the artwork, before adding any of them here.
 
 ## Remaining external task
 
-Only the external repository submission is required:
+Only the external repository submission is required. **`fdroiddata`'s canonical repo is on
+GitLab** (`https://gitlab.com/fdroid/fdroiddata`) — `f-droid/fdroiddata` on GitHub is a read-only
+mirror; a fork or merge request opened there is never seen by F-Droid's maintainers. All of this
+happens outside this repo (`TigerPlayer` itself never needs a GitLab account or a `fdroiddata`
+remote), so it must be done by whoever holds/creates the GitLab account submitting the app —
+typically done once, by a maintainer, not repeated by every contributor.
 
-1. Fork `f-droid/fdroiddata`.
-2. Add `metadata/com.tigerplayer.yml` describing the `assembleFossRelease` build recipe:
+1. Register a GitLab account, then fork `https://gitlab.com/fdroid/fdroiddata`.
+2. Create a branch on the fork named after the app id (`com.tigerplayer`), **not** on the fork's
+   `master` — `master` is protected there too, and pushing to it desyncs future upstream pulls.
+3. Add `metadata/com.tigerplayer.yml` (either via the GitLab web UI or a local clone) describing
+   the `fossRelease` build recipe:
    ```yaml
    Categories:
      - Multimedia
@@ -89,6 +97,18 @@ Only the external repository submission is required:
        gradle:
          - fossRelease
    ```
-3. Run `fdroid checkupdates` / `fdroid readmeta` locally.
-4. Submit the merge request against `f-droid/fdroiddata`.
+4. If using `fdroidserver` locally (`pip install git+https://gitlab.com/fdroid/fdroidserver.git`):
+   run `fdroid readmeta`, `fdroid rewritemeta com.tigerplayer`, `fdroid checkupdates com.tigerplayer`
+   to fill automated fields, `fdroid lint com.tigerplayer` (must report zero warnings), and
+   `fdroid build -v -l com.tigerplayer` to test the recipe end-to-end before opening the MR. If
+   editing only via the GitLab web UI, instead push the branch and confirm the fork's CI/CD
+   pipeline (GitLab → CI/CD tab) passes on the commit.
+5. Open the merge request against `gitlab.com/fdroid/fdroiddata` (not the GitHub mirror), filling
+   in their MR template, then respond to packager review questions.
+
+Because `AutoUpdateMode: Version` / `UpdateCheckMode: Tags` are already set above, this MR is a
+**one-time onboarding step** — once merged, F-Droid's bot picks up every future `v*` tag on this
+repo automatically (subject to `versionCode` incrementing per the build rule in
+`gradle-build.instructions.md`) without a new MR per release, unless the build recipe itself
+changes (new dependency, new Gradle task, etc.).
 
