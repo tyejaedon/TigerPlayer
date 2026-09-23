@@ -11,6 +11,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-09-23
+
 ### Added
 
 - **Full player**: the Speed/Pitch dialog has a restore-to-default action that resets both to
@@ -100,4 +102,5 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   Spotify track after the user started local playback, caused by stale Spotify state re-emissions
   clobbering the just-started local track. (#162)
 
-[Unreleased]: https://github.com/tyejaedon/TigerPlayer/compare/master...HEAD
+[Unreleased]: https://github.com/tyejaedon/TigerPlayer/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/tyejaedon/TigerPlayer/compare/v2.1...v2.1.2
