@@ -75,13 +75,19 @@ typically done once, by a maintainer, not repeated by every contributor.
 2. Create a branch on the fork named after the app id (`com.tigerplayer`), **not** on the fork's
    `master` — `master` is protected there too, and pushing to it desyncs future upstream pulls.
 3. Add `metadata/com.tigerplayer.yml` (either via the GitLab web UI or a local clone) describing
-   the `fossRelease` build recipe:
+   the `fossRelease` build recipe. `Repo`/`RepoType` are required by the schema validation CI
+   job — they're the actual clone source for `fdroid build`/`checkupdates`, separate from the
+   human-facing `SourceCode` link; omitting them fails schema validation, `checkupdates` (`Tags
+   update mode only works for git repositories currently`), and `fdroid build`:
    ```yaml
    Categories:
      - Multimedia
    License: Apache-2.0
    SourceCode: https://github.com/tyejaedon/TigerPlayer
    IssueTracker: https://github.com/tyejaedon/TigerPlayer/issues
+
+   RepoType: git
+   Repo: https://github.com/tyejaedon/TigerPlayer.git
 
    AutoUpdateMode: Version
    UpdateCheckMode: Tags
