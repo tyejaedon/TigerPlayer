@@ -21,9 +21,16 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 - **Constellation**: the bottom "Cosmic Insight" overlay panel is now collapsible, so the starfield
   can be viewed unobstructed. Added a two-layer parallax starfield with a subtle twinkle behind the
   orbiting nodes for a stronger sense of depth. (#162)
+- **Constellation**: a clickable central "Sun" node now anchors the galaxy - tapping it shows the
+  "Cosmic Insight" summary as scannable label/value rows instead of a paragraph. Tapping a song node
+  now shows its title, artist, and play count (including in collapsed mode), and tapping an artist
+  shows their top 3 songs in place of the bio snippet.
 
 ### Changed
 
+- **Constellation**: increased minimum node sizes so low-importance artist/album/track artwork
+  stays legible at any zoom level, and artist/track name plates no longer clip the label to the
+  node's own bounding box, so full names are always visible.
 - **Sonic Prism**: the mixer moved from a cramped expandable Home dashboard card to its own
   full-screen destination, where the faders scale to the available height (up to 360 dp) instead of
   being clamped to 180 dp. The Home feed now shows a compact entry card with a quick enable toggle

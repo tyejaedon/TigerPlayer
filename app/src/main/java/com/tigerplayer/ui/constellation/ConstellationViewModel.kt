@@ -30,11 +30,26 @@ sealed class ConstellationState {
         val edges: List<GraphEdge>,
         val density: Float,
         val seed: Long,
-        val insightMessage: String,
+        val insight: GalaxyInsight,
     ) : ConstellationState()
 
     data class Error(val message: String) : ConstellationState()
 }
+
+/**
+ * Structured "Cosmic Insight" data, shown when the central Sun node is tapped.
+ * Kept as discrete fields (rather than a pre-formatted paragraph) so the overlay can
+ * render it as separate, readable rows instead of a wall of text.
+ */
+data class GalaxyInsight(
+    val densityPercent: Int,
+    val artistCount: Int,
+    val albumCount: Int,
+    val trackCount: Int,
+    val topArtistName: String?,
+    val topArtistPlays: Int,
+    val clusterCount: Int
+)
 
 data class ConstellationArtistReading(
     val artistName: String,
@@ -78,7 +93,7 @@ class ConstellationViewModel @Inject constructor(
                 edges = graph.edges,
                 density = graph.density,
                 seed = graph.seed,
-                insightMessage = insight
+                insight = insight
             ) as ConstellationState
         }
         .flowOn(Dispatchers.Default) // Perform physics calculations off the Main thread
@@ -96,7 +111,7 @@ class ConstellationViewModel @Inject constructor(
        🌌 INSIGHT ENGINE
     ----------------------------------- */
 
-    private fun generateGalaxyInsight(density: Float, layoutNodes: List<PositionedNode>): String {
+    private fun generateGalaxyInsight(density: Float, layoutNodes: List<PositionedNode>): GalaxyInsight {
         val artistNodes = layoutNodes.filter { it.type == NodeType.ARTIST }
         val albumNodes = layoutNodes.count { it.type == NodeType.ALBUM }
         val trackNodes = layoutNodes.count { it.type == NodeType.TRACK }
@@ -108,13 +123,15 @@ class ConstellationViewModel @Inject constructor(
         val clusterCount = layoutNodes.count { it.orbitRadius < 1000f }
         val densityPercent = (density * 100).roundToInt()
 
-        return buildString {
-            append("Mapped $densityPercent% density across ${artistNodes.size} artists, $albumNodes albums, and $trackNodes tracks.\n")
-            dominantArtist?.let {
-                append("Top artist signal: ${it.label} (${it.playCount} plays).\n")
-            }
-            append("Detected $clusterCount active orbit clusters in your listening history.")
-        }
+        return GalaxyInsight(
+            densityPercent = densityPercent,
+            artistCount = artistNodes.size,
+            albumCount = albumNodes,
+            trackCount = trackNodes,
+            topArtistName = dominantArtist?.label,
+            topArtistPlays = dominantArtist?.playCount ?: 0,
+            clusterCount = clusterCount
+        )
     }
 
     fun prefetchArtistReading(artistName: String) {

@@ -49,8 +49,15 @@ data class GraphNode(
     val imageUrl: String? = null,
     val parentId: String? = null,
     val importance: Float = 0.5f,
-    val audioEnergyBias: Float = 0.5f
+    val audioEnergyBias: Float = 0.5f,
+    /** Populated for TRACK nodes so the UI can show "artist name" alongside a song's stats. */
+    val artistName: String? = null,
+    /** Populated for ARTIST nodes: their top 3 most-played local songs. */
+    val topTracks: List<TopTrackEntry> = emptyList()
 )
+
+/** A single ranked song entry, used to surface an artist's top songs in the UI. */
+data class TopTrackEntry(val title: String, val playCount: Int)
 
 data class GraphEdge(val sourceId: String, val targetId: String, val strength: Float)
 
@@ -79,5 +86,9 @@ data class PositionedNode(
     val mass: Float,
     val fluidInfluence: Float,
     val energy: Float,
-    val trailLength: Float
+    val trailLength: Float,
+    /** Populated for TRACK nodes: the owning artist's display name. */
+    val artistName: String? = null,
+    /** Populated for ARTIST nodes: their top 3 most-played local songs. */
+    val topTracks: List<TopTrackEntry> = emptyList()
 )

@@ -102,7 +102,8 @@ class OrbitalLayoutEngine @Inject constructor() {
                     mass = artist.importance * 100f,
                     fluidInfluence = 0.8f,
                     energy = artist.audioEnergyBias,
-                    trailLength = 0.8f
+                    trailLength = 0.8f,
+                    topTracks = artist.topTracks
                 )
             )
         }
@@ -177,7 +178,8 @@ class OrbitalLayoutEngine @Inject constructor() {
                         mass = track.importance * 20f,
                         fluidInfluence = 1.0f,
                         energy = track.audioEnergyBias,
-                        trailLength = 0.3f
+                        trailLength = 0.3f,
+                        artistName = track.artistName
                     )
                 )
             }
