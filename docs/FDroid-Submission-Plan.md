@@ -26,13 +26,24 @@ readiness for 2.1.1).
 
 `fastlane/metadata/android/en-US/` contains `title.txt`, `short_description.txt`,
 `full_description.txt`, and `changelogs/1.txt` + `changelogs/2.txt` (one file per `versionCode`),
-matching the layout F-Droid's fastlane metadata scanner expects. Add screenshots under
-`fastlane/metadata/android/en-US/images/phoneScreenshots/` before submitting — this is still
-outstanding. F-Droid does not accept screenshots with copyrighted third-party artwork visible
-(e.g. album art from major labels); the images checked into `screenshots/` at the repo root
-(`Daylist.png`, `Player.png`, etc.) have **not** been vetted for this and must not be copied in
-as-is. Recapture with royalty-free or self-owned content, or blur/replace any label-owned art,
-before placing them under the fastlane path.
+matching the layout F-Droid's fastlane metadata scanner expects.
+
+`images/phoneScreenshots/` now contains 4 screenshots, each chosen because the underlying screen
+is verified (by reading the composable source, not just eyeballing the PNG) to never render
+track-specific artwork, so there is no third-party/label album-art exposure:
+
+- `1_Daylist.png` — `DaylistDetailScreen`: abstract time-of-day gradients only, no `AsyncImage`.
+- `2_Fluid_Visualizer.png` — `FluidRenderEngine`/`TigerVortexRender`: procedural GLSL noise shader.
+- `3_Waveform_Visualizer.png` — `PlayerVisualizers`: Canvas-drawn procedural waveform.
+- `4_Sonic_Footprint.png` — `SonicFootprintScreen`: radar chart plus text-only Last.fm genre tags.
+
+The remaining root `screenshots/` images (`Player.png`, `Home.png`, `Discover_Weekly.png`,
+`Galaxy_View_Artist.png`, `Galaxy_View_Full.png`, `Youtube_Integration.png`) all correspond to
+screens that load real album/artist artwork via Coil (`FullPlayerScreen`, `HomeScreen`'s
+recommended-albums carousel, `DiscoverWeeklyDetailScreen`'s `DiscoveryDeck`, `Constellation.kt`
+node images) or real third-party YouTube thumbnails (`YouTubeSearchScreen`). These must **not** be
+copied into the fastlane path as-is — recapture against royalty-free/self-owned content, or
+blur/crop the artwork, before adding any of them here.
 
 ## Pre-submission checklist (resolved)
 
@@ -45,8 +56,8 @@ before placing them under the fastlane path.
 
 ## Outstanding before submission
 
-- [ ] **Screenshots**: capture/clear at least 2 clean `phoneScreenshots` and commit under
-  `fastlane/metadata/android/en-US/images/phoneScreenshots/`.
+- [x] **Screenshots**: 4 verified-clean `phoneScreenshots` committed under
+  `fastlane/metadata/android/en-US/images/phoneScreenshots/` (see "Fastlane metadata" above).
 - [ ] **Tag the release**: once this PR merges, tag `v2.1.1` on `master` (`git tag v2.1.1 && git push origin v2.1.1`).
   The fdroiddata recipe's `commit:` field must reference this tag.
 
