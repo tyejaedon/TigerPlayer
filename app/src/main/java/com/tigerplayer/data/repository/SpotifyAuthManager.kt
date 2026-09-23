@@ -4,11 +4,13 @@ import android.util.Log
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.local.SpotifyPrefs
 import com.tigerplayer.data.remote.api.SpotifyAuthApi
+import com.tigerplayer.di.IoDispatcher
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +21,8 @@ import kotlinx.coroutines.withContext
 @Singleton
 class SpotifyAuthManager @Inject constructor(
     private val spotifyPrefs: SpotifyPrefs,
-    private val spotifyAuthApi: SpotifyAuthApi
+    private val spotifyAuthApi: SpotifyAuthApi,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
     // --- USER AUTH STATE ---
     private val _token = MutableStateFlow("")
@@ -31,7 +34,11 @@ class SpotifyAuthManager @Inject constructor(
     // Public client identifier only — no secret. PKCE requires no client authentication.
     private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    // Uses the injected dispatcher (rather than a hardcoded Dispatchers.IO) so tests can supply a
+    // TestDispatcher backed by the same TestScope scheduler as runTest, making the persistence
+    // side effects (saveToken/clearToken) advance under virtual time instead of racing a real
+    // background thread with a wall-clock coVerify(timeout = ...) (issue: flaky 400-refresh test).
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     init {
         scope.launch {
@@ -49,7 +56,7 @@ class SpotifyAuthManager @Inject constructor(
      * Returns a valid access token, transparently refreshing via the stored refresh token
      * if the cached access token has expired. Returns "" if the user must re-authenticate.
      */
-    suspend fun getValidToken(): String = withContext(Dispatchers.IO) {
+    suspend fun getValidToken(): String = withContext(ioDispatcher) {
         if (_token.value.isNotEmpty() && !isTokenExpired(tokenTimestamp)) {
             return@withContext _token.value
         }

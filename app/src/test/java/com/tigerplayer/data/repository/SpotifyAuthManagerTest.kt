@@ -8,7 +8,10 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -27,26 +30,30 @@ import retrofit2.Response
  * Coverage for issue #46 - migration from client-credentials/Basic-auth to
  * Authorization Code + PKCE, plus the refresh-token handling that previously didn't exist.
  *
- * Persistence side effects (`SpotifyPrefs.saveToken` / `clearToken`) are fired from an internal,
- * non-injectable `CoroutineScope(Dispatchers.IO)`, so those specific assertions use a bounded
- * `coVerify(timeout = ...)` rather than `runTest` virtual time. All token-state assertions
- * (`getToken()`, return values) are set synchronously and do not need it.
+ * `SpotifyAuthManager` fires its persistence side effects (`SpotifyPrefs.saveToken` /
+ * `clearToken`) from an internally-owned `CoroutineScope`, and the manager's public suspend
+ * functions dispatch via an injected `CoroutineDispatcher` (`@IoDispatcher`) rather than a
+ * hardcoded `Dispatchers.IO`. Tests supply an `UnconfinedTestDispatcher`, which runs both the
+ * suspend function body and the launched persistence coroutine eagerly/synchronously on the test
+ * thread — so every assertion, including `saveToken`/`clearToken` verification, is deterministic
+ * and does not race a real background dispatcher with a wall-clock `coVerify(timeout = ...)`.
  *
  * Runs under Robolectric so the real `android.util.Log` calls on the error/refresh paths do not
  * throw ("not mocked") the way they would under a plain JVM unit test.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@OptIn(ExperimentalCoroutinesApi::class)
 class SpotifyAuthManagerTest {
 
     private val spotifyPrefs = mockk<SpotifyPrefs>(relaxed = true)
     private val spotifyAuthApi = mockk<SpotifyAuthApi>()
 
-    private fun manager(): SpotifyAuthManager {
+    private fun manager(dispatcher: CoroutineDispatcher = UnconfinedTestDispatcher()): SpotifyAuthManager {
         every { spotifyPrefs.accessToken } returns flowOf(null)
         every { spotifyPrefs.tokenTimestamp } returns flowOf(null)
         every { spotifyPrefs.refreshToken } returns flowOf(null)
-        return SpotifyAuthManager(spotifyPrefs, spotifyAuthApi)
+        return SpotifyAuthManager(spotifyPrefs, spotifyAuthApi, dispatcher)
     }
 
     private fun tokenResponse(
@@ -87,7 +94,7 @@ class SpotifyAuthManagerTest {
 
         assertEquals("access-1", result)
         assertEquals("access-1", sut.getToken())
-        coVerify(timeout = 2_000) { spotifyPrefs.saveToken("access-1", any(), "refresh-1") }
+        coVerify(exactly = 1) { spotifyPrefs.saveToken("access-1", any(), "refresh-1") }
     }
 
     @Test
@@ -180,7 +187,7 @@ class SpotifyAuthManagerTest {
 
         assertEquals("", result)
         assertEquals("", sut.getToken())
-        coVerify(timeout = 2_000) { spotifyPrefs.clearToken() }
+        coVerify(exactly = 1) { spotifyPrefs.clearToken() }
     }
 
     @Test
