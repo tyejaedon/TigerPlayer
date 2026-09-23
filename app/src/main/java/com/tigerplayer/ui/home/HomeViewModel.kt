@@ -1,15 +1,12 @@
 package com.tigerplayer.ui.home
 
-import android.annotation.SuppressLint
 import android.app.Application
 import android.location.Location
-import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tigerplayer.data.repository.WeatherRepository
+import com.tigerplayer.data.repository.LocationProvider
 import com.tigerplayer.utils.Resource
-import com.tigerplayer.utils.AttributionTags
-import com.google.android.gms.location.LocationServices
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,41 +14,31 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlinx.coroutines.tasks.await
 
 
 
 @HiltViewModel
-// Note: Changed to AndroidViewModel to access the application context for the FusedLocationClient
 class HomeViewModel @Inject constructor(
     application: Application,
-    private val weatherRepository: WeatherRepository
+    private val weatherRepository: WeatherRepository,
+    private val locationProvider: LocationProvider
 ) : AndroidViewModel(application) {
 
     private val _weatherUiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
     val weatherUiState: StateFlow<WeatherUiState> = _weatherUiState.asStateFlow()
 
-    private val attributedContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        getApplication<Application>().createAttributionContext(AttributionTags.WEATHER_LOCATION)
-    } else {
-        application
-    }
-
-    // The Google Location Engine
-    private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(attributedContext)
-
     init {
         fetchWeather()
     }
 
-    @SuppressLint("MissingPermission") // We handled permissions in the UI
     fun fetchWeather() {
         viewModelScope.launch {
             _weatherUiState.value = WeatherUiState.Loading
 
             try {
-                // 1. Fetch the absolute latest GPS coordinates
-                val location: Location? = fusedLocationClient.lastLocation.await()
+                // 1. Fetch the latest GPS coordinates via the location provider
+                // (flavor-specific: Google Play Services in full, no-op in foss)
+                val location: Location? = locationProvider.getLastLocation()
 
                 // Fallback to Nairobi if GPS is off or unavailable
                 val lat = location?.latitude ?: -1.2921
@@ -85,7 +72,7 @@ class HomeViewModel @Inject constructor(
                     }
                 }
             } catch (_: Exception) {
-                // Handle total failure (e.g., Google Play Services missing)
+                // Handle total failure (e.g., location unavailable or network error)
                 _weatherUiState.value = WeatherUiState.Error("GPS Failure", "--", "Offline", "--", "--", true)
             }
         }

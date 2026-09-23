@@ -209,8 +209,10 @@ dependencies {
     "fullImplementation"(files("libs/spotify-app-remote-release-0.8.0.aar"))
 
     // --- Google Play Services ---
-    implementation(libs.play.services.location)
-    implementation(libs.kotlinx.coroutines.play.services)
+    // Google Play Services are proprietary and only available in `full` flavor.
+    // The `foss` flavor (F-Droid) builds without these dependencies.
+    "fullImplementation"(libs.play.services.location)
+    "fullImplementation"(libs.kotlinx.coroutines.play.services)
 
     // --- Testing ---
     testImplementation(libs.junit)
