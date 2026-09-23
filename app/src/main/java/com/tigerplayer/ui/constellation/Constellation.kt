@@ -41,6 +41,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.tigerplayer.constellation.NodeType
 import com.tigerplayer.constellation.PositionedNode
+import com.tigerplayer.constellation.TopTrackEntry
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
@@ -90,6 +91,8 @@ fun ConstellationScreen(
                 val focusedArtistName = focusedNode
                     ?.takeIf { it.type == NodeType.ARTIST }
                     ?.label
+                val focusedTrackNode = focusedNode?.takeIf { it.type == NodeType.TRACK }
+                val isSunFocused = focusedNode?.type == NodeType.GALAXY_CORE
                 val selectedArtistFlow = remember(focusedArtistName) {
                     focusedArtistName
                         ?.let(viewModel::observeArtistReading)
@@ -228,6 +231,33 @@ fun ConstellationScreen(
                     // --- 2. CELESTIAL BODIES (COMPOSE NODES) ---
                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                         val canvasCenter = Offset(constraints.maxWidth / 2f, constraints.maxHeight / 2f)
+                        val visualScale = cameraScale.value.coerceIn(0.6f, 1.5f)
+
+                        // --- 2a. THE SUN (Galaxy Core - the source of gravitational pull) ---
+                        // Always rendered, regardless of camera zoom, so there's always a
+                        // stable visual anchor at the center of the universe.
+                        state.nodes.values.firstOrNull { it.type == NodeType.GALAXY_CORE }?.let { sun ->
+                            val isFocused = focusedNodeId == null || focusedNodeId == sun.id
+                            val targetAlpha = if (isFocused) 1f else 0.35f
+                            val animatedAlpha by animateFloatAsState(targetValue = targetAlpha, label = "sunAlpha")
+                            val sunRadius = (60f * visualScale).coerceIn(40f, 110f)
+
+                            val realPos = calculatePosition(sun, timeClock, state.nodes)
+                            val screenX = canvasCenter.x + (realPos.x * cameraScale.value) + cameraPan.value.x
+                            val screenY = canvasCenter.y + (realPos.y * cameraScale.value) + cameraPan.value.y
+
+                            Box(
+                                modifier = Modifier
+                                    .graphicsLayer {
+                                        translationX = screenX - sunRadius
+                                        translationY = screenY - sunRadius
+                                        alpha = animatedAlpha
+                                    }
+                                    .size((sunRadius * 2).dp)
+                            ) {
+                                SunNodeRenderer(onClick = { focusedNodeId = sun.id })
+                            }
+                        }
 
                         state.nodes.values.filter { it.type != NodeType.GALAXY_CORE }.forEach { node ->
 
@@ -243,8 +273,10 @@ fun ConstellationScreen(
                                 val targetAlpha = if (isFocused) 1f else 0.3f
                                 val animatedAlpha by animateFloatAsState(targetValue = targetAlpha, label = "alpha")
 
-                                val visualScale = cameraScale.value.coerceIn(0.6f, 1.5f)
-                                val nodeRadius = node.weight * visualScale
+                                // Floor the visual radius per node type so low-importance nodes
+                                // (especially deep-catalog tracks) never shrink to invisibility -
+                                // the artwork inside must stay legible at any zoom level.
+                                val nodeRadius = (node.weight * visualScale).coerceAtLeast(minNodeRadius(node.type))
 
                                 val realPos = calculatePosition(node, timeClock, state.nodes)
                                 val screenX = canvasCenter.x + (realPos.x * cameraScale.value) + cameraPan.value.x
@@ -277,8 +309,11 @@ fun ConstellationScreen(
 
                 // --- 3. UI OVERLAY ---
                 ConstellationOverlay(
-                    insight = state.insightMessage,
+                    insight = state.insight,
+                    isSunFocused = isSunFocused,
                     selectedArtistReading = selectedArtistReading,
+                    selectedArtistTopTracks = focusedNode?.takeIf { it.type == NodeType.ARTIST }?.topTracks ?: emptyList(),
+                    selectedTrackNode = focusedTrackNode,
                     artistNodeCount = artistNodeCount,
                     albumNodeCount = albumNodeCount,
                     trackNodeCount = trackNodeCount,
@@ -295,6 +330,18 @@ fun ConstellationScreen(
             }
         }
     }
+}
+
+/**
+ * Minimum on-screen radius (in dp-equivalent pixels) for each node type, so low-importance
+ * nodes - especially deep-catalog tracks - never shrink below a size where their artwork is
+ * illegible.
+ */
+private fun minNodeRadius(type: NodeType): Float = when (type) {
+    NodeType.ARTIST -> 34f
+    NodeType.ALBUM -> 22f
+    NodeType.TRACK -> 16f
+    NodeType.GALAXY_CORE -> 40f
 }
 
 /**
@@ -362,6 +409,64 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStar(
 // RENDERING COMPONENTS
 // =====================================================================
 
+/**
+ * The central "Sun" - the galaxy's gravitational anchor. Always rendered at the origin,
+ * regardless of zoom, so there is always a stable, tappable center to the universe. Tapping
+ * it surfaces the structured "Cosmic Insight" summary in the overlay panel.
+ */
+@Composable
+fun SunNodeRenderer(onClick: () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition(label = "sunPulse")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.88f, targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+        label = "sunPulseScale"
+    )
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // Outer corona glow
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.95f)
+                .graphicsLayer { scaleX = pulse; scaleY = pulse }
+                .background(
+                    Brush.radialGradient(listOf(Color(0xFFFFE9A8).copy(alpha = 0.35f), Color.Transparent)),
+                    CircleShape
+                )
+        )
+        // Sun core
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.55f)
+                .shadow(32.dp, CircleShape, spotColor = Color(0xFFFFD54F))
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(listOf(Color.White, Color(0xFFFFD54F), Color(0xFFFF8F00)))
+                )
+                .bounceClick { onClick() }
+        )
+        // Name plate
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = 28.dp)
+                .wrapContentWidth(unbounded = true)
+                .glassEffect(RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "GALAXY CORE",
+                color = Color(0xFFFFD54F),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
 @Composable
 fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () -> Unit) {
     val shape = if (node.type == NodeType.ALBUM) RoundedCornerShape(20) else CircleShape
@@ -407,7 +512,7 @@ fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () 
                 contentDescription = node.label,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .fillMaxSize(0.75f)
+                    .fillMaxSize(0.82f)
                     .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = accentColor)
                     .clip(shape)
                     .border(if (node.type == NodeType.ARTIST) 2.dp else 1.dp, accentColor.copy(alpha = 0.8f), shape)
@@ -416,7 +521,7 @@ fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () 
         } else {
             Box(
                 modifier = Modifier
-                    .fillMaxSize(0.75f)
+                    .fillMaxSize(0.82f)
                     .shadow(if (node.type == NodeType.ARTIST) 24.dp else 8.dp, shape, spotColor = accentColor)
                     .clip(shape)
                     .background(Brush.radialGradient(listOf(accentColor.copy(alpha = 0.7f), Color(0xFF0B0D10))))
@@ -453,21 +558,25 @@ fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () 
             }
         }
 
-        // Floating Name Plate
+        // Floating Name Plate - unbounded width so an artist's full name is never clipped by
+        // the node's own (potentially small) bounding box.
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .offset(y = 20.dp)
+                .wrapContentWidth(unbounded = true)
                 .glassEffect(RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
                 text = node.label,
                 color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
+                style = if (node.type == NodeType.ARTIST) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelMedium,
                 fontWeight = if (node.type == NodeType.ARTIST) FontWeight.Black else FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxLines = if (node.type == NodeType.ARTIST) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = node.type == NodeType.ARTIST,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -475,8 +584,11 @@ fun CelestialNodeRenderer(node: PositionedNode, visualScale: Float, onClick: () 
 
 @Composable
 fun ConstellationOverlay(
-    insight: String,
+    insight: GalaxyInsight,
+    isSunFocused: Boolean,
     selectedArtistReading: ConstellationArtistReading?,
+    selectedArtistTopTracks: List<TopTrackEntry>,
+    selectedTrackNode: PositionedNode?,
     artistNodeCount: Int,
     albumNodeCount: Int,
     trackNodeCount: Int,
@@ -485,6 +597,22 @@ fun ConstellationOverlay(
     onRecenter: () -> Unit
 ) {
     var isInsightExpanded by rememberSaveable { mutableStateOf(true) }
+
+    val panelTitle = when {
+        isSunFocused -> "COSMIC INSIGHT"
+        selectedArtistReading != null -> "ARTIST SIGNAL"
+        selectedTrackNode != null -> "TRACK SIGNAL"
+        else -> "GALAXY GUIDE"
+    }
+
+    val collapsedSummary = when {
+        isSunFocused -> "Cosmic Insight • ${insight.densityPercent}% density"
+        selectedArtistReading != null ->
+            "${selectedArtistReading.artistName} • ${selectedArtistReading.playCount} plays • ${selectedArtistReading.minutesListened} min"
+        selectedTrackNode != null ->
+            "${selectedTrackNode.label} • ${selectedTrackNode.playCount} plays"
+        else -> "Tap the Sun, a star, or a track for details"
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().statusBarsPadding().padding(24.dp)
@@ -523,10 +651,10 @@ fun ConstellationOverlay(
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("COSMIC INSIGHT", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB388FF), fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    Text(panelTitle, style = MaterialTheme.typography.labelSmall, color = Color(0xFFB388FF), fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                     if (!isInsightExpanded) {
                         Text(
-                            text = selectedArtistReading?.artistName ?: insight,
+                            text = collapsedSummary,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White,
                             maxLines = 1,
@@ -545,59 +673,159 @@ fun ConstellationOverlay(
 
             AnimatedVisibility(visible = isInsightExpanded) {
                 Column {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(insight, style = MaterialTheme.typography.bodyMedium, color = Color.White, lineHeight = 20.sp)
-
                     Spacer(modifier = Modifier.height(12.dp))
                     HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    if (selectedArtistReading != null) {
-                        val artist = selectedArtistReading
-                        Text(
-                            text = "${artist.artistName} • ${artist.playCount} plays • ${artist.minutesListened} min",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${formatPercent(artist.listeningSharePercent)} of lifetime listening",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.78f)
-                        )
-                        val genreLabel = artist.genres.take(3).joinToString(" • ")
-                        if (genreLabel.isNotBlank()) {
+                    when {
+                        isSunFocused -> GalaxyInsightDetails(insight)
+                        selectedArtistReading != null -> ArtistReadingDetails(selectedArtistReading, selectedArtistTopTracks)
+                        selectedTrackNode != null -> TrackReadingDetails(selectedTrackNode)
+                        else -> {
                             Text(
-                                text = genreLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFFB388FF),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = "Tap the Sun for cosmic insight, a star for artist stats, or a track for song stats.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White,
+                                lineHeight = 20.sp
                             )
-                        }
-                        artist.bioSnippet?.let { bio ->
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = bio,
+                                text = "Currently mapping $artistNodeCount artists, $albumNodeCount albums, and $trackNodeCount tracks.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.72f),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis
+                                color = Color.White.copy(alpha = 0.78f)
                             )
                         }
-                    } else {
-                        Text(
-                            text = "Tap an artist star to inspect your real listening totals. Universe currently maps $artistNodeCount artists, $albumNodeCount albums, and $trackNodeCount tracks.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.78f)
-                        )
                     }
                 }
             }
         }
     }
+}
+
+/** Readable, row-based rendering of the galaxy-wide insight - shown when the Sun is tapped. */
+@Composable
+private fun GalaxyInsightDetails(insight: GalaxyInsight) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        InsightRow(label = "Galaxy density", value = "${insight.densityPercent}%")
+        InsightRow(label = "Artists mapped", value = "${insight.artistCount}")
+        InsightRow(label = "Albums mapped", value = "${insight.albumCount}")
+        InsightRow(label = "Tracks mapped", value = "${insight.trackCount}")
+        insight.topArtistName?.let { name ->
+            InsightRow(label = "Top artist signal", value = "$name (${insight.topArtistPlays} plays)")
+        }
+        InsightRow(label = "Active orbit clusters", value = "${insight.clusterCount}")
+    }
+}
+
+/** A single label/value line used to present insight data as scannable rows instead of prose. */
+@Composable
+private fun InsightRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.7f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+/** Artist stats block - shown when an artist star is tapped. Top songs replace the bio snippet. */
+@Composable
+private fun ArtistReadingDetails(artist: ConstellationArtistReading, topTracks: List<TopTrackEntry>) {
+    Text(
+        text = "${artist.artistName} • ${artist.playCount} plays • ${artist.minutesListened} min",
+        style = MaterialTheme.typography.titleSmall,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+    Text(
+        text = "${formatPercent(artist.listeningSharePercent)} of lifetime listening",
+        style = MaterialTheme.typography.bodySmall,
+        color = Color.White.copy(alpha = 0.78f)
+    )
+    val genreLabel = artist.genres.take(3).joinToString(" • ")
+    if (genreLabel.isNotBlank()) {
+        Text(
+            text = genreLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFFB388FF),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    if (topTracks.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "TOP SONGS",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.55f),
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            topTracks.forEachIndexed { index, track ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${index + 1}. ${track.title}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "${track.playCount} plays",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Song stats block - shown when a track node is tapped, including in collapsed mode. */
+@Composable
+private fun TrackReadingDetails(track: PositionedNode) {
+    Text(
+        text = track.label,
+        style = MaterialTheme.typography.titleSmall,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
+    track.artistName?.takeIf { it.isNotBlank() }?.let { artistName ->
+        Text(
+            text = artistName,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.78f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    Spacer(modifier = Modifier.height(6.dp))
+    InsightRow(label = "Play count", value = "${track.playCount}")
 }
 
 private fun formatPercent(value: Float): String {
