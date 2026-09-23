@@ -78,21 +78,22 @@ typically done once, by a maintainer, not repeated by every contributor.
    the `fossRelease` build recipe. `Repo`/`RepoType` are required by the schema validation CI
    job — they're the actual clone source for `fdroid build`/`checkupdates`, separate from the
    human-facing `SourceCode` link; omitting them fails schema validation, `checkupdates` (`Tags
-   update mode only works for git repositories currently`), and `fdroid build`:
+   update mode only works for git repositories currently`), and `fdroid build`. Note
+   `fdroidserver`'s canonical writer does **not** quote `CurrentVersion` (confirmed from the
+   `checkupdates` CI diff on first submission) — match that exactly, since the `fdroid
+   rewritemeta` CI job fails on any formatting drift from what `fdroidserver` itself would write:
    ```yaml
    Categories:
      - Multimedia
    License: Apache-2.0
    SourceCode: https://github.com/tyejaedon/TigerPlayer
    IssueTracker: https://github.com/tyejaedon/TigerPlayer/issues
-
    RepoType: git
    Repo: https://github.com/tyejaedon/TigerPlayer.git
 
    AutoUpdateMode: Version
    UpdateCheckMode: Tags
-
-   CurrentVersion: "2.1.1"
+   CurrentVersion: 2.1.1
    CurrentVersionCode: 2
 
    Builds:
@@ -103,6 +104,9 @@ typically done once, by a maintainer, not repeated by every contributor.
        gradle:
          - fossRelease
    ```
+   If the `fdroid rewritemeta` CI job still fails after matching this, its own log contains the
+   *exact* diff `fdroidserver` wants applied — that job is the ground truth for formatting; treat
+   any further drift report from it as authoritative over this snippet.
 4. If using `fdroidserver` locally (`pip install git+https://gitlab.com/fdroid/fdroidserver.git`):
    run `fdroid readmeta`, `fdroid rewritemeta com.tigerplayer`, `fdroid checkupdates com.tigerplayer`
    to fill automated fields, `fdroid lint com.tigerplayer` (must report zero warnings), and
