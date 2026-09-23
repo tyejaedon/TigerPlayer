@@ -58,8 +58,9 @@ blur/crop the artwork, before adding any of them here.
 
 - [x] **Screenshots**: 4 verified-clean `phoneScreenshots` committed under
   `fastlane/metadata/android/en-US/images/phoneScreenshots/` (see "Fastlane metadata" above).
-- [ ] **Tag the release**: once this PR merges, tag `v2.1.1` on `master` (`git tag v2.1.1 && git push origin v2.1.1`).
-  The fdroiddata recipe's `commit:` field must reference this tag.
+- [x] **Tag the release**: `v2.1.1` tagged on `master` at `ef7a114` and pushed
+  (`git tag v2.1.1 && git push origin v2.1.1`), triggering `release.yml`. The fdroiddata recipe's
+  `commit:` field references this tag.
 
 ## Remaining external task
 
