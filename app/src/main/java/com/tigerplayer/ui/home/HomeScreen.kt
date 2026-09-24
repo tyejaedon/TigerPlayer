@@ -36,8 +36,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.preview.ExperimentalGlancePreviewApi
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
@@ -55,6 +57,7 @@ import com.tigerplayer.ui.library.*
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.prism.PrismTestTags
 import com.tigerplayer.ui.prism.PrismViewModel
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.bounceClick
@@ -701,7 +704,7 @@ fun UserStatisticsHeader(statistics: UserStatistics, onClick: () -> Unit) {
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatGlassWidget(modifier = Modifier.weight(1f), title = "CHANTED TODAY", value = statistics.listeningTimeToday, icon = WitcherIcons.Duration, accentColor = AardBlue)
-            StatGlassWidget(modifier = Modifier.weight(1f), title = "ARCHIVE SIZE", value = "${statistics.totalTracksCount}", icon = WitcherIcons.Library, accentColor = IgniRed)
+            StatGlassWidget(modifier = Modifier.weight(1f), title = "ARCHIVE SIZE", value = "${statistics.totalTracksCount} tracks", icon = WitcherIcons.Library, accentColor = IgniRed)
         }
     }
 }
@@ -719,15 +722,15 @@ fun StatGlassWidget(
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
             .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.shapes.large)
     ) {
-        Column(
+        Row(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.Center
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier.size(if (isFullWidth) 40.dp else 44.dp).background(accentColor.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = accentColor, modifier = Modifier.size(18.dp))
+                Icon(icon, null, tint = accentColor, modifier = Modifier.size(12.dp))
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -736,6 +739,17 @@ fun StatGlassWidget(
                 Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, maxLines = 1)
                 Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun StatGlassWidgetPreview() {
+    TigerPlayerTheme {
+        Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatGlassWidget(modifier = Modifier.weight(1f), title = "CHANTED TODAY", value = "1h 42m", icon = WitcherIcons.Duration, accentColor = AardBlue)
+            StatGlassWidget(modifier = Modifier.weight(1f), title = "ARCHIVE SIZE", value = "1,204 tracks", icon = WitcherIcons.Library, accentColor = IgniRed)
         }
     }
 }
