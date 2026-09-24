@@ -21,6 +21,7 @@ class PlaybackEngine @Inject constructor(
     val repeatMode: Flow<Int> = mediaControllerManager.repeatMode
     val sleepTimerState: StateFlow<SleepTimerState> = mediaControllerManager.sleepTimerState
     val spotifyPlaybackState: Flow<SpotifyPlaybackState?> = spotifyRepository.spotifyPlaybackState
+    val spotifyReauthRequired: StateFlow<Boolean> = spotifyRepository.reauthRequired
     init {
         mediaControllerManager.onSleepTimerExpired = { pauseActiveTransport() }
     }

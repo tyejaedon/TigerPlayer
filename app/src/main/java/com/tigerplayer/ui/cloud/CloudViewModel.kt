@@ -26,6 +26,7 @@ class CloudViewModel @Inject constructor(
     val userPlaylists = spotifyRepository.userPlaylists
     val isSpotifyAuthenticated = spotifyRepository.isAuthenticated
     val isSpotifyRemoteConnected = spotifyRepository.isConnected
+    val reauthRequired = spotifyRepository.reauthRequired
 
     private val _currentPlaylistTracks = MutableStateFlow<List<SpotifyTrack>>(emptyList())
     val currentPlaylistTracks = _currentPlaylistTracks.asStateFlow()

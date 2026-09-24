@@ -60,6 +60,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -265,6 +268,12 @@ fun FullPlayerScreen(
                 sleepTimerActive = sleepTimerState.mode != SleepTimerMode.OFF,
                 onShowSleepTimer = { showSleepTimerSheet = true }
             )
+
+            if (uiState.spotifyReauthRequired) {
+                SpotifyReauthBannerPlayer(
+                    onReauthorize = { (context as? com.tigerplayer.MainActivity)?.authenticateSpotify() }
+                )
+            }
 
                 if (showSleepTimerSheet) {
                     SleepTimerSheet(
@@ -1010,6 +1019,48 @@ fun HeaderRitual(
         }
 
       */
+    }
+}
+
+@Composable
+private fun SpotifyReauthBannerPlayer(
+    onReauthorize: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.errorContainer,
+        shadowElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Spotify Reauthorization Required",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Approve Spotify App Remote access to continue playback.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onReauthorize,
+                modifier = Modifier.fillMaxWidth().height(40.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
+            ) {
+                Text("Re-authorize", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
     }
 }
 

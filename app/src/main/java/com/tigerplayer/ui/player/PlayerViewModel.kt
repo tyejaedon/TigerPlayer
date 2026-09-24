@@ -90,7 +90,8 @@ data class PlayerUiState(
     val currentWaveform: List<Float> = emptyList(),
     val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame(),
     val mainViewState: MainViewState = MainViewState.ARTWORK,
-    val connectedBluetoothDevice: BluetoothDeviceInfo = BluetoothDeviceInfo()
+    val connectedBluetoothDevice: BluetoothDeviceInfo = BluetoothDeviceInfo(),
+    val spotifyReauthRequired: Boolean = false
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -240,6 +241,12 @@ class PlayerViewModel @Inject constructor(
                     }
                     statsEngine.onTrackChanged(spotifyTrack, spotifyState.isPlaying)
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            playbackEngine.spotifyReauthRequired.collect { reauthRequired ->
+                _uiState.update { it.copy(spotifyReauthRequired = reauthRequired) }
             }
         }
 
