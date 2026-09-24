@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.tigerplayer.MainActivity
@@ -233,7 +234,7 @@ private fun CloudHeader(
             onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(54.dp)
                 .glassEffect(CircleShape),
             placeholder = { Text("Search the cloud...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
             leadingIcon = { Icon(WitcherIcons.Search, null, tint = SpotifyGreen, modifier = Modifier.size(20.dp)) },
@@ -257,6 +258,11 @@ private fun CloudHeader(
             singleLine = true
         )
     }
+}
+@Preview(showBackground = true)
+@Composable
+fun CloudHeaderPreview() {
+    CloudHeader(query = "", onQueryChange = {}, onRefresh = {}, onYouTubeSearchClick = {})
 }
 
 @Composable

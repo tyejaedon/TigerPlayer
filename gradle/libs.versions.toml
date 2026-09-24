@@ -60,6 +60,7 @@ animationVersion = "1.11.2"
 youtubeextractor = "1.5.1"
 foundationLayout = "1.11.2"
 browser = "1.10.0"
+glancePreview = "1.2.0"
 
 [libraries]
 # Core & Lifecycle
@@ -80,6 +81,8 @@ androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-compose-ui-text = { group = "androidx.compose.ui", name = "ui-text" }
 androidx-compose-ui-unit = { group = "androidx.compose.ui", name = "ui-unit" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout" }
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation" }
@@ -150,6 +153,7 @@ youtubeextractor = { module = "com.github.Yash-K-B:youtubeextractor", version.re
 youtubePlayer = { module = "com.pierfrancescosoffritti.androidyoutubeplayer:core", version.ref = "youtubePlayer" }
 androidx-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+androidx-glance-preview = { group = "androidx.glance", name = "glance-preview", version.ref = "glancePreview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

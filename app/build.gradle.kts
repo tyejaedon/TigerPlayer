@@ -141,6 +141,7 @@ ksp {
 }
 
 dependencies {
+    implementation(libs.androidx.glance.preview)
     // --- Coroutines ---
     // Declared explicitly for every flavor. The Compose runtime constrains
     // kotlinx-coroutines-android to 1.9.0, and coroutines-play-services (which used to pull it
@@ -162,6 +163,8 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.foundation.layout)
     implementation(libs.androidx.compose.animation)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    debugImplementation(libs.androidx.compose.ui.tooling)
 
     // Activity & Navigation
     implementation(libs.androidx.activity.compose)
