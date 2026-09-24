@@ -1,2 +1,2 @@
-A local-first Android music player with Media3 playback, on-device discovery, and a GPU visualizer.
+Local-first music player with on-device analytics and a GPU visualizer.
 
