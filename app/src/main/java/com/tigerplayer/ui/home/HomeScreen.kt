@@ -39,7 +39,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.preview.ExperimentalGlancePreviewApi
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
@@ -87,6 +86,7 @@ fun HomeScreen(
     homeViewModel: HomeViewModel,
     prismViewModel: PrismViewModel,
     onNavigateToSonicPrism: () -> Unit,
+    onBottomNavigationVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val homeState by viewModel.homeUiState.collectAsStateWithLifecycle()
@@ -99,6 +99,16 @@ fun HomeScreen(
     var showConstellation by remember { mutableStateOf(false) }
     var showSonicFootprint by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+
+    LaunchedEffect(showConstellation, showSonicFootprint) {
+        onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onBottomNavigationVisibilityChanged(false)
+        }
+    }
 
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
@@ -267,7 +277,6 @@ fun HomeScreen(
                         ) {
                             CurationRow(
                                 title = "DAY LIST",
-                                count = daylistTracks.size,
                                 color = AardBlue,
                                 status = curationStatusLabel(
                                     meta = daylistMeta,
@@ -282,7 +291,6 @@ fun HomeScreen(
                             )
                             CurationRow(
                                 title = "DISCOVERY WEEKLY",
-                                count = discoveryWeeklyTracks.size,
                                 color = SpotifyGreen,
                                 status = curationStatusLabel(
                                     meta = discoveryMeta,
@@ -473,7 +481,6 @@ fun SonicPrismEntryCard(
 @Composable
 fun CurationRow(
     title: String,
-    count: Int,
     color: Color,
     status: String,
     isStale: Boolean,

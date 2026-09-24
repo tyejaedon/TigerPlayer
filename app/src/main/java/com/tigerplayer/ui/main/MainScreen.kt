@@ -30,6 +30,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.tigerplayer.navigation.BottomNavTab
 import com.tigerplayer.navigation.MainNavigationPresets
+import com.tigerplayer.navigation.Screen
 import com.tigerplayer.ui.cloud.CloudScreen
 import com.tigerplayer.ui.youtube.YouTubeSearchScreen
 import com.tigerplayer.ui.home.HomeScreen
@@ -108,6 +109,7 @@ fun MainScreen(
     var playerState by remember { mutableStateOf(PlayerSheetState.MINI) }
     val isExpanded = playerState == PlayerSheetState.EXPANDED
     val hasTrack = uiState.currentTrack != null
+    var isImmersiveOverlayVisible by remember { mutableStateOf(false) }
 
     // Keep service-visible fullscreen state in sync for fullscreen-only haptic policies.
     LaunchedEffect(isExpanded) {
@@ -161,86 +163,96 @@ fun MainScreen(
                 }
                 .clip(RoundedCornerShape(appCornerRadius.coerceAtLeast(0.dp))),
             bottomBar = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // Ensure the bottom bar accounts for edge-to-edge navigation gestures
-                        .windowInsetsPadding(WindowInsets.navigationBars)
-                        .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                val backStack by tabNavController.currentBackStackEntryAsState()
+                val destination = backStack?.destination
+                val shouldShowBottomNavigation = shouldShowBottomNavigation(
+                    currentRoute = destination?.route,
+                    isImmersiveOverlayVisible = isImmersiveOverlayVisible
+                )
+
+                AnimatedVisibility(
+                    visible = shouldShowBottomNavigation,
+                    enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
+                    exit = shrinkVertically(tween(250)) + fadeOut(tween(200))
                 ) {
-                    AnimatedVisibility(
-                        visible = hasTrack && !isExpanded,
-                        enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
-                        exit = shrinkVertically(tween(250)) + fadeOut(tween(200))
-                    ) {
-                        Column {
-                            MiniPlayer(
-                                viewModel = playerViewModel,
-                                onExpandClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    playerViewModel.onFullPlayerOpened(isCoverOptimized = isCoverScreen)
-                                    playerState = PlayerSheetState.EXPANDED
-                                }
-                            )
-
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 24.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isLightTheme) 0.18f else 0.08f)
-                            )
-                        }
-                    }
-
-                    NavigationBar(
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp,
+                    Column(
                         modifier = Modifier
-                            .background(Color.Transparent)
-                            .testTag(MainScreenTestTags.BOTTOM_NAVIGATION_BAR)
+                            .fillMaxWidth()
+                            // Ensure the bottom bar accounts for edge-to-edge navigation gestures
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .glassEffect(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                     ) {
-                        val backStack by tabNavController.currentBackStackEntryAsState()
-                        val destination = backStack?.destination
-
-                        tabs.forEach { tab ->
-                            val selected = destination?.hierarchy?.any { it.route == tab.route } == true
-
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                                    playerViewModel.clearSearch()
-
-                                    tabNavController.navigate(tab.route) {
-                                        // Pop up to the start destination of the graph to
-                                        // avoid building up a large stack of destinations
-                                        popUpTo(tabNavController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        // Avoid multiple copies of the same destination when
-                                        // reselecting the same item
-                                        launchSingleTop = true
-                                        // Restore state when reselecting a previously selected item
-                                        restoreState = true
+                        AnimatedVisibility(
+                            visible = hasTrack && !isExpanded,
+                            enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
+                            exit = shrinkVertically(tween(250)) + fadeOut(tween(200))
+                        ) {
+                            Column {
+                                MiniPlayer(
+                                    viewModel = playerViewModel,
+                                    onExpandClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        playerViewModel.onFullPlayerOpened(isCoverOptimized = isCoverScreen)
+                                        playerState = PlayerSheetState.EXPANDED
                                     }
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = tab.icon,
-                                        contentDescription = tab.title,
-                                        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = tab.title,
-                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                alwaysShowLabel = navigationPreset.showTabLabels,
-                                colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                 )
-                            )
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 24.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isLightTheme) 0.18f else 0.08f)
+                                )
+                            }
+                        }
+
+                        NavigationBar(
+                            containerColor = Color.Transparent,
+                            tonalElevation = 0.dp,
+                            modifier = Modifier
+                                .background(Color.Transparent)
+                                .testTag(MainScreenTestTags.BOTTOM_NAVIGATION_BAR)
+                        ) {
+                            tabs.forEach { tab ->
+                                val selected = destination?.hierarchy?.any { it.route == tab.route } == true
+
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                        playerViewModel.clearSearch()
+
+                                        tabNavController.navigate(tab.route) {
+                                            // Pop up to the start destination of the graph to
+                                            // avoid building up a large stack of destinations
+                                            popUpTo(tabNavController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            // Avoid multiple copies of the same destination when
+                                            // reselecting the same item
+                                            launchSingleTop = true
+                                            // Restore state when reselecting a previously selected item
+                                            restoreState = true
+                                        }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = tab.icon,
+                                            contentDescription = tab.title,
+                                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = tab.title,
+                                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    alwaysShowLabel = navigationPreset.showTabLabels,
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -299,7 +311,8 @@ fun MainScreen(
                             onNavigateToSettings = onNavigateToSettings,
                             onNavigatetoArtist = onNavigateToArtist,
                             onNavigateToDaylist = onNavigateToDaylistDetail,
-                            onNavigateToDiscoverWeekly = onNavigateToDiscoverWeeklyDetail
+                            onNavigateToDiscoverWeekly = onNavigateToDiscoverWeeklyDetail,
+                            onBottomNavigationVisibilityChanged = { isImmersiveOverlayVisible = it }
                         )
                     }
 
@@ -324,7 +337,7 @@ fun MainScreen(
                         )
                     }
 
-                    composable(com.tigerplayer.navigation.Screen.SonicPrism.route) {
+                    composable(Screen.SonicPrism.route) {
                         SonicPrismRoute(
                             // Deliberately the MainScreen-owned instance, not a fresh
                             // hiltViewModel() - Home and this screen must not diverge.
@@ -419,3 +432,5 @@ fun MainScreen(
         }
     }
 }
+
+
