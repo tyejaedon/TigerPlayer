@@ -114,6 +114,7 @@ class SpotifyAppRemoteClientImpl @Inject constructor(
                         trackUri = track.uri,
                         trackName = track.name,
                         artistName = track.artist.name,
+                        albumName = track.album.name,
                         durationMs = track.duration,
                         positionMs = playerState.playbackPosition,
                         isPaused = playerState.isPaused,
@@ -137,4 +138,3 @@ class SpotifyAppRemoteClientImpl @Inject constructor(
         }.getOrNull() ?: false
     }
 }
-

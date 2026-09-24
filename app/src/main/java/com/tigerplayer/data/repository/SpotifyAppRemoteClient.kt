@@ -8,6 +8,7 @@ data class SpotifyRemotePlayerState(
     val trackUri: String,
     val trackName: String,
     val artistName: String,
+    val albumName: String,
     val durationMs: Long,
     val positionMs: Long,
     val isPaused: Boolean,
@@ -49,4 +50,3 @@ interface SpotifyAppRemoteClient {
     fun toggleShuffle()
     fun toggleRepeat()
 }
-

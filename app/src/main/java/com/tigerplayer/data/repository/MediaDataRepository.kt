@@ -11,6 +11,7 @@ import com.tigerplayer.data.remote.model.LastFmImage
 import com.tigerplayer.data.remote.model.SpotifyArtistDetail
 import com.tigerplayer.data.remote.model.SpotifyTrack
 import com.tigerplayer.utils.ArtistUtils
+import com.tigerplayer.utils.MusicMetadataSearch.cleanSearchTerm
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -228,17 +229,6 @@ class MediaDataRepository @Inject constructor(
 
     suspend fun clearArtistCache() {
         tigerDao.clearArtistCache()
-    }
-
-    /**
-     * Utility helper to strip bracketed clutter and trailing text (like "- Live")
-     * while preserving the clean, exact core names for surgical search accuracy.
-     */
-    private fun cleanSearchTerm(term: String): String {
-        return term
-            .replace(Regex("\\s*[(\\[](Explicit|Remastered|Deluxe|Live|O.S.T.|Original Motion Picture Soundtrack|Bonus Track|Mono|Stereo|Re-Recorded)[^\\])]*[\\])]", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\s+-\\s+.*$"), "") // Removes trailing single separators like "- Single"
-            .trim()
     }
 
     fun getHighResAlbumArt(title: String, artist: String, album: String): Flow<String?> = flow {

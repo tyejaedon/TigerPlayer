@@ -85,6 +85,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   message instead of silently leaving the player parked at `0:00` forever. Playback that is never
   confirmed by the Spotify app is also timed out and reported rather than left hanging, and builds
   without App Remote support say so. (#170)
+- **Lyrics**: LRCLIB lookups now retry with cleaned title/artist metadata and without placeholder
+  album labels, so lyrics can still resolve when playback surfaces generic album names like
+  `"Spotify"` or tracks carry noisy suffixes such as remaster/live tags.
 - **Spotify playlist screen**: the header artwork is now centred and captioned with the playlist
   name and track count, and no longer draws its glow shadow twice. Both the playlist and album
   detail screens now show an explicit empty state, surface errors that occur while they are open,

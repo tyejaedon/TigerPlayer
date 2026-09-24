@@ -276,7 +276,7 @@ class SpotifyRepository @Inject constructor(
                             id = it.trackUri,
                             title = it.trackName,
                             artist = it.artistName,
-                            album = "Spotify",
+                            album = it.albumName.ifBlank { "Spotify" },
                             uri = Uri.EMPTY,
                             artworkUri = Uri.EMPTY,
                             durationMs = it.durationMs,
