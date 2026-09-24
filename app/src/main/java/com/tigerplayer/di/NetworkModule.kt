@@ -1,5 +1,6 @@
 package com.tigerplayer.di
 
+import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.remote.api.*
 import dagger.Module
 import dagger.Provides
@@ -77,6 +78,22 @@ object NetworkModule {
             .retryOnConnectionFailure(true)
             .build()
     }
+
+    @Provides
+    @Singleton
+    @LrclibRetrofit
+    fun provideLrclibClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+        .addInterceptor { chain ->
+            val request = chain.request().newBuilder()
+                .header(
+                    "User-Agent",
+                    "TigerPlayer/${BuildConfig.VERSION_NAME} (https://github.com/tyejaedon/TigerPlayer)"
+                )
+                .build()
+            chain.proceed(request)
+        }
+        .build()
+
     // --- Retrofit Builders ---
 
 
@@ -125,7 +142,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @LrclibRetrofit
-    fun provideLrclibRetrofit(client: OkHttpClient): Retrofit =
+    fun provideLrclibRetrofit(@LrclibRetrofit client: OkHttpClient): Retrofit =
         Retrofit.Builder()
             .baseUrl(LRCLIB_BASE_URL)
             .client(client)

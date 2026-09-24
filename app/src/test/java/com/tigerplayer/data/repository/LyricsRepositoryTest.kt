@@ -1,6 +1,7 @@
 package com.tigerplayer.data.repository
 
 import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.remote.api.LrclibApi
 import com.tigerplayer.data.remote.api.LrclibResponse
@@ -124,6 +125,81 @@ class LyricsRepositoryTest {
                 trackName = "Bohemian Rhapsody",
                 artistName = "Queen",
                 albumName = "A Night at the Opera"
+            )
+        }
+    }
+
+    @Test
+    fun `server error aborts remaining lookup variants and caches the miss`() = runTest {
+        val track = AudioTrack(
+            id = "local-5xx",
+            title = "Bohemian Rhapsody - Remastered 2011",
+            artist = "Queen feat. Someone",
+            album = "A Night at the Opera (Deluxe)",
+            uri = android.net.Uri.EMPTY,
+            artworkUri = android.net.Uri.EMPTY,
+            durationMs = 355_000L,
+            mimeType = "audio/mp3",
+            isLocal = true
+        )
+        coEvery { tigerDao.getLyricsCache(track.id) } returns null
+        coEvery { lrclibApi.getLyrics(any(), any(), any()) } returns Response.error(
+            520,
+            "Cloudflare error".toResponseBody("text/plain".toMediaTypeOrNull())
+        )
+
+        val lyrics = repository.getLyrics(track).first()
+
+        assertEquals(null, lyrics)
+        coVerify(exactly = 1) { lrclibApi.getLyrics(any(), any(), any()) }
+        coVerify(exactly = 1) {
+            tigerDao.insertLyricsCache(
+                match {
+                    it.trackId == track.id &&
+                        it.plainLyrics == null &&
+                        it.syncedLyrics == null
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `negative cache hit avoids another remote lookup`() = runTest {
+        val track = AudioTrack(
+            id = "local-no-lyrics",
+            title = "Unknown Song",
+            artist = "Unknown Artist",
+            album = "Unknown Album",
+            uri = android.net.Uri.EMPTY,
+            artworkUri = android.net.Uri.EMPTY,
+            durationMs = 180_000L,
+            mimeType = "audio/mp3",
+            isLocal = true
+        )
+        coEvery { tigerDao.getLyricsCache(track.id) } returns null andThen LyricsCacheEntity(
+            trackId = track.id,
+            plainLyrics = null,
+            syncedLyrics = null,
+            lastAccessed = 4_000_000_000_000L
+        )
+        coEvery { lrclibApi.getLyrics(any(), any(), any()) } returns Response.error(
+            404,
+            "Not found".toResponseBody("text/plain".toMediaTypeOrNull())
+        )
+
+        val firstResult = repository.getLyrics(track).first()
+        val cachedResult = repository.getLyrics(track).first()
+
+        assertEquals(null, firstResult)
+        assertEquals(null, cachedResult)
+        coVerify(exactly = 1) { lrclibApi.getLyrics(any(), any(), any()) }
+        coVerify(exactly = 1) {
+            tigerDao.insertLyricsCache(
+                match {
+                    it.trackId == track.id &&
+                        it.plainLyrics == null &&
+                        it.syncedLyrics == null
+                }
             )
         }
     }

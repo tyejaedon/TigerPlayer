@@ -11,6 +11,12 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lyrics**: LRCLIB lookups now identify the app with a descriptive user agent, stop retrying
+  query variants after server errors, and negatively cache missing lyrics to avoid repeated failed
+  requests. (#200)
+
 ## [2.1.2] - 2026-09-23
 
 ### Added

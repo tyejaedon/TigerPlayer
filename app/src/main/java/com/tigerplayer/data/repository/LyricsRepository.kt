@@ -31,13 +31,21 @@ class LyricsRepository @Inject constructor(
         // 1. CHECK THE LOCAL ARCHIVES FIRST
         val cached = tigerDao.getLyricsCache(track.id)
 
-        if (cached != null && (!cached.syncedLyrics.isNullOrBlank() || !cached.plainLyrics.isNullOrBlank())) {
-            // Update the timestamp so it isn't deleted during cleanup
-            tigerDao.updateLyricsAccessTime(track.id)
+        if (cached != null) {
+            val hasLyrics = !cached.syncedLyrics.isNullOrBlank() || !cached.plainLyrics.isNullOrBlank()
+            if (hasLyrics) {
+                // Update the timestamp so it isn't deleted during cleanup
+                tigerDao.updateLyricsAccessTime(track.id)
 
-            // Prefer synced lyrics, fallback to plain
-            emit(cached.syncedLyrics ?: cached.plainLyrics)
-            return@flow
+                // Prefer synced lyrics, fallback to plain
+                emit(cached.syncedLyrics ?: cached.plainLyrics)
+                return@flow
+            }
+
+            if (System.currentTimeMillis() - cached.lastAccessed < NEGATIVE_CACHE_TTL_MS) {
+                emit(null)
+                return@flow
+            }
         }
 
         // 2. CACHE MISS: CONSULT LRCLIB
@@ -51,6 +59,7 @@ class LyricsRepository @Inject constructor(
             if (e is CancellationException) throw e
 
             Log.e(TAG, "Failed to fetch lyrics from LRCLIB", e)
+            cacheNegativeLyrics(track.id)
             null
         }
 
@@ -75,6 +84,7 @@ class LyricsRepository @Inject constructor(
                     TAG,
                     "LRCLIB lookup variant ${index + 1}/${lookupQueries.size} failed with HTTP ${response.code()}."
                 )
+                if (response.code() >= 500) break
                 continue
             }
 
@@ -97,7 +107,19 @@ class LyricsRepository @Inject constructor(
             return synced ?: plain
         }
 
+        cacheNegativeLyrics(trackId)
         return null
+    }
+
+    private suspend fun cacheNegativeLyrics(trackId: String) {
+        tigerDao.insertLyricsCache(
+            LyricsCacheEntity(
+                trackId = trackId,
+                plainLyrics = null,
+                syncedLyrics = null
+            )
+        )
+        tigerDao.enforceLyricsCacheLimit()
     }
 
     private fun buildLookupQueries(track: AudioTrack): List<LyricsLookupQuery> {
@@ -125,5 +147,6 @@ class LyricsRepository @Inject constructor(
 
     private companion object {
         const val TAG = "LyricsRepo"
+        const val NEGATIVE_CACHE_TTL_MS = 24 * 60 * 60 * 1000L
     }
 }
