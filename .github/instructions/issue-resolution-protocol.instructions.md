@@ -8,6 +8,19 @@ Execute the following phased lifecycle for each assigned issue in strict sequent
 
 ---
 
+## Phase 0: Issue Validation & Milestone Assignment
+
+**AGENTS MUST NEVER WRITE CODE WITHOUT A FORMAL ISSUE FIRST.**
+
+- **Issue Existence & Assignment:** Verify the issue exists, is formally described with acceptance criteria, and is assigned to you.
+- **Milestone Binding:** The issue must be tied to a milestone (existing or newly created). If no milestone exists for the work:
+  - Create one via GitHub UI or CLI: `gh api repos/<owner>/<repo>/milestones --input milestone.json`
+  - Use semantic versioning naming (e.g., `v2.1.0`, `v2.1.1-hotfix`).
+  - Assign the issue to that milestone.
+- **Gate:** Do not proceed to Phase 1 until the issue ID is known, the issue is formally described, and the milestone is set. Attempting to branch without an issue is a protocol violation.
+
+---
+
 ## Phase 1: Environment Sanitation & Branching
 
 - **Working Tree Audit:** Inspect repository state using `git status --porcelain`. Abort immediately if untracked changes, unstaged edits, or merge conflicts exist.
@@ -64,14 +77,17 @@ Execute the following phased lifecycle for each assigned issue in strict sequent
 
 - **Remote Dispatch & Pull Request:**
   - Push the branch upstream: `git push -u origin <branch-name>`.
-  - Dispatch a Pull Request via GitHub CLI:
+  - Dispatch a Pull Request via GitHub CLI, explicitly closing the issue:
 
     ```bash
     gh pr create \
       --title "fix(<scope>): <short description> (closes #<ID>)" \
-      --body "### Summary of Changes"$'\n'"- Implemented targeted fix for issue #<ID>."$'\n\n'"### Verification"$'\n'"- All linters, unit tests, and regression suites passed locally." \
+      --body "### Summary of Changes"$'\n'"- Implemented targeted fix for issue #<ID>."$'\n\n'"### Verification"$'\n'"- All linters, unit tests, and regression suites passed locally."$'\n\n'"### Milestone"$'\n'"Tied to issue milestone for release tracking." \
       --base <default-branch>
     ```
+
+  - **Critical:** The `closes #<ID>` text in the PR title and/or body **must** reference the issue ID. GitHub will automatically close the issue when the PR merges.
+  - Verify the issue is bound to the correct milestone before opening the PR (it will be inherited from the issue).
 
 ---
 

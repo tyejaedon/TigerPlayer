@@ -3,9 +3,13 @@
 Machine-readable operating guide for AI coding agents working in the TigerPlayer repository.
 Human contributors should read `README.md` first.
 
-> **Companion documents**
-> - `.github/instructions/issue-resolution-protocol.instructions.md` — the AIRP lifecycle for resolving an issue
+> **⚠️ MANDATORY START HERE**
+> - `.github/instructions/AGENT-WORKFLOW-CHECKLIST.md` — **quick reference for the issue-first workflow (read this first)**
+> - `.github/instructions/issue-resolution-protocol.instructions.md` — the AIRP lifecycle for resolving an issue (5 phases, Phase 0 is mandatory)
+> - `.github/instructions/git-workflow.instructions.md` — branch protection rules and no-master-commits guardrails
 > - `docs/Roadmap-v2.1.1-v2.3.md` — milestones, issue index, dependency graph
+
+**⛔ CRITICAL:** Before writing any code, verify you have a formal GitHub issue (`#<ID>`) assigned to you with acceptance criteria and a milestone. Branches are created FROM issues, never the reverse. See AGENT-WORKFLOW-CHECKLIST.md for the complete mandatory sequence.
 
 ---
 
@@ -126,6 +130,11 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
 
 ## 5. Guardrails — do not do these
 
+0. ⚠️ **ISSUE-FIRST PROTOCOL (MANDATORY):** Never write code without a formal GitHub issue (`#<ID>`) assigned
+   to you with acceptance criteria and a milestone. Always follow AGENT-WORKFLOW-CHECKLIST.md Phase 1–6
+   **in strict order**. The issue must exist, be formally written, and be assigned to you **before** you
+   create a branch. Violations of this are AIRP Phase 0 failures and will cause all downstream phases to fail.
+
 1. **Never** run `git add .` or `git add -A`. Stage explicit paths only.
    A release keystore and `secrets.properties` live in the working tree.
 2. **Never** commit or print the contents of `secrets.properties`, `local.properties`, or any
@@ -139,10 +148,11 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
    The legacy stdlib workaround has been decommissioned (issue #75).
 7. **Never** edit anything under `app/build/`, `build/`, or `.gradle/` — generated output.
 8. Do not "fix" unrelated files you happen to open. AIRP Phase 2 forbids out-of-scope changes.
-9. **Never** commit or push directly to `master`. It is branch-protected (PR + status checks
-   required); a direct push is rejected by GitHub. Always create a feature branch first
-   (`git checkout -b fix/issue-<ID>-<slug>` or similar) and land changes via a pull request. See
-   `.github/instructions/git-workflow.instructions.md`.
+9. **Never** commit or push directly to `master`. It is branch-protected (PR + status checks required);
+   a direct push is rejected by GitHub. Always create a feature branch first, **but only after validating
+   the issue exists and is assigned** (see point 0 above). Use `git checkout -b fix/issue-<ID>-<slug>`
+   and land changes via a pull request with explicit `closes #<ID>` linkage. See
+   `.github/instructions/git-workflow.instructions.md` and AGENT-WORKFLOW-CHECKLIST.md.
 
 ---
 
