@@ -1,5 +1,7 @@
 package com.tigerplayer.data.backup
 
+import com.google.gson.annotations.SerializedName
+
 /**
  * On-disk JSON shape written/read by [BackupManager]. This is a public contract — a backup file
  * created by one app version must remain readable (or fail loudly, never silently corrupt data)
@@ -20,11 +22,17 @@ package com.tigerplayer.data.backup
  * "not found" and simply omits it, so this degrades gracefully rather than crashing.
  */
 data class BackupManifest(
+    @SerializedName("schemaVersion")
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
+    @SerializedName("appVersionName")
     val appVersionName: String,
+    @SerializedName("createdAtEpochMs")
     val createdAtEpochMs: Long,
+    @SerializedName("settings")
     val settings: SettingsBackup,
+    @SerializedName("playlists")
     val playlists: List<PlaylistBackup>,
+    @SerializedName("history")
     val history: List<HistoryBackup>
 ) {
     companion object {
@@ -40,48 +48,82 @@ data class BackupManifest(
  * `enumValueOf`.
  */
 data class SettingsBackup(
+    @SerializedName("themeMode")
     val themeMode: String,
+    @SerializedName("pureAmoledBlack")
     val pureAmoledBlack: Boolean,
+    @SerializedName("disablePip")
     val disablePip: Boolean,
+    @SerializedName("accentStyle")
     val accentStyle: String,
+    @SerializedName("defaultPlayerView")
     val defaultPlayerView: String,
+    @SerializedName("crossfadeDurationSec")
     val crossfadeDurationSec: Int,
+    @SerializedName("gaplessPlayback")
     val gaplessPlayback: Boolean,
+    @SerializedName("audioReactiveHaptics")
     val audioReactiveHaptics: Boolean,
+    @SerializedName("audioReactiveHapticsProfile")
     val audioReactiveHapticsProfile: String,
+    @SerializedName("skipShortAudio")
     val skipShortAudio: String,
+    @SerializedName("routeToSystemDecoderDsp")
     val routeToSystemDecoderDsp: Boolean,
+    @SerializedName("resumeOnBluetoothConnect")
     val resumeOnBluetoothConnect: Boolean,
+    @SerializedName("resumeOnWiredHeadsetConnect")
     val resumeOnWiredHeadsetConnect: Boolean,
+    @SerializedName("prismEnabled")
     val prismEnabled: Boolean,
+    @SerializedName("prismVocals")
     val prismVocals: Float,
+    @SerializedName("prismBeats")
     val prismBeats: Float,
+    @SerializedName("prismInstruments")
     val prismInstruments: Float,
+    @SerializedName("prismSpectralAnalysis")
     val prismSpectralAnalysis: String
 )
 
 data class PlaylistBackup(
+    @SerializedName("name")
     val name: String,
+    @SerializedName("artworkUri")
     val artworkUri: String?,
+    @SerializedName("createdAt")
     val createdAt: Long,
+    @SerializedName("position")
     val position: Int,
+    @SerializedName("tracks")
     val tracks: List<PlaylistTrackBackup>
 )
 
 data class PlaylistTrackBackup(
+    @SerializedName("trackId")
     val trackId: String,
+    @SerializedName("dateAdded")
     val dateAdded: Long,
+    @SerializedName("position")
     val position: Int
 )
 
 data class HistoryBackup(
+    @SerializedName("trackId")
     val trackId: String,
+    @SerializedName("title")
     val title: String,
+    @SerializedName("artist")
     val artist: String,
+    @SerializedName("album")
     val album: String,
+    @SerializedName("imageUrl")
     val imageUrl: String?,
+    @SerializedName("durationListenedMs")
     val durationListenedMs: Long,
+    @SerializedName("timestamp")
     val timestamp: Long,
+    @SerializedName("source")
     val source: String
 )
 

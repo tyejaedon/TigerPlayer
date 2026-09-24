@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
+import com.google.gson.annotations.SerializedName
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.local.dao.PlaylistDao
@@ -159,6 +160,65 @@ class BackupManagerTest {
         assertFalse(result.isSuccess)
     }
 
+    @Test
+    fun `backup models declare explicit serialized names for every persisted JSON field`() {
+        assertSerializedNames(
+            BackupManifest::class.java,
+            "schemaVersion",
+            "appVersionName",
+            "createdAtEpochMs",
+            "settings",
+            "playlists",
+            "history"
+        )
+        assertSerializedNames(
+            SettingsBackup::class.java,
+            "themeMode",
+            "pureAmoledBlack",
+            "disablePip",
+            "accentStyle",
+            "defaultPlayerView",
+            "crossfadeDurationSec",
+            "gaplessPlayback",
+            "audioReactiveHaptics",
+            "audioReactiveHapticsProfile",
+            "skipShortAudio",
+            "routeToSystemDecoderDsp",
+            "resumeOnBluetoothConnect",
+            "resumeOnWiredHeadsetConnect",
+            "prismEnabled",
+            "prismVocals",
+            "prismBeats",
+            "prismInstruments",
+            "prismSpectralAnalysis"
+        )
+        assertSerializedNames(
+            PlaylistBackup::class.java,
+            "name",
+            "artworkUri",
+            "createdAt",
+            "position",
+            "tracks"
+        )
+        assertSerializedNames(
+            PlaylistTrackBackup::class.java,
+            "trackId",
+            "dateAdded",
+            "position"
+        )
+        assertSerializedNames(
+            HistoryBackup::class.java,
+            "trackId",
+            "title",
+            "artist",
+            "album",
+            "imageUrl",
+            "durationListenedMs",
+            "timestamp",
+            "source"
+        )
+    }
+
     private fun sampleBackupJson(schemaVersion: Int): String {
         val manifest = BackupManifest(
             schemaVersion = schemaVersion,
@@ -209,6 +269,13 @@ class BackupManagerTest {
             )
         )
         return com.google.gson.Gson().toJson(manifest)
+    }
+
+    private fun assertSerializedNames(clazz: Class<*>, vararg fieldNames: String) {
+        fieldNames.forEach { fieldName ->
+            val annotation = clazz.getDeclaredField(fieldName).getAnnotation(SerializedName::class.java)
+            assertEquals(fieldName, annotation?.value)
+        }
     }
 }
 
