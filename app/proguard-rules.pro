@@ -36,6 +36,15 @@
 	<fields>;
 }
 
+# --- Backup JSON models ---
+# BackupManager relies on Gson reflection over nested generic lists. Keep the model classes and
+# fields so release minification does not strip the signatures/structure needed to deserialize
+# PlaylistBackup / HistoryBackup rows as their real types instead of LinkedTreeMap.
+-keep class com.tigerplayer.data.backup.** { *; }
+-keepclassmembers class com.tigerplayer.data.backup.** {
+	<fields>;
+}
+
 -keepclassmembers,allowobfuscation class * {
 	@com.google.gson.annotations.SerializedName <fields>;
 }
