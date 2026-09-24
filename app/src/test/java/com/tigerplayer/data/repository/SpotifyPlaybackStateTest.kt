@@ -1,12 +1,15 @@
 package com.tigerplayer.data.repository
 
+import com.tigerplayer.data.local.SpotifyPrefs
 import com.tigerplayer.data.remote.api.SpotifyApiService
 import com.tigerplayer.data.remote.model.SpotifyAlbum
 import com.tigerplayer.data.remote.model.SpotifyArtistSimplified
 import com.tigerplayer.data.remote.model.SpotifyImage
 import com.tigerplayer.data.remote.model.SpotifyTrack
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -34,11 +37,11 @@ class SpotifyPlaybackStateTest {
 
     private val apiService = mockk<SpotifyApiService>(relaxed = true)
 
-    // A real auth manager over relaxed prefs/api mocks — matching SpotifyAuthManagerTest. Mocking
+    // A real auth manager over explicit prefs/api mocks — matching SpotifyAuthManagerTest. Mocking
     // the manager itself does not survive Robolectric's classloader. An UnconfinedTestDispatcher
     // runs the manager's internal persistence coroutine eagerly/synchronously, so no test in this
     // class races a real background dispatcher.
-    private val authManager = SpotifyAuthManager(mockk(relaxed = true), mockk(relaxed = true), UnconfinedTestDispatcher())
+    private val authManager = authManagerWithPersistedSession()
 
     /** Records interactions and lets a test drive the App Remote callbacks by hand. */
     private class FakeAppRemoteClient(override val isSupported: Boolean = true) : SpotifyAppRemoteClient {
@@ -83,8 +86,24 @@ class SpotifyPlaybackStateTest {
         override fun toggleRepeat() = Unit
     }
 
-    private fun repository(client: SpotifyAppRemoteClient, dispatcher: TestDispatcher) =
+    private fun repository(
+        client: SpotifyAppRemoteClient,
+        dispatcher: TestDispatcher,
+        authManager: SpotifyAuthManager = this.authManager
+    ) =
         SpotifyRepository(apiService, authManager, client, dispatcher)
+
+    private fun authManagerWithPersistedSession(
+        accessToken: String? = null,
+        grantedScope: String? = null
+    ): SpotifyAuthManager {
+        val prefs = mockk<SpotifyPrefs>(relaxed = true)
+        every { prefs.accessToken } returns flowOf(accessToken)
+        every { prefs.tokenTimestamp } returns flowOf(accessToken?.let { System.currentTimeMillis() })
+        every { prefs.refreshToken } returns flowOf(null)
+        every { prefs.grantedScope } returns flowOf(grantedScope)
+        return SpotifyAuthManager(prefs, mockk(relaxed = true), UnconfinedTestDispatcher())
+    }
 
     private fun spotifyTrack(
         id: String = "6habFhsOp2NvshLv26DqMb",
@@ -188,6 +207,45 @@ class SpotifyPlaybackStateTest {
         assertNull("the placeholder must not linger at 0:00", repo.spotifyPlaybackState.value)
         assertNotNull(repo.connectionError.value)
         assertFalse(repo.isConnected.value)
+    }
+
+    @Test
+    fun `an explicit authorization failure reports reauthorization instead of a generic connection error`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val client = FakeAppRemoteClient().apply {
+            failOnConnect = IllegalStateException(
+                "Explicit user authorization is required to use Spotify. The user has to complete the auth-flow to allow the app to use Spotify on their behalf"
+            )
+        }
+        val repo = repository(client, dispatcher)
+
+        repo.playTrack(spotifyTrack())
+
+        assertEquals(
+            "Spotify playback needs one-time reauthorization. In Settings > Connected Accounts, disconnect Spotify, then sign in again.",
+            repo.connectionError.value
+        )
+        assertNull(repo.spotifyPlaybackState.value)
+    }
+
+    @Test
+    fun `a known legacy session without app remote scope asks for reauthorization before connecting`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val client = FakeAppRemoteClient()
+        val legacyAuthManager = authManagerWithPersistedSession(
+            accessToken = "access-1",
+            grantedScope = "playlist-read-private user-library-read"
+        )
+        val repo = repository(client, dispatcher, legacyAuthManager)
+
+        repo.playTrack(spotifyTrack())
+
+        assertEquals(
+            "Spotify playback needs one-time reauthorization. In Settings > Connected Accounts, disconnect Spotify, then sign in again.",
+            repo.connectionError.value
+        )
+        assertTrue("the old session should be rejected before any IPC connect attempt", client.connectCalls == 0)
+        assertNull(repo.spotifyPlaybackState.value)
     }
 
     @Test

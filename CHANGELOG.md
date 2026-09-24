@@ -66,6 +66,10 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+- **Spotify**: the login flow now requests Spotify's `app-remote-control` permission alongside the
+  existing library scopes, so a fresh sign-in authorizes App Remote playback instead of failing
+  later with "Explicit user authorization is required". Sessions known to predate that scope now
+  surface an actionable reauthorization message that points to Settings > Connected Accounts. 
 - **Build (F-Droid)**: removed the `org.gradle.toolchains.foojay-resolver` plugin, scoped Google
   Play Services Location and the Spotify App Remote AAR to the `full` flavor only (via a new
   `LocationProvider` abstraction with a no-op `foss` implementation), and pinned
