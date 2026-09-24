@@ -90,44 +90,44 @@ class SpotifyAuthManager @Inject constructor(
      */
     suspend fun getValidUserToken(): String = getValidToken()
 
-    private suspend fun refreshAccessToken(): String {
-        return try {
-            val response = spotifyAuthApi.refreshToken(
-                clientId = clientId,
-                refreshToken = refreshToken
-            )
-            if (response.isSuccessful) {
-                val body = response.body()
-                if (body != null) {
-                    // Spotify may or may not rotate the refresh token on refresh.
-                    val newRefreshToken = body.refreshToken ?: refreshToken
-                    updateToken(
-                        newToken = body.accessToken,
-                        expiresInSeconds = body.expiresIn,
-                        newRefreshToken = newRefreshToken,
-                        grantedScope = body.scope ?: _grantedScope.value
-                    )
-                    Log.d("SpotifyAuth", "Access token refreshed successfully.")
-                    body.accessToken
-                } else {
-                    Log.e("SpotifyAuth", "Refresh failed: response body was empty.")
-                    ""
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e("SpotifyAuth", "Refresh failed with code ${response.code()}: $errorBody")
-                if (response.code() == 400 || response.code() == 401) {
-                    // Refresh token itself is dead — force the user to log in again.
-                    logout()
-                }
-                ""
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.e("SpotifyAuth", "Exception during refresh: ${e.message}")
-            ""
-        }
-    }
+     private suspend fun refreshAccessToken(): String {
+         return try {
+             val response = spotifyAuthApi.refreshToken(
+                 clientId = clientId,
+                 refreshToken = refreshToken
+             )
+             if (response.isSuccessful) {
+                 val body = response.body()
+                 if (body != null) {
+                     // Spotify may or may not rotate the refresh token on refresh.
+                     val newRefreshToken = body.refreshToken ?: refreshToken
+                     updateToken(
+                         newToken = body.accessToken,
+                         expiresInSeconds = body.expiresIn,
+                         newRefreshToken = newRefreshToken,
+                         grantedScope = body.scope ?: _grantedScope.value
+                     )
+                     Log.d("SpotifyAuth", "Access token refreshed successfully.")
+                     body.accessToken
+                 } else {
+                     Log.e("SpotifyAuth", "Refresh failed: response body was empty.")
+                     ""
+                 }
+             } else {
+                 val errorBody = response.errorBody()?.string()
+                 Log.e("SpotifyAuth", "Refresh failed with code ${response.code()}: $errorBody")
+                 if (response.code() == 400 || response.code() == 401) {
+                     // Refresh token itself is dead — force the user to log in again.
+                     logoutSync()
+                 }
+                 ""
+             }
+         } catch (e: Exception) {
+             if (e is CancellationException) throw e
+             Log.e("SpotifyAuth", "Exception during refresh: ${e.message}")
+             ""
+         }
+     }
 
     fun requiresAppRemoteReauth(): Boolean {
         val grantedScope = _grantedScope.value ?: return false
@@ -163,23 +163,39 @@ class SpotifyAuthManager @Inject constructor(
         }
     }
 
-    fun getToken(): String = _token.value
+     fun getToken(): String = _token.value
 
-    fun isTokenExpired(timestamp: Long): Boolean {
-        if (timestamp == 0L) return true
-        val bufferMs = 300_000L // 5 min buffer
-        return System.currentTimeMillis() - timestamp > (expiresInMs - bufferMs)
-    }
+     fun isTokenExpired(timestamp: Long): Boolean {
+         if (timestamp == 0L) return true
+         val bufferMs = 300_000L // 5 min buffer
+         return System.currentTimeMillis() - timestamp > (expiresInMs - bufferMs)
+     }
 
-    fun logout() {
-        _token.value = ""
-        _grantedScope.value = null
-        tokenTimestamp = 0L
-        refreshToken = ""
-        scope.launch {
-            spotifyPrefs.clearToken()
-        }
-    }
+     /**
+      * Synchronous logout used internally during token refresh failures.
+      * Clears in-memory state immediately; persistence is async.
+      */
+     private fun logoutSync() {
+         _token.value = ""
+         _grantedScope.value = null
+         tokenTimestamp = 0L
+         refreshToken = ""
+         scope.launch {
+             spotifyPrefs.clearToken()
+         }
+     }
+
+     /**
+      * Public logout that suspends until token persistence is cleared.
+      * This ensures callers wait for the full logout to complete, preventing race conditions.
+      */
+     suspend fun logout() {
+         _token.value = ""
+         _grantedScope.value = null
+         tokenTimestamp = 0L
+         refreshToken = ""
+         spotifyPrefs.clearToken()
+     }
 
     /**
      * Exchanges the temporary Authorization Code for an Access Token using PKCE.
