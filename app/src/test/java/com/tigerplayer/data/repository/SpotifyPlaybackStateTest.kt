@@ -133,6 +133,7 @@ class SpotifyPlaybackStateTest {
         trackUri = trackUri,
         trackName = "Bohemian Rhapsody",
         artistName = "Queen",
+        albumName = "A Night at the Opera",
         durationMs = 354_000L,
         positionMs = 1_200L,
         isPaused = false,
@@ -192,6 +193,7 @@ class SpotifyPlaybackStateTest {
         assertFalse(state.isOptimistic)
         assertEquals(1_200L, state.positionMs)
         assertEquals(354_000L, state.track.durationMs)
+        assertEquals("A Night at the Opera", state.track.album)
     }
 
     // --- issue #170: failures must surface and must not leave a stuck placeholder ---
