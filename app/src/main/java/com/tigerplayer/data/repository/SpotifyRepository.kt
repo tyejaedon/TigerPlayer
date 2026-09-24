@@ -74,6 +74,14 @@ class SpotifyRepository @Inject constructor(
     private val _connectionError = MutableStateFlow<String?>(null)
     val connectionError: StateFlow<String?> = _connectionError.asStateFlow()
 
+    /**
+     * `true` when the connection error is specifically due to Spotify requiring web reauthorization
+     * (i.e., missing `app-remote-control` scope). This allows the UI to show a persistent,
+     * actionable element with a "Re-authorize" button. See issue #201.
+     */
+    private val _reauthRequired = MutableStateFlow(false)
+    val reauthRequired: StateFlow<Boolean> = _reauthRequired.asStateFlow()
+
     val isAuthenticated: StateFlow<Boolean> = authManager.token
         .map { it.isNotEmpty() }
         .stateIn(repositoryScope, SharingStarted.Eagerly, false)
@@ -257,6 +265,7 @@ class SpotifyRepository @Inject constructor(
                 _isRemoteConnected.value = connected
                 if (connected) {
                     _connectionError.value = null
+                    _reauthRequired.value = false
                     pendingUriToPlay?.let { uri ->
                         appRemoteClient.play(uri)
                         publishOptimisticPlayback(uri, pendingKnownTrack)
@@ -270,6 +279,7 @@ class SpotifyRepository @Inject constructor(
                 // any stale failure message no longer apply.
                 playbackConfirmationJob?.cancel()
                 _connectionError.value = null
+                _reauthRequired.value = false
                 _spotifyPlaybackState.value = remoteState?.let {
                     SpotifyPlaybackState(
                         track = AudioTrack(
@@ -369,6 +379,7 @@ class SpotifyRepository @Inject constructor(
 
     fun clearConnectionError() {
         _connectionError.value = null
+        _reauthRequired.value = false
     }
 
     fun disconnect() {
@@ -401,6 +412,7 @@ class SpotifyRepository @Inject constructor(
         pendingUriToPlay = null
         pendingKnownTrack = null
         _connectionError.value = message
+        _reauthRequired.value = (message == ERROR_REMOTE_REAUTH_REQUIRED)
         if (_spotifyPlaybackState.value?.isOptimistic == true) {
             _spotifyPlaybackState.value = null
         }

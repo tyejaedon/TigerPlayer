@@ -52,6 +52,7 @@ fun CloudScreen(
     val albums by viewModel.filteredAlbums.collectAsState()
     val isAuthenticated by viewModel.isSpotifyAuthenticated.collectAsState()
     val isRemoteConnected by viewModel.isSpotifyRemoteConnected.collectAsState()
+    val reauthRequired by viewModel.reauthRequired.collectAsState()
 
     val uiError by viewModel.uiError.collectAsState()
     val isLoadingTracks by viewModel.isLoadingTracks.collectAsState()
@@ -94,6 +95,12 @@ fun CloudScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
             ) {
+                if (reauthRequired) {
+                    SpotifyReauthBanner(
+                        onReauthorize = { (context as? MainActivity)?.authenticateSpotify() }
+                    )
+                }
+
                 if (!isRemoteConnected) {
                     Text(
                         text = "Spotify playback remote is reconnecting...",
@@ -418,3 +425,46 @@ private fun ArchiveGrid(
         }
     }
 }
+
+@Composable
+private fun SpotifyReauthBanner(
+    onReauthorize: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.errorContainer,
+        shadowElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Spotify Reauthorization Required",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Approve Spotify App Remote access in a one-time reauthentication flow to continue playback.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onReauthorize,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
+            ) {
+                Text("Re-authorize Spotify", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+

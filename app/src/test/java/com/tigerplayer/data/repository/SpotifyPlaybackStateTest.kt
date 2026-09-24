@@ -352,4 +352,82 @@ class SpotifyPlaybackStateTest {
         assertNull(repo.spotifyPlaybackState.value)
         assertFalse(repo.isConnected.value)
     }
+
+    // --- issue #201: reauthRequired state visibility and clearing ---
+
+    @Test
+    fun `a legacy session without app remote scope sets reauthRequired flag`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val client = FakeAppRemoteClient()
+        val legacyAuthManager = authManagerWithPersistedSession(
+            accessToken = "access-1",
+            grantedScope = "playlist-read-private user-library-read"
+        )
+        val repo = repository(client, dispatcher, legacyAuthManager)
+
+        repo.playTrack(spotifyTrack())
+
+        assertTrue("reauthRequired must be true when web reauth is needed", repo.reauthRequired.value)
+        assertNotNull(repo.connectionError.value)
+    }
+
+    @Test
+    fun `a successful connection clears the reauthRequired flag`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val client = FakeAppRemoteClient()
+        val legacyAuthManager = authManagerWithPersistedSession(
+            accessToken = "access-1",
+            grantedScope = "playlist-read-private user-library-read"
+        )
+        val repo = repository(client, dispatcher, legacyAuthManager)
+
+        repo.playTrack(spotifyTrack())
+        assertTrue("initially set to true for legacy session", repo.reauthRequired.value)
+
+        // Now simulate a successful connection after reauth
+        val freshAuthManager = authManagerWithPersistedSession(
+            accessToken = "access-2",
+            grantedScope = "playlist-read-private user-library-read app-remote-control"
+        )
+        val freshRepo = repository(client, dispatcher, freshAuthManager)
+
+        freshRepo.playTrack(spotifyTrack())
+        client.completeConnection()
+        client.emitPlayerState(remoteState())
+
+        assertFalse("reauthRequired must be cleared after successful connection", freshRepo.reauthRequired.value)
+        assertNull(freshRepo.connectionError.value)
+    }
+
+    @Test
+    fun `clearing the connection error also clears reauthRequired`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val client = FakeAppRemoteClient()
+        val legacyAuthManager = authManagerWithPersistedSession(
+            accessToken = "access-1",
+            grantedScope = "playlist-read-private"
+        )
+        val repo = repository(client, dispatcher, legacyAuthManager)
+
+        repo.playTrack(spotifyTrack())
+        assertTrue("reauthRequired is set with reauth error", repo.reauthRequired.value)
+
+        repo.clearConnectionError()
+
+        assertFalse("reauthRequired must be cleared", repo.reauthRequired.value)
+        assertNull(repo.connectionError.value)
+    }
+
+    @Test
+    fun `non-reauth connection errors do not set reauthRequired`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val client = FakeAppRemoteClient().apply { failOnConnect = IllegalStateException("no app") }
+        val repo = repository(client, dispatcher)
+
+        repo.playTrack(spotifyTrack())
+
+        assertFalse("reauthRequired must be false for non-reauth errors", repo.reauthRequired.value)
+        assertNotNull(repo.connectionError.value)
+        assertFalse(repo.connectionError.value?.contains("reauthorization", ignoreCase = true) ?: true)
+    }
 }
