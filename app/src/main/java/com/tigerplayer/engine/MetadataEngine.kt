@@ -14,6 +14,16 @@ import androidx.core.net.toUri
 import com.tigerplayer.data.local.dao.TigerDao
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.times
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+
+internal const val ARTIST_PRESEED_CONCURRENCY = 3
+private val ARTIST_PRESEED_TIMEOUT = 5.seconds
+private val ARTIST_PRESEED_STAGGER = 150.milliseconds
+
+private const val TAG = "MetadataEngine"
 
 @Singleton
 class MetadataEngine @Inject constructor(
@@ -92,7 +102,7 @@ class MetadataEngine @Inject constructor(
                     .filter { it.imageUrl != null }
                     .take(1)
                     .timeout(3000.milliseconds)
-                    .catch { 
+                    .catch {
                         // If timeout or no image, take whatever the first emission was (cache)
                         try {
                             emit(mediaDataRepository.getArtistDetails(track.artist).first())
@@ -137,7 +147,7 @@ class MetadataEngine @Inject constructor(
                         .filter { it.imageUrl != null }
                         .take(1)
                         .timeout(4000.milliseconds)
-                        .catch { 
+                        .catch {
                             try {
                                 emit(mediaDataRepository.getArtistDetails(name).first())
                             } catch (e: Exception) { /* Silent fail */ }
@@ -163,20 +173,31 @@ class MetadataEngine @Inject constructor(
     @OptIn(FlowPreview::class)
     suspend fun preSeedArtistCache(tracks: List<AudioTrack>) {
         if (tracks.isEmpty()) return
-        val uniqueArtists = tracks.map { ArtistUtils.getBaseArtist(it.artist).trim() }.distinct()
+        val uniqueArtists = tracks
+            .map { ArtistUtils.getBaseArtist(it.artist).trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val semaphore = Semaphore(ARTIST_PRESEED_CONCURRENCY)
 
         coroutineScope {
-            uniqueArtists.forEach { name ->
+            uniqueArtists.forEachIndexed { index, name ->
                 launch {
-                    try {
-                        // Just trigger the flow, DB updates will propagate via artistDetails StateFlow
-                        mediaDataRepository.getArtistDetails(name)
-                            .filter { it.imageUrl != null }
-                            .take(1)
-                            .timeout(2000.milliseconds)
-                            .collect()
-                    } catch (e: Exception) {
-                        Log.w("MetadataEngine", "Pre-seed failed for $name: ${e.message}")
+                    delay((index % ARTIST_PRESEED_CONCURRENCY) * ARTIST_PRESEED_STAGGER)
+                    semaphore.withPermit {
+                        try {
+                            withTimeout(ARTIST_PRESEED_TIMEOUT) {
+                                mediaDataRepository.getArtistDetails(name)
+                                    .filter { it.imageUrl != null }
+                                    .take(1)
+                                    .collect()
+                            }
+                        } catch (e: TimeoutCancellationException) {
+                            Log.w(TAG, "Pre-seed failed: ${e.message}")
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Pre-seed failed: ${e.message}")
+                        }
                     }
                 }
             }
