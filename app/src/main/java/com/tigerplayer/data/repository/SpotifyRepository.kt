@@ -486,7 +486,7 @@ class SpotifyRepository @Inject constructor(
                 className.endsWith("UserNotAuthorizedException") ||
                 message.contains("Explicit user authorization is required", ignoreCase = true)
             ) {
-                return ERROR_REMOTE_REAUTH_REQUIRED
+                return ERROR_APP_REMOTE_AUTH_REQUIRED
             }
             current = current.cause
         }
@@ -507,6 +507,8 @@ class SpotifyRepository @Inject constructor(
             "Couldn't reach the Spotify app. Make sure it's installed, open, and signed in with Premium."
         const val ERROR_REMOTE_REAUTH_REQUIRED =
             "Spotify playback needs one-time reauthorization. In Settings > Connected Accounts, disconnect Spotify, then sign in again."
+        const val ERROR_APP_REMOTE_AUTH_REQUIRED =
+            "Spotify playback still needs the Spotify app to approve this build. Open Spotify on this device, make sure the account is Premium, and verify this app's package name and signing SHA-1 are registered in the Spotify developer dashboard."
         const val ERROR_PLAYBACK_UNCONFIRMED =
             "Spotify didn't start playback. Open the Spotify app, then try again."
         const val ERROR_APP_REMOTE_UNSUPPORTED =

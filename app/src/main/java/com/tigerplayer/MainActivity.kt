@@ -157,7 +157,7 @@ class MainActivity : ComponentActivity() {
                         val token = authManager.exchangeCodeForToken(code, redirectUri, verifier)
                         if (token.isNotEmpty()) {
                             playerViewModel.onAuthSuccess(token)
-                            Log.d("SpotifyAuth", "Ritual complete. ViewModels will auto-sync.")
+                            Log.d("SpotifyAuth", "Token exchange complete. Spotify App Remote will connect on playback request.")
                         } else {
                             authMessage.value = "Spotify login returned an empty token. Please retry."
                         }

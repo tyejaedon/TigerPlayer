@@ -38,6 +38,10 @@
         android:tag="player_motion_sensor"
         android:label="@string/attr_player_motion_sensor" />
 
+    <queries>
+        <package android:name="com.spotify.music" />
+    </queries>
+
     <application
         android:name=".TigerPlayerApplication"
         android:allowBackup="true"

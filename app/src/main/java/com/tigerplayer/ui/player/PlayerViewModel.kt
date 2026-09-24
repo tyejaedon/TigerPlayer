@@ -696,7 +696,8 @@ class PlayerViewModel @Inject constructor(
 
     fun onAuthSuccess(token: String) {
         networkEngine.onAuthSuccess(token)
-        playbackEngine.connectSpotifyRemote()
+        // App Remote authorization is a separate Spotify-app handshake and must be opened lazily
+        // from an explicit playback action, not eagerly during the browser/custom-tab return path.
     }
 
     fun refreshBluetoothRouteState() {

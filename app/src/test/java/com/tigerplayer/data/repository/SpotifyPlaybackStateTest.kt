@@ -212,7 +212,7 @@ class SpotifyPlaybackStateTest {
     }
 
     @Test
-    fun `an explicit authorization failure reports reauthorization instead of a generic connection error`() = runTest {
+    fun `an explicit app remote authorization failure points to spotify app readiness instead of web token reauth`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val client = FakeAppRemoteClient().apply {
             failOnConnect = IllegalStateException(
@@ -223,10 +223,10 @@ class SpotifyPlaybackStateTest {
 
         repo.playTrack(spotifyTrack())
 
-        assertEquals(
-            "Spotify playback needs one-time reauthorization. In Settings > Connected Accounts, disconnect Spotify, then sign in again.",
-            repo.connectionError.value
-        )
+        val error = requireNotNull(repo.connectionError.value)
+        assertTrue(error.contains("Premium"))
+        assertTrue(error.contains("SHA-1"))
+        assertFalse(error.contains("disconnect Spotify", ignoreCase = true))
         assertNull(repo.spotifyPlaybackState.value)
     }
 
