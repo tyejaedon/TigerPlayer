@@ -114,7 +114,9 @@ class SpotifyRepository @Inject constructor(
                     id = id,
                     name = artists.first().name,
                     source = ArtistSource.SPOTIFY,
-                    albumCount = artists.size
+                    albumCount = artists.size,
+                    imageUrl = albums.firstOrNull { album -> album.artists.any { it.id == id } }
+                        ?.images?.firstOrNull()?.url
                 )
             }
             .sortedBy { it.name.lowercase() }

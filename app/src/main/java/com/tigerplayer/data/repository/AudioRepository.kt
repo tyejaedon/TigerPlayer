@@ -196,7 +196,8 @@ class AudioRepository @Inject constructor(
                         genres = artist.genres.orEmpty()
                             .split(',')
                             .map(String::trim)
-                            .filter(String::isNotEmpty)
+                            .filter(String::isNotEmpty),
+                        imageUrl = artist.imageUrl
                     )
                 }
             }

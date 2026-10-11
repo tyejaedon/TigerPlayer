@@ -11,5 +11,6 @@ data class Artist(
     val source: ArtistSource,
     val trackCount: Int = 0,
     val albumCount: Int = 0,
-    val genres: List<String> = emptyList()
+    val genres: List<String> = emptyList(),
+    val imageUrl: String? = null
 )

@@ -11,6 +11,11 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+
+- **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
+  album counts, artist album lists, and swipe-back navigation. (#220)
+
 ### Fixed
 
 - **Spotify**: completing Spotify web login no longer immediately retries an App Remote bind during the browser return transition, which had been misclassifying local Spotify-app authorization failures as a stale web token and sending users into a disconnect/re-auth loop. The app now declares package visibility for `com.spotify.music`, keeps the Web token intact, and points App Remote failures to Spotify app readiness, Premium, and dashboard SHA-1/package registration instead. (#202)
