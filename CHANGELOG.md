@@ -15,6 +15,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 - **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
   album counts, artist album lists, and swipe-back navigation. (#220)
+- **Cover screen**: added album track browsing with play, add-to-queue, remove-from-queue swipe,
+  and long-press track actions. (#221)
 
 ### Fixed
 
