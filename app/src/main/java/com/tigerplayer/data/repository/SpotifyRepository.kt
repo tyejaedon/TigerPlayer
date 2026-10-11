@@ -3,6 +3,8 @@ package com.tigerplayer.data.repository
 import android.net.Uri
 import android.util.Log
 import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.model.Artist
+import com.tigerplayer.data.model.ArtistSource
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.remote.api.SpotifyApiService
 import com.tigerplayer.data.remote.model.SpotifyAlbum
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -102,6 +105,20 @@ class SpotifyRepository @Inject constructor(
 
     private val _userAlbums = MutableStateFlow<List<SpotifyAlbum>>(emptyList())
     val userAlbums = _userAlbums.asStateFlow()
+
+    fun getArtists(): Flow<List<Artist>> = userAlbums.map { albums ->
+        albums.flatMap { album -> album.artists }
+            .groupBy { it.id }
+            .map { (id, artists) ->
+                Artist(
+                    id = id,
+                    name = artists.first().name,
+                    source = ArtistSource.SPOTIFY,
+                    albumCount = artists.size
+                )
+            }
+            .sortedBy { it.name.lowercase() }
+    }
 
     // --- 3. AUTHENTICATION RITUALS ---
 

@@ -28,6 +28,13 @@ data class TrackStats(
     val playCount: Int
 )
 
+data class ArtistSummary(
+    val name: String,
+    val trackCount: Int,
+    val albumCount: Int,
+    val genres: String?
+)
+
 data class SonicFootprintStats(
     val acoustic: Long,
     val electronic: Long,
@@ -440,6 +447,51 @@ abstract class TigerDao {
 
     @Query("SELECT * FROM cached_tracks ORDER BY title ASC")
     abstract fun getCachedTracks(): Flow<List<CachedTrackEntity>>
+
+    @Query(
+        """
+        WITH artist_tracks AS (
+            SELECT
+                trim(CASE
+                    WHEN instr(lower(artist), ' featuring ') > 0 THEN substr(artist, 1, instr(lower(artist), ' featuring ') - 1)
+                    WHEN instr(lower(artist), ' feat. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat. ') - 1)
+                    WHEN instr(lower(artist), ' feat.') > 0 THEN substr(artist, 1, instr(lower(artist), ' feat.') - 1)
+                    WHEN instr(lower(artist), ' ft. ') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft. ') - 1)
+                    WHEN instr(lower(artist), ' ft.') > 0 THEN substr(artist, 1, instr(lower(artist), ' ft.') - 1)
+                    WHEN instr(lower(artist), ' & ') > 0 THEN substr(artist, 1, instr(lower(artist), ' & ') - 1)
+                    WHEN instr(artist, ',') > 0 THEN substr(artist, 1, instr(artist, ',') - 1)
+                    WHEN instr(artist, '/') > 0 THEN substr(artist, 1, instr(artist, '/') - 1)
+                    WHEN instr(artist, ';') > 0 THEN substr(artist, 1, instr(artist, ';') - 1)
+                    WHEN instr(artist, '|') > 0 THEN substr(artist, 1, instr(artist, '|') - 1)
+                    ELSE artist
+                END) AS name,
+                album
+            FROM cached_tracks
+        ),
+        grouped_artists AS (
+            SELECT
+                MIN(name) AS name,
+                COUNT(*) AS trackCount,
+                COUNT(DISTINCT lower(trim(album))) AS albumCount
+            FROM artist_tracks
+            WHERE name != ''
+            GROUP BY lower(name)
+        )
+        SELECT
+            grouped_artists.name AS name,
+            grouped_artists.trackCount AS trackCount,
+            grouped_artists.albumCount AS albumCount,
+            artist_cache.genres AS genres
+        FROM grouped_artists
+        LEFT JOIN artist_cache ON artist_cache.artistName = lower(trim(grouped_artists.name))
+        WHERE :query = ''
+            OR instr(lower(grouped_artists.name), lower(:query)) > 0
+            OR instr(lower(coalesce(artist_cache.genres, '')), lower(:query)) > 0
+        ORDER BY lower(grouped_artists.name)
+        LIMIT :limit OFFSET :offset
+        """
+    )
+    abstract fun getArtistPage(query: String, limit: Int, offset: Int): Flow<List<ArtistSummary>>
 
     @Query(
         """
