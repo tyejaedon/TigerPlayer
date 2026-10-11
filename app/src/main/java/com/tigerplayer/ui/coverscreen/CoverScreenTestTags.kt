@@ -10,7 +10,12 @@ object CoverScreenTestTags {
     const val ARTISTS_GRID = "cover_screen_artists_grid"
     const val ARTISTS_EMPTY_STATE = "cover_screen_artists_empty_state"
     const val ARTIST_BACK = "cover_screen_artist_back"
+    const val ALBUM_TRACKS = "cover_screen_album_tracks"
+    const val ALBUM_BACK = "cover_screen_album_back"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"
+    fun track(id: String): String = "cover_screen_track_$id"
+    fun queueTrack(id: String): String = "cover_screen_queue_track_$id"
+    fun removeTrack(id: String): String = "cover_screen_remove_track_$id"
 }
