@@ -13,13 +13,17 @@ import com.tigerplayer.data.local.dao.TigerDao
 import com.tigerplayer.data.local.dao.TrackStats
 import com.tigerplayer.data.local.entity.CachedTrackEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
+import com.tigerplayer.data.model.Artist
+import com.tigerplayer.data.model.ArtistSource
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.source.LocalAudioDataSource
 import com.tigerplayer.data.source.SafFolderScanner
+import com.tigerplayer.di.IoDispatcher
 import com.tigerplayer.utils.NavidromeMapper.toAudioTrack
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CancellationException
@@ -43,11 +47,13 @@ class AudioRepository @Inject constructor(
     private val navidromeRepository: NavidromeRepository,
     private val statsEpoch: StatsEpoch,
     private val musicFolderRepository: MusicFolderRepository,
-    private val safFolderScanner: SafFolderScanner
+    private val safFolderScanner: SafFolderScanner,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
 
     companion object {
         private const val TAG = "AudioRepository"
+        private const val MAX_ARTISTS_PER_PAGE = 50
 
         // Coalesces bursts of MediaStore change notifications (e.g. a multi-file copy) into a
         // single incremental resync instead of triggering one per row.
@@ -174,6 +180,29 @@ class AudioRepository @Inject constructor(
         tigerDao.getCachedTracks().map { entities ->
             entities.map { it.toDomainModel() }
         }
+
+    fun getArtists(query: String, limit: Int, offset: Int): Flow<List<Artist>> {
+        val boundedLimit = limit.coerceIn(1, MAX_ARTISTS_PER_PAGE)
+        val boundedOffset = offset.coerceAtLeast(0)
+        return tigerDao.getArtistPage(query.trim(), boundedLimit, boundedOffset)
+            .map { artists ->
+                artists.map { artist ->
+                    Artist(
+                        id = artist.name.lowercase(),
+                        name = artist.name,
+                        source = ArtistSource.LOCAL,
+                        trackCount = artist.trackCount,
+                        albumCount = artist.albumCount,
+                        genres = artist.genres.orEmpty()
+                            .split(',')
+                            .map(String::trim)
+                            .filter(String::isNotEmpty)
+                    )
+                }
+            }
+            .flowOn(ioDispatcher)
+    }
+
     /**
      * Used specifically when the UI needs to display the ScanningOverlay.
      */

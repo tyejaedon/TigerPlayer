@@ -61,6 +61,7 @@ class PlayerViewModelTest {
         Dispatchers.setMain(dispatcher)
 
         every { playbackEngine.spotifyPlaybackState } returns MutableStateFlow(null)
+        every { playbackEngine.spotifyReauthRequired } returns MutableStateFlow(false)
         every { playbackEngine.getQueueSnapshotFlow() } returns flowOf(MediaControllerManager.QueueSnapshot())
 
         every { mediaControllerManager.isPlaying } returns MutableStateFlow(false)
@@ -127,4 +128,3 @@ class PlayerViewModelTest {
         verify(exactly = 0) { playbackEngine.connectSpotifyRemote() }
     }
 }
-
