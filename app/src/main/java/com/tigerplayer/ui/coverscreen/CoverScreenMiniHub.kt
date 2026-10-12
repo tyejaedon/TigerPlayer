@@ -14,14 +14,10 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,7 +46,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -522,14 +517,18 @@ fun CoverScreenMiniHub(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    CoverQueueSheet(
+                    CoverScreenQueueView(
                         queue = uiState.queue,
-                        currentId = track?.id,
+                        currentTrackId = track?.id,
                         currentIndex = uiState.currentQueueIndex,
+                        shuffleModeEnabled = uiState.isShuffleEnabled,
                         onTrackTapped = {
                             playerViewModel.playTrack(it)
                             queueVisible = false
-                        }
+                        },
+                        onRemoveFromQueue = playerViewModel::removeFromQueue,
+                        onMoveQueueItem = playerViewModel::moveQueueItem,
+                        onClearQueue = playerViewModel::clearQueue
                     )
                 }
             }
@@ -672,82 +671,6 @@ private fun CoverControlButton(
             tint = Color.White,
             modifier = Modifier.size(24.dp)
         )
-    }
-}
-
-@Composable
-private fun CoverQueueSheet(
-    queue: List<com.tigerplayer.data.model.AudioTrack>,
-    currentId: String?,
-    currentIndex: Int,
-    onTrackTapped: (com.tigerplayer.data.model.AudioTrack) -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 160.dp, max = 260.dp)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color.Black.copy(alpha = 0.08f),
-                        Color.Black.copy(alpha = 0.72f),
-                        Color.Black.copy(alpha = 0.84f)
-                    )
-                )
-            )
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-        val upcoming = remember(queue, currentIndex) {
-            if (currentIndex in queue.indices) queue.drop(currentIndex).take(9) else queue.take(9)
-        }
-
-        val queueListState = rememberLazyListState()
-
-        LazyColumn(
-            state = queueListState,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            items(upcoming, key = { it.id }) { track ->
-                val isCurrent = track.id == currentId
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (isCurrent) TigerNeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
-                            RoundedCornerShape(10.dp)
-                        )
-                        .minimumInteractiveComponentSize()
-                        .clickable(
-                            role = Role.Button,
-                            onClickLabel = "Play ${track.title}"
-                        ) { onTrackTapped(track) }
-                        .semantics {
-                            contentDescription = "Queue item ${track.title} by ${track.artist}"
-                        }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = track.title,
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isCurrent) FontWeight.Black else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = track.artist,
-                        color = Color.White.copy(alpha = 0.68f),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
     }
 }
 

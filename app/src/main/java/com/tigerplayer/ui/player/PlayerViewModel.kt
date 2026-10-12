@@ -509,6 +509,10 @@ class PlayerViewModel @Inject constructor(
         playbackEngine.removeFromQueue(index)
     }
 
+    fun clearQueue() {
+        playbackEngine.clearQueue()
+    }
+
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         playbackEngine.moveQueueItem(fromIndex, toIndex)
     }
