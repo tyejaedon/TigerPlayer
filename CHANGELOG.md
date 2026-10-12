@@ -23,8 +23,6 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   with top-edge swipe activation and optional voice input. (#223)
 - **Cover screen**: added categorized search results for artists, albums, and tracks, with no-results
   feedback plus immediate play and queue actions for matching tracks. (#224)
-- **Cover screen**: expanded queue browsing to the full queue with long-press reordering, confirmed
-  swipe removal, and a confirmed persistent clear-queue action. (#225)
 
 ### Fixed
 
