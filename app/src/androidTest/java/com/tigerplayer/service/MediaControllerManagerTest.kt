@@ -94,6 +94,20 @@ class MediaControllerManagerTest {
     }
 
     @Test
+    fun clearQueue_clearsControllerAndPersistsEmptyState() = runBlocking {
+        val mockController = mockk<MediaController>(relaxed = true)
+        manager.mediaController = mockController
+        every { mockController.mediaItemCount } returnsMany listOf(2, 0)
+
+        manager.clearQueue()
+
+        verify { mockController.clearMediaItems() }
+        coVerify(timeout = 2.seconds.inWholeMilliseconds) {
+            playbackPrefs.clearPlaybackState()
+        }
+    }
+
+    @Test
     fun crossfade_disable_restores_full_volume() = runBlocking {
         val mockController = mockk<MediaController>(relaxed = true)
         manager.mediaController = mockController
