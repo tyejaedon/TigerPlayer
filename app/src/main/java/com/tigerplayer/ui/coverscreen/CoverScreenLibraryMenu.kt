@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -56,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -112,6 +114,7 @@ fun CoverScreenLibraryMenu(
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
+    val view = LocalView.current
     val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val artists by libraryViewModel.artists.collectAsStateWithLifecycle()
     val selectedSource by libraryViewModel.selectedSource.collectAsStateWithLifecycle()
@@ -373,90 +376,146 @@ fun CoverScreenLibraryMenu(
                     )
                 }
 
-                CoverScreenLibraryTabRow(
-                    selectedTab = selectedTab,
-                    onTabSelected = { tab ->
-                        selectedTab = tab
-                        if (tab == CoverScreenLibraryTab.ARTISTS) {
-                            libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
+                if (searchActive && debouncedSearchQuery.isNotBlank()) {
+                    CoverScreenSearchResults(
+                        query = debouncedSearchQuery,
+                        artists = artists,
+                        albums = if (selectedSource == CoverScreenLibrarySource.LOCAL) {
+                            filteredLocalAlbums
+                        } else {
+                            spotifyCoverAlbums.filter {
+                                it.name.contains(debouncedSearchQuery, ignoreCase = true)
+                            }
+                        },
+                        tracks = playerState.allTracks,
+                        onArtistSelected = { artist ->
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
+                                spotifyAlbums.firstOrNull { album ->
+                                    album.artists.any { it.id == artist.id }
+                                }?.let { album ->
+                                    cloudViewModel.playSpotifyCollection(album.uri, album.name)
+                                    onDismiss()
+                                }
+                            } else {
+                                playerState.allTracks.firstOrNull { track ->
+                                    ArtistUtils.getBaseArtist(track.artist)
+                                        .equals(artist.name, ignoreCase = true)
+                                }?.let { track ->
+                                    playerViewModel.playTrack(track)
+                                    onDismiss()
+                                }
+                            }
+                        },
+                        onAlbumSelected = { album ->
+                            if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
+                                spotifyAlbums.firstOrNull { it.id == album.id }?.let {
+                                    cloudViewModel.playSpotifyCollection(it.uri, it.name)
+                                    onDismiss()
+                                }
+                            } else {
+                                selectedAlbum = album
+                            }
+                        },
+                        onPlayTrack = { track ->
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            playerViewModel.playTrack(track)
+                            onDismiss()
+                        },
+                        onQueueTrack = { track ->
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            playerViewModel.addToQueue(track)
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f)
+                    )
+                } else {
+                    CoverScreenLibraryTabRow(
+                        selectedTab = selectedTab,
+                        onTabSelected = { tab ->
+                            selectedTab = tab
+                            if (tab == CoverScreenLibraryTab.ARTISTS) {
+                                libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
+                            }
                         }
-                    }
-                )
+                    )
 
-                AnimatedContent(
-                    targetState = selectedTab,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .testTag(CoverScreenTestTags.LIBRARY_CONTENT),
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "Cover screen library tab"
-                ) { tab ->
-                    when (tab) {
-                        CoverScreenLibraryTab.ARTISTS -> Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = selectedSource == CoverScreenLibrarySource.LOCAL,
-                                    onClick = {
-                                        libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag(CoverScreenTestTags.LIBRARY_CONTENT),
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "Cover screen library tab"
+                    ) { tab ->
+                        when (tab) {
+                            CoverScreenLibraryTab.ARTISTS -> Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = selectedSource == CoverScreenLibrarySource.LOCAL,
+                                        onClick = {
+                                            libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
+                                        },
+                                        label = { Text("Local") },
+                                        modifier = Modifier.testTag(CoverScreenTestTags.LOCAL_SOURCE)
+                                    )
+                                    FilterChip(
+                                        selected = selectedSource == CoverScreenLibrarySource.SPOTIFY,
+                                        onClick = {
+                                            libraryViewModel.selectSource(CoverScreenLibrarySource.SPOTIFY)
+                                        },
+                                        label = { Text("Spotify") },
+                                        modifier = Modifier.testTag(CoverScreenTestTags.SPOTIFY_SOURCE)
+                                    )
+                                }
+                                CoverScreenArtistsGrid(
+                                    artists = artists,
+                                    albums = if (selectedSource == CoverScreenLibrarySource.LOCAL) {
+                                        filteredLocalAlbums
+                                    } else {
+                                        spotifyCoverAlbums.filter {
+                                            it.name.contains(debouncedSearchQuery, ignoreCase = true)
+                                        }
                                     },
-                                    label = { Text("Local") },
-                                    modifier = Modifier.testTag(CoverScreenTestTags.LOCAL_SOURCE)
-                                )
-                                FilterChip(
-                                    selected = selectedSource == CoverScreenLibrarySource.SPOTIFY,
-                                    onClick = {
-                                        libraryViewModel.selectSource(CoverScreenLibrarySource.SPOTIFY)
-                                    },
-                                    label = { Text("Spotify") },
-                                    modifier = Modifier.testTag(CoverScreenTestTags.SPOTIFY_SOURCE)
+                                    onAlbumSelected = { album ->
+                                        if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
+                                            val spotifyAlbum = spotifyAlbums.firstOrNull { it.id == album.id }
+                                            spotifyAlbum?.let {
+                                                cloudViewModel.playSpotifyCollection(it.uri, it.name)
+                                                onDismiss()
+                                            }
+                                        } else {
+                                            selectedAlbum = album
+                                        }
+                                    }
                                 )
                             }
-                            CoverScreenArtistsGrid(
-                                artists = artists,
-                                albums = if (selectedSource == CoverScreenLibrarySource.LOCAL) {
-                                    filteredLocalAlbums
-                                } else {
-                                    spotifyCoverAlbums.filter {
-                                        it.name.contains(debouncedSearchQuery, ignoreCase = true)
-                                    }
-                                },
-                                onAlbumSelected = { album ->
-                                    if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
-                                        val spotifyAlbum = spotifyAlbums.firstOrNull { it.id == album.id }
-                                        spotifyAlbum?.let {
-                                            cloudViewModel.playSpotifyCollection(it.uri, it.name)
-                                            onDismiss()
-                                        }
-                                    } else {
-                                        selectedAlbum = album
-                                    }
+
+                            CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
+                                albums = filteredLocalAlbums,
+                                onAlbumSelected = { selectedAlbum = it }
+                            )
+
+                            CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(
+                                playlists = filteredPlaylists,
+                                onPlaylistSelected = { selectedPlaylist = it }
+                            )
+
+                            CoverScreenLibraryTab.SPOTIFY_PLAYLISTS -> SpotifyPlaylistPicker(
+                                authenticated = spotifyAuthenticated,
+                                playlists = filteredSpotifyPlaylists,
+                                onPlaylistSelected = { playlist ->
+                                    cloudViewModel.playSpotifyCollection(playlist.uri, playlist.name)
+                                    onDismiss()
                                 }
                             )
                         }
-
-                        CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
-                            albums = filteredLocalAlbums,
-                            onAlbumSelected = { selectedAlbum = it }
-                        )
-
-                        CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(
-                            playlists = filteredPlaylists,
-                            onPlaylistSelected = { selectedPlaylist = it }
-                        )
-
-                        CoverScreenLibraryTab.SPOTIFY_PLAYLISTS -> SpotifyPlaylistPicker(
-                            authenticated = spotifyAuthenticated,
-                            playlists = filteredSpotifyPlaylists,
-                            onPlaylistSelected = { playlist ->
-                                cloudViewModel.playSpotifyCollection(playlist.uri, playlist.name)
-                                onDismiss()
-                            }
-                        )
                     }
                 }
             }
