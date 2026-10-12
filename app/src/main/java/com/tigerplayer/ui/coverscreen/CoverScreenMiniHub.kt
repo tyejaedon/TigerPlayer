@@ -14,7 +14,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -272,8 +271,6 @@ fun CoverScreenMiniHub(
     val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsStateWithLifecycle()
     val daylistMeta by dashboardViewModel.daylistMeta.collectAsStateWithLifecycle()
     val discoveryMeta by dashboardViewModel.discoveryMeta.collectAsStateWithLifecycle()
-    val auralNexusViewModel: AuralNexusViewModel = hiltViewModel()
-    val equalizerState by auralNexusViewModel.uiState.collectAsStateWithLifecycle()
     val track = uiState.currentTrack
     val view = LocalView.current
     val density = LocalDensity.current
@@ -281,7 +278,6 @@ fun CoverScreenMiniHub(
     // FIX: Interactive Sheet State (Enhanced for Cover Screen Stability)
     var queueVisible by remember { mutableStateOf(false) }
     var libraryVisible by remember { mutableStateOf(false) }
-    var playbackSettingsVisible by remember { mutableStateOf(false) }
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
@@ -308,31 +304,30 @@ fun CoverScreenMiniHub(
                 tapSlopPx = tapSlopPx,
                 shouldIgnoreGestureAt = { position ->
                     val positionInRoot = coverScreenCoordinates?.localToRoot(position) ?: position
-                    playbackSettingsVisible ||
-                        discoveryTouchBounds?.contains(positionInRoot) == true
+                    discoveryTouchBounds?.contains(positionInRoot) == true
                 },
                 onTap = {
-                    if (libraryVisible || playbackSettingsVisible) return@coverScreenGestures
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     playerViewModel.togglePlayPause()
                 },
                 onSwipeLeft = {
-                    if (libraryVisible || playbackSettingsVisible) return@coverScreenGestures
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToNext()
                 },
                 onSwipeRight = {
-                    if (libraryVisible || playbackSettingsVisible) return@coverScreenGestures
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToPrevious()
                 },
                 onSwipeUp = {
-                    if (libraryVisible || playbackSettingsVisible) return@coverScreenGestures
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = true
                 },
                 onSwipeDown = {
-                    if (libraryVisible || playbackSettingsVisible) return@coverScreenGestures
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = false
                     searchOnLibraryOpen = true
@@ -630,32 +625,6 @@ fun CoverScreenMiniHub(
                 showSearchInitially = searchOnLibraryOpen
             )
         }
-
-        if (playbackSettingsVisible) {
-            CoverScreenPlaybackSettings(
-                isShuffleEnabled = uiState.isShuffleEnabled,
-                repeatMode = uiState.repeatMode,
-                volume = uiState.coverScreenVolume,
-                selectedEqPreset = equalizerState.currentMood,
-                onToggleShuffle = {
-                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    playerViewModel.toggleShuffle()
-                },
-                onCycleRepeat = {
-                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    playerViewModel.toggleRepeat()
-                },
-                onAdjustVolume = { delta ->
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    playerViewModel.adjustCoverScreenVolume(delta)
-                },
-                onSelectEqPreset = { preset: CoverScreenEqPreset ->
-                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    auralNexusViewModel.setMoodPreset(preset.displayName)
-                },
-                onClose = { playbackSettingsVisible = false }
-            )
-        }
     }
 }
 
@@ -776,7 +745,6 @@ private fun CoverControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
     testTag: String? = null
 ) {
     Box(
@@ -784,9 +752,7 @@ private fun CoverControlButton(
             .minimumInteractiveComponentSize()
             .size(48.dp)
             .background(Color.White.copy(alpha = 0.12f), CircleShape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .then(if (testTag == null) Modifier else Modifier.testTag(testTag)),
-        contentAlignment = Alignment.Center
+            .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
     ) {
         Icon(
             imageVector = icon,
