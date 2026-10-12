@@ -20,6 +20,11 @@ object CoverScreenTestTags {
     const val LOCAL_SOURCE = "cover_screen_local_source"
     const val SPOTIFY_SOURCE = "cover_screen_spotify_source"
     const val LIBRARY_SPOTIFY_AUTH_REQUIRED = "cover_screen_spotify_auth_required"
+    const val SEARCH_OPEN = "cover_screen_search_open"
+    const val SEARCH_FIELD = "cover_screen_search_field"
+    const val SEARCH_VOICE = "cover_screen_search_voice"
+    const val SEARCH_CLOSE = "cover_screen_search_close"
+    const val SEARCH_VOICE_STATUS = "cover_screen_search_voice_status"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"
