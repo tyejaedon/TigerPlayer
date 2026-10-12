@@ -163,6 +163,10 @@ class PlaybackEngine @Inject constructor(
         mediaControllerManager.removeFromQueueAt(index)
     }
 
+    fun clearQueue() {
+        mediaControllerManager.clearQueue()
+    }
+
     fun playQueueItem(index: Int) {
         mediaControllerManager.playQueueItem(index)
     }
