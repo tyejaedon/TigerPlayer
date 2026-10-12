@@ -1,0 +1,477 @@
+package com.tigerplayer.ui.coverscreen
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.data.remote.model.SpotifyPlaylist
+import com.tigerplayer.ui.cloud.CloudViewModel
+import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.utils.ArtistUtils
+
+enum class CoverScreenLibraryTab(val label: String) {
+    ARTISTS("Artists"),
+    ALBUMS("Albums"),
+    PLAYLISTS("Playlists"),
+    SPOTIFY_PLAYLISTS("Spotify Playlists")
+}
+
+@Composable
+fun CoverScreenLibraryTabRow(
+    selectedTab: CoverScreenLibraryTab,
+    onTabSelected: (CoverScreenLibraryTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    PrimaryScrollableTabRow(
+        selectedTabIndex = CoverScreenLibraryTab.entries.indexOf(selectedTab),
+        edgePadding = 8.dp,
+        modifier = modifier.testTag(CoverScreenTestTags.LIBRARY_TABS)
+    ) {
+        CoverScreenLibraryTab.entries.forEach { tab ->
+            Tab(
+                selected = tab == selectedTab,
+                onClick = { onTabSelected(tab) },
+                modifier = Modifier.testTag(CoverScreenTestTags.libraryTab(tab.name)),
+                text = { Text(tab.label) }
+            )
+        }
+    }
+}
+
+@Composable
+fun CoverScreenLibraryMenu(
+    playerViewModel: PlayerViewModel,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    libraryViewModel: CoverScreenLibraryViewModel = hiltViewModel(),
+    cloudViewModel: CloudViewModel = hiltViewModel()
+) {
+    val density = LocalDensity.current
+    val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val artists by libraryViewModel.artists.collectAsStateWithLifecycle()
+    val selectedSource by libraryViewModel.selectedSource.collectAsStateWithLifecycle()
+    val playlists by playerViewModel.customPlaylists.collectAsStateWithLifecycle()
+    val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
+    val spotifyAlbums by cloudViewModel.userAlbums.collectAsStateWithLifecycle()
+    val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
+    var selectedTab by remember { mutableStateOf(CoverScreenLibraryTab.ARTISTS) }
+    var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
+    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
+
+    val localAlbums = remember(playerState.allTracks) {
+        playerState.allTracks
+            .filter { it.album.isNotBlank() }
+            .groupBy { track ->
+                "${ArtistUtils.getBaseArtist(track.artist).lowercase()}|${track.album.lowercase()}"
+            }
+            .map { (id, tracks) ->
+                val first = tracks.first()
+                CoverScreenAlbum(
+                    id = id,
+                    artistId = ArtistUtils.getBaseArtist(first.artist).lowercase(),
+                    name = first.album,
+                    trackCount = tracks.size,
+                    artworkUrl = first.artworkUri.toString().takeUnless { it.isBlank() }
+                )
+            }
+            .sortedBy { it.name.lowercase() }
+    }
+    val spotifyCoverAlbums = remember(spotifyAlbums) {
+        spotifyAlbums.flatMap { album ->
+            album.artists.map { artist ->
+                CoverScreenAlbum(
+                    id = album.id,
+                    artistId = artist.id,
+                    name = album.name,
+                    trackCount = album.totalTracks ?: 0,
+                    artworkUrl = album.images?.firstOrNull()?.url
+                )
+            }
+        }
+    }
+
+    BackHandler(enabled = true) {
+        when {
+            selectedAlbum != null -> selectedAlbum = null
+            selectedPlaylist != null -> selectedPlaylist = null
+            else -> onDismiss()
+        }
+    }
+
+    LaunchedEffect(selectedPlaylist?.id) {
+        val playlistId = selectedPlaylist?.id ?: return@LaunchedEffect
+        playerViewModel.getPlaylistTracks(playlistId).collect { selectedPlaylistTracks = it }
+    }
+
+    LaunchedEffect(spotifyAuthenticated) {
+        if (spotifyAuthenticated) cloudViewModel.forceRefreshArchives()
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag(CoverScreenTestTags.LIBRARY_MENU)
+            .semantics { contentDescription = "Cover screen library" },
+        color = MaterialTheme.colorScheme.background,
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column {
+            if (selectedAlbum != null || selectedPlaylist != null) {
+                val album = selectedAlbum
+                val playlist = selectedPlaylist
+                val albumTracks = if (album == null) {
+                    emptyList()
+                } else {
+                    playerState.allTracks.filter { track ->
+                        track.album == album.name &&
+                            ArtistUtils.getBaseArtist(track.artist).equals(album.artistId, ignoreCase = true)
+                    }.sortedBy { it.trackNumber }
+                }
+                CoverScreenAlbumsView(
+                    album = album ?: CoverScreenAlbum(
+                        id = playlist!!.id.toString(),
+                        artistId = "playlist",
+                        name = playlist.name,
+                        trackCount = selectedPlaylistTracks.size,
+                        artworkUrl = playlist.artworkUri
+                    ),
+                    artistName = if (playlist != null) "Playlist" else albumTracks.firstOrNull()?.artist.orEmpty(),
+                    tracks = when {
+                        playlist != null -> selectedPlaylistTracks
+                        album != null -> albumTracks
+                        else -> emptyList()
+                    },
+                    onBack = {
+                        selectedAlbum = null
+                        selectedPlaylist = null
+                    },
+                    onPlayTrack = playerViewModel::playTrack,
+                    onAddToQueue = playerViewModel::addToQueue,
+                    onRemoveFromQueue = { track ->
+                        val index = playerState.queue.indexOfFirst { it.id == track.id }
+                        if (index >= 0) playerViewModel.removeFromQueue(index)
+                    }
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 4.dp, end = 12.dp, top = 4.dp)
+                        .pointerInput(Unit) {
+                            var totalDrag = 0f
+                            val swipeThreshold = with(density) { 80.dp.toPx() }
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { _, amount -> totalDrag += amount },
+                                onDragEnd = {
+                                    if (totalDrag > swipeThreshold) onDismiss()
+                                    totalDrag = 0f
+                                },
+                                onDragCancel = { totalDrag = 0f }
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag(CoverScreenTestTags.LIBRARY_BACK)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to playback"
+                        )
+                    }
+                    Text(
+                        text = "Library",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.LibraryMusic,
+                        contentDescription = null
+                    )
+                }
+
+                CoverScreenLibraryTabRow(
+                    selectedTab = selectedTab,
+                    onTabSelected = { tab ->
+                        selectedTab = tab
+                        if (tab == CoverScreenLibraryTab.ARTISTS) {
+                            libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
+                        }
+                    }
+                )
+
+                AnimatedContent(
+                    targetState = selectedTab,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag(CoverScreenTestTags.LIBRARY_CONTENT),
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "Cover screen library tab"
+                ) { tab ->
+                    when (tab) {
+                        CoverScreenLibraryTab.ARTISTS -> Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = selectedSource == CoverScreenLibrarySource.LOCAL,
+                                    onClick = {
+                                        libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
+                                    },
+                                    label = { Text("Local") },
+                                    modifier = Modifier.testTag(CoverScreenTestTags.LOCAL_SOURCE)
+                                )
+                                FilterChip(
+                                    selected = selectedSource == CoverScreenLibrarySource.SPOTIFY,
+                                    onClick = {
+                                        libraryViewModel.selectSource(CoverScreenLibrarySource.SPOTIFY)
+                                    },
+                                    label = { Text("Spotify") },
+                                    modifier = Modifier.testTag(CoverScreenTestTags.SPOTIFY_SOURCE)
+                                )
+                            }
+                            CoverScreenArtistsGrid(
+                                artists = artists,
+                                albums = if (selectedSource == CoverScreenLibrarySource.LOCAL) {
+                                    localAlbums
+                                } else {
+                                    spotifyCoverAlbums
+                                },
+                                onAlbumSelected = { album ->
+                                    if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
+                                        val spotifyAlbum = spotifyAlbums.firstOrNull { it.id == album.id }
+                                        spotifyAlbum?.let {
+                                            cloudViewModel.playSpotifyCollection(it.uri, it.name)
+                                            onDismiss()
+                                        }
+                                    } else {
+                                        selectedAlbum = album
+                                    }
+                                }
+                            )
+                        }
+
+                        CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
+                            albums = localAlbums,
+                            onAlbumSelected = { selectedAlbum = it }
+                        )
+
+                        CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(
+                            playlists = playlists,
+                            onPlaylistSelected = { selectedPlaylist = it }
+                        )
+
+                        CoverScreenLibraryTab.SPOTIFY_PLAYLISTS -> SpotifyPlaylistPicker(
+                            authenticated = spotifyAuthenticated,
+                            playlists = spotifyPlaylists,
+                            onPlaylistSelected = { playlist ->
+                                cloudViewModel.playSpotifyCollection(playlist.uri, playlist.name)
+                                onDismiss()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumPicker(
+    albums: List<CoverScreenAlbum>,
+    onAlbumSelected: (CoverScreenAlbum) -> Unit
+) {
+    if (albums.isEmpty()) {
+        EmptyLibraryMessage("No albums available")
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 144.dp),
+            contentPadding = PaddingValues(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(albums, key = CoverScreenAlbum::id) { album ->
+                LibraryTile(
+                    title = album.name,
+                    subtitle = "${album.trackCount} tracks",
+                    description = "Album ${album.name}",
+                    imageUrl = album.artworkUrl,
+                    icon = Icons.Filled.Album,
+                    modifier = Modifier.testTag(CoverScreenTestTags.libraryAlbum(album.id)),
+                    onClick = { onAlbumSelected(album) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalPlaylistPicker(
+    playlists: List<Playlist>,
+    onPlaylistSelected: (Playlist) -> Unit
+) {
+    if (playlists.isEmpty()) {
+        EmptyLibraryMessage("No playlists available")
+    } else {
+        LazyColumn(contentPadding = PaddingValues(12.dp)) {
+            items(playlists.size, key = { playlists[it].id }) { index ->
+                val playlist = playlists[index]
+                LibraryTile(
+                    title = playlist.name,
+                    subtitle = "${playlist.trackCount} tracks",
+                    description = "Playlist ${playlist.name}",
+                    imageUrl = playlist.artworkUri,
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    modifier = Modifier.testTag(CoverScreenTestTags.localPlaylist(playlist.id)),
+                    onClick = { onPlaylistSelected(playlist) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpotifyPlaylistPicker(
+    authenticated: Boolean,
+    playlists: List<SpotifyPlaylist>,
+    onPlaylistSelected: (SpotifyPlaylist) -> Unit
+) {
+    if (!authenticated) {
+        EmptyLibraryMessage(
+            message = "Sign in to Spotify to browse your playlists",
+            testTag = CoverScreenTestTags.LIBRARY_SPOTIFY_AUTH_REQUIRED
+        )
+    } else if (playlists.isEmpty()) {
+        EmptyLibraryMessage("No Spotify playlists available")
+    } else {
+        LazyColumn(contentPadding = PaddingValues(12.dp)) {
+            items(playlists.size, key = { playlists[it].id }) { index ->
+                val playlist = playlists[index]
+                LibraryTile(
+                    title = playlist.name,
+                    subtitle = playlist.owner.displayName,
+                    description = "Spotify playlist ${playlist.name}",
+                    imageUrl = playlist.images?.firstOrNull()?.url,
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    modifier = Modifier.testTag(CoverScreenTestTags.spotifyPlaylist(playlist.id)),
+                    onClick = { onPlaylistSelected(playlist) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTile(
+    title: String,
+    subtitle: String,
+    description: String,
+    imageUrl: String?,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (imageUrl.isNullOrBlank()) {
+                Icon(icon, contentDescription = null)
+            } else {
+                coil.compose.AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            }
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                Text(text = title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyLibraryMessage(message: String, testTag: String? = null) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = message,
+            modifier = Modifier
+                .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
+                .semantics { contentDescription = message },
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
