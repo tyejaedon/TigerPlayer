@@ -2,6 +2,7 @@ package com.tigerplayer.ui.main
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import com.tigerplayer.engine.CoverScreenStatsSnapshot
 import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
 import com.tigerplayer.ui.coverscreen.CoverScreenWindowState
 import com.tigerplayer.ui.player.PlayerUiState
@@ -34,6 +35,8 @@ class CoverScreenMountingTest {
     private fun mockPlayerViewModel(): PlayerViewModel {
         val playerViewModel = mockk<PlayerViewModel>(relaxed = true)
         every { playerViewModel.uiState } returns MutableStateFlow(PlayerUiState())
+        every { playerViewModel.coverScreenStats } returns MutableStateFlow(CoverScreenStatsSnapshot())
+        every { playerViewModel.sonicFootprintOpenRequest } returns MutableStateFlow(false)
         return playerViewModel
     }
 

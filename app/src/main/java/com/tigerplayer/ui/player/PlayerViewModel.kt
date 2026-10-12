@@ -28,6 +28,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.minutes
 import javax.inject.Inject
 
 enum class PlayerVisualMode { ARTWORK, WAVEFORM, VORTEX, SONIC_PRISM }
@@ -115,6 +116,9 @@ class PlayerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    private val _sonicFootprintOpenRequest = MutableStateFlow(false)
+    val sonicFootprintOpenRequest: StateFlow<Boolean> = _sonicFootprintOpenRequest.asStateFlow()
+
     private val _trackColor = MutableStateFlow(Color(0xFF4FC3F7))
     val trackColor: StateFlow<Color> = _trackColor.asStateFlow()
 
@@ -150,6 +154,13 @@ class PlayerViewModel @Inject constructor(
         unifiedTracksFlow,
         metadataEngine.artistDetails
     ).stateIn(viewModelScope, SharingStarted.Lazily, DetailedStatsUiState())
+
+    val coverScreenStats: StateFlow<CoverScreenStatsSnapshot> =
+        statsEngine.getCoverScreenStatsSnapshotFlow().stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(replayExpirationMillis = 5.minutes.inWholeMilliseconds),
+            CoverScreenStatsSnapshot()
+        )
 
     val customPlaylists: StateFlow<List<Playlist>> = combine(
         libraryEngine.getCustomPlaylists(),
@@ -524,6 +535,14 @@ class PlayerViewModel @Inject constructor(
 
     fun setMainViewState(state: MainViewState) {
         _uiState.update { it.copy(mainViewState = state) }
+    }
+
+    fun requestSonicFootprintOpen() {
+        _sonicFootprintOpenRequest.value = true
+    }
+
+    fun consumeSonicFootprintOpenRequest() {
+        _sonicFootprintOpenRequest.value = false
     }
 
     // ==========================================

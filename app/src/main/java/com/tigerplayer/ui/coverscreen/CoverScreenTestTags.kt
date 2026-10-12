@@ -34,6 +34,8 @@ object CoverScreenTestTags {
     const val QUEUE_CLEAR_CONFIRM = "cover_screen_queue_clear_confirm"
     const val QUEUE_REMOVE_DIALOG = "cover_screen_queue_remove_dialog"
     const val QUEUE_REMOVE_CONFIRM = "cover_screen_queue_remove_confirm"
+    const val STATS_WIDGET = "cover_screen_stats_widget"
+    const val STATS_CHART = "cover_screen_stats_chart"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"
