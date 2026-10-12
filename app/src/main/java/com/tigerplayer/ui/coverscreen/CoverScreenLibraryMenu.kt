@@ -1,6 +1,13 @@
 package com.tigerplayer.ui.coverscreen
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,11 +48,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -58,6 +68,9 @@ import com.tigerplayer.data.remote.model.SpotifyPlaylist
 import com.tigerplayer.ui.cloud.CloudViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.utils.ArtistUtils
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 enum class CoverScreenLibraryTab(val label: String) {
     ARTISTS("Artists"),
@@ -93,10 +106,12 @@ fun CoverScreenLibraryMenu(
     playerViewModel: PlayerViewModel,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    showSearchInitially: Boolean = false,
     libraryViewModel: CoverScreenLibraryViewModel = hiltViewModel(),
     cloudViewModel: CloudViewModel = hiltViewModel()
 ) {
     val density = LocalDensity.current
+    val context = LocalContext.current
     val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val artists by libraryViewModel.artists.collectAsStateWithLifecycle()
     val selectedSource by libraryViewModel.selectedSource.collectAsStateWithLifecycle()
@@ -108,6 +123,49 @@ fun CoverScreenLibraryMenu(
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
+    var searchActive by remember { mutableStateOf(showSearchInitially) }
+    var searchQuery by remember { mutableStateOf("") }
+    var debouncedSearchQuery by remember { mutableStateOf("") }
+    var voiceSearchError by remember { mutableStateOf<String?>(null) }
+    val voiceSearchAvailable = remember(context) {
+        SpeechRecognizer.isRecognitionAvailable(context)
+    }
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val recognizedText = result.data
+                ?.getStringArrayListExtra(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+            if (!recognizedText.isNullOrBlank()) {
+                searchQuery = recognizedText
+                voiceSearchError = null
+            } else {
+                voiceSearchError = "No speech was recognized. Try again or type to search."
+            }
+        }
+    }
+
+    @OptIn(FlowPreview::class)
+    LaunchedEffect(searchActive) {
+        if (!searchActive) {
+            searchQuery = ""
+            debouncedSearchQuery = ""
+            libraryViewModel.setSearchQuery("")
+            return@LaunchedEffect
+        }
+        snapshotFlow { searchQuery }
+            .debounce(300)
+            .distinctUntilChanged()
+            .collect { query ->
+                debouncedSearchQuery = query.trim()
+                libraryViewModel.setSearchQuery(query)
+            }
+    }
+
+    LaunchedEffect(showSearchInitially) {
+        if (showSearchInitially) searchActive = true
+    }
 
     val localAlbums = remember(playerState.allTracks) {
         playerState.allTracks
@@ -140,11 +198,35 @@ fun CoverScreenLibraryMenu(
             }
         }
     }
+    val filteredLocalAlbums = remember(localAlbums, debouncedSearchQuery, playerState.allTracks) {
+        if (debouncedSearchQuery.isBlank()) localAlbums else localAlbums.filter { album ->
+            album.name.contains(debouncedSearchQuery, ignoreCase = true) ||
+                playerState.allTracks.any { track ->
+                    track.album == album.name &&
+                        (track.artist.contains(debouncedSearchQuery, ignoreCase = true) ||
+                            track.title.contains(debouncedSearchQuery, ignoreCase = true))
+                }
+        }
+    }
+    val filteredPlaylists = remember(playlists, debouncedSearchQuery) {
+        if (debouncedSearchQuery.isBlank()) playlists else playlists.filter {
+            it.name.contains(debouncedSearchQuery, ignoreCase = true)
+        }
+    }
+    val filteredSpotifyPlaylists = remember(spotifyPlaylists, debouncedSearchQuery) {
+        if (debouncedSearchQuery.isBlank()) spotifyPlaylists else spotifyPlaylists.filter {
+            it.name.contains(debouncedSearchQuery, ignoreCase = true)
+        }
+    }
 
     BackHandler(enabled = true) {
         when {
             selectedAlbum != null -> selectedAlbum = null
             selectedPlaylist != null -> selectedPlaylist = null
+            searchActive -> {
+                searchActive = false
+                voiceSearchError = null
+            }
             else -> onDismiss()
         }
     }
@@ -175,7 +257,13 @@ fun CoverScreenLibraryMenu(
                 } else {
                     playerState.allTracks.filter { track ->
                         track.album == album.name &&
-                            ArtistUtils.getBaseArtist(track.artist).equals(album.artistId, ignoreCase = true)
+                            ArtistUtils.getBaseArtist(track.artist).equals(
+                                album.artistId,
+                                ignoreCase = true
+                            ) &&
+                            (debouncedSearchQuery.isBlank() ||
+                                track.title.contains(debouncedSearchQuery, ignoreCase = true) ||
+                                track.artist.contains(debouncedSearchQuery, ignoreCase = true))
                     }.sortedBy { it.trackNumber }
                 }
                 CoverScreenAlbumsView(
@@ -236,9 +324,52 @@ fun CoverScreenLibraryMenu(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
+                    if (!searchActive) {
+                        IconButton(
+                            onClick = { searchActive = true },
+                            modifier = Modifier.testTag(CoverScreenTestTags.SEARCH_OPEN)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "Search library"
+                            )
+                        }
+                    }
                     Icon(
                         imageVector = Icons.Filled.LibraryMusic,
                         contentDescription = null
+                    )
+                }
+
+                if (searchActive) {
+                    CoverScreenSearchBar(
+                        query = searchQuery,
+                        onQueryChange = {
+                            searchQuery = it
+                            voiceSearchError = null
+                        },
+                        onVoiceSearch = {
+                            voiceSearchError = null
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(
+                                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                                )
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Search your music")
+                            }
+                            try {
+                                speechLauncher.launch(intent)
+                            } catch (error: ActivityNotFoundException) {
+                                voiceSearchError = "Voice search is unavailable. Type to search instead."
+                            }
+                        },
+                        onClose = {
+                            searchActive = false
+                            voiceSearchError = null
+                        },
+                        voiceSearchAvailable = voiceSearchAvailable,
+                        voiceSearchError = voiceSearchError,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
                 }
 
@@ -288,9 +419,11 @@ fun CoverScreenLibraryMenu(
                             CoverScreenArtistsGrid(
                                 artists = artists,
                                 albums = if (selectedSource == CoverScreenLibrarySource.LOCAL) {
-                                    localAlbums
+                                    filteredLocalAlbums
                                 } else {
-                                    spotifyCoverAlbums
+                                    spotifyCoverAlbums.filter {
+                                        it.name.contains(debouncedSearchQuery, ignoreCase = true)
+                                    }
                                 },
                                 onAlbumSelected = { album ->
                                     if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
@@ -307,18 +440,18 @@ fun CoverScreenLibraryMenu(
                         }
 
                         CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
-                            albums = localAlbums,
+                            albums = filteredLocalAlbums,
                             onAlbumSelected = { selectedAlbum = it }
                         )
 
                         CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(
-                            playlists = playlists,
+                            playlists = filteredPlaylists,
                             onPlaylistSelected = { selectedPlaylist = it }
                         )
 
                         CoverScreenLibraryTab.SPOTIFY_PLAYLISTS -> SpotifyPlaylistPicker(
                             authenticated = spotifyAuthenticated,
-                            playlists = spotifyPlaylists,
+                            playlists = filteredSpotifyPlaylists,
                             onPlaylistSelected = { playlist ->
                                 cloudViewModel.playSpotifyCollection(playlist.uri, playlist.name)
                                 onDismiss()
