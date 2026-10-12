@@ -19,6 +19,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   and long-press track actions. (#221)
 - **Cover screen**: added gesture-accessible library navigation for artists, albums, local playlists,
   and authenticated Spotify playlists. (#222)
+- **Cover screen**: added a 300 ms debounced library search for artists, albums, tracks, and playlists,
+  with top-edge swipe activation and optional voice input. (#223)
 
 ### Fixed
 
