@@ -48,6 +48,7 @@ class StatsEngine @Inject constructor(
     private val elapsedTimeSource: ElapsedTimeSource
 ) {
     private val _statsFilter = MutableStateFlow("Today")
+    private val sessionStartedAtMs = System.currentTimeMillis()
 
     fun updateStatsFilter(newFilter: String) {
         _statsFilter.value = newFilter
@@ -361,4 +362,9 @@ class StatsEngine @Inject constructor(
         /** Absolute floor; below this the listener effectively skipped. */
         const val MIN_LISTENED_MS = 5_000L
     }
+
+    private data class SessionStats(
+        val topArtists: List<ArtistStats>,
+        val trackPlayCount: Int
+    )
 }

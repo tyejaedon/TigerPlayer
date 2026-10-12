@@ -1,5 +1,11 @@
 package com.tigerplayer.ui.coverscreen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -71,21 +77,27 @@ fun CoverScreenStatsWidget(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (stats.hasHistory) {
-                Text(
-                    text = "Top artists: $topArtists",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                ListeningHistoryBars(
-                    dailyPlayCounts = stats.dailyPlayCounts,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(18.dp)
-                        .testTag(CoverScreenTestTags.STATS_CHART)
-                )
+            AnimatedVisibility(
+                visible = stats.hasHistory,
+                enter = fadeIn(tween(220)) + expandVertically(tween(220)),
+                exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Top artists: $topArtists",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    ListeningHistoryBars(
+                        dailyPlayCounts = stats.dailyPlayCounts,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(18.dp)
+                            .testTag(CoverScreenTestTags.STATS_CHART)
+                    )
+                }
             }
         }
     }

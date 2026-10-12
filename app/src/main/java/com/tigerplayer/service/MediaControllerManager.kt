@@ -67,7 +67,6 @@ class MediaControllerManager @Inject constructor(
         private const val FLOW_STATE_MIN_WINDOW_MS = 3_000L
         private const val FLOW_STATE_MAX_WINDOW_MS = 12_000L
         private const val FLOW_STATE_MIN_VOLUME = 0.18f
-        private const val FLOW_STATE_MAX_VOLUME = 1.0f
         private const val FLOW_STATE_STEP_MS = 90L
         private const val FLOW_STATE_FADE_IN_MS = 2_200L
         private const val QUEUE_ITEM_SEPARATOR = "\u001F"
@@ -123,6 +122,9 @@ class MediaControllerManager @Inject constructor(
     private val _pitch = MutableStateFlow(1f)
     val pitch: StateFlow<Float> = _pitch
 
+    private val _volume = MutableStateFlow(1f)
+    val volume: StateFlow<Float> = _volume
+
     private val _mediaControllerState = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val mediaControllerState: SharedFlow<Unit> = _mediaControllerState
 
@@ -134,6 +136,7 @@ class MediaControllerManager @Inject constructor(
     private var infinitePlayJob: Job? = null
     private var flowStateFadeOutJob: Job? = null
     private var flowStateFadeInJob: Job? = null
+    private var fadeOutAndPauseJob: Job? = null
     private var lastInfiniteAnchorId: String? = null
     private var activeFlowStateMediaId: String? = null
     private var pendingFlowStateFadeIn = false
@@ -233,6 +236,7 @@ class MediaControllerManager @Inject constructor(
                 audioReactiveHapticsEnabled = settings.audioReactiveHaptics
                 resumeOnBluetoothConnect = settings.resumeOnBluetoothConnect
                 resumeOnWiredHeadsetConnect = settings.resumeOnWiredHeadsetConnect
+                setVolume(settings.coverScreenVolume)
 
                 if (!flowStateEnabled) {
                     resetFlowStatePipeline(restoreFullVolume = true)
@@ -253,8 +257,9 @@ class MediaControllerManager @Inject constructor(
         val controller = mediaController ?: return
         if (!controller.isPlaying) return
 
-        managerScope.launch {
-            val startVolume = controller.volume.coerceIn(0f, FLOW_STATE_MAX_VOLUME)
+        fadeOutAndPauseJob?.cancel()
+        fadeOutAndPauseJob = managerScope.launch {
+            val startVolume = controller.volume.coerceIn(0f, _volume.value)
             val steps = 60
             val stepDelay = (durationMs / steps).coerceAtLeast(20L)
             for (step in 1..steps) {
@@ -265,7 +270,7 @@ class MediaControllerManager @Inject constructor(
             }
             mediaController?.let {
                 it.pause()
-                it.volume = FLOW_STATE_MAX_VOLUME
+                it.volume = _volume.value
             }
         }
     }
@@ -290,6 +295,7 @@ class MediaControllerManager @Inject constructor(
                 _isPlaying.value = controller.isPlaying
                 _shuffleModeEnabled.value = controller.shuffleModeEnabled
                 _repeatMode.value = controller.repeatMode
+                controller.volume = _volume.value
                 updateCurrentQueuePointer(controller)
 
                 setupPlayerListener(controller)
@@ -359,7 +365,7 @@ class MediaControllerManager @Inject constructor(
                 } else {
                     pendingFlowStateFadeIn = false
                     flowStateFadeInJob?.cancel()
-                    controller.volume = FLOW_STATE_MAX_VOLUME
+                    controller.volume = _volume.value
                 }
                 if (sleepTimerController.state.value.mode == SleepTimerMode.END_OF_TRACK &&
                     reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
@@ -501,7 +507,9 @@ class MediaControllerManager @Inject constructor(
         activeFlowStateMediaId = mediaId
         pendingFlowStateFadeIn = true
 
-        val startVolume = controller.volume.coerceIn(FLOW_STATE_MIN_VOLUME, FLOW_STATE_MAX_VOLUME)
+        val targetVolume = _volume.value
+        val startVolume = controller.volume.coerceIn(0f, targetVolume)
+        val fadeVolume = targetVolume * FLOW_STATE_MIN_VOLUME
         val fadeDurationMs = remainingMs.coerceIn(1_400L, flowStateWindowMs)
         val steps = (fadeDurationMs / FLOW_STATE_STEP_MS).coerceAtLeast(1L).toInt()
 
@@ -512,13 +520,13 @@ class MediaControllerManager @Inject constructor(
 
                 val t = step.toFloat() / steps.toFloat()
                 val smooth = t * t * (3f - (2f * t))
-                val volume = lerp(startVolume, FLOW_STATE_MIN_VOLUME, smooth)
+                val volume = lerp(startVolume, fadeVolume, smooth)
                 activeController.volume = volume
                 delay(FLOW_STATE_STEP_MS.milliseconds)
             }
 
             mediaController?.takeIf { it.currentMediaItem?.mediaId == mediaId }?.let {
-                it.volume = FLOW_STATE_MIN_VOLUME
+                it.volume = fadeVolume
             }
         }
     }
@@ -530,7 +538,8 @@ class MediaControllerManager @Inject constructor(
         flowStateFadeInJob?.cancel()
         flowStateFadeInJob = managerScope.launch {
             val controller = mediaController ?: return@launch
-            val startVolume = controller.volume.coerceIn(FLOW_STATE_MIN_VOLUME, FLOW_STATE_MAX_VOLUME)
+            val targetVolume = _volume.value
+            val startVolume = controller.volume.coerceIn(0f, targetVolume)
             val steps = (FLOW_STATE_FADE_IN_MS / FLOW_STATE_STEP_MS).coerceAtLeast(1L).toInt()
 
             for (step in 1..steps) {
@@ -539,13 +548,13 @@ class MediaControllerManager @Inject constructor(
 
                 val t = step.toFloat() / steps.toFloat()
                 val smooth = 1f - ((1f - t) * (1f - t))
-                val volume = lerp(startVolume, FLOW_STATE_MAX_VOLUME, smooth)
+                val volume = lerp(startVolume, targetVolume, smooth)
                 activeController.volume = volume
                 delay(FLOW_STATE_STEP_MS.milliseconds)
             }
 
             mediaController?.takeIf { it.currentMediaItem?.mediaId == targetId }?.let {
-                it.volume = FLOW_STATE_MAX_VOLUME
+                it.volume = targetVolume
             }
             pendingFlowStateFadeIn = false
         }
@@ -627,7 +636,7 @@ class MediaControllerManager @Inject constructor(
         pendingFlowStateFadeIn = false
 
         if (restoreFullVolume) {
-            mediaController?.volume = FLOW_STATE_MAX_VOLUME
+            mediaController?.volume = _volume.value
         }
     }
 
@@ -1047,6 +1056,22 @@ class MediaControllerManager @Inject constructor(
             controller.prepare()
         }
         controller.play()
+    }
+
+    fun setVolume(volume: Float) {
+        val safeVolume = volume.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 1f
+        if (safeVolume == _volume.value) return
+
+        _volume.value = safeVolume
+        flowStateFadeOutJob?.cancel()
+        flowStateFadeInJob?.cancel()
+        fadeOutAndPauseJob?.cancel()
+        flowStateFadeOutJob = null
+        flowStateFadeInJob = null
+        fadeOutAndPauseJob = null
+        activeFlowStateMediaId = null
+        pendingFlowStateFadeIn = false
+        mediaController?.volume = safeVolume
     }
 
     fun pause() = mediaController?.pause()

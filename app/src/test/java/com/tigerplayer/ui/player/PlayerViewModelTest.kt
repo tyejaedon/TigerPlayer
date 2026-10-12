@@ -21,6 +21,7 @@ import com.tigerplayer.ui.home.HomeUiState
 import com.tigerplayer.utils.BluetoothDeviceInfo
 import com.tigerplayer.utils.BluetoothDeviceManager
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -69,6 +70,7 @@ class PlayerViewModelTest {
         every { mediaControllerManager.currentPosition } returns MutableStateFlow(0L)
         every { mediaControllerManager.shuffleModeEnabled } returns MutableStateFlow(false)
         every { mediaControllerManager.repeatMode } returns MutableStateFlow(Player.REPEAT_MODE_OFF)
+        every { mediaControllerManager.volume } returns MutableStateFlow(1f)
         every { mediaControllerManager.playbackSpeed } returns MutableStateFlow(1f)
         every { mediaControllerManager.pitch } returns MutableStateFlow(1f)
 
@@ -139,5 +141,22 @@ class PlayerViewModelTest {
 
         viewModel.consumeSonicFootprintOpenRequest()
         assertEquals(false, viewModel.sonicFootprintOpenRequest.value)
+    }
+
+    @Test
+    fun `cover screen volume is normalized persisted and applied`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.setCoverScreenVolume(0.42f)
+        advanceUntilIdle()
+
+        assertEquals(0.42f, viewModel.uiState.value.coverScreenVolume, 0.001f)
+        coVerify(exactly = 1) { settingsDataStore.setCoverScreenVolume(0.42f) }
+        verify(exactly = 1) { mediaControllerManager.setVolume(0.42f) }
+
+        viewModel.setCoverScreenVolume(Float.NaN)
+        advanceUntilIdle()
+        assertEquals(1f, viewModel.uiState.value.coverScreenVolume, 0f)
     }
 }
