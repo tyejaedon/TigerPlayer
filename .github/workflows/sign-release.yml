@@ -147,6 +147,10 @@ jobs:
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
 
           "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
             --ks release.keystore \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
             --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
@@ -155,6 +159,10 @@ jobs:
             unsigned-apks/app-full-release-unsigned.apk
 
           "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
             --ks release.keystore \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
             --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
