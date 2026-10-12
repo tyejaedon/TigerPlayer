@@ -58,6 +58,13 @@ enum class ReplayGainMode {
     SMART
 }
 
+enum class CoverScreenEqPreset(val displayName: String) {
+    NEURAL_ADAPTIVE("Neural Adaptive"),
+    NIGHT_DRIVE("Night Drive"),
+    PURE_VOCAL("Pure Vocal"),
+    STUDIO_FLAT("Studio Flat")
+}
+
 data class TigerSettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pureAmoledBlack: Boolean = false,
@@ -79,7 +86,9 @@ data class TigerSettingsState(
     val prismSpectralAnalysis: PrismSpectralAnalysis = PrismSpectralAnalysis.FFT,
     val replayGainMode: ReplayGainMode = ReplayGainMode.SMART,
     val replayGainPreampDb: Float = 0f,
-    val replayGainPreventClipping: Boolean = true
+    val replayGainPreventClipping: Boolean = true,
+    val coverScreenVolume: Float = 1f,
+    val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE
 )
 
 @Singleton
@@ -112,7 +121,15 @@ class SettingsDataStore @Inject constructor(
             prismSpectralAnalysis = enumOrDefault(prefs[PRISM_SPECTRAL_ANALYSIS], PrismSpectralAnalysis.FFT),
             replayGainMode = enumOrDefault(prefs[REPLAY_GAIN_MODE], ReplayGainMode.SMART),
             replayGainPreampDb = (prefs[REPLAY_GAIN_PREAMP_DB] ?: 0f).coerceIn(-15f, 15f),
-            replayGainPreventClipping = prefs[REPLAY_GAIN_PREVENT_CLIPPING] ?: true
+            replayGainPreventClipping = prefs[REPLAY_GAIN_PREVENT_CLIPPING] ?: true,
+            coverScreenVolume = prefs[COVER_SCREEN_VOLUME]
+                ?.takeIf { it.isFinite() }
+                ?.coerceIn(0f, 1f)
+                ?: 1f,
+            coverScreenEqPreset = enumOrDefault(
+                prefs[COVER_SCREEN_EQ_PRESET],
+                CoverScreenEqPreset.NEURAL_ADAPTIVE
+            )
         )
     }
 
@@ -196,6 +213,18 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[REPLAY_GAIN_PREVENT_CLIPPING] = enabled }
     }
 
+    suspend fun setCoverScreenVolume(volume: Float) {
+        dataStore.edit {
+            it[COVER_SCREEN_VOLUME] = volume.takeIf { value -> value.isFinite() }
+                ?.coerceIn(0f, 1f)
+                ?: 1f
+        }
+    }
+
+    suspend fun setCoverScreenEqPreset(preset: CoverScreenEqPreset) {
+        dataStore.edit { it[COVER_SCREEN_EQ_PRESET] = preset.name }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -227,6 +256,7 @@ class SettingsDataStore @Inject constructor(
         val REPLAY_GAIN_MODE = stringPreferencesKey("replay_gain_mode")
         val REPLAY_GAIN_PREAMP_DB = floatPreferencesKey("replay_gain_preamp_db")
         val REPLAY_GAIN_PREVENT_CLIPPING = booleanPreferencesKey("replay_gain_prevent_clipping")
+        val COVER_SCREEN_VOLUME = floatPreferencesKey("cover_screen_volume")
+        val COVER_SCREEN_EQ_PRESET = stringPreferencesKey("cover_screen_eq_preset")
     }
 }
-

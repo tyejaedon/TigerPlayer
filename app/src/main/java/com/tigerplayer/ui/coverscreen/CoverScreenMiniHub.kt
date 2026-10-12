@@ -37,7 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -57,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
@@ -400,6 +400,12 @@ fun CoverScreenMiniHub(
                     Spacer(modifier = Modifier.height(10.dp))
                     CoverAccessibleControls(
                         isPlaying = uiState.isPlaying,
+                        onLongPressPlayPause = {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            queueVisible = false
+                            libraryVisible = false
+                            playbackSettingsVisible = true
+                        },
                         onTogglePlayPause = {
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             playerViewModel.togglePlayPause()
@@ -466,6 +472,12 @@ fun CoverScreenMiniHub(
                 Spacer(modifier = Modifier.height(10.dp))
                 CoverAccessibleControls(
                     isPlaying = uiState.isPlaying,
+                    onLongPressPlayPause = {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = false
+                        libraryVisible = false
+                        playbackSettingsVisible = true
+                    },
                     onTogglePlayPause = {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         playerViewModel.togglePlayPause()
@@ -679,6 +691,7 @@ private fun TrackInfoText(
 @Composable
 private fun CoverAccessibleControls(
     isPlaying: Boolean,
+    onLongPressPlayPause: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -697,8 +710,14 @@ private fun CoverAccessibleControls(
         )
         CoverControlButton(
             icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-            description = if (isPlaying) "Pause" else "Play",
-            onClick = onTogglePlayPause
+            description = if (isPlaying) {
+                "Pause. Long press for playback settings"
+            } else {
+                "Play. Long press for playback settings"
+            },
+            onClick = onTogglePlayPause,
+            onLongClick = onLongPressPlayPause,
+            testTag = CoverScreenTestTags.PLAYBACK_SETTINGS_OPEN
         )
         CoverControlButton(
             icon = Icons.Filled.SkipNext,
@@ -726,8 +745,7 @@ private fun CoverControlButton(
     onClick: () -> Unit,
     testTag: String? = null
 ) {
-    IconButton(
-        onClick = onClick,
+    Box(
         modifier = Modifier
             .minimumInteractiveComponentSize()
             .size(48.dp)
