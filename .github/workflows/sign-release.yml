@@ -13,6 +13,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -35,73 +36,114 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Determine tag
+      - name: Resolve release candidate
         id: tag
+        shell: bash
         run: |
+          set -euo pipefail
+
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             TAG="${{ inputs.tag }}"
+            SOURCE_RUN_ID=$(gh run list \
+              --workflow release.yml \
+              --branch "$TAG" \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // empty')
           else
-            # Extract tag from the workflow_run event
-            TAG=$(gh run view ${{ github.event.workflow_run.id }} --json headBranch -q '.headBranch' | sed 's|refs/tags/||')
+            SOURCE_RUN_ID="${{ github.event.workflow_run.id }}"
+            TAG=$(gh run view "$SOURCE_RUN_ID" --json headBranch --jq '.headBranch')
           fi
+
+          if [[ -z "$TAG" || -z "$SOURCE_RUN_ID" ]]; then
+            echo "::error::Could not resolve the tag and successful release-candidate run."
+            exit 1
+          fi
+
+          RUN_METADATA=$(gh run view "$SOURCE_RUN_ID" --json conclusion,headBranch)
+          if [[ "$(jq -r '.conclusion' <<< "$RUN_METADATA")" != "success" ||
+                "$(jq -r '.headBranch' <<< "$RUN_METADATA")" != "$TAG" ]]; then
+            echo "::error::Run $SOURCE_RUN_ID is not a successful release candidate for $TAG."
+            exit 1
+          fi
+
+          ARTIFACT_NAME=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.name | startswith("unsigned-release-")) | .name] | if length == 1 then .[0] else empty end')
+          if [[ -z "$ARTIFACT_NAME" ]]; then
+            echo "::error::Expected exactly one unsigned release artifact for run $SOURCE_RUN_ID."
+            exit 1
+          fi
+
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Using tag: ${TAG}"
+          echo "source_run_id=${SOURCE_RUN_ID}" >> $GITHUB_OUTPUT
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "Using release candidate run ${SOURCE_RUN_ID} for ${TAG}."
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Download unsigned APKs from release
+      - name: Download unsigned APK artifact
         run: |
+          gh run download "${{ steps.tag.outputs.source_run_id }}" \
+            --name "${{ steps.tag.outputs.artifact_name }}" \
+            --dir unsigned-release
           mkdir -p unsigned-apks
-          gh release download ${{ steps.tag.outputs.tag }} \
-            -p "app-full-release*.apk" \
-            -p "app-foss-release*.apk" \
-            -D unsigned-apks
+          cp unsigned-release/app/build/outputs/apk/full/release/app-full-release-unsigned.apk \
+            unsigned-apks/app-full-release-unsigned.apk
+          cp unsigned-release/app/build/outputs/apk/foss/release/app-foss-release-unsigned.apk \
+            unsigned-apks/app-foss-release-unsigned.apk
           ls -lh unsigned-apks/
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Prepare keystore
         run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_B64 }}" | base64 -d > release.keystore
-          ls -lh release.keystore
+          set -euo pipefail
+          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > release.keystore
+          test -s release.keystore
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
 
       - name: Sign APKs
         run: |
+          set -euo pipefail
           mkdir -p signed-apks
 
-          # Sign full release APK
           jarsigner -verbose \
             -sigalg SHA256withRSA \
             -digestalg SHA-256 \
             -keystore release.keystore \
-            -storepass "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
-            -keypass "${{ secrets.RELEASE_KEY_PASSWORD }}" \
-            unsigned-apks/app-full-release*.apk \
-            "${{ secrets.RELEASE_KEY_ALIAS }}"
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
+            -keypass "$RELEASE_KEY_PASSWORD" \
+            unsigned-apks/app-full-release-unsigned.apk \
+            "$RELEASE_KEY_ALIAS"
 
-          # Sign foss release APK
           jarsigner -verbose \
             -sigalg SHA256withRSA \
             -digestalg SHA-256 \
             -keystore release.keystore \
-            -storepass "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
-            -keypass "${{ secrets.RELEASE_KEY_PASSWORD }}" \
-            unsigned-apks/app-foss-release*.apk \
-            "${{ secrets.RELEASE_KEY_ALIAS }}"
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
+            -keypass "$RELEASE_KEY_PASSWORD" \
+            unsigned-apks/app-foss-release-unsigned.apk \
+            "$RELEASE_KEY_ALIAS"
 
-          # Copy signed APKs
-          cp unsigned-apks/app-full-release*.apk signed-apks/app-full-release-signed.apk
-          cp unsigned-apks/app-foss-release*.apk signed-apks/app-foss-release-signed.apk
+          cp unsigned-apks/app-full-release-unsigned.apk signed-apks/app-full-release-signed.apk
+          cp unsigned-apks/app-foss-release-unsigned.apk signed-apks/app-foss-release-signed.apk
+          sha256sum signed-apks/*.apk > signed-apks/SHA256SUMS-signed.txt
 
           ls -lh signed-apks/
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
 
       - name: Verify signed APKs
         run: |
-          # Verify full release APK signature
+          set -euo pipefail
           jarsigner -verify -verbose -certs \
             signed-apks/app-full-release-signed.apk
 
-          # Verify foss release APK signature
           jarsigner -verify -verbose -certs \
             signed-apks/app-foss-release-signed.apk
 
@@ -114,6 +156,7 @@ jobs:
           gh release upload "${TAG}" \
             signed-apks/app-full-release-signed.apk \
             signed-apks/app-foss-release-signed.apk \
+            signed-apks/SHA256SUMS-signed.txt \
             --repo "${{ github.repository }}" \
             --clobber
 
@@ -126,4 +169,3 @@ jobs:
         run: |
           rm -f release.keystore
           echo "Keystore cleaned up"
-
