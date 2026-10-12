@@ -1,5 +1,12 @@
 package com.tigerplayer.ui.coverscreen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +44,10 @@ fun CoverScreenStatsWidget(
     } else {
         "Listening stats appear after you play music"
     }
+    val sessionArtists = stats.sessionTopArtists
+        .take(3)
+        .joinToString(separator = ", ") { it.artistName }
+        .ifBlank { "no session artists yet" }
 
     Surface(
         modifier = modifier
@@ -45,7 +56,8 @@ fun CoverScreenStatsWidget(
             .clickable(onClick = onOpenFullStats)
             .testTag(CoverScreenTestTags.STATS_WIDGET)
             .semantics {
-                contentDescription = "Listening statistics. $summary. Top artists: $topArtists. Open full stats."
+                contentDescription = "Listening statistics. $summary. Top artists: $topArtists. " +
+                    "Session favorites: $sessionArtists. Open full stats."
             },
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
         shape = RoundedCornerShape(14.dp)
@@ -71,21 +83,36 @@ fun CoverScreenStatsWidget(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (stats.hasHistory) {
-                Text(
-                    text = "Top artists: $topArtists",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                ListeningHistoryBars(
-                    dailyPlayCounts = stats.dailyPlayCounts,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(18.dp)
-                        .testTag(CoverScreenTestTags.STATS_CHART)
-                )
+            AnimatedVisibility(
+                visible = stats.hasHistory,
+                enter = fadeIn(tween(220)) + expandVertically(tween(220)),
+                exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Top artists: $topArtists",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (stats.sessionTrackPlayCount > 0) {
+                        Text(
+                            text = "Session favorites: $sessionArtists · ${stats.sessionTrackPlayCount} plays",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    ListeningHistoryBars(
+                        dailyPlayCounts = stats.dailyPlayCounts,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(18.dp)
+                            .testTag(CoverScreenTestTags.STATS_CHART)
+                    )
+                }
             }
         }
     }
@@ -99,6 +126,14 @@ private fun ListeningHistoryBars(
     val values = dailyPlayCounts.takeLast(CoverScreenStatsSnapshot.STATS_DAYS)
         .map { it.coerceAtLeast(0).toFloat() }
     val maximum = values.maxOrNull()?.takeIf { it.isFinite() && it > 0f } ?: 1f
+    val fractions = values.mapIndexed { index, value ->
+        val target = (value / maximum).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+        animateFloatAsState(
+            targetValue = target,
+            animationSpec = tween(durationMillis = 320),
+            label = "listening-history-bar-$index"
+        ).value
+    }
     val barColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
 
@@ -106,8 +141,8 @@ private fun ListeningHistoryBars(
         if (values.isEmpty()) return@Canvas
         val gap = 3.dp.toPx()
         val barWidth = ((size.width - gap * (values.size - 1)) / values.size).coerceAtLeast(0f)
-        values.forEachIndexed { index, value ->
-            val fraction = (value / maximum).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+        values.forEachIndexed { index, _ ->
+            val fraction = fractions[index].takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
             val barHeight = (size.height * fraction).coerceAtLeast(2.dp.toPx())
             val left = index * (barWidth + gap)
             drawRoundRect(

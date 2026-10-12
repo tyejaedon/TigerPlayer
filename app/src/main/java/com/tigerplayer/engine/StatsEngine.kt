@@ -23,6 +23,8 @@ data class CoverScreenStatsSnapshot(
     val listeningTimeTodayMs: Long = 0L,
     val tracksPlayedToday: Int = 0,
     val dailyPlayCounts: List<Int> = List(STATS_DAYS) { 0 },
+    val sessionTopArtists: List<ArtistStats> = emptyList(),
+    val sessionTrackPlayCount: Int = 0,
     val hasHistory: Boolean = false
 ) {
     companion object {
@@ -48,6 +50,7 @@ class StatsEngine @Inject constructor(
     private val elapsedTimeSource: ElapsedTimeSource
 ) {
     private val _statsFilter = MutableStateFlow("Today")
+    private val sessionStartedAtMs = System.currentTimeMillis()
 
     fun updateStatsFilter(newFilter: String) {
         _statsFilter.value = newFilter
@@ -61,6 +64,15 @@ class StatsEngine @Inject constructor(
         }
     }.flatMapLatest {
         val todayStart = calculateStartTimeForFilter("Today")
+        val sessionStats = combine(
+            historyRepository.getTopArtists(sessionStartedAtMs, limit = 3),
+            historyRepository.getTrackPlayCount(sessionStartedAtMs)
+        ) { topArtists, trackPlayCount ->
+            SessionStats(
+                topArtists = topArtists.take(3),
+                trackPlayCount = trackPlayCount.coerceAtLeast(0)
+            )
+        }
         combine(
             historyRepository.getTopArtists(todayStart, limit = 3),
             historyRepository.getTotalListeningTime(todayStart),
@@ -72,8 +84,9 @@ class StatsEngine @Inject constructor(
                         window.endExclusive
                     )
                 }
-            ) { counts -> counts.toList() }
-        ) { topArtists, listeningTimeMs, trackPlayCount, dailyPlayCounts ->
+            ) { counts -> counts.toList() },
+            sessionStats
+        ) { topArtists, listeningTimeMs, trackPlayCount, dailyPlayCounts, session ->
             val listeningTimeTodayMs = (listeningTimeMs ?: 0L).coerceAtLeast(0L)
             val tracksPlayedToday = trackPlayCount.coerceAtLeast(0)
             CoverScreenStatsSnapshot(
@@ -81,9 +94,12 @@ class StatsEngine @Inject constructor(
                 listeningTimeTodayMs = listeningTimeTodayMs,
                 tracksPlayedToday = tracksPlayedToday,
                 dailyPlayCounts = dailyPlayCounts,
+                sessionTopArtists = session.topArtists,
+                sessionTrackPlayCount = session.trackPlayCount,
                 hasHistory = tracksPlayedToday > 0 ||
                     listeningTimeTodayMs > 0L ||
-                    dailyPlayCounts.any { it > 0 }
+                    dailyPlayCounts.any { it > 0 } ||
+                    session.trackPlayCount > 0
             )
         }
     }
@@ -361,4 +377,9 @@ class StatsEngine @Inject constructor(
         /** Absolute floor; below this the listener effectively skipped. */
         const val MIN_LISTENED_MS = 5_000L
     }
+
+    private data class SessionStats(
+        val topArtists: List<ArtistStats>,
+        val trackPlayCount: Int
+    )
 }
