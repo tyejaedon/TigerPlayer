@@ -69,15 +69,15 @@ class CoverScreenStatsSnapshotTest {
             statsEngine.getCoverScreenStatsSnapshotFlow().collect(snapshots::add)
         }
         runCurrent()
-        assertEquals(0, snapshots.last().sessionTrackPlayCount)
+        assertEquals(0, snapshots.last().tracksPlayedToday)
 
         artists.value = listOf(ArtistStats("Session Artist", 2, 120_000L))
         listeningTime.value = 120_000L
         playCount.value = 2
         runCurrent()
 
-        assertEquals("Session Artist", snapshots.last().sessionTopArtists.single().artistName)
-        assertEquals(2, snapshots.last().sessionTrackPlayCount)
+        assertEquals("Session Artist", snapshots.last().topArtists.single().artistName)
+        assertEquals(2, snapshots.last().tracksPlayedToday)
         collector.cancel()
     }
 
