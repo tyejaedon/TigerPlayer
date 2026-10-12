@@ -116,8 +116,9 @@ jobs:
               private_key = 0
             }
             /^Entry type: PrivateKeyEntry$/ { private_key = 1 }
-            /^SHA256: / {
-              fingerprint = substr($0, index($0, ": ") + 2)
+            /^[[:space:]]*SHA256:/ {
+              fingerprint = $0
+              sub(/^[[:space:]]*SHA256:[[:space:]]*/, "", fingerprint)
               gsub(":", "", fingerprint)
               if (private_key && tolower(fingerprint) == expected) {
                 print alias
