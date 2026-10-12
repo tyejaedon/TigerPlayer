@@ -93,6 +93,12 @@ abstract class TigerDao {
     @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history WHERE timestamp >= :startTime")
     abstract fun getTotalListeningTimeMs(startTime: Long): Flow<Long>
 
+    @Query("SELECT COUNT(*) FROM playback_history WHERE timestamp >= :startTime")
+    abstract fun getTrackPlayCount(startTime: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM playback_history WHERE timestamp >= :startTime AND timestamp < :endTime")
+    abstract fun getTrackPlayCountBetween(startTime: Long, endTime: Long): Flow<Int>
+
     /**
      * Classifies each play into 5 sonic axes and weights every axis by the actual time listened
      * ([PlaybackHistoryEntity.durationListenedMs]) rather than a raw play count, so a 20-second
