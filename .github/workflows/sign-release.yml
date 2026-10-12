@@ -98,24 +98,38 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Prepare keystore
+        id: keystore
         run: |
           set -euo pipefail
           printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > release.keystore
           test -s release.keystore
-          KEY_ENTRY=$(keytool -list -v \
-            -keystore release.keystore \
-            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
-            -alias tigerplayer 2>/dev/null)
-          if ! grep -q 'Entry type: PrivateKeyEntry' <<< "$KEY_ENTRY"; then
-            echo "::error::The documented tigerplayer alias is not a private-key entry."
-            exit 1
-          fi
-          ACTUAL_FINGERPRINT=$(awk -F': ' '/SHA256:/ { gsub(":", "", $2); print tolower($2); exit }' <<< "$KEY_ENTRY")
           EXPECTED_FINGERPRINT="0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b"
-          if [[ "$ACTUAL_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]]; then
-            echo "::error::The release keystore certificate does not match the documented signing certificate."
+          KEYSTORE_ENTRIES=$(keytool -list -v \
+            -keystore release.keystore \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" 2>/dev/null) || {
+              echo "::error::Could not read the release keystore."
+              exit 1
+            }
+          SIGNING_ALIAS=$(awk -v expected="$EXPECTED_FINGERPRINT" '
+            /^Alias name: / {
+              alias = substr($0, index($0, ": ") + 2)
+              private_key = 0
+            }
+            /^Entry type: PrivateKeyEntry$/ { private_key = 1 }
+            /^SHA256: / {
+              fingerprint = substr($0, index($0, ": ") + 2)
+              gsub(":", "", fingerprint)
+              if (private_key && tolower(fingerprint) == expected) {
+                print alias
+              }
+              private_key = 0
+            }
+          ' <<< "$KEYSTORE_ENTRIES")
+          if [[ -z "$SIGNING_ALIAS" || "$SIGNING_ALIAS" == *$'\n'* ]]; then
+            echo "::error::No unique private-key entry matches the documented release certificate."
             exit 1
           fi
+          echo "release_key_alias=${SIGNING_ALIAS}" >> "$GITHUB_OUTPUT"
         env:
           RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
@@ -132,7 +146,7 @@ jobs:
             -storepass "$RELEASE_KEYSTORE_PASSWORD" \
             -keypass "$RELEASE_KEY_PASSWORD" \
             unsigned-apks/app-full-release-unsigned.apk \
-            tigerplayer
+            "$RELEASE_KEY_ALIAS"
 
           jarsigner -verbose \
             -sigalg SHA256withRSA \
@@ -141,7 +155,7 @@ jobs:
             -storepass "$RELEASE_KEYSTORE_PASSWORD" \
             -keypass "$RELEASE_KEY_PASSWORD" \
             unsigned-apks/app-foss-release-unsigned.apk \
-            tigerplayer
+            "$RELEASE_KEY_ALIAS"
 
           cp unsigned-apks/app-full-release-unsigned.apk signed-apks/app-full-release-signed.apk
           cp unsigned-apks/app-foss-release-unsigned.apk signed-apks/app-foss-release-signed.apk
@@ -151,6 +165,7 @@ jobs:
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ steps.keystore.outputs.release_key_alias }}
 
       - name: Verify signed APKs
         run: |
