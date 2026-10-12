@@ -1,0 +1,40 @@
+Categories:
+  - Multimedia
+
+License: GPL-3.0-only
+
+WebSite: https://github.com/tyejaedon/TigerPlayer
+SourceCode: https://github.com/tyejaedon/TigerPlayer
+IssueTracker: https://github.com/tyejaedon/TigerPlayer/issues
+
+RepoType: git
+Repo: https://github.com/tyejaedon/TigerPlayer
+
+# F-Droid Reproducible Build Support
+# Binary verification URLs for F-Droid to validate reproducible builds
+Binaries: https://github.com/tyejaedon/TigerPlayer/releases/download/v%v/app-foss-release.apk
+
+# Allowed signing certificate SHA-256 fingerprint (extracted from release keystore)
+# Generated from: apksigner verify --print-certs app-release.apk
+# Certificate DN: CN=Jaedon, OU=Software Dev, O=Freelancer, L=Nairobi, ST=Kenya, C=KE
+AllowedAPKSigningKeys:
+  - 0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b
+
+AutoUpdateMode: Version %v
+UpdateCheckMode: Tags
+
+# Current release version
+CurrentVersion: 2.1.2
+CurrentVersionCode: 3
+
+Builds:
+  - versionName: 2.1.2
+    versionCode: 3
+    commit: v2.1.2
+    subdir: app
+    gradle:
+      - foss
+    # Per-build binary verification
+    # F-Droid will verify the built APK matches this upstream binary
+    binary: https://github.com/tyejaedon/TigerPlayer/releases/download/v%v/app-foss-release.apk
+
