@@ -522,18 +522,18 @@ fun CoverScreenMiniHub(
                     )
                 }
             }
+        }
 
-            AnimatedVisibility(
-                visible = libraryVisible,
-                enter = fadeIn() + slideInVertically { it / 8 },
-                exit = fadeOut() + slideOutVertically { it / 8 },
-                modifier = Modifier.fillMaxSize()
-            ) {
-                CoverScreenLibraryMenu(
-                    playerViewModel = playerViewModel,
-                    onDismiss = { libraryVisible = false }
-                )
-            }
+        AnimatedVisibility(
+            visible = libraryVisible,
+            enter = fadeIn() + slideInVertically { it / 8 },
+            exit = fadeOut() + slideOutVertically { it / 8 },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenLibraryMenu(
+                playerViewModel = playerViewModel,
+                onDismiss = { libraryVisible = false }
+            )
         }
     }
 }
