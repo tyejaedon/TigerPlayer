@@ -270,6 +270,7 @@ fun CoverScreenMiniHub(
     // FIX: Interactive Sheet State (Enhanced for Cover Screen Stability)
     var queueVisible by remember { mutableStateOf(false) }
     var libraryVisible by remember { mutableStateOf(false) }
+    var searchOnLibraryOpen by remember { mutableStateOf(false) }
 
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
@@ -284,7 +285,8 @@ fun CoverScreenMiniHub(
             .fillMaxSize()
             .background(Color.Black)
             .semantics {
-                contentDescription = "Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue."
+                contentDescription =
+                    "Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down for search."
             }
             .coverScreenGestures(
                 swipeThresholdPx = swipeThresholdPx,
@@ -308,6 +310,13 @@ fun CoverScreenMiniHub(
                     if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = true
+                },
+                onSwipeDown = {
+                    if (libraryVisible) return@coverScreenGestures
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    queueVisible = false
+                    searchOnLibraryOpen = true
+                    libraryVisible = true
                 }
             )
     ) {
@@ -396,6 +405,7 @@ fun CoverScreenMiniHub(
                         onOpenLibrary = {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             queueVisible = false
+                            searchOnLibraryOpen = false
                             libraryVisible = true
                         }
                     )
@@ -439,6 +449,7 @@ fun CoverScreenMiniHub(
                     onOpenLibrary = {
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                         queueVisible = false
+                        searchOnLibraryOpen = false
                         libraryVisible = true
                     }
                 )
@@ -532,7 +543,11 @@ fun CoverScreenMiniHub(
         ) {
             CoverScreenLibraryMenu(
                 playerViewModel = playerViewModel,
-                onDismiss = { libraryVisible = false }
+                onDismiss = {
+                    libraryVisible = false
+                    searchOnLibraryOpen = false
+                },
+                showSearchInitially = searchOnLibraryOpen
             )
         }
     }
@@ -808,17 +823,19 @@ private fun Modifier.coverScreenGestures(
     onTap: () -> Unit,
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
-    onSwipeUp: () -> Unit
+    onSwipeUp: () -> Unit,
+    onSwipeDown: () -> Unit
 ): Modifier {
     return pointerInput(swipeThresholdPx, tapSlopPx) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
 
-            // FIX: System Edge Exclusion Zone (ignore outer 12% of the screen)
+            // Preserve system edge gestures, except top-edge down swipes used to open search.
             val edgeX = size.width * 0.12f
             val edgeY = size.height * 0.12f
+            val startedAtTopEdge = down.position.y < edgeY
             if (down.position.x < edgeX || down.position.x > size.width - edgeX ||
-                down.position.y < edgeY || down.position.y > size.height - edgeY) {
+                down.position.y > size.height - edgeY) {
                 return@awaitEachGesture // Let Samsung's OS handle the edge swipe
             }
 
@@ -845,9 +862,10 @@ private fun Modifier.coverScreenGestures(
 
             when {
                 absX <= tapSlopPx && absY <= tapSlopPx -> onTap()
-                absX > absY && totalX <= -swipeThresholdPx -> onSwipeLeft()
-                absX > absY && totalX >= swipeThresholdPx -> onSwipeRight()
-                absY > absX && totalY <= -swipeThresholdPx -> onSwipeUp()
+                !startedAtTopEdge && absX > absY && totalX <= -swipeThresholdPx -> onSwipeLeft()
+                !startedAtTopEdge && absX > absY && totalX >= swipeThresholdPx -> onSwipeRight()
+                !startedAtTopEdge && absY > absX && totalY <= -swipeThresholdPx -> onSwipeUp()
+                absY > absX && totalY >= swipeThresholdPx -> onSwipeDown()
             }
         }
     }
