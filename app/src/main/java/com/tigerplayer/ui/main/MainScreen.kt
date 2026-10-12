@@ -32,6 +32,7 @@ import com.tigerplayer.navigation.BottomNavTab
 import com.tigerplayer.navigation.MainNavigationPresets
 import com.tigerplayer.navigation.Screen
 import com.tigerplayer.ui.cloud.CloudScreen
+import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.youtube.YouTubeSearchScreen
 import com.tigerplayer.ui.home.HomeScreen
 import com.tigerplayer.ui.home.HomeViewModel
@@ -70,6 +71,7 @@ fun MainScreen(
     onNavigateToDiscoverWeeklyDetail: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToQueue: () -> Unit,
+    dashboardViewModel: DashboardViewModel? = null,
     // Test-only seam: rememberCoverScreenWindowState() needs a real Activity/display to produce a
     // genuine cover-screen Configuration, which an instrumented Compose test can't simulate. Left
     // null in production so real callers are unaffected (see CoverScreenMountingTest).
@@ -77,6 +79,7 @@ fun MainScreen(
 ) {
     val windowState = windowStateOverride ?: rememberCoverScreenWindowState()
     val isCoverScreen = windowState.isCoverScreen
+    val sharedDashboardViewModel = dashboardViewModel ?: hiltViewModel()
 
     // Audio must load regardless of shell: the cover-screen mini hub reads the same
     // playerViewModel.uiState as the full shell.
@@ -89,6 +92,7 @@ fun MainScreen(
         // app shell (Scaffold + bottom NavigationBar) squeezed into a ~1.9-3.4in panel.
         CoverScreenMiniHub(
             playerViewModel = playerViewModel,
+            dashboardViewModel = sharedDashboardViewModel,
             windowState = windowState,
             modifier = Modifier
                 .fillMaxSize()
@@ -303,6 +307,7 @@ fun MainScreen(
                         HomeScreen(
                             viewModel = playerViewModel,
                             homeViewModel = homeViewModel,
+                            dashboardViewModel = sharedDashboardViewModel,
                             prismViewModel = prismViewModel,
                             onNavigateToSonicPrism = {
                                 tabNavController.navigate(com.tigerplayer.navigation.Screen.SonicPrism.route)
@@ -432,5 +437,4 @@ fun MainScreen(
         }
     }
 }
-
 
