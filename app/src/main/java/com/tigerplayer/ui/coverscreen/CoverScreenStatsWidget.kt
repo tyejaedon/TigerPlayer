@@ -107,6 +107,21 @@ fun CoverScreenStatsWidget(
                             .testTag(CoverScreenTestTags.STATS_CHART)
                     )
                 }
+            if (stats.hasHistory) {
+                Text(
+                    text = "Top artists: $topArtists",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                ListeningHistoryBars(
+                    dailyPlayCounts = stats.dailyPlayCounts,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(18.dp)
+                        .testTag(CoverScreenTestTags.STATS_CHART)
+                )
             }
         }
     }
