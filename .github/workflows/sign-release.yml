@@ -1,0 +1,132 @@
+name: Sign and publish release APKs
+
+on:
+  workflow_run:
+    workflows: ["Release candidate"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sign (e.g., v2.1.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  sign-release:
+    name: Sign and publish release APKs
+    runs-on: ubuntu-latest
+    environment: release-candidate
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            # Extract tag from the workflow_run event
+            TAG=$(gh run view ${{ github.event.workflow_run.id }} --json headBranch -q '.headBranch' | sed 's|refs/tags/||')
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Using tag: ${TAG}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download unsigned APKs from release
+        run: |
+          mkdir -p unsigned-apks
+          gh release download ${{ steps.tag.outputs.tag }} \
+            -p "app-full-release*.apk" \
+            -p "app-foss-release*.apk" \
+            -D unsigned-apks
+          ls -lh unsigned-apks/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Prepare keystore
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_B64 }}" | base64 -d > release.keystore
+          ls -lh release.keystore
+
+      - name: Sign APKs
+        run: |
+          mkdir -p signed-apks
+
+          # Sign full release APK
+          jarsigner -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore release.keystore \
+            -storepass "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.RELEASE_KEY_PASSWORD }}" \
+            unsigned-apks/app-full-release*.apk \
+            "${{ secrets.RELEASE_KEY_ALIAS }}"
+
+          # Sign foss release APK
+          jarsigner -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore release.keystore \
+            -storepass "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.RELEASE_KEY_PASSWORD }}" \
+            unsigned-apks/app-foss-release*.apk \
+            "${{ secrets.RELEASE_KEY_ALIAS }}"
+
+          # Copy signed APKs
+          cp unsigned-apks/app-full-release*.apk signed-apks/app-full-release-signed.apk
+          cp unsigned-apks/app-foss-release*.apk signed-apks/app-foss-release-signed.apk
+
+          ls -lh signed-apks/
+
+      - name: Verify signed APKs
+        run: |
+          # Verify full release APK signature
+          jarsigner -verify -verbose -certs \
+            signed-apks/app-full-release-signed.apk
+
+          # Verify foss release APK signature
+          jarsigner -verify -verbose -certs \
+            signed-apks/app-foss-release-signed.apk
+
+      - name: Upload signed APKs to release
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          echo "Uploading signed APKs to release ${TAG}..."
+
+          gh release upload "${TAG}" \
+            signed-apks/app-full-release-signed.apk \
+            signed-apks/app-foss-release-signed.apk \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+          echo "Successfully uploaded signed APKs!"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Clean up secrets
+        if: always()
+        run: |
+          rm -f release.keystore
+          echo "Keystore cleaned up"
+
