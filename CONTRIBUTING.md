@@ -78,3 +78,18 @@ Add an entry to [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]` in the same 
 user-visible effect of the change (not the implementation). Purely internal refactors, tests, and
 CI-only changes don't need an entry.
 
+## Release Build Signing
+
+TigerPlayer release builds are signed with a release keystore (`tigerplayer_release.jks`). **This is
+only for core maintainers performing releases.**
+
+- Never commit the keystore to git (already in `.gitignore`).
+- Signing credentials (keystore password, key password) are stored in GitHub Secrets and CI 
+  environment variables only — never in version control or build logs.
+- All release builds are performed via GitHub Actions to maintain a clean audit trail.
+
+**For detailed signing key security procedures, backup, and emergency recovery, see 
+[docs/SIGNING_KEY_SECURITY.md](docs/SIGNING_KEY_SECURITY.md).**
+
+**F-Droid reproducible builds:** The release certificate SHA-256 fingerprint is documented in
+`fastlane/metadata/android/com.tigerplayer.yml` and used for binary verification.

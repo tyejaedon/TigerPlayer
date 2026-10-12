@@ -32,11 +32,18 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
-- **Spotify**: completing Spotify web login no longer immediately retries an App Remote bind during the browser return transition, which had been misclassifying local Spotify-app authorization failures as a stale web token and sending users into a disconnect/re-auth loop. The app now declares package visibility for `com.spotify.music`, keeps the Web token intact, and points App Remote failures to Spotify app readiness, Premium, and dashboard SHA-1/package registration instead. (#202)
+## [2.1.3] - 2026-10-12
 
-- **Lyrics**: LRCLIB lookups now identify the app with a descriptive user agent, stop retrying
-  query variants after server errors, and negatively cache missing lyrics to avoid repeated failed
-  requests. (#200)
+### Fixed
+
+- **Spotify**: Surface actionable UI element for Spotify App Remote reauthorization in Cloud Archives
+  and Full Player screens. Added a persistent reauth banner with one-tap "Re-authorize Spotify" button
+  and clear status feedback on successful reauthorization. (#201)
+
+### Added
+
+- **F-Droid**: Reproducible builds support with binary verification metadata and allowed signing keys
+  documentation. (#246)
 
 ## [2.1.2] - 2026-09-23
 
