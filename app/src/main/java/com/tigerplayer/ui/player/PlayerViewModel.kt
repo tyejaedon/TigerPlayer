@@ -72,6 +72,7 @@ data class PlayerUiState(
     val artistImageUrl: String? = null,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val coverScreenVolume: Float = 1f,
     val playbackSpeed: Float = 1f,
     val pitch: Float = 1f,
     val allTracks: List<AudioTrack> = emptyList(),
@@ -264,6 +265,8 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             settingsDataStore.settingsFlow.collect { settings ->
                 preferredDefaultPlayerView = settings.defaultPlayerView
+                _uiState.update { it.copy(coverScreenVolume = settings.coverScreenVolume) }
+                mediaControllerManager.setVolume(settings.coverScreenVolume)
             }
         }
 
@@ -277,6 +280,12 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             mediaControllerManager.repeatMode.collect { repeat ->
                 _uiState.update { it.copy(repeatMode = repeat) }
+            }
+        }
+
+        viewModelScope.launch {
+            mediaControllerManager.volume.collect { volume ->
+                _uiState.update { it.copy(coverScreenVolume = volume) }
             }
         }
 
@@ -471,6 +480,19 @@ class PlayerViewModel @Inject constructor(
 
     fun toggleRepeat() {
         playbackEngine.toggleRepeat(_uiState.value.currentTrack)
+    }
+
+    fun setCoverScreenVolume(volume: Float) {
+        val normalizedVolume = volume.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 1f
+        _uiState.update { it.copy(coverScreenVolume = normalizedVolume) }
+        viewModelScope.launch {
+            settingsDataStore.setCoverScreenVolume(normalizedVolume)
+            mediaControllerManager.setVolume(normalizedVolume)
+        }
+    }
+
+    fun adjustCoverScreenVolume(delta: Float) {
+        setCoverScreenVolume(_uiState.value.coverScreenVolume + delta)
     }
 
     // --- PLAYBACK SPEED & PITCH CONTROLS (issue #52) ---

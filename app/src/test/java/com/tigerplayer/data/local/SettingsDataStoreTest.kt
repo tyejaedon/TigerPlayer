@@ -3,6 +3,9 @@ package com.tigerplayer.data.local
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.mutablePreferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,5 +64,40 @@ class SettingsDataStoreTest {
             assertEquals(true, snapshot.resumeOnWiredHeadsetConnect)
         }
     }
-}
 
+    @Test
+    fun persists_cover_screen_volume_and_eq_preset_with_safe_coercion() {
+        runBlocking {
+            val settingsDataStore = SettingsDataStore(InMemoryPreferencesDataStore())
+
+            settingsDataStore.setCoverScreenVolume(0.64f)
+            settingsDataStore.setCoverScreenEqPreset(CoverScreenEqPreset.NIGHT_DRIVE)
+            val persisted = settingsDataStore.settingsFlow.first()
+
+            assertEquals(0.64f, persisted.coverScreenVolume, 0.001f)
+            assertEquals(CoverScreenEqPreset.NIGHT_DRIVE, persisted.coverScreenEqPreset)
+
+            settingsDataStore.setCoverScreenVolume(Float.NaN)
+            assertEquals(1f, settingsDataStore.settingsFlow.first().coverScreenVolume, 0f)
+
+            settingsDataStore.setCoverScreenVolume(1.5f)
+            assertEquals(1f, settingsDataStore.settingsFlow.first().coverScreenVolume, 0f)
+        }
+    }
+
+    @Test
+    fun falls_back_for_unknown_cover_screen_eq_preset_and_invalid_volume() {
+        runBlocking {
+            val initial = mutablePreferencesOf(
+                floatPreferencesKey("cover_screen_volume") to Float.NaN,
+                stringPreferencesKey("cover_screen_eq_preset") to "FUTURE_PRESET"
+            )
+            val settingsDataStore = SettingsDataStore(InMemoryPreferencesDataStore(initial))
+
+            val snapshot = settingsDataStore.settingsFlow.first()
+
+            assertEquals(1f, snapshot.coverScreenVolume, 0f)
+            assertEquals(CoverScreenEqPreset.NEURAL_ADAPTIVE, snapshot.coverScreenEqPreset)
+        }
+    }
+}
