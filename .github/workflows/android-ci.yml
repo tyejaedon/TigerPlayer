@@ -81,7 +81,7 @@ jobs:
         run: ./gradlew :app:lintFullDebug --stacktrace
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: lint-report
           path: |
@@ -130,7 +130,7 @@ jobs:
           fi
       - name: Upload test and release reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-and-r8-reports
           path: |
@@ -169,7 +169,7 @@ jobs:
             --tests "com.example.tigerplayer.data.local.TigerDaoIntegrityTest"
       - name: Upload Android test report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-smoke-report
           path: |
