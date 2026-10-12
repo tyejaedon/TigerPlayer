@@ -160,7 +160,10 @@ jobs:
 
           cp unsigned-apks/app-full-release-unsigned.apk signed-apks/app-full-release-signed.apk
           cp unsigned-apks/app-foss-release-unsigned.apk signed-apks/app-foss-release-signed.apk
-          sha256sum signed-apks/*.apk > signed-apks/SHA256SUMS-signed.txt
+          (
+            cd signed-apks
+            sha256sum *.apk > SHA256SUMS-signed.txt
+          )
 
           ls -lh signed-apks/
         env:
