@@ -47,6 +47,7 @@ Motorola external-display support is advertised via manifest meta-data
 - Swipe right: previous track
 - Swipe up: open queue sheet
 - Swipe down: close queue sheet
+- Long-press play/pause: open playback settings for shuffle, repeat, swipe volume, and EQ presets
 - Horizontal swipe on the discovery row: browse suggestions without skipping the playing track
 
 ## Visuals

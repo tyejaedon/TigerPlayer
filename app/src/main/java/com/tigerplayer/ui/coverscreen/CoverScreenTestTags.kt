@@ -41,6 +41,13 @@ object CoverScreenTestTags {
     const val DISCOVERY_EMPTY_STATE = "cover_screen_discovery_empty_state"
     const val DISCOVERY_MISSING_FEED = "cover_screen_discovery_missing_feed"
     const val DISCOVERY_REFRESH = "cover_screen_discovery_refresh"
+    const val PLAYBACK_SETTINGS = "cover_screen_playback_settings"
+    const val PLAYBACK_SETTINGS_PANEL = "cover_screen_playback_settings_panel"
+    const val PLAYBACK_SETTINGS_OPEN = "cover_screen_playback_settings_open"
+    const val PLAYBACK_SETTINGS_CLOSE = "cover_screen_playback_settings_close"
+    const val PLAYBACK_SHUFFLE = "cover_screen_playback_shuffle"
+    const val PLAYBACK_REPEAT = "cover_screen_playback_repeat"
+    const val PLAYBACK_VOLUME = "cover_screen_playback_volume"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"
@@ -61,4 +68,5 @@ object CoverScreenTestTags {
     fun discoveryRecommendation(id: String): String = "cover_screen_discovery_recommendation_$id"
     fun discoveryPlay(id: String): String = "cover_screen_discovery_play_$id"
     fun discoveryQueue(id: String): String = "cover_screen_discovery_queue_$id"
+    fun eqPreset(preset: String): String = "cover_screen_eq_preset_$preset"
 }

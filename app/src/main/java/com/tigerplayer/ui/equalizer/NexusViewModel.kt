@@ -6,6 +6,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
+import com.tigerplayer.data.local.CoverScreenEqPreset
+import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.engine.AcousticNode
 import com.tigerplayer.engine.AdaptiveDspEngine
@@ -19,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.abs
@@ -69,11 +72,19 @@ data class AuralNexusState(
 @HiltViewModel
 class AuralNexusViewModel @OptIn(UnstableApi::class)
 @Inject constructor(
-    private val adaptiveDspEngine: AdaptiveDspEngine
+    private val adaptiveDspEngine: AdaptiveDspEngine,
+    private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuralNexusState())
     val uiState: StateFlow<AuralNexusState> = _uiState.asStateFlow()
+
+    private val neuralAdaptiveNodes = listOf(
+        SpatialNode("sub", "Sub", FilterType.LOW_SHELF, 60f, Offset(-0.75f, -0.20f), Color(0xFFFF007F)),
+        SpatialNode("warmth", "Body", FilterType.PEAKING, 220f, Offset(-0.30f, 0.05f), Color(0xFFFFD500)),
+        SpatialNode("presence", "Presence", FilterType.PEAKING, 3600f, Offset(0.28f, -0.30f), Color(0xFF39FF14)),
+        SpatialNode("air", "Air", FilterType.HIGH_SHELF, 12_000f, Offset(0.72f, -0.16f), Color(0xFF00E5FF))
+    )
 
     private var dspUpdateJob: Job? = null
     private var visualsUpdateJob: Job? = null // FIXED: Prevent visual computation thread leaks
@@ -81,15 +92,12 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
     val audioReactiveFrame: StateFlow<AudioReactiveFrame> = adaptiveDspEngine.audioReactiveFrame
 
     init {
-        val defaultNodes = listOf(
-            SpatialNode("sub", "Sub", FilterType.LOW_SHELF, 60f, Offset(-0.75f, -0.20f), Color(0xFFFF007F)),
-            SpatialNode("warmth", "Body", FilterType.PEAKING, 220f, Offset(-0.30f, 0.05f), Color(0xFFFFD500)),
-            SpatialNode("presence", "Presence", FilterType.PEAKING, 3600f, Offset(0.28f, -0.30f), Color(0xFF39FF14)),
-            SpatialNode("air", "Air", FilterType.HIGH_SHELF, 12_000f, Offset(0.72f, -0.16f), Color(0xFF00E5FF))
-        )
-
-        _uiState.value = AuralNexusState(nodes = defaultNodes)
+        _uiState.value = AuralNexusState(nodes = neuralAdaptiveNodes)
         updateDspAndVisuals()
+        viewModelScope.launch {
+            val savedPreset = settingsDataStore.settingsFlow.first().coverScreenEqPreset
+            applyMoodPreset(savedPreset.displayName)
+        }
     }
 
     fun applyListeningHabitProfile(historyTracks: List<AudioTrack>) {
@@ -106,7 +114,14 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
     }
 
     fun setMoodPreset(mood: String) {
-        val nodes = _uiState.value.nodes
+        CoverScreenEqPreset.entries.firstOrNull { it.displayName == mood }?.let { preset ->
+            viewModelScope.launch { settingsDataStore.setCoverScreenEqPreset(preset) }
+        }
+        applyMoodPreset(mood)
+    }
+
+    private fun applyMoodPreset(mood: String) {
+        val nodes = neuralAdaptiveNodes
         val updated = when (mood) {
             "Night Drive" -> nodes.map { n ->
                 when (n.id) {

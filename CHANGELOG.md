@@ -31,6 +31,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   actions, horizontal browsing, and refreshable empty-feed feedback. (#227)
 - **Cover screen**: added live session artist/play summaries and animated history bars, with
   lightweight charts validated at compact and wide widget sizes. (#228)
+- **Cover screen**: added a long-press playback settings panel for shuffle, repeat, swipe volume,
+  and persisted equalizer presets, with haptic feedback. (#229)
 
 ### Fixed
 
