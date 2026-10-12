@@ -33,6 +33,9 @@ Motorola external-display support is advertised via manifest meta-data
     `DisplayManager.DisplayListener` to react to displays attaching/detaching at runtime.
   - `CoverScreenMiniHub(...)` swaps the normal app shell with a compact gesture UI. It is mounted
     by `MainScreen` whenever `CoverScreenWindowState.isCoverScreen` is true.
+  - The cover-screen stats and Day List / Discover Weekly suggestions reuse the `PlayerViewModel`
+    and `DashboardViewModel` state consumed by Home. The suggestion row lazily loads artwork,
+    supports play and queue actions, and keeps horizontal browsing separate from player gestures.
   - `isCoverScreenHeuristic(...)`, `isSecondaryDisplayIdentity(...)`, and `resolveIsCoverScreen(...)`
     keep each detection signal - and how they combine - independently testable.
 
@@ -43,6 +46,7 @@ Motorola external-display support is advertised via manifest meta-data
 - Swipe right: previous track
 - Swipe up: open queue sheet
 - Swipe down: close queue sheet
+- Horizontal swipe on the discovery row: browse suggestions without skipping the playing track
 
 ## Visuals
 
@@ -56,5 +60,4 @@ Motorola external-display support is advertised via manifest meta-data
 cd "/Users/tyejaedon/StudioProjects/TigerPlayer"
 ./gradlew :app:testDebugUnitTest
 ```
-
 
