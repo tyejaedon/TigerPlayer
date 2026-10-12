@@ -21,6 +21,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   and authenticated Spotify playlists. (#222)
 - **Cover screen**: added a 300 ms debounced library search for artists, albums, tracks, and playlists,
   with top-edge swipe activation and optional voice input. (#223)
+- **Cover screen**: added categorized search results for artists, albums, and tracks, with no-results
+  feedback plus immediate play and queue actions for matching tracks. (#224)
 
 ### Fixed
 
