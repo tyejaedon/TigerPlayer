@@ -786,6 +786,16 @@ class MediaControllerManager @Inject constructor(
         saveCurrentState()
     }
 
+    fun clearQueue() {
+        val controller = mediaController ?: return
+        if (controller.mediaItemCount == 0) return
+
+        controller.clearMediaItems()
+        updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
+        saveCurrentState()
+    }
+
     fun playNext(track: AudioTrack) {
         val controller = mediaController ?: return
         val newItem = createMediaItem(track)

@@ -14,19 +14,16 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -48,7 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -261,12 +258,15 @@ fun CoverScreenMiniHub(
     modifier: Modifier = Modifier
 ) {
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val coverStats by playerViewModel.coverScreenStats.collectAsStateWithLifecycle()
     val track = uiState.currentTrack
     val view = LocalView.current
     val density = LocalDensity.current
 
     // FIX: Interactive Sheet State (Enhanced for Cover Screen Stability)
     var queueVisible by remember { mutableStateOf(false) }
+    var libraryVisible by remember { mutableStateOf(false) }
+    var searchOnLibraryOpen by remember { mutableStateOf(false) }
 
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
@@ -281,26 +281,38 @@ fun CoverScreenMiniHub(
             .fillMaxSize()
             .background(Color.Black)
             .semantics {
-                contentDescription = "Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue."
+                contentDescription =
+                    "Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down for search."
             }
             .coverScreenGestures(
                 swipeThresholdPx = swipeThresholdPx,
                 tapSlopPx = tapSlopPx,
                 onTap = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     playerViewModel.togglePlayPause()
                 },
                 onSwipeLeft = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToNext()
                 },
                 onSwipeRight = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToPrevious()
                 },
                 onSwipeUp = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = true
+                },
+                onSwipeDown = {
+                    if (libraryVisible) return@coverScreenGestures
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    queueVisible = false
+                    searchOnLibraryOpen = true
+                    libraryVisible = true
                 }
             )
     ) {
@@ -365,7 +377,8 @@ fun CoverScreenMiniHub(
                         subtitle = "FLEX MODE ACTIVE",
                         lyrics = uiState.currentLyrics,
                         currentPosition = uiState.currentPosition,
-                        isLarge = true
+                        isLarge = true,
+                        statsVisible = true
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     CoverAccessibleControls(
@@ -385,6 +398,20 @@ fun CoverScreenMiniHub(
                         onOpenQueue = {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             queueVisible = true
+                        },
+                        onOpenLibrary = {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            queueVisible = false
+                            searchOnLibraryOpen = false
+                            libraryVisible = true
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CoverScreenStatsWidget(
+                        stats = coverStats,
+                        onOpenFullStats = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            playerViewModel.requestSonicFootprintOpen()
                         }
                     )
                 }
@@ -403,7 +430,8 @@ fun CoverScreenMiniHub(
                     subtitle = if (uiState.isPlaying) "NOW PLAYING" else "PAUSED",
                     lyrics = uiState.currentLyrics,
                     currentPosition = uiState.currentPosition,
-                    isLarge = false
+                    isLarge = false,
+                    statsVisible = true
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 CoverAccessibleControls(
@@ -423,6 +451,20 @@ fun CoverScreenMiniHub(
                     onOpenQueue = {
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                         queueVisible = true
+                    },
+                    onOpenLibrary = {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = false
+                        searchOnLibraryOpen = false
+                        libraryVisible = true
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                CoverScreenStatsWidget(
+                    stats = coverStats,
+                    onOpenFullStats = {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        playerViewModel.requestSonicFootprintOpen()
                     }
                 )
             }
@@ -494,17 +536,37 @@ fun CoverScreenMiniHub(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    CoverQueueSheet(
+                    CoverScreenQueueView(
                         queue = uiState.queue,
-                        currentId = track?.id,
+                        currentTrackId = track?.id,
                         currentIndex = uiState.currentQueueIndex,
+                        shuffleModeEnabled = uiState.isShuffleEnabled,
                         onTrackTapped = {
                             playerViewModel.playTrack(it)
                             queueVisible = false
-                        }
+                        },
+                        onRemoveFromQueue = playerViewModel::removeFromQueue,
+                        onMoveQueueItem = playerViewModel::moveQueueItem,
+                        onClearQueue = playerViewModel::clearQueue
                     )
                 }
             }
+        }
+
+        AnimatedVisibility(
+            visible = libraryVisible,
+            enter = fadeIn() + slideInVertically { it / 8 },
+            exit = fadeOut() + slideOutVertically { it / 8 },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenLibraryMenu(
+                playerViewModel = playerViewModel,
+                onDismiss = {
+                    libraryVisible = false
+                    searchOnLibraryOpen = false
+                },
+                showSearchInitially = searchOnLibraryOpen
+            )
         }
     }
 }
@@ -515,7 +577,8 @@ private fun TrackInfoText(
     subtitle: String,
     lyrics: String?,
     currentPosition: Long,
-    isLarge: Boolean
+    isLarge: Boolean,
+    statsVisible: Boolean
 ) {
     Spacer(modifier = Modifier.height(if (isLarge) 12.dp else 8.dp))
 
@@ -542,7 +605,13 @@ private fun TrackInfoText(
     Box(
         modifier = Modifier
             .fillMaxWidth(if (isLarge) 0.82f else 0.94f)
-            .height(if (isLarge) 180.dp else 130.dp),
+            .height(
+                when {
+                    statsVisible -> 72.dp
+                    isLarge -> 180.dp
+                    else -> 130.dp
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
 
@@ -570,7 +639,8 @@ private fun CoverAccessibleControls(
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onOpenQueue: () -> Unit
+    onOpenQueue: () -> Unit,
+    onOpenLibrary: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -597,6 +667,12 @@ private fun CoverAccessibleControls(
             description = "Open queue",
             onClick = onOpenQueue
         )
+        CoverControlButton(
+            icon = Icons.Filled.LibraryMusic,
+            description = "Open library",
+            onClick = onOpenLibrary,
+            testTag = CoverScreenTestTags.LIBRARY_OPEN
+        )
     }
 }
 
@@ -604,7 +680,8 @@ private fun CoverAccessibleControls(
 private fun CoverControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    testTag: String? = null
 ) {
     IconButton(
         onClick = onClick,
@@ -612,6 +689,7 @@ private fun CoverControlButton(
             .minimumInteractiveComponentSize()
             .size(48.dp)
             .background(Color.White.copy(alpha = 0.12f), CircleShape)
+            .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
     ) {
         Icon(
             imageVector = icon,
@@ -619,82 +697,6 @@ private fun CoverControlButton(
             tint = Color.White,
             modifier = Modifier.size(24.dp)
         )
-    }
-}
-
-@Composable
-private fun CoverQueueSheet(
-    queue: List<com.tigerplayer.data.model.AudioTrack>,
-    currentId: String?,
-    currentIndex: Int,
-    onTrackTapped: (com.tigerplayer.data.model.AudioTrack) -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 160.dp, max = 260.dp)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color.Black.copy(alpha = 0.08f),
-                        Color.Black.copy(alpha = 0.72f),
-                        Color.Black.copy(alpha = 0.84f)
-                    )
-                )
-            )
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-        val upcoming = remember(queue, currentIndex) {
-            if (currentIndex in queue.indices) queue.drop(currentIndex).take(9) else queue.take(9)
-        }
-
-        val queueListState = rememberLazyListState()
-
-        LazyColumn(
-            state = queueListState,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            items(upcoming, key = { it.id }) { track ->
-                val isCurrent = track.id == currentId
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (isCurrent) TigerNeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
-                            RoundedCornerShape(10.dp)
-                        )
-                        .minimumInteractiveComponentSize()
-                        .clickable(
-                            role = Role.Button,
-                            onClickLabel = "Play ${track.title}"
-                        ) { onTrackTapped(track) }
-                        .semantics {
-                            contentDescription = "Queue item ${track.title} by ${track.artist}"
-                        }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = track.title,
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isCurrent) FontWeight.Black else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = track.artist,
-                        color = Color.White.copy(alpha = 0.68f),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -770,17 +772,19 @@ private fun Modifier.coverScreenGestures(
     onTap: () -> Unit,
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
-    onSwipeUp: () -> Unit
+    onSwipeUp: () -> Unit,
+    onSwipeDown: () -> Unit
 ): Modifier {
     return pointerInput(swipeThresholdPx, tapSlopPx) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
 
-            // FIX: System Edge Exclusion Zone (ignore outer 12% of the screen)
+            // Preserve system edge gestures, except top-edge down swipes used to open search.
             val edgeX = size.width * 0.12f
             val edgeY = size.height * 0.12f
+            val startedAtTopEdge = down.position.y < edgeY
             if (down.position.x < edgeX || down.position.x > size.width - edgeX ||
-                down.position.y < edgeY || down.position.y > size.height - edgeY) {
+                down.position.y > size.height - edgeY) {
                 return@awaitEachGesture // Let Samsung's OS handle the edge swipe
             }
 
@@ -807,9 +811,10 @@ private fun Modifier.coverScreenGestures(
 
             when {
                 absX <= tapSlopPx && absY <= tapSlopPx -> onTap()
-                absX > absY && totalX <= -swipeThresholdPx -> onSwipeLeft()
-                absX > absY && totalX >= swipeThresholdPx -> onSwipeRight()
-                absY > absX && totalY <= -swipeThresholdPx -> onSwipeUp()
+                !startedAtTopEdge && absX > absY && totalX <= -swipeThresholdPx -> onSwipeLeft()
+                !startedAtTopEdge && absX > absY && totalX >= swipeThresholdPx -> onSwipeRight()
+                !startedAtTopEdge && absY > absX && totalY <= -swipeThresholdPx -> onSwipeUp()
+                absY > absX && totalY >= swipeThresholdPx -> onSwipeDown()
             }
         }
     }

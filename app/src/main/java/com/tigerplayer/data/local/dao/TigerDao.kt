@@ -32,7 +32,8 @@ data class ArtistSummary(
     val name: String,
     val trackCount: Int,
     val albumCount: Int,
-    val genres: String?
+    val genres: String?,
+    val imageUrl: String?
 )
 
 data class SonicFootprintStats(
@@ -91,6 +92,12 @@ abstract class TigerDao {
 
     @Query("SELECT COALESCE(SUM(durationListenedMs), 0) FROM playback_history WHERE timestamp >= :startTime")
     abstract fun getTotalListeningTimeMs(startTime: Long): Flow<Long>
+
+    @Query("SELECT COUNT(*) FROM playback_history WHERE timestamp >= :startTime")
+    abstract fun getTrackPlayCount(startTime: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM playback_history WHERE timestamp >= :startTime AND timestamp < :endTime")
+    abstract fun getTrackPlayCountBetween(startTime: Long, endTime: Long): Flow<Int>
 
     /**
      * Classifies each play into 5 sonic axes and weights every axis by the actual time listened
@@ -481,7 +488,16 @@ abstract class TigerDao {
             grouped_artists.name AS name,
             grouped_artists.trackCount AS trackCount,
             grouped_artists.albumCount AS albumCount,
-            artist_cache.genres AS genres
+            artist_cache.genres AS genres,
+            (
+                SELECT cached_tracks.artworkUriString
+                FROM cached_tracks
+                WHERE lower(trim(cached_tracks.artist)) = lower(trim(grouped_artists.name))
+                    OR lower(trim(cached_tracks.artist)) LIKE lower(trim(grouped_artists.name)) || ' %'
+                    OR lower(trim(cached_tracks.artist)) LIKE lower(trim(grouped_artists.name)) || ',%'
+                ORDER BY cached_tracks.dateAdded DESC
+                LIMIT 1
+            ) AS imageUrl
         FROM grouped_artists
         LEFT JOIN artist_cache ON artist_cache.artistName = lower(trim(grouped_artists.name))
         WHERE :query = ''
