@@ -25,6 +25,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   feedback plus immediate play and queue actions for matching tracks. (#224)
 - **Cover screen**: expanded queue browsing to the full queue with long-press reordering, confirmed
   swipe removal, and a confirmed persistent clear-queue action. (#225)
+- **Cover screen**: added a cached listening-stats widget with today's listening time and play
+  count, top artists, a seven-day history chart, and a shortcut to Sonic Footprint. (#226)
 
 ### Fixed
 

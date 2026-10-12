@@ -258,6 +258,7 @@ fun CoverScreenMiniHub(
     modifier: Modifier = Modifier
 ) {
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val coverStats by playerViewModel.coverScreenStats.collectAsStateWithLifecycle()
     val track = uiState.currentTrack
     val view = LocalView.current
     val density = LocalDensity.current
@@ -376,7 +377,8 @@ fun CoverScreenMiniHub(
                         subtitle = "FLEX MODE ACTIVE",
                         lyrics = uiState.currentLyrics,
                         currentPosition = uiState.currentPosition,
-                        isLarge = true
+                        isLarge = true,
+                        statsVisible = true
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     CoverAccessibleControls(
@@ -404,6 +406,14 @@ fun CoverScreenMiniHub(
                             libraryVisible = true
                         }
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CoverScreenStatsWidget(
+                        stats = coverStats,
+                        onOpenFullStats = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            playerViewModel.requestSonicFootprintOpen()
+                        }
+                    )
                 }
             }
         } else {
@@ -420,7 +430,8 @@ fun CoverScreenMiniHub(
                     subtitle = if (uiState.isPlaying) "NOW PLAYING" else "PAUSED",
                     lyrics = uiState.currentLyrics,
                     currentPosition = uiState.currentPosition,
-                    isLarge = false
+                    isLarge = false,
+                    statsVisible = true
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 CoverAccessibleControls(
@@ -446,6 +457,14 @@ fun CoverScreenMiniHub(
                         queueVisible = false
                         searchOnLibraryOpen = false
                         libraryVisible = true
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                CoverScreenStatsWidget(
+                    stats = coverStats,
+                    onOpenFullStats = {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        playerViewModel.requestSonicFootprintOpen()
                     }
                 )
             }
@@ -558,7 +577,8 @@ private fun TrackInfoText(
     subtitle: String,
     lyrics: String?,
     currentPosition: Long,
-    isLarge: Boolean
+    isLarge: Boolean,
+    statsVisible: Boolean
 ) {
     Spacer(modifier = Modifier.height(if (isLarge) 12.dp else 8.dp))
 
@@ -585,7 +605,13 @@ private fun TrackInfoText(
     Box(
         modifier = Modifier
             .fillMaxWidth(if (isLarge) 0.82f else 0.94f)
-            .height(if (isLarge) 180.dp else 130.dp),
+            .height(
+                when {
+                    statsVisible -> 72.dp
+                    isLarge -> 180.dp
+                    else -> 130.dp
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
 
