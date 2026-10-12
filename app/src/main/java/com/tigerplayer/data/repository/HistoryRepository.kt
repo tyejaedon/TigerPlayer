@@ -120,6 +120,14 @@ class HistoryRepository @Inject constructor(
     fun getTotalListeningTime(startTime: Long): Flow<Long?> =
         statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getTotalListeningTimeMs(it) }
 
+    fun getTrackPlayCount(startTime: Long): Flow<Int> =
+        statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getTrackPlayCount(it) }
+
+    fun getTrackPlayCountBetween(startTime: Long, endTime: Long): Flow<Int> =
+        statsEpoch.effectiveStart(startTime).flatMapLatest {
+            tigerDao.getTrackPlayCountBetween(it, endTime)
+        }
+
     private companion object {
         const val MIN_LISTENED_MS = 5_000L
     }
