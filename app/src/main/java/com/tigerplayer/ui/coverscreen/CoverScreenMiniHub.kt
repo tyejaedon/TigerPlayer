@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -48,6 +49,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -267,6 +269,7 @@ fun CoverScreenMiniHub(
 
     // FIX: Interactive Sheet State (Enhanced for Cover Screen Stability)
     var queueVisible by remember { mutableStateOf(false) }
+    var libraryVisible by remember { mutableStateOf(false) }
 
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
@@ -287,18 +290,22 @@ fun CoverScreenMiniHub(
                 swipeThresholdPx = swipeThresholdPx,
                 tapSlopPx = tapSlopPx,
                 onTap = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     playerViewModel.togglePlayPause()
                 },
                 onSwipeLeft = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToNext()
                 },
                 onSwipeRight = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToPrevious()
                 },
                 onSwipeUp = {
+                    if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = true
                 }
@@ -385,6 +392,11 @@ fun CoverScreenMiniHub(
                         onOpenQueue = {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             queueVisible = true
+                        },
+                        onOpenLibrary = {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            queueVisible = false
+                            libraryVisible = true
                         }
                     )
                 }
@@ -423,6 +435,11 @@ fun CoverScreenMiniHub(
                     onOpenQueue = {
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                         queueVisible = true
+                    },
+                    onOpenLibrary = {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = false
+                        libraryVisible = true
                     }
                 )
             }
@@ -506,6 +523,18 @@ fun CoverScreenMiniHub(
                 }
             }
         }
+
+        AnimatedVisibility(
+            visible = libraryVisible,
+            enter = fadeIn() + slideInVertically { it / 8 },
+            exit = fadeOut() + slideOutVertically { it / 8 },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenLibraryMenu(
+                playerViewModel = playerViewModel,
+                onDismiss = { libraryVisible = false }
+            )
+        }
     }
 }
 
@@ -570,7 +599,8 @@ private fun CoverAccessibleControls(
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onOpenQueue: () -> Unit
+    onOpenQueue: () -> Unit,
+    onOpenLibrary: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -597,6 +627,12 @@ private fun CoverAccessibleControls(
             description = "Open queue",
             onClick = onOpenQueue
         )
+        CoverControlButton(
+            icon = Icons.Filled.LibraryMusic,
+            description = "Open library",
+            onClick = onOpenLibrary,
+            testTag = CoverScreenTestTags.LIBRARY_OPEN
+        )
     }
 }
 
@@ -604,7 +640,8 @@ private fun CoverAccessibleControls(
 private fun CoverControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    testTag: String? = null
 ) {
     IconButton(
         onClick = onClick,
@@ -612,6 +649,7 @@ private fun CoverControlButton(
             .minimumInteractiveComponentSize()
             .size(48.dp)
             .background(Color.White.copy(alpha = 0.12f), CircleShape)
+            .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
     ) {
         Icon(
             imageVector = icon,
