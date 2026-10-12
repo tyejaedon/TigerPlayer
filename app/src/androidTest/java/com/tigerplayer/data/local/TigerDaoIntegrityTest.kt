@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tigerplayer.data.local.entity.CachedTrackEntity
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -74,5 +76,34 @@ class TigerDaoIntegrityTest {
         assertEquals(track.isLiked, persisted.isLiked)
         assertEquals(track.path, persisted.path)
     }
-}
 
+    @Test
+    fun trackPlayCount_observesOnlyHistoryInsideTheRequestedWindow() = runBlocking {
+        val dao = database.tigerDao()
+        dao.insertHistory(historyAt(1_000L))
+        dao.insertHistory(historyAt(2_000L))
+        dao.insertHistory(historyAt(999L))
+
+        assertEquals(2, dao.getTrackPlayCount(startTime = 1_000L).first())
+    }
+
+    @Test
+    fun trackPlayCountBetween_countsEveryRowInsideDayBounds() = runBlocking {
+        val dao = database.tigerDao()
+        dao.insertHistoryBatch((1L..65L).map(::historyAt))
+        dao.insertHistory(historyAt(66L))
+
+        assertEquals(65, dao.getTrackPlayCountBetween(1L, 66L).first())
+    }
+
+    private fun historyAt(timestamp: Long) = PlaybackHistoryEntity(
+        trackId = "track-$timestamp",
+        title = "Track",
+        artist = "Artist",
+        album = "Album",
+        imageUrl = null,
+        durationListenedMs = 30_000L,
+        timestamp = timestamp,
+        source = MediaSource.LOCAL
+    )
+}

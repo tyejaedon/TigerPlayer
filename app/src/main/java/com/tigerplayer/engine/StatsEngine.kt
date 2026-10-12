@@ -1,6 +1,8 @@
 package com.tigerplayer.engine
 
 import com.tigerplayer.data.local.MediaSource
+import com.tigerplayer.data.local.dao.ArtistStats
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.HistoryRepository
@@ -9,10 +11,29 @@ import com.tigerplayer.ui.player.StatItem
 import com.tigerplayer.utils.ArtistUtils
 import com.tigerplayer.utils.ElapsedTimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import java.util.Calendar
+import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class CoverScreenStatsSnapshot(
+    val topArtists: List<ArtistStats> = emptyList(),
+    val listeningTimeTodayMs: Long = 0L,
+    val tracksPlayedToday: Int = 0,
+    val dailyPlayCounts: List<Int> = List(STATS_DAYS) { 0 },
+    val hasHistory: Boolean = false
+) {
+    companion object {
+        const val STATS_DAYS = 7
+    }
+}
+
+internal data class DailyPlayCountWindow(
+    val startInclusive: Long,
+    val endExclusive: Long
+)
 
 /**
  * Owns listening analytics: the aggregation flows that feed the stats surfaces, and the
@@ -30,6 +51,41 @@ class StatsEngine @Inject constructor(
 
     fun updateStatsFilter(newFilter: String) {
         _statsFilter.value = newFilter
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun getCoverScreenStatsSnapshotFlow(): Flow<CoverScreenStatsSnapshot> = flow {
+        while (true) {
+            emit(Unit)
+            delay(COVER_SCREEN_STATS_REFRESH_MS)
+        }
+    }.flatMapLatest {
+        val todayStart = calculateStartTimeForFilter("Today")
+        combine(
+            historyRepository.getTopArtists(todayStart, limit = 3),
+            historyRepository.getTotalListeningTime(todayStart),
+            historyRepository.getTrackPlayCount(todayStart),
+            combine(
+                dailyPlayCountWindows(System.currentTimeMillis()).map { window ->
+                    historyRepository.getTrackPlayCountBetween(
+                        window.startInclusive,
+                        window.endExclusive
+                    )
+                }
+            ) { counts -> counts.toList() }
+        ) { topArtists, listeningTimeMs, trackPlayCount, dailyPlayCounts ->
+            val listeningTimeTodayMs = (listeningTimeMs ?: 0L).coerceAtLeast(0L)
+            val tracksPlayedToday = trackPlayCount.coerceAtLeast(0)
+            CoverScreenStatsSnapshot(
+                topArtists = topArtists.take(3),
+                listeningTimeTodayMs = listeningTimeTodayMs,
+                tracksPlayedToday = tracksPlayedToday,
+                dailyPlayCounts = dailyPlayCounts,
+                hasHistory = tracksPlayedToday > 0 ||
+                    listeningTimeTodayMs > 0L ||
+                    dailyPlayCounts.any { it > 0 }
+            )
+        }
     }
 
     // The complex derived flow for detailed UI stats
@@ -270,7 +326,32 @@ class StatsEngine @Inject constructor(
         }
     }
 
+    internal fun dailyPlayCountWindows(
+        nowMillis: Long,
+        timeZone: TimeZone = TimeZone.getDefault()
+    ): List<DailyPlayCountWindow> {
+        val firstDay = Calendar.getInstance(timeZone).apply {
+            timeInMillis = nowMillis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.DAY_OF_YEAR, -(CoverScreenStatsSnapshot.STATS_DAYS - 1))
+        }
+        val boundaries = (0..CoverScreenStatsSnapshot.STATS_DAYS).map { dayOffset ->
+            Calendar.getInstance(timeZone).apply {
+                timeInMillis = firstDay.timeInMillis
+                add(Calendar.DAY_OF_YEAR, dayOffset)
+            }.timeInMillis
+        }
+        return boundaries.zipWithNext { start, end ->
+            DailyPlayCountWindow(startInclusive = start, endExclusive = end)
+        }
+    }
+
     private companion object {
+        const val COVER_SCREEN_STATS_REFRESH_MS = 5 * 60 * 1000L
+
         /** A play always qualifies once four minutes have been heard, regardless of length. */
         const val FULL_PLAY_THRESHOLD_MS = 4 * 60 * 1000L
 
