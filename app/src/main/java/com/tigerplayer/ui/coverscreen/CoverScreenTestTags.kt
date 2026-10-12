@@ -36,6 +36,11 @@ object CoverScreenTestTags {
     const val QUEUE_REMOVE_CONFIRM = "cover_screen_queue_remove_confirm"
     const val STATS_WIDGET = "cover_screen_stats_widget"
     const val STATS_CHART = "cover_screen_stats_chart"
+    const val DISCOVERY_VIEW = "cover_screen_discovery_view"
+    const val DISCOVERY_LIST = "cover_screen_discovery_list"
+    const val DISCOVERY_EMPTY_STATE = "cover_screen_discovery_empty_state"
+    const val DISCOVERY_MISSING_FEED = "cover_screen_discovery_missing_feed"
+    const val DISCOVERY_REFRESH = "cover_screen_discovery_refresh"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"
@@ -53,4 +58,7 @@ object CoverScreenTestTags {
     fun libraryAlbum(id: String): String = "cover_screen_library_album_$id"
     fun localPlaylist(id: Long): String = "cover_screen_local_playlist_$id"
     fun spotifyPlaylist(id: String): String = "cover_screen_spotify_playlist_$id"
+    fun discoveryRecommendation(id: String): String = "cover_screen_discovery_recommendation_$id"
+    fun discoveryPlay(id: String): String = "cover_screen_discovery_play_$id"
+    fun discoveryQueue(id: String): String = "cover_screen_discovery_queue_$id"
 }

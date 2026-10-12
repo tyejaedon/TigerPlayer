@@ -41,7 +41,11 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -58,6 +62,7 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
 import coil.compose.AsyncImage
+import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.LyricsDisplay
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.TigerNeonOrange
@@ -254,11 +259,16 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
 @Composable
 fun CoverScreenMiniHub(
     playerViewModel: PlayerViewModel,
+    dashboardViewModel: DashboardViewModel,
     windowState: CoverScreenWindowState,
     modifier: Modifier = Modifier
 ) {
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val coverStats by playerViewModel.coverScreenStats.collectAsStateWithLifecycle()
+    val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
+    val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsStateWithLifecycle()
+    val daylistMeta by dashboardViewModel.daylistMeta.collectAsStateWithLifecycle()
+    val discoveryMeta by dashboardViewModel.discoveryMeta.collectAsStateWithLifecycle()
     val track = uiState.currentTrack
     val view = LocalView.current
     val density = LocalDensity.current
@@ -267,6 +277,8 @@ fun CoverScreenMiniHub(
     var queueVisible by remember { mutableStateOf(false) }
     var libraryVisible by remember { mutableStateOf(false) }
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
+    var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
 
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
@@ -279,6 +291,7 @@ fun CoverScreenMiniHub(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .onGloballyPositioned { coverScreenCoordinates = it }
             .background(Color.Black)
             .semantics {
                 contentDescription =
@@ -287,6 +300,10 @@ fun CoverScreenMiniHub(
             .coverScreenGestures(
                 swipeThresholdPx = swipeThresholdPx,
                 tapSlopPx = tapSlopPx,
+                shouldIgnoreGestureAt = { position ->
+                    val positionInRoot = coverScreenCoordinates?.localToRoot(position) ?: position
+                    discoveryTouchBounds?.contains(positionInRoot) == true
+                },
                 onTap = {
                     if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -414,6 +431,19 @@ fun CoverScreenMiniHub(
                             playerViewModel.requestSonicFootprintOpen()
                         }
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CoverScreenDiscoveryView(
+                        daylistTracks = daylistTracks,
+                        discoveryWeeklyTracks = discoveryWeeklyTracks,
+                        daylistMeta = daylistMeta,
+                        discoveryMeta = discoveryMeta,
+                        onPlayTrack = playerViewModel::playTrack,
+                        onQueueTrack = playerViewModel::addToQueue,
+                        onRefresh = dashboardViewModel::refreshForYou,
+                        modifier = Modifier.onGloballyPositioned {
+                            discoveryTouchBounds = it.boundsInRoot()
+                        }
+                    )
                 }
             }
         } else {
@@ -465,6 +495,19 @@ fun CoverScreenMiniHub(
                     onOpenFullStats = {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         playerViewModel.requestSonicFootprintOpen()
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                CoverScreenDiscoveryView(
+                    daylistTracks = daylistTracks,
+                    discoveryWeeklyTracks = discoveryWeeklyTracks,
+                    daylistMeta = daylistMeta,
+                    discoveryMeta = discoveryMeta,
+                    onPlayTrack = playerViewModel::playTrack,
+                    onQueueTrack = playerViewModel::addToQueue,
+                    onRefresh = dashboardViewModel::refreshForYou,
+                    modifier = Modifier.onGloballyPositioned {
+                        discoveryTouchBounds = it.boundsInRoot()
                     }
                 )
             }
@@ -769,6 +812,7 @@ private fun CoverMicroWaveform(
 private fun Modifier.coverScreenGestures(
     swipeThresholdPx: Float,
     tapSlopPx: Float,
+    shouldIgnoreGestureAt: (Offset) -> Boolean,
     onTap: () -> Unit,
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
@@ -778,6 +822,7 @@ private fun Modifier.coverScreenGestures(
     return pointerInput(swipeThresholdPx, tapSlopPx) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
+            val ignoreGesture = shouldIgnoreGestureAt(down.position)
 
             // Preserve system edge gestures, except top-edge down swipes used to open search.
             val edgeX = size.width * 0.12f
@@ -808,6 +853,8 @@ private fun Modifier.coverScreenGestures(
 
             val absX = abs(totalX)
             val absY = abs(totalY)
+
+            if (ignoreGesture) return@awaitEachGesture
 
             when {
                 absX <= tapSlopPx && absY <= tapSlopPx -> onTap()

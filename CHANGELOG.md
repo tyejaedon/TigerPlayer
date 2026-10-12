@@ -27,6 +27,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   swipe removal, and a confirmed persistent clear-queue action. (#225)
 - **Cover screen**: added a cached listening-stats widget with today's listening time and play
   count, top artists, a seven-day history chart, and a shortcut to Sonic Footprint. (#226)
+- **Cover screen**: surfaced Day List and Discover Weekly suggestions with artwork, play/queue
+  actions, horizontal browsing, and refreshable empty-feed feedback. (#227)
 
 ### Fixed
 

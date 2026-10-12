@@ -84,6 +84,7 @@ fun HomeScreen(
     onNavigateToDaylist: () -> Unit,
     onNavigateToDiscoverWeekly: () -> Unit,
     homeViewModel: HomeViewModel,
+    dashboardViewModel: DashboardViewModel,
     prismViewModel: PrismViewModel,
     onNavigateToSonicPrism: () -> Unit,
     onBottomNavigationVisibilityChanged: (Boolean) -> Unit = {},
@@ -121,7 +122,6 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
     val weatherUiState by homeViewModel.weatherUiState.collectAsStateWithLifecycle()
-    val dashboardViewModel: DashboardViewModel = hiltViewModel()
     val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
     val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsStateWithLifecycle()
     val daylistMeta by dashboardViewModel.daylistMeta.collectAsStateWithLifecycle()
