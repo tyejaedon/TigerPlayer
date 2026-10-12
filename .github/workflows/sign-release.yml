@@ -102,8 +102,23 @@ jobs:
           set -euo pipefail
           printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > release.keystore
           test -s release.keystore
+          KEY_ENTRY=$(keytool -list -v \
+            -keystore release.keystore \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
+            -alias tigerplayer 2>/dev/null)
+          if ! grep -q 'Entry type: PrivateKeyEntry' <<< "$KEY_ENTRY"; then
+            echo "::error::The documented tigerplayer alias is not a private-key entry."
+            exit 1
+          fi
+          ACTUAL_FINGERPRINT=$(awk -F': ' '/SHA256:/ { gsub(":", "", $2); print tolower($2); exit }' <<< "$KEY_ENTRY")
+          EXPECTED_FINGERPRINT="0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b"
+          if [[ "$ACTUAL_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]]; then
+            echo "::error::The release keystore certificate does not match the documented signing certificate."
+            exit 1
+          fi
         env:
           RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
 
       - name: Sign APKs
         run: |
@@ -117,7 +132,7 @@ jobs:
             -storepass "$RELEASE_KEYSTORE_PASSWORD" \
             -keypass "$RELEASE_KEY_PASSWORD" \
             unsigned-apks/app-full-release-unsigned.apk \
-            "$RELEASE_KEY_ALIAS"
+            tigerplayer
 
           jarsigner -verbose \
             -sigalg SHA256withRSA \
@@ -126,7 +141,7 @@ jobs:
             -storepass "$RELEASE_KEYSTORE_PASSWORD" \
             -keypass "$RELEASE_KEY_PASSWORD" \
             unsigned-apks/app-foss-release-unsigned.apk \
-            "$RELEASE_KEY_ALIAS"
+            tigerplayer
 
           cp unsigned-apks/app-full-release-unsigned.apk signed-apks/app-full-release-signed.apk
           cp unsigned-apks/app-foss-release-unsigned.apk signed-apks/app-foss-release-signed.apk
@@ -136,7 +151,6 @@ jobs:
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
 
       - name: Verify signed APKs
         run: |
