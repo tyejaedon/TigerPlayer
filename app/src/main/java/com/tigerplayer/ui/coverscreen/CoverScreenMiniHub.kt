@@ -62,9 +62,7 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
 import coil.compose.AsyncImage
-import com.tigerplayer.data.local.CoverScreenEqPreset
 import com.tigerplayer.ui.dashboard.DashboardViewModel
-import com.tigerplayer.ui.equalizer.AuralNexusViewModel
 import com.tigerplayer.ui.player.LyricsDisplay
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.TigerNeonOrange

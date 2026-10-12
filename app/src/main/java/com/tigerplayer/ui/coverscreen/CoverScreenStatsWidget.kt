@@ -1,12 +1,5 @@
 package com.tigerplayer.ui.coverscreen
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +51,7 @@ fun CoverScreenStatsWidget(
             .semantics {
                 contentDescription = "Listening statistics. $summary. Top artists: $topArtists. " +
                     "Session favorites: $sessionArtists. Open full stats."
+                contentDescription = "Listening statistics. $summary. Top artists: $topArtists. Open full stats."
             },
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
         shape = RoundedCornerShape(14.dp)
@@ -141,8 +135,8 @@ private fun ListeningHistoryBars(
         if (values.isEmpty()) return@Canvas
         val gap = 3.dp.toPx()
         val barWidth = ((size.width - gap * (values.size - 1)) / values.size).coerceAtLeast(0f)
-        values.forEachIndexed { index, _ ->
-            val fraction = fractions[index].takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+        values.forEachIndexed { index, value ->
+            val fraction = (value / maximum).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
             val barHeight = (size.height * fraction).coerceAtLeast(2.dp.toPx())
             val left = index * (barWidth + gap)
             drawRoundRect(
