@@ -29,6 +29,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   count, top artists, a seven-day history chart, and a shortcut to Sonic Footprint. (#226)
 - **Cover screen**: surfaced Day List and Discover Weekly suggestions with artwork, play/queue
   actions, horizontal browsing, and refreshable empty-feed feedback. (#227)
+- **Cover screen**: added live session artist/play summaries and animated history bars, with
+  lightweight charts validated at compact and wide widget sizes. (#228)
 
 ### Fixed
 
