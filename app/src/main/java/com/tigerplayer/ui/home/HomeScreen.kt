@@ -99,6 +99,14 @@ fun HomeScreen(
     var showConstellation by remember { mutableStateOf(false) }
     var showSonicFootprint by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+    val sonicFootprintOpenRequest by viewModel.sonicFootprintOpenRequest.collectAsStateWithLifecycle()
+
+    LaunchedEffect(sonicFootprintOpenRequest) {
+        if (sonicFootprintOpenRequest) {
+            showSonicFootprint = true
+            viewModel.consumeSonicFootprintOpenRequest()
+        }
+    }
 
     LaunchedEffect(showConstellation, showSonicFootprint) {
         onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint)

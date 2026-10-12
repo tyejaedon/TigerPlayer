@@ -34,6 +34,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
@@ -126,5 +127,17 @@ class PlayerViewModelTest {
 
         verify(exactly = 1) { networkEngine.onAuthSuccess("token-123") }
         verify(exactly = 0) { playbackEngine.connectSpotifyRemote() }
+    }
+
+    @Test
+    fun `sonic footprint open request is consumed after navigation`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.requestSonicFootprintOpen()
+        assertEquals(true, viewModel.sonicFootprintOpenRequest.value)
+
+        viewModel.consumeSonicFootprintOpenRequest()
+        assertEquals(false, viewModel.sonicFootprintOpenRequest.value)
     }
 }

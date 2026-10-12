@@ -11,6 +11,23 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+
+- **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
+  album counts, artist album lists, and swipe-back navigation. (#220)
+- **Cover screen**: added album track browsing with play, add-to-queue, remove-from-queue swipe,
+  and long-press track actions. (#221)
+- **Cover screen**: added gesture-accessible library navigation for artists, albums, local playlists,
+  and authenticated Spotify playlists. (#222)
+- **Cover screen**: added a 300 ms debounced library search for artists, albums, tracks, and playlists,
+  with top-edge swipe activation and optional voice input. (#223)
+- **Cover screen**: added categorized search results for artists, albums, and tracks, with no-results
+  feedback plus immediate play and queue actions for matching tracks. (#224)
+- **Cover screen**: expanded queue browsing to the full queue with long-press reordering, confirmed
+  swipe removal, and a confirmed persistent clear-queue action. (#225)
+- **Cover screen**: added a cached listening-stats widget with today's listening time and play
+  count, top artists, a seven-day history chart, and a shortcut to Sonic Footprint. (#226)
+
 ### Fixed
 
 - **Spotify**: completing Spotify web login no longer immediately retries an App Remote bind during the browser return transition, which had been misclassifying local Spotify-app authorization failures as a stale web token and sending users into a disconnect/re-auth loop. The app now declares package visibility for `com.spotify.music`, keeps the Web token intact, and points App Remote failures to Spotify app readiness, Premium, and dashboard SHA-1/package registration instead. (#202)
