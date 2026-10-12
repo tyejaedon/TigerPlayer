@@ -14,6 +14,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -276,6 +277,7 @@ fun CoverScreenMiniHub(
     // FIX: Interactive Sheet State (Enhanced for Cover Screen Stability)
     var queueVisible by remember { mutableStateOf(false) }
     var libraryVisible by remember { mutableStateOf(false) }
+    var playbackSettingsVisible by remember { mutableStateOf(false) }
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
@@ -743,6 +745,7 @@ private fun CoverControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     testTag: String? = null
 ) {
     Box(
@@ -751,6 +754,18 @@ private fun CoverControlButton(
             .size(48.dp)
             .background(Color.White.copy(alpha = 0.12f), CircleShape)
             .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
+            .then(
+                if (onLongClick != null) {
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { onClick() },
+                            onLongPress = { onLongClick() }
+                        )
+                    }
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                }
+            )
     ) {
         Icon(
             imageVector = icon,

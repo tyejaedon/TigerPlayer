@@ -68,4 +68,5 @@ object CoverScreenTestTags {
     fun discoveryRecommendation(id: String): String = "cover_screen_discovery_recommendation_$id"
     fun discoveryPlay(id: String): String = "cover_screen_discovery_play_$id"
     fun discoveryQueue(id: String): String = "cover_screen_discovery_queue_$id"
+    fun eqPreset(name: String): String = "cover_screen_eq_preset_$name"
 }
