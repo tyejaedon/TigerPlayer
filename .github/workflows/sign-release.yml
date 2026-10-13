@@ -36,6 +36,11 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Set up Android build tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools build-tools;36.0.0"
+
       - name: Resolve release candidate
         id: tag
         shell: bash
@@ -139,27 +144,32 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p signed-apks
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
 
-          jarsigner -verbose \
-            -sigalg SHA256withRSA \
-            -digestalg SHA-256 \
-            -keystore release.keystore \
-            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
-            -keypass "$RELEASE_KEY_PASSWORD" \
-            unsigned-apks/app-full-release-unsigned.apk \
-            "$RELEASE_KEY_ALIAS"
+          "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
+            --ks release.keystore \
+            --ks-key-alias "$RELEASE_KEY_ALIAS" \
+            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out signed-apks/app-full-release-signed.apk \
+            unsigned-apks/app-full-release-unsigned.apk
 
-          jarsigner -verbose \
-            -sigalg SHA256withRSA \
-            -digestalg SHA-256 \
-            -keystore release.keystore \
-            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
-            -keypass "$RELEASE_KEY_PASSWORD" \
-            unsigned-apks/app-foss-release-unsigned.apk \
-            "$RELEASE_KEY_ALIAS"
+          "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
+            --ks release.keystore \
+            --ks-key-alias "$RELEASE_KEY_ALIAS" \
+            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out signed-apks/app-foss-release-signed.apk \
+            unsigned-apks/app-foss-release-unsigned.apk
 
-          cp unsigned-apks/app-full-release-unsigned.apk signed-apks/app-full-release-signed.apk
-          cp unsigned-apks/app-foss-release-unsigned.apk signed-apks/app-foss-release-signed.apk
           (
             cd signed-apks
             sha256sum *.apk > SHA256SUMS-signed.txt
@@ -174,11 +184,20 @@ jobs:
       - name: Verify signed APKs
         run: |
           set -euo pipefail
-          jarsigner -verify -verbose -certs \
-            signed-apks/app-full-release-signed.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          EXPECTED_FINGERPRINT="0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b"
 
-          jarsigner -verify -verbose -certs \
-            signed-apks/app-foss-release-signed.apk
+          for apk in signed-apks/app-full-release-signed.apk signed-apks/app-foss-release-signed.apk; do
+            VERIFICATION=$("$APKSIGNER" verify --verbose --print-certs "$apk")
+            if ! grep -Fq "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFICATION"; then
+              echo "::error::APK does not have a valid v2 signature: $apk"
+              exit 1
+            fi
+            if ! grep -Fq "Signer #1 certificate SHA-256 digest: ${EXPECTED_FINGERPRINT}" <<< "$VERIFICATION"; then
+              echo "::error::APK signer does not match the release certificate: $apk"
+              exit 1
+            fi
+          done
 
       - name: Upload signed APKs to release
         run: |
