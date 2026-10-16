@@ -43,7 +43,7 @@ class CoverScreenLibraryNavigationTest {
     }
 
     @Test
-    fun allFourLibraryTabsAreReachable() {
+    fun allLibraryTabsAreReachable() {
         composeRule.setContent {
             TigerPlayerTheme {
                 CoverScreenLibraryTabRow(

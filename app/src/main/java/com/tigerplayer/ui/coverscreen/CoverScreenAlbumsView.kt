@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -59,7 +61,13 @@ fun CoverScreenAlbumsView(
     onPlayTrack: (AudioTrack) -> Unit,
     onAddToQueue: (AudioTrack) -> Unit,
     onRemoveFromQueue: (AudioTrack) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPlayAll: (List<AudioTrack>) -> Unit = {
+        if (it.isNotEmpty()) {
+            onPlayTrack(it.first())
+            it.drop(1).forEach(onAddToQueue)
+        }
+    }
 ) {
     val view = LocalView.current
     var revealedTrackId by remember { mutableStateOf<String?>(null) }
@@ -130,6 +138,23 @@ fun CoverScreenAlbumsView(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            if (tracks.isNotEmpty()) {
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                onPlayAll(tracks)
+                            }
+                        },
+                        modifier = Modifier.testTag(CoverScreenTestTags.PLAY_ALL)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "Play all")
+                    }
                 }
             }
             items(tracks, key = AudioTrack::id) { track ->

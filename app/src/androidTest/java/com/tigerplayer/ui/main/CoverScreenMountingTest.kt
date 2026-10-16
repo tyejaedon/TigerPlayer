@@ -7,7 +7,6 @@ import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.engine.CoverScreenStatsSnapshot
 import com.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.tigerplayer.ui.dashboard.DashboardViewModel
-import com.tigerplayer.engine.CoverScreenStatsSnapshot
 import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
 import com.tigerplayer.ui.coverscreen.CoverScreenWindowState
 import com.tigerplayer.ui.player.PlayerUiState

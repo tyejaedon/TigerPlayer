@@ -13,7 +13,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,9 +36,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +86,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 enum class CoverScreenLibraryTab(val label: String) {
     ARTISTS("Artists"),
     ALBUMS("Albums"),
+    SONGS("Songs"),
     PLAYLISTS("Playlists"),
     SPOTIFY_PLAYLISTS("Spotify Playlists")
 }
@@ -221,6 +231,9 @@ fun CoverScreenLibraryMenu(
             it.name.contains(debouncedSearchQuery, ignoreCase = true)
         }
     }
+    val filteredSongs = remember(playerState.allTracks, debouncedSearchQuery) {
+        filterAndSortTracks(playerState.allTracks, debouncedSearchQuery)
+    }
 
     BackHandler(enabled = true) {
         when {
@@ -292,7 +305,8 @@ fun CoverScreenLibraryMenu(
                     onRemoveFromQueue = { track ->
                         val index = playerState.queue.indexOfFirst { it.id == track.id }
                         if (index >= 0) playerViewModel.removeFromQueue(index)
-                    }
+                    },
+                    onPlayAll = playerViewModel::playAll
                 )
             } else {
                 Row(
@@ -502,6 +516,18 @@ fun CoverScreenLibraryMenu(
                                 onAlbumSelected = { selectedAlbum = it }
                             )
 
+                            CoverScreenLibraryTab.SONGS -> SongPicker(
+                                tracks = filteredSongs,
+                                onPlayTrack = { track ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    playerViewModel.playTrack(track)
+                                },
+                                onAddToQueue = { track ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    playerViewModel.addToQueue(track)
+                                }
+                            )
+
                             CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(
                                 playlists = filteredPlaylists,
                                 onPlaylistSelected = { selectedPlaylist = it }
@@ -666,4 +692,204 @@ private fun EmptyLibraryMessage(message: String, testTag: String? = null) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+@Composable
+private fun SongPicker(
+    tracks: List<AudioTrack>,
+    onPlayTrack: (AudioTrack) -> Unit,
+    onAddToQueue: (AudioTrack) -> Unit
+) {
+    if (tracks.isEmpty()) {
+        EmptyLibraryMessage("No songs available")
+    } else {
+        var revealedTrackId by remember { mutableStateOf<String?>(null) }
+        var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(CoverScreenTestTags.SONGS_LIST),
+            contentPadding = PaddingValues(12.dp)
+        ) {
+            items(tracks, key = AudioTrack::id) { track ->
+                SongTrackRow(
+                    track = track,
+                    isQueueRevealed = revealedTrackId == track.id,
+                    isOptionsExpanded = optionsTrack?.id == track.id,
+                    onPlay = { onPlayTrack(track) },
+                    onAddToQueue = { onAddToQueue(track) },
+                    onRevealQueue = { revealedTrackId = track.id },
+                    onDismissQueue = { revealedTrackId = null },
+                    onShowOptions = { optionsTrack = track },
+                    onDismissOptions = { optionsTrack = null }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun SongTrackRow(
+    track: AudioTrack,
+    isQueueRevealed: Boolean,
+    isOptionsExpanded: Boolean,
+    onPlay: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onRevealQueue: () -> Unit,
+    onDismissQueue: () -> Unit,
+    onShowOptions: () -> Unit,
+    onDismissOptions: () -> Unit
+) {
+    var horizontalDrag by remember(track.id) { mutableStateOf(0f) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .pointerInput(track.id) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, amount -> horizontalDrag += amount },
+                    onDragEnd = {
+                        if (horizontalDrag < -64.dp.toPx()) onRevealQueue()
+                        if (horizontalDrag > 64.dp.toPx()) onDismissQueue()
+                        horizontalDrag = 0f
+                    },
+                    onDragCancel = { horizontalDrag = 0f }
+                )
+            },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(14.dp))
+                .combinedClickable(
+                    onClick = onPlay,
+                    onLongClick = {
+                        onRevealQueue()
+                        onShowOptions()
+                    }
+                )
+                .testTag(CoverScreenTestTags.songTrack(track.id))
+                .semantics {
+                    contentDescription =
+                        "${track.title}, ${track.artist}, ${formatTrackDuration(track.durationMs)}"
+                },
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (track.artworkUri.toString().isBlank()) {
+                        Icon(
+                            imageVector = Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        coil.compose.AsyncImage(
+                            model = track.artworkUri,
+                            contentDescription = null,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = track.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+                Text(
+                    text = formatTrackDuration(track.durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Play ${track.title}"
+                )
+            }
+        }
+        if (isQueueRevealed) {
+            TextButton(
+                onClick = {
+                    onAddToQueue()
+                    onDismissQueue()
+                },
+                modifier = Modifier.testTag(CoverScreenTestTags.songQueue(track.id))
+            ) {
+                Text("Add to queue")
+            }
+        }
+        Box {
+            IconButton(
+                onClick = onAddToQueue,
+                modifier = Modifier
+                    .size(44.dp)
+                    .testTag(CoverScreenTestTags.queueTrack(track.id))
+                    .semantics { contentDescription = "Add ${track.title} to queue" }
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null
+                )
+            }
+            DropdownMenu(
+                expanded = isOptionsExpanded,
+                onDismissRequest = onDismissOptions
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Play now") },
+                    onClick = {
+                        onDismissOptions()
+                        onPlay()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Add to queue") },
+                    onClick = {
+                        onDismissOptions()
+                        onAddToQueue()
+                    }
+                )
+            }
+        }
+    }
+}
+
+internal fun filterAndSortTracks(
+    tracks: List<AudioTrack>,
+    query: String = ""
+): List<AudioTrack> {
+    val trimmed = query.trim()
+    val filtered = if (trimmed.isBlank()) {
+        tracks
+    } else {
+        tracks.filter { track ->
+            track.title.contains(trimmed, ignoreCase = true) ||
+                track.artist.contains(trimmed, ignoreCase = true)
+        }
+    }
+    return filtered.sortedBy { it.title.lowercase() }
 }

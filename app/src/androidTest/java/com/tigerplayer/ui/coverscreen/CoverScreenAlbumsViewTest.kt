@@ -70,6 +70,36 @@ class CoverScreenAlbumsViewTest {
         composeRule.runOnIdle { assertEquals(track, removed) }
     }
 
+    @Test
+    fun tappingPlayAllRequestsPlaybackForAllTracks() {
+        val tracks = listOf(
+            sampleTrack(),
+            sampleTrack().copy(id = "track-2", title = "Sample Track 2")
+        )
+        var playedAll: List<AudioTrack>? = null
+
+        composeRule.setContent {
+            TigerPlayerTheme {
+                CoverScreenAlbumsView(
+                    album = sampleAlbum(),
+                    artistName = "Sample Artist",
+                    tracks = tracks,
+                    onBack = {},
+                    onPlayTrack = {},
+                    onAddToQueue = {},
+                    onRemoveFromQueue = {},
+                    onPlayAll = { playedAll = it }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(CoverScreenTestTags.PLAY_ALL)
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.runOnIdle { assertEquals(tracks, playedAll) }
+    }
+
     private fun sampleAlbum() = CoverScreenAlbum(
         id = "album-1",
         artistId = "artist-1",
