@@ -462,6 +462,11 @@ class PlayerViewModel @Inject constructor(
         playbackEngine.setPlaylistAndPlay(tracks, startIndex)
     }
 
+    fun playAll(tracks: List<AudioTrack>) {
+        if (tracks.isEmpty()) return
+        setPlaylistAndPlay(tracks, 0)
+    }
+
     fun skipToNext() {
         playbackEngine.skipToNext(_uiState.value.currentTrack)
     }

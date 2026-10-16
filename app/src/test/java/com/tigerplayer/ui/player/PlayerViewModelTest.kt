@@ -159,4 +159,34 @@ class PlayerViewModelTest {
         advanceUntilIdle()
         assertEquals(1f, viewModel.uiState.value.coverScreenVolume, 0f)
     }
+
+    @Test
+    fun `playAll initiates playback from first track when tracks are present`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        val track1 = AudioTrack(
+            id = "t1",
+            title = "Track 1",
+            artist = "Artist",
+            album = "Album",
+            uri = mockk(relaxed = true),
+            artworkUri = mockk(relaxed = true),
+            durationMs = 1000L,
+            mimeType = "audio/mpeg"
+        )
+        val track2 = track1.copy(id = "t2", title = "Track 2")
+        val tracks = listOf(track1, track2)
+
+        viewModel.playAll(tracks)
+
+        verify(exactly = 1) { playbackEngine.setPlaylistAndPlay(tracks, 0) }
+    }
+
+    @Test
+    fun `playAll ignores empty track list`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+
+        viewModel.playAll(emptyList())
+
+        verify(exactly = 0) { playbackEngine.setPlaylistAndPlay(any(), any()) }
+    }
 }
