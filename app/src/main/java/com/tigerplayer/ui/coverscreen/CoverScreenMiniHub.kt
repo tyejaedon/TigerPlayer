@@ -50,11 +50,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -690,89 +695,169 @@ private fun TrackInfoText(
     )
 }
 
+/**
+ * Calculates adaptive visual dimensions for playback control buttons across different cover display
+ * widths (200-420 dp band).
+ *
+ * On narrow screens (~260dp, leaving ~228dp inside 16dp horizontal padding), 5 fixed 48dp buttons (240dp)
+ * cause horizontal container overflow. Sizing the visual button circle down to 40dp (or 34dp on ~200dp
+ * displays) ensures all 5 buttons and their margins fit comfortably, while each button retains at least
+ * a 48x48 dp minimum interactive touch target via proportional weights.
+ */
+internal fun calculateCoverControlButtonSize(availableWidth: Dp): Dp {
+    if (availableWidth <= 0.dp || availableWidth == Dp.Infinity) return 48.dp
+    val slotWidth = availableWidth / 5
+    return when {
+        slotWidth >= 52.dp -> 48.dp
+        slotWidth >= 46.dp -> 44.dp
+        slotWidth >= 40.dp -> 40.dp
+        slotWidth >= 34.dp -> 34.dp
+        else -> 30.dp
+    }
+}
+
+internal fun calculateCoverControlIconSize(buttonSize: Dp): Dp {
+    return when {
+        buttonSize >= 44.dp -> 24.dp
+        buttonSize >= 38.dp -> 20.dp
+        else -> 18.dp
+    }
+}
+
 @Composable
-private fun CoverAccessibleControls(
+internal fun CoverAccessibleControls(
     isPlaying: Boolean,
     onLongPressPlayPause: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onOpenQueue: () -> Unit,
-    onOpenLibrary: () -> Unit
+    onOpenLibrary: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
     ) {
-        CoverControlButton(
-            icon = Icons.Filled.SkipPrevious,
-            description = "Previous track",
-            onClick = onPrevious
-        )
-        CoverControlButton(
-            icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-            description = if (isPlaying) {
-                "Pause. Long press for playback settings"
-            } else {
-                "Play. Long press for playback settings"
-            },
-            onClick = onTogglePlayPause,
-            onLongClick = onLongPressPlayPause,
-            testTag = CoverScreenTestTags.PLAYBACK_SETTINGS_OPEN
-        )
-        CoverControlButton(
-            icon = Icons.Filled.SkipNext,
-            description = "Next track",
-            onClick = onNext
-        )
-        CoverControlButton(
-            icon = Icons.AutoMirrored.Filled.QueueMusic,
-            description = "Open queue",
-            onClick = onOpenQueue
-        )
-        CoverControlButton(
-            icon = Icons.Filled.LibraryMusic,
-            description = "Open library",
-            onClick = onOpenLibrary,
-            testTag = CoverScreenTestTags.LIBRARY_OPEN
-        )
+        val availableWidth = maxWidth
+        val buttonSize = calculateCoverControlButtonSize(availableWidth)
+        val iconSize = calculateCoverControlIconSize(buttonSize)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CoverControlButton(
+                icon = Icons.Filled.SkipPrevious,
+                description = "Previous track",
+                onClick = onPrevious,
+                modifier = Modifier.weight(1f),
+                buttonSize = buttonSize,
+                iconSize = iconSize
+            )
+            CoverControlButton(
+                icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                description = if (isPlaying) {
+                    "Pause. Long press for playback settings"
+                } else {
+                    "Play. Long press for playback settings"
+                },
+                onClick = onTogglePlayPause,
+                onLongClick = onLongPressPlayPause,
+                testTag = CoverScreenTestTags.PLAYBACK_SETTINGS_OPEN,
+                modifier = Modifier.weight(1f),
+                buttonSize = buttonSize,
+                iconSize = iconSize
+            )
+            CoverControlButton(
+                icon = Icons.Filled.SkipNext,
+                description = "Next track",
+                onClick = onNext,
+                modifier = Modifier.weight(1f),
+                buttonSize = buttonSize,
+                iconSize = iconSize
+            )
+            CoverControlButton(
+                icon = Icons.AutoMirrored.Filled.QueueMusic,
+                description = "Open queue",
+                onClick = onOpenQueue,
+                modifier = Modifier.weight(1f),
+                buttonSize = buttonSize,
+                iconSize = iconSize
+            )
+            CoverControlButton(
+                icon = Icons.Filled.LibraryMusic,
+                description = "Open library",
+                onClick = onOpenLibrary,
+                testTag = CoverScreenTestTags.LIBRARY_OPEN,
+                modifier = Modifier.weight(1f),
+                buttonSize = buttonSize,
+                iconSize = iconSize
+            )
+        }
     }
 }
 
 @Composable
-private fun CoverControlButton(
+internal fun CoverControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
-    testTag: String? = null
+    testTag: String? = null,
+    buttonSize: Dp = 48.dp,
+    iconSize: Dp = 24.dp
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .minimumInteractiveComponentSize()
-            .size(48.dp)
-            .background(Color.White.copy(alpha = 0.12f), CircleShape)
             .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
             .then(
                 if (onLongClick != null) {
-                    Modifier.pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = { onClick() },
-                            onLongPress = { onLongClick() }
-                        )
-                    }
+                    Modifier
+                        .semantics {
+                            role = Role.Button
+                            onClick(label = description) {
+                                onClick()
+                                true
+                            }
+                            onLongClick(label = description) {
+                                onLongClick()
+                                true
+                            }
+                        }
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = { onClick() },
+                                onLongPress = { onLongClick() }
+                            )
+                        }
                 } else {
-                    Modifier.clickable(onClick = onClick)
+                    Modifier.clickable(
+                        role = Role.Button,
+                        onClickLabel = description,
+                        onClick = onClick
+                    )
                 }
-            )
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = description,
-            tint = Color.White,
-            modifier = Modifier.size(24.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(buttonSize)
+                .background(Color.White.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = description,
+                tint = Color.White,
+                modifier = Modifier.size(iconSize)
+            )
+        }
     }
 }
 
