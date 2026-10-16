@@ -46,6 +46,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -402,7 +403,8 @@ fun CoverScreenMiniHub(
                         lyrics = uiState.currentLyrics,
                         currentPosition = uiState.currentPosition,
                         isLarge = true,
-                        statsVisible = true
+                        statsVisible = true,
+                        screenHeightDp = windowState.heightDp.dp
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     CoverAccessibleControls(
@@ -461,10 +463,14 @@ fun CoverScreenMiniHub(
             }
         } else {
             // COVER SCREEN MODE: Centered & Glanceable
+            val isTightScreen = windowState.heightDp in 1..360
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = if (isTightScreen) 6.dp else 12.dp
+                    ),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -474,9 +480,10 @@ fun CoverScreenMiniHub(
                     lyrics = uiState.currentLyrics,
                     currentPosition = uiState.currentPosition,
                     isLarge = false,
-                    statsVisible = true
+                    statsVisible = true,
+                    screenHeightDp = windowState.heightDp.dp
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(if (isTightScreen) 6.dp else 10.dp))
                 CoverAccessibleControls(
                     isPlaying = uiState.isPlaying,
                     onLongPressPlayPause = {
@@ -508,7 +515,7 @@ fun CoverScreenMiniHub(
                         libraryVisible = true
                     }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 8.dp))
                 CoverScreenStatsWidget(
                     stats = coverStats,
                     onOpenFullStats = {
@@ -516,7 +523,7 @@ fun CoverScreenMiniHub(
                         playerViewModel.requestSonicFootprintOpen()
                     }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 8.dp))
                 CoverScreenDiscoveryView(
                     daylistTracks = daylistTracks,
                     discoveryWeeklyTracks = discoveryWeeklyTracks,
@@ -640,9 +647,26 @@ private fun TrackInfoText(
     lyrics: String?,
     currentPosition: Long,
     isLarge: Boolean,
-    statsVisible: Boolean
+    statsVisible: Boolean,
+    screenHeightDp: Dp = LocalConfiguration.current.screenHeightDp.dp
 ) {
-    Spacer(modifier = Modifier.height(if (isLarge) 12.dp else 8.dp))
+    val isTight = screenHeightDp > 0.dp && screenHeightDp <= 360.dp
+    val spacerHeight = when {
+        isLarge -> 12.dp
+        isTight -> 4.dp
+        else -> 8.dp
+    }
+
+    val fontScale = LocalDensity.current.fontScale
+    val minLineHeight = calculateCoverLyricsMinLineHeight(fontScale)
+    val targetLyricsHeight = calculateCoverLyricsBoxHeight(
+        screenHeightDp = screenHeightDp,
+        fontScale = fontScale,
+        isLarge = isLarge,
+        statsVisible = statsVisible
+    )
+
+    Spacer(modifier = Modifier.height(spacerHeight))
 
     Text(
         text = track?.title ?: "TIGER PLAYER",
@@ -663,21 +687,15 @@ private fun TrackInfoText(
         letterSpacing = 1.2.sp
     )
 
-    Spacer(modifier = Modifier.height(if (isLarge) 12.dp else 8.dp))
+    Spacer(modifier = Modifier.height(spacerHeight))
     Box(
         modifier = Modifier
             .fillMaxWidth(if (isLarge) 0.82f else 0.94f)
-            .height(
-                when {
-                    statsVisible -> 72.dp
-                    isLarge -> 180.dp
-                    else -> 130.dp
-                }
-            ),
+            .wrapContentHeight()
+            .heightIn(min = minLineHeight, max = targetLyricsHeight)
+            .testTag(CoverScreenTestTags.LYRICS_CONTAINER),
         contentAlignment = Alignment.Center
     ) {
-
-
         LyricsDisplay(
             lyrics = lyrics,
             currentPosition = currentPosition,
@@ -685,7 +703,7 @@ private fun TrackInfoText(
             activeColor = TigerNeonOrange
         )
     }
-    Spacer(modifier = Modifier.height(if (isLarge) 12.dp else 8.dp))
+    Spacer(modifier = Modifier.height(spacerHeight))
 
     Text(
         text = subtitle,
@@ -693,6 +711,70 @@ private fun TrackInfoText(
         style = MaterialTheme.typography.labelSmall,
         letterSpacing = 1.sp
     )
+}
+
+/**
+ * Calculates the minimum vertical height required to comfortably display at least one full line
+ * of synced lyrics in [LyricsDisplay] without visual or glyph clipping.
+ *
+ * In [LyricsDisplay], an active lyric line is styled with 24sp bold font, scaled by 1.1x via graphicsLayer,
+ * and padded with 24dp vertical padding (12dp top and bottom). With viewport centering
+ * (`contentPadding = maxHeight / 2`), the container must be at least as tall as the scaled text line plus
+ * vertical padding and ascender/descender clearance, scaling proportionally with [fontScale].
+ */
+internal fun calculateCoverLyricsMinLineHeight(fontScale: Float): Dp {
+    val effectiveScale = fontScale.coerceAtLeast(0.85f)
+    // 40sp nominal scaled line height (36sp headline lineHeight * 1.1x active factor) * fontScale
+    // + 24dp inner text vertical padding + 16dp outer clearance buffer for ascenders/descenders
+    return (40.dp * effectiveScale) + 40.dp
+}
+
+/**
+ * Calculates adaptive visual dimensions for the lyrics container in cover-screen and flex-mode layouts.
+ *
+ * Prevents hard-clipping of lyrics (issue #252) while ensuring that downstream widgets
+ * ([CoverScreenStatsWidget] and [CoverScreenDiscoveryView]) remain visible and are never pushed off screen.
+ *
+ * Adapts dynamically across font scales (e.g. 1.0x, 1.25x, 1.5x) and screen heights (e.g. 343dp Razr 2022,
+ * 400dp Galaxy Z Flip, 413dp Razr+, and flex mode split displays).
+ */
+internal fun calculateCoverLyricsBoxHeight(
+    screenHeightDp: Dp,
+    fontScale: Float = 1.0f,
+    isLarge: Boolean = false,
+    statsVisible: Boolean = true
+): Dp {
+    val minLineHeight = calculateCoverLyricsMinLineHeight(fontScale)
+
+    if (!statsVisible) {
+        return if (isLarge) {
+            maxOf(180.dp, minLineHeight)
+        } else {
+            maxOf(130.dp, minLineHeight)
+        }
+    }
+
+    // statsVisible == true
+    if (isLarge) {
+        // Flex mode: bottom half viewing zone has ample space (typically 380-480dp).
+        // Provide comfortable multi-line space while keeping controls, stats, and discovery visible.
+        val flexTarget = if (screenHeightDp > 0.dp && screenHeightDp != Dp.Infinity) {
+            (screenHeightDp * 0.16f).coerceIn(120.dp, 160.dp)
+        } else {
+            130.dp
+        }
+        return maxOf(minLineHeight, flexTarget)
+    }
+
+    // Compact cover screen with stats visible:
+    // On tight displays (<= 360dp, e.g. Motorola Razr 2022 @ 343dp), restrict to minimum single-line
+    // height so stats and discovery are never pushed off screen.
+    // On larger panels (> 360dp, e.g. Z Flip @ 390-400dp, Razr+ @ 413dp), proportionally allocate a portion
+    // of the surplus height up to a safe cap.
+    val effectiveHeight = if (screenHeightDp > 0.dp && screenHeightDp != Dp.Infinity) screenHeightDp else 390.dp
+    val extraHeight = (effectiveHeight - 360.dp).coerceAtLeast(0.dp)
+    val adaptiveHeight = minLineHeight + (extraHeight * 0.25f)
+    return adaptiveHeight.coerceAtMost(120.dp).coerceAtLeast(minLineHeight)
 }
 
 /**
