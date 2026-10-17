@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -253,7 +254,13 @@ fun CoverScreenLibraryMenu(
     }
 
     LaunchedEffect(spotifyAuthenticated) {
-        if (spotifyAuthenticated) cloudViewModel.forceRefreshArchives()
+        if (spotifyAuthenticated) cloudViewModel.loadArchives()
+    }
+
+    LaunchedEffect(selectedTab, spotifyAuthenticated) {
+        if (selectedTab == CoverScreenLibraryTab.SPOTIFY_PLAYLISTS && spotifyAuthenticated) {
+            cloudViewModel.loadPlaylists()
+        }
     }
 
     Surface(
@@ -604,7 +611,7 @@ private fun LocalPlaylistPicker(
 }
 
 @Composable
-private fun SpotifyPlaylistPicker(
+internal fun SpotifyPlaylistPicker(
     authenticated: Boolean,
     playlists: List<SpotifyPlaylist>,
     onPlaylistSelected: (SpotifyPlaylist) -> Unit
@@ -647,6 +654,7 @@ private fun LibraryTile(
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
             .padding(vertical = 4.dp)
             .clickable(onClick = onClick)
             .semantics { contentDescription = description },
