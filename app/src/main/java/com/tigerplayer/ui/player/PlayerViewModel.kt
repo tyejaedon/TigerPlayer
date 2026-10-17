@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import com.tigerplayer.data.local.CoverScreenEqPreset
 import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.MediaSource
 import com.tigerplayer.data.local.PlaybackPrefs
@@ -73,6 +74,7 @@ data class PlayerUiState(
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val coverScreenVolume: Float = 1f,
+    val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
     val playbackSpeed: Float = 1f,
     val pitch: Float = 1f,
     val allTracks: List<AudioTrack> = emptyList(),
@@ -265,7 +267,12 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             settingsDataStore.settingsFlow.collect { settings ->
                 preferredDefaultPlayerView = settings.defaultPlayerView
-                _uiState.update { it.copy(coverScreenVolume = settings.coverScreenVolume) }
+                _uiState.update {
+                    it.copy(
+                        coverScreenVolume = settings.coverScreenVolume,
+                        coverScreenEqPreset = settings.coverScreenEqPreset
+                    )
+                }
                 mediaControllerManager.setVolume(settings.coverScreenVolume)
             }
         }
@@ -498,6 +505,13 @@ class PlayerViewModel @Inject constructor(
 
     fun adjustCoverScreenVolume(delta: Float) {
         setCoverScreenVolume(_uiState.value.coverScreenVolume + delta)
+    }
+
+    fun setCoverScreenEqPreset(preset: CoverScreenEqPreset) {
+        _uiState.update { it.copy(coverScreenEqPreset = preset) }
+        viewModelScope.launch {
+            settingsDataStore.setCoverScreenEqPreset(preset)
+        }
     }
 
     // --- PLAYBACK SPEED & PITCH CONTROLS (issue #52) ---

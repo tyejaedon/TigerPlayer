@@ -19,8 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -108,15 +110,20 @@ private fun ListeningHistoryBars(
     dailyPlayCounts: List<Int>,
     modifier: Modifier = Modifier
 ) {
-    val values = dailyPlayCounts.takeLast(CoverScreenStatsSnapshot.STATS_DAYS)
-        .map { it.coerceAtLeast(0).toFloat() }
-    val maximum = values.maxOrNull()?.takeIf { it.isFinite() && it > 0f } ?: 1f
+    val values = remember(dailyPlayCounts) {
+        dailyPlayCounts.takeLast(CoverScreenStatsSnapshot.STATS_DAYS)
+            .map { it.coerceAtLeast(0).toFloat() }
+    }
+    val maximum = remember(values) {
+        values.maxOrNull()?.takeIf { it.isFinite() && it > 0f } ?: 1f
+    }
     val barColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
 
     Canvas(modifier = modifier) {
         if (values.isEmpty()) return@Canvas
         val gap = 3.dp.toPx()
+        val cornerRadius = CornerRadius(3.dp.toPx())
         val barWidth = ((size.width - gap * (values.size - 1)) / values.size).coerceAtLeast(0f)
         values.forEachIndexed { index, value ->
             val fraction = (value / maximum).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
@@ -126,13 +133,13 @@ private fun ListeningHistoryBars(
                 color = trackColor,
                 topLeft = androidx.compose.ui.geometry.Offset(left, 0f),
                 size = androidx.compose.ui.geometry.Size(barWidth, size.height),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                cornerRadius = cornerRadius
             )
             drawRoundRect(
                 color = barColor,
                 topLeft = androidx.compose.ui.geometry.Offset(left, size.height - barHeight),
                 size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                cornerRadius = cornerRadius
             )
         }
     }
