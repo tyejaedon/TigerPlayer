@@ -30,8 +30,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -188,5 +190,84 @@ class PlayerViewModelTest {
         viewModel.playAll(emptyList())
 
         verify(exactly = 0) { playbackEngine.setPlaylistAndPlay(any(), any()) }
+    }
+
+    @Test
+    fun `onSearchQueryChanged updates rawSearchQuery immediately without updating uiState`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onSearchQueryChanged("Kaer Morhen")
+
+        assertEquals("Kaer Morhen", viewModel.rawSearchQuery.value)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        verify(exactly = 0) { libraryEngine.updateSearchQuery(any()) }
+    }
+
+    @Test
+    fun `search query is debounced before updating uiState and libraryEngine`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onSearchQueryChanged("Kaer")
+        advanceTimeBy(100)
+        runCurrent()
+        assertEquals("Kaer", viewModel.rawSearchQuery.value)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        verify(exactly = 0) { libraryEngine.updateSearchQuery(any()) }
+
+        viewModel.onSearchQueryChanged("Kaer Morhen")
+        advanceTimeBy(200)
+        runCurrent()
+        assertEquals("Kaer Morhen", viewModel.rawSearchQuery.value)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        verify(exactly = 0) { libraryEngine.updateSearchQuery(any()) }
+
+        // Advance the remaining time to pass the 250ms debounce threshold
+        advanceTimeBy(50)
+        runCurrent()
+        assertEquals("Kaer Morhen", viewModel.rawSearchQuery.value)
+        assertEquals("Kaer Morhen", viewModel.uiState.value.searchQuery)
+        verify(exactly = 1) { libraryEngine.updateSearchQuery("Kaer Morhen") }
+    }
+
+    @Test
+    fun `clearSearch immediately resets both rawSearchQuery and uiState searchQuery`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onSearchQueryChanged("Witcher")
+        advanceTimeBy(250)
+        runCurrent()
+        assertEquals("Witcher", viewModel.rawSearchQuery.value)
+        assertEquals("Witcher", viewModel.uiState.value.searchQuery)
+
+        viewModel.clearSearch()
+
+        assertEquals("", viewModel.rawSearchQuery.value)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        verify(atLeast = 1) { libraryEngine.clearSearch() }
+    }
+
+    @Test
+    fun `clearSearch immediately cancels in-flight debounced query`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onSearchQueryChanged("Pending")
+        assertEquals("Pending", viewModel.rawSearchQuery.value)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+
+        viewModel.clearSearch()
+
+        assertEquals("", viewModel.rawSearchQuery.value)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        verify(atLeast = 1) { libraryEngine.clearSearch() }
+
+        // Even after debounce time expires, pending value is not emitted
+        advanceTimeBy(300)
+        runCurrent()
+        assertEquals("", viewModel.rawSearchQuery.value)
+        assertEquals("", viewModel.uiState.value.searchQuery)
     }
 }

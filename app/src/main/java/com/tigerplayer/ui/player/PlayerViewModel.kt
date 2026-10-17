@@ -26,6 +26,7 @@ import com.tigerplayer.utils.BluetoothDeviceManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -118,6 +119,9 @@ class PlayerViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    private val _rawSearchQuery = MutableStateFlow("")
+    val rawSearchQuery: StateFlow<String> = _rawSearchQuery.asStateFlow()
 
     private val _sonicFootprintOpenRequest = MutableStateFlow(false)
     val sonicFootprintOpenRequest: StateFlow<Boolean> = _sonicFootprintOpenRequest.asStateFlow()
@@ -365,6 +369,19 @@ class PlayerViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _playlistSortOrder.collect { order -> _uiState.update { it.copy(playlistSortOrder = order) } }
+        }
+
+        // --- 2c. SEARCH QUERY DEBOUNCE (issue #262) ---
+        @OptIn(FlowPreview::class)
+        viewModelScope.launch {
+            _rawSearchQuery
+                .drop(1)
+                .debounce(250L)
+                .distinctUntilChanged()
+                .collect { debouncedQuery ->
+                    _uiState.update { it.copy(searchQuery = debouncedQuery) }
+                    libraryEngine.updateSearchQuery(debouncedQuery)
+                }
         }
 
         // --- 3. QUEUE SYNCHRONIZATION ---
@@ -710,11 +727,11 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun onSearchQueryChanged(query: String) {
-        _uiState.update { it.copy(searchQuery = query) }
-        libraryEngine.updateSearchQuery(query)
+        _rawSearchQuery.value = query
     }
 
     fun clearSearch() {
+        _rawSearchQuery.value = ""
         _uiState.update { it.copy(searchQuery = "") }
         libraryEngine.clearSearch()
     }

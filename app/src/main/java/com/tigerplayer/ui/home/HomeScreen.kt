@@ -152,22 +152,20 @@ fun HomeScreen(
         }
     }
 
-    val query = uiState.searchQuery
-    var localSearchQuery by remember(isSearchActive) { mutableStateOf(query) }
+    val rawSearchQuery by viewModel.rawSearchQuery.collectAsState()
+    val debouncedQuery = uiState.searchQuery
 
-    LaunchedEffect(localSearchQuery) {
-        if (localSearchQuery != uiState.searchQuery) {
-            viewModel.onSearchQueryChanged(localSearchQuery)
-        }
+    val matchedArtists = remember(debouncedQuery, uiState.artists) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.artists.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
     }
-
-    val matchedArtists = remember(localSearchQuery, uiState.artists) {
-        if (localSearchQuery.isBlank()) emptyList()
-        else uiState.artists.filter { it.name.contains(localSearchQuery, ignoreCase = true) }
+    val matchedAlbums = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.tracks.filter { it.album.contains(debouncedQuery, ignoreCase = true) }.distinctBy { it.album.lowercase().trim() }
     }
-    val matchedAlbums = remember(localSearchQuery, uiState.tracks) {
-        if (localSearchQuery.isBlank()) emptyList()
-        else uiState.tracks.filter { it.album.contains(localSearchQuery, ignoreCase = true) }.distinctBy { it.album.lowercase().trim() }
+    val matchedTracks = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.tracks.filter { it.title.contains(debouncedQuery, ignoreCase = true) }
     }
 
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -182,28 +180,28 @@ fun HomeScreen(
             item {
                 HomeHeader(
                     title = "TIGER PLAYER",
-                    searchQuery = localSearchQuery,
+                    searchQuery = rawSearchQuery,
                     isSearchActive = isSearchActive,
                     onSearchToggle = {
                         isSearchActive = !isSearchActive
                         if (!isSearchActive) {
-                            localSearchQuery = ""
                             keyboardController?.hide()
                             focusManager.clearFocus()
                             viewModel.clearSearch()
                         }
                     },
-                    onSearchQueryChange = { localSearchQuery = it },
+                    onSearchQueryChange = { viewModel.onSearchQueryChanged(it) },
                     onSettingsClick = onNavigateToSettings
                 )
             }
 
-            if (localSearchQuery.isNotEmpty()) {
+            if (rawSearchQuery.isNotEmpty()) {
                 renderSearchResults(
                     uiState = uiState,
                     viewModel = viewModel,
                     matchedArtists = matchedArtists,
                     matchedAlbums = matchedAlbums,
+                    matchedTracks = matchedTracks,
                     onNavigateToAlbum = { album ->
                         keyboardController?.hide()
                         focusManager.clearFocus()
