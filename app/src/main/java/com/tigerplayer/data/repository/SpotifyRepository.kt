@@ -12,6 +12,7 @@ import com.tigerplayer.data.remote.model.SpotifyImage
 import com.tigerplayer.data.remote.model.SpotifyPlaylist
 import com.tigerplayer.data.remote.model.SpotifyTrack
 import com.tigerplayer.di.IoDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -103,6 +104,23 @@ class SpotifyRepository @Inject constructor(
     private val _userPlaylists = MutableStateFlow<List<SpotifyPlaylist>>(emptyList())
     val userPlaylists = _userPlaylists.asStateFlow()
 
+    var userPlaylistsLastFetchedMs: Long = 0L
+
+    init {
+        repositoryScope.launch {
+            authManager.token.collect { token ->
+                if (token.isEmpty()) {
+                    clearPlaylistsCache()
+                }
+            }
+        }
+    }
+
+    fun clearPlaylistsCache() {
+        _userPlaylists.value = emptyList()
+        userPlaylistsLastFetchedMs = 0L
+    }
+
     private val _userAlbums = MutableStateFlow<List<SpotifyAlbum>>(emptyList())
     val userAlbums = _userAlbums.asStateFlow()
 
@@ -137,18 +155,38 @@ class SpotifyRepository @Inject constructor(
 
     // --- 4. THE THREAD-SAFE FETCHERS ---
 
-    suspend fun fetchUserPlaylists(token: String) = withContext(ioDispatcher) {
+    suspend fun fetchUserPlaylists(
+        token: String,
+        forceRefresh: Boolean = false
+    ): List<SpotifyPlaylist> = withContext(ioDispatcher) {
+        if (!forceRefresh &&
+            _userPlaylists.value.isNotEmpty() &&
+            (System.currentTimeMillis() - userPlaylistsLastFetchedMs < PLAYLISTS_CACHE_TTL_MS)
+        ) {
+            return@withContext _userPlaylists.value
+        }
+
+        if (token.isBlank()) {
+            Log.w(TAG, "Cannot fetch playlists with empty or invalid token")
+            return@withContext _userPlaylists.value
+        }
+
         try {
             val response = spotifyApiService.getUserPlaylists("Bearer $token")
             if (response.isSuccessful) {
                 // Safeguard against null items occasionally returned by Spotify's pagination
-                _userPlaylists.value = response.body()?.items?.filterNotNull() ?: emptyList()
+                val playlists = response.body()?.items?.filterNotNull() ?: emptyList()
+                _userPlaylists.value = playlists
+                userPlaylistsLastFetchedMs = System.currentTimeMillis()
+                playlists
             } else {
                 Log.e(TAG, "Playlist fetch rejected: ${response.code()} ${response.errorBody()?.string()}")
+                _userPlaylists.value
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Playlist network failure", e)
-            throw e // Re-throw so the ViewModel can catch it and notify the UI
+            _userPlaylists.value
         }
     }
 
@@ -525,8 +563,9 @@ class SpotifyRepository @Inject constructor(
         return ERROR_CONNECTION_FAILED
     }
 
-    private companion object {
-        const val TAG = "SpotifyRepo"
+    companion object {
+        const val PLAYLISTS_CACHE_TTL_MS = 15 * 60 * 1000L
+        private const val TAG = "SpotifyRepo"
 
         /**
          * How long to wait for the Spotify app to confirm playback before giving up on the

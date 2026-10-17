@@ -106,7 +106,22 @@ class CloudViewModel @Inject constructor(
      */
     fun forceRefreshArchives() {
         fetchSavedAlbums()
-        fetchUserPlaylists()
+        fetchUserPlaylists(forceRefresh = true)
+    }
+
+    /**
+     * Loads saved albums and user playlists respecting cache TTL.
+     */
+    fun loadArchives(forceRefresh: Boolean = false) {
+        fetchSavedAlbums()
+        fetchUserPlaylists(forceRefresh = forceRefresh)
+    }
+
+    /**
+     * Loads user playlists, respecting cache TTL unless [forceRefresh] is requested.
+     */
+    fun loadPlaylists(forceRefresh: Boolean = false) {
+        fetchUserPlaylists(forceRefresh = forceRefresh)
     }
 
     fun clearError() {
@@ -166,12 +181,12 @@ class CloudViewModel @Inject constructor(
         }
     }
 
-    private fun fetchUserPlaylists() {
+    private fun fetchUserPlaylists(forceRefresh: Boolean = false) {
         viewModelScope.launch {
             val token = ensureValidToken() ?: return@launch
             _isLoadingTracks.value = true
             try {
-                spotifyRepository.fetchUserPlaylists(token)
+                spotifyRepository.fetchUserPlaylists(token, forceRefresh = forceRefresh)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _uiError.value = "Couldn't load your playlists. Please try again."
