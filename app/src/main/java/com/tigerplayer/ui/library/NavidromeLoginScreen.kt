@@ -4,14 +4,25 @@ import android.os.Build
 import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import com.tigerplayer.ui.KeyboardTestTags
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -37,6 +48,8 @@ fun NavidromeLoginScreen(
     // user acknowledgement (issue #47) - see CleartextNotAcknowledgedException.
     var pendingCleartextUrl by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     fun attemptConnect(allowCleartext: Boolean) {
         isLoading = true
@@ -79,6 +92,9 @@ fun NavidromeLoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.85f)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .testTag(KeyboardTestTags.NAVIDROME_LOGIN_CARD)
                 .glassEffect(MaterialTheme.shapes.extraLarge)
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f), MaterialTheme.shapes.extraLarge)
                 .padding(32.dp),
@@ -104,7 +120,15 @@ fun NavidromeLoginScreen(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
                 label = "Server URL",
-                placeholder = "https://192.168.1.100:4533"
+                placeholder = "https://192.168.1.100:4533",
+                modifier = Modifier.testTag(KeyboardTestTags.NAVIDROME_SERVER_URL),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                )
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -113,7 +137,15 @@ fun NavidromeLoginScreen(
             LoginField(
                 value = username,
                 onValueChange = { username = it },
-                label = "Username"
+                label = "Username",
+                modifier = Modifier.testTag(KeyboardTestTags.NAVIDROME_USERNAME),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                )
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -123,7 +155,20 @@ fun NavidromeLoginScreen(
                 value = password,
                 onValueChange = { password = it },
                 label = "Password",
-                isPassword = true
+                isPassword = true,
+                modifier = Modifier.testTag(KeyboardTestTags.NAVIDROME_PASSWORD),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        keyboardController?.hide()
+                        if (!isLoading && serverUrl.isNotBlank() && username.isNotBlank()) {
+                            attemptConnect(allowCleartext = false)
+                        }
+                    }
+                )
             )
 
             errorMessage?.let { message ->
@@ -190,7 +235,10 @@ private fun LoginField(
     onValueChange: (String) -> Unit,
     label: String,
     placeholder: String = "",
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    modifier: Modifier = Modifier,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     OutlinedTextField(
         value = value,
@@ -198,8 +246,10 @@ private fun LoginField(
         label = { Text(label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) },
         placeholder = { if (placeholder.isNotEmpty()) Text(placeholder) },
         visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),

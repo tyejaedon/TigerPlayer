@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
@@ -32,8 +34,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import com.tigerplayer.ui.KeyboardTestTags
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +75,8 @@ fun ExpandedStatsScreen(
         "Lifetime"
     )
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     // --- SEARCH & SORT STATE ---
     var searchQuery by remember { mutableStateOf("") }
@@ -125,7 +135,7 @@ fun ExpandedStatsScreen(
             )
         }
 
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
             // --- TOP BAR: THE ARCHIVE HEADER ---
             Row(
                 modifier = Modifier
@@ -136,6 +146,8 @@ fun ExpandedStatsScreen(
                 IconButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
                         onClose()
                     },
                     modifier = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)
@@ -176,6 +188,8 @@ fun ExpandedStatsScreen(
                             .background(bgColor)
                             .bounceClick {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
                                 viewModel.updateStatsFilter(filter)
                             }
                             .padding(horizontal = 20.dp, vertical = 10.dp)
@@ -321,6 +335,9 @@ fun StatsSearchBar(
     isAlphabeticalSort: Boolean,
     onToggleSort: () -> Unit
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -334,10 +351,18 @@ fun StatsSearchBar(
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
             cursorBrush = SolidColor(AardBlue),
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search,
+                keyboardType = KeyboardType.Text
+            ),
+            keyboardActions = KeyboardActions(
+                onSearch = { keyboardController?.hide() }
+            ),
             modifier = Modifier
                 .weight(1f)
                 .height(48.dp)
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape),
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)
+                .testTag(KeyboardTestTags.STATS_SEARCH_FIELD),
             decorationBox = { innerTextField ->
                 Row(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -352,7 +377,11 @@ fun StatsSearchBar(
                         innerTextField()
                     }
                     if (query.isNotEmpty()) {
-                        IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(24.dp)) {
+                        IconButton(onClick = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onQueryChange("")
+                        }, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Close, "Clear", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
                         }
                     }
@@ -368,7 +397,11 @@ fun StatsSearchBar(
                 .size(48.dp)
                 .clip(CircleShape)
                 .background(if (isAlphabeticalSort) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-                .bounceClick { onToggleSort() },
+                .bounceClick {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    onToggleSort()
+                },
             contentAlignment = Alignment.Center
         ) {
             Icon(
