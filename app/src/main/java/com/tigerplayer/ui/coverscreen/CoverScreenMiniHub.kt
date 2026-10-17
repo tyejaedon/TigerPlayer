@@ -51,18 +51,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tigerplayer.R
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.layout.FoldingFeature
@@ -290,20 +295,88 @@ fun CoverScreenMiniHub(
 
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
-    val artworkDescription = remember(track?.id, track?.title, track?.artist) {
-        val title = track?.title?.ifBlank { "Unknown title" } ?: "Unknown title"
-        val artist = track?.artist?.ifBlank { "Unknown artist" } ?: "Unknown artist"
-        "Album art for $title by $artist"
-    }
+    val unknownTitle = stringResource(R.string.coverscreen_unknown_title)
+    val unknownArtist = stringResource(R.string.coverscreen_unknown_artist)
+    val title = track?.title?.ifBlank { unknownTitle } ?: unknownTitle
+    val artist = track?.artist?.ifBlank { unknownArtist } ?: unknownArtist
+    val artworkDescription = stringResource(R.string.coverscreen_artwork_description, title, artist)
+
+    val gestureInstructions = stringResource(R.string.coverscreen_gesture_instructions)
+    val tapPlayPauseLabel = stringResource(R.string.coverscreen_gesture_tap_play_pause)
+    val swipeNextLabel = stringResource(R.string.coverscreen_gesture_swipe_next)
+    val swipePrevLabel = stringResource(R.string.coverscreen_gesture_swipe_prev)
+    val swipeUpQueueLabel = stringResource(R.string.coverscreen_gesture_swipe_up_queue)
+    val swipeDownCloseLabel = stringResource(R.string.coverscreen_gesture_swipe_down_close)
+    val longPressSettingsLabel = stringResource(R.string.coverscreen_gesture_long_press_settings)
+    val nowPlayingStatus = stringResource(R.string.coverscreen_status_now_playing)
+    val pausedStatus = stringResource(R.string.coverscreen_status_paused)
 
     Box(
         modifier = modifier
             .fillMaxSize()
+            .testTag(CoverScreenTestTags.MINI_HUB_ROOT)
             .onGloballyPositioned { coverScreenCoordinates = it }
             .background(Color.Black)
             .semantics {
-                contentDescription =
-                    "Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down for search."
+                contentDescription = gestureInstructions
+                stateDescription = if (uiState.isPlaying) nowPlayingStatus else pausedStatus
+                onClick(label = tapPlayPauseLabel) {
+                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    playerViewModel.togglePlayPause()
+                    true
+                }
+                onLongClick(label = longPressSettingsLabel) {
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    queueVisible = false
+                    libraryVisible = false
+                    playbackSettingsVisible = true
+                    true
+                }
+                customActions = listOf(
+                    CustomAccessibilityAction(tapPlayPauseLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        playerViewModel.togglePlayPause()
+                        true
+                    },
+                    CustomAccessibilityAction(swipeNextLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        playerViewModel.skipToNext()
+                        true
+                    },
+                    CustomAccessibilityAction(swipePrevLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        playerViewModel.skipToPrevious()
+                        true
+                    },
+                    CustomAccessibilityAction(swipeUpQueueLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = true
+                        true
+                    },
+                    CustomAccessibilityAction(swipeDownCloseLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        if (queueVisible) {
+                            queueVisible = false
+                        } else if (libraryVisible) {
+                            libraryVisible = false
+                            searchOnLibraryOpen = false
+                        } else if (playbackSettingsVisible) {
+                            playbackSettingsVisible = false
+                        } else {
+                            queueVisible = false
+                            searchOnLibraryOpen = true
+                            libraryVisible = true
+                        }
+                        true
+                    },
+                    CustomAccessibilityAction(longPressSettingsLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = false
+                        libraryVisible = false
+                        playbackSettingsVisible = true
+                        true
+                    }
+                )
             }
             .coverScreenGestures(
                 swipeThresholdPx = swipeThresholdPx,
@@ -399,7 +472,7 @@ fun CoverScreenMiniHub(
                 ) {
                     TrackInfoText(
                         track = track,
-                        subtitle = "FLEX MODE ACTIVE",
+                        subtitle = stringResource(R.string.coverscreen_status_flex_mode_active),
                         lyrics = uiState.currentLyrics,
                         currentPosition = uiState.currentPosition,
                         isLarge = true,
@@ -476,7 +549,7 @@ fun CoverScreenMiniHub(
             ) {
                 TrackInfoText(
                     track = track,
-                    subtitle = if (uiState.isPlaying) "NOW PLAYING" else "PAUSED",
+                    subtitle = if (uiState.isPlaying) stringResource(R.string.coverscreen_status_now_playing) else stringResource(R.string.coverscreen_status_paused),
                     lyrics = uiState.currentLyrics,
                     currentPosition = uiState.currentPosition,
                     isLarge = false,
@@ -589,15 +662,24 @@ fun CoverScreenMiniHub(
                             .padding(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
+                        val closeQueueLabel = stringResource(R.string.coverscreen_action_close_queue)
                         IconButton(
                             onClick = { queueVisible = false },
                             modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                                 .minimumInteractiveComponentSize()
-                                .size(44.dp)
+                                .size(48.dp)
+                                .semantics {
+                                    role = Role.Button
+                                    onClick(label = closeQueueLabel) {
+                                        queueVisible = false
+                                        true
+                                    }
+                                }
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Close,
-                                contentDescription = "Close queue",
+                                contentDescription = closeQueueLabel,
                                 tint = Color.White
                             )
                         }
@@ -669,7 +751,7 @@ private fun TrackInfoText(
     Spacer(modifier = Modifier.height(spacerHeight))
 
     Text(
-        text = track?.title ?: "TIGER PLAYER",
+        text = track?.title ?: stringResource(R.string.coverscreen_default_title),
         color = Color.White,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -678,7 +760,7 @@ private fun TrackInfoText(
     )
 
     Text(
-        text = track?.artist?.uppercase() ?: "WITCHER ARCHIVE",
+        text = track?.artist?.uppercase() ?: stringResource(R.string.coverscreen_default_artist),
         color = TigerNeonOrange,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -707,7 +789,7 @@ private fun TrackInfoText(
 
     Text(
         text = subtitle,
-        color = Color.White.copy(alpha = 0.4f),
+        color = Color.White.copy(alpha = 0.72f),
         style = MaterialTheme.typography.labelSmall,
         letterSpacing = 1.sp
     )
@@ -825,6 +907,16 @@ internal fun CoverAccessibleControls(
         val buttonSize = calculateCoverControlButtonSize(availableWidth)
         val iconSize = calculateCoverControlIconSize(buttonSize)
 
+        val previousLabel = stringResource(R.string.coverscreen_action_previous)
+        val playLabel = stringResource(R.string.coverscreen_action_play)
+        val pauseLabel = stringResource(R.string.coverscreen_action_pause)
+        val nextLabel = stringResource(R.string.coverscreen_action_next)
+        val queueLabel = stringResource(R.string.coverscreen_action_queue)
+        val libraryLabel = stringResource(R.string.coverscreen_action_library)
+        val settingsLabel = stringResource(R.string.coverscreen_gesture_long_press_settings)
+        val playingState = stringResource(R.string.coverscreen_status_now_playing)
+        val pausedState = stringResource(R.string.coverscreen_status_paused)
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -832,7 +924,8 @@ internal fun CoverAccessibleControls(
         ) {
             CoverControlButton(
                 icon = Icons.Filled.SkipPrevious,
-                description = "Previous track",
+                description = previousLabel,
+                onClickLabel = previousLabel,
                 onClick = onPrevious,
                 modifier = Modifier.weight(1f),
                 buttonSize = buttonSize,
@@ -840,11 +933,10 @@ internal fun CoverAccessibleControls(
             )
             CoverControlButton(
                 icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                description = if (isPlaying) {
-                    "Pause. Long press for playback settings"
-                } else {
-                    "Play. Long press for playback settings"
-                },
+                description = if (isPlaying) pauseLabel else playLabel,
+                stateDescription = if (isPlaying) playingState else pausedState,
+                onClickLabel = if (isPlaying) pauseLabel else playLabel,
+                onLongClickLabel = settingsLabel,
                 onClick = onTogglePlayPause,
                 onLongClick = onLongPressPlayPause,
                 testTag = CoverScreenTestTags.PLAYBACK_SETTINGS_OPEN,
@@ -854,7 +946,8 @@ internal fun CoverAccessibleControls(
             )
             CoverControlButton(
                 icon = Icons.Filled.SkipNext,
-                description = "Next track",
+                description = nextLabel,
+                onClickLabel = nextLabel,
                 onClick = onNext,
                 modifier = Modifier.weight(1f),
                 buttonSize = buttonSize,
@@ -862,7 +955,8 @@ internal fun CoverAccessibleControls(
             )
             CoverControlButton(
                 icon = Icons.AutoMirrored.Filled.QueueMusic,
-                description = "Open queue",
+                description = queueLabel,
+                onClickLabel = queueLabel,
                 onClick = onOpenQueue,
                 modifier = Modifier.weight(1f),
                 buttonSize = buttonSize,
@@ -870,7 +964,8 @@ internal fun CoverAccessibleControls(
             )
             CoverControlButton(
                 icon = Icons.Filled.LibraryMusic,
-                description = "Open library",
+                description = libraryLabel,
+                onClickLabel = libraryLabel,
                 onClick = onOpenLibrary,
                 testTag = CoverScreenTestTags.LIBRARY_OPEN,
                 modifier = Modifier.weight(1f),
@@ -890,7 +985,10 @@ internal fun CoverControlButton(
     onLongClick: (() -> Unit)? = null,
     testTag: String? = null,
     buttonSize: Dp = 48.dp,
-    iconSize: Dp = 24.dp
+    iconSize: Dp = 24.dp,
+    stateDescription: String? = null,
+    onClickLabel: String? = null,
+    onLongClickLabel: String? = null
 ) {
     Box(
         modifier = modifier
@@ -902,11 +1000,14 @@ internal fun CoverControlButton(
                     Modifier
                         .semantics {
                             role = Role.Button
-                            onClick(label = description) {
+                            if (stateDescription != null) {
+                                this.stateDescription = stateDescription
+                            }
+                            onClick(label = onClickLabel ?: description) {
                                 onClick()
                                 true
                             }
-                            onLongClick(label = description) {
+                            onLongClick(label = onLongClickLabel ?: description) {
                                 onLongClick()
                                 true
                             }
@@ -918,11 +1019,17 @@ internal fun CoverControlButton(
                             )
                         }
                 } else {
-                    Modifier.clickable(
-                        role = Role.Button,
-                        onClickLabel = description,
-                        onClick = onClick
-                    )
+                    Modifier
+                        .semantics {
+                            if (stateDescription != null) {
+                                this.stateDescription = stateDescription
+                            }
+                        }
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = onClickLabel ?: description,
+                            onClick = onClick
+                        )
                 }
             ),
         contentAlignment = Alignment.Center
