@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -14,11 +16,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import com.tigerplayer.ui.KeyboardTestTags
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -38,10 +46,13 @@ fun YouTubeSearchScreen(
     val placeholderIconTint = if (isEmbedded) Color.White else TigerSurfaceElevated
 
     val content = @Composable { padding: PaddingValues ->
+        val keyboardController = LocalSoftwareKeyboardController.current
+        val focusManager = LocalFocusManager.current
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .graphicsLayer {
                     shadowElevation = 1f
                 }
@@ -89,6 +100,8 @@ fun YouTubeSearchScreen(
                                     YouTubeTrackItem(
                                         track = track,
                                         onClick = {
+                                            keyboardController?.hide()
+                                            focusManager.clearFocus()
                                             selectedVideoId = track.videoId
                                         }
                                     )
@@ -139,7 +152,7 @@ fun YouTubeSearchScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun YouTubeSearchBar(
+fun YouTubeSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     onClearClick: () -> Unit,
@@ -147,6 +160,9 @@ private fun YouTubeSearchBar(
     isEmbedded: Boolean = false,
     iconTint: Color = TigerTextMed
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     Surface(
         color = if (isEmbedded) Color.Transparent else Color.Black,
         modifier = Modifier.statusBarsPadding()
@@ -158,10 +174,22 @@ private fun YouTubeSearchBar(
                 .fillMaxWidth()
                 .padding(16.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .glassEffect(RoundedCornerShape(12.dp)),
+                .glassEffect(RoundedCornerShape(12.dp))
+                .testTag(KeyboardTestTags.YOUTUBE_SEARCH_FIELD),
             placeholder = { Text("Search YouTube Music...", color = TigerTextLow) },
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search,
+                keyboardType = KeyboardType.Text
+            ),
+            keyboardActions = KeyboardActions(
+                onSearch = { keyboardController?.hide() }
+            ),
             leadingIcon = {
-                IconButton(onClick = onBackClick) {
+                IconButton(onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    onBackClick()
+                }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
@@ -171,7 +199,11 @@ private fun YouTubeSearchBar(
             },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = onClearClick) {
+                    IconButton(onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onClearClick()
+                    }) {
                         Icon(Icons.Default.Clear, contentDescription = "Clear", tint = iconTint)
                     }
                 }

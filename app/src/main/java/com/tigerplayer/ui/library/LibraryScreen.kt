@@ -24,6 +24,8 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -36,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -47,9 +51,15 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import com.tigerplayer.ui.KeyboardTestTags
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -108,18 +118,26 @@ fun LibraryScreen(
             .distinctBy { it.album.lowercase().trim() }
     }
 
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
+            .imePadding()
     ) {
         AnimatedLibraryHeader(
             query = query,
             isSearchActive = isSearchActive,
             onSearchToggle = {
                 isSearchActive = !isSearchActive
-                if (!isSearchActive) viewModel.clearSearch()
+                if (!isSearchActive) {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    viewModel.clearSearch()
+                }
             },
             onQueryChange = { viewModel.onSearchQueryChanged(it) }
         )
@@ -142,9 +160,21 @@ fun LibraryScreen(
                         viewModel = viewModel,
                         matchedArtists = matchedArtists,
                         matchedAlbums = matchedAlbums,
-                        onNavigateToAlbum = onNavigateToAlbum,
-                        onNavigatetoArtist = onNavigateToArtist,
-                        artistDetails = artistDetails
+                        onNavigateToAlbum = { album ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onNavigateToAlbum(album)
+                        },
+                        onNavigatetoArtist = { artist ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onNavigateToArtist(artist)
+                        },
+                        artistDetails = artistDetails,
+                        onTrackSelected = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                        }
                     )
                 }
             } else {
@@ -177,6 +207,15 @@ fun AnimatedLibraryHeader(
     onQueryChange: (String) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) {
+            focusRequester.requestFocus()
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -210,6 +249,7 @@ fun AnimatedLibraryHeader(
             }, label = "SearchBarAnimation"
         ) { searchActive ->
             if (searchActive) {
+                @Suppress("DEPRECATION")
                 OutlinedTextField(
                     value = query,
                     onValueChange = onQueryChange,
@@ -217,9 +257,19 @@ fun AnimatedLibraryHeader(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
+                        .focusRequester(focusRequester)
+                        .testTag(KeyboardTestTags.LIBRARY_SEARCH_FIELD)
                         .glassEffect(CircleShape),
                     shape = CircleShape,
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Search,
+                        keyboardType = KeyboardType.Text,
+                        autoCorrect = false
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { keyboardController?.hide() }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.aardBlue,
                         unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
@@ -228,7 +278,12 @@ fun AnimatedLibraryHeader(
                     ),
                     leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.aardBlue) },
                     trailingIcon = {
-                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSearchToggle() }) {
+                        IconButton(onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onSearchToggle()
+                        }) {
                             Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
                         }
                     }
@@ -699,8 +754,18 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
     var newPlaylistName by remember { mutableStateOf("") }
 
     if (showCreateDialog) {
+        val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
+
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+
         AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
+            onDismissRequest = {
+                showCreateDialog = false
+                keyboardController?.hide()
+            },
             title = { Text("NEW PLAYLIST", fontWeight = FontWeight.Black) },
             text = {
                 OutlinedTextField(
@@ -708,7 +773,21 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     onValueChange = { newPlaylistName = it },
                     label = { Text("Playlist Name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .testTag(KeyboardTestTags.PLAYLIST_CREATE_NAME_FIELD),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (newPlaylistName.isNotBlank()) {
+                                viewModel.createPlaylist(newPlaylistName)
+                                newPlaylistName = ""
+                                showCreateDialog = false
+                                keyboardController?.hide()
+                            }
+                        }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.aardBlue,
                         cursorColor = MaterialTheme.aardBlue
@@ -722,6 +801,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                             viewModel.createPlaylist(newPlaylistName)
                             newPlaylistName = ""
                             showCreateDialog = false
+                            keyboardController?.hide()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.aardBlue)
@@ -730,7 +810,10 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) {
+                TextButton(onClick = {
+                    showCreateDialog = false
+                    keyboardController?.hide()
+                }) {
                     Text("CANCEL", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
             },
@@ -1300,7 +1383,8 @@ fun LazyListScope.renderSearchResults(
     matchedAlbums: List<AudioTrack>,
     onNavigateToAlbum: (String) -> Unit,
     onNavigatetoArtist: (String) -> Unit,
-    artistDetails: Map<String, ArtistDetails>
+    artistDetails: Map<String, ArtistDetails>,
+    onTrackSelected: (() -> Unit)? = null
 ) {
     if (matchedArtists.isNotEmpty()) {
         item {
@@ -1313,6 +1397,8 @@ fun LazyListScope.renderSearchResults(
             )
         }
         items(matchedArtists, key = { "artist_${it.name}" }) { artist ->
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
 
             // 🔥 THE FIX: Extract HD images using the identical Lore logic
             val normalizedKey = remember(artist.name) {
@@ -1337,7 +1423,11 @@ fun LazyListScope.renderSearchResults(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .bounceClick { onNavigatetoArtist(artist.name) }
+                    .bounceClick {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onNavigatetoArtist(artist.name)
+                    }
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1371,11 +1461,17 @@ fun LazyListScope.renderSearchResults(
             )
         }
         items(matchedAlbums, key = { "album_${it.album}" }) { album ->
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .bounceClick { onNavigateToAlbum(album.album) }
+                    .bounceClick {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onNavigateToAlbum(album.album)
+                    }
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1404,10 +1500,17 @@ fun LazyListScope.renderSearchResults(
             )
         }
         items(matchedTracks, key = { "track_${it.id}" }) { track ->
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
             SongItem(
                 track = track,
                 isActive = uiState.currentTrack?.id == track.id,
-                onClick = { viewModel.playTrack(track) }
+                onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    onTrackSelected?.invoke()
+                    viewModel.playTrack(track)
+                }
             )
         }
     }

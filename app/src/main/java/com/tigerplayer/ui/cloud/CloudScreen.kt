@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,7 +23,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import com.tigerplayer.ui.KeyboardTestTags
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +55,8 @@ fun CloudScreen(
     onNavigateToYouTubeSearch: () -> Unit
 ) {
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val query by viewModel.searchQuery.collectAsState()
     val playlists by viewModel.filteredPlaylists.collectAsState()
     val albums by viewModel.filteredAlbums.collectAsState()
@@ -94,6 +104,7 @@ fun CloudScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
+                    .imePadding()
             ) {
                 if (reauthRequired) {
                     SpotifyReauthBanner(
@@ -134,7 +145,11 @@ fun CloudScreen(
                     tabs.forEachIndexed { index, title ->
                         Tab(
                             selected = pagerState.currentPage == index,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            onClick = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                scope.launch { pagerState.animateScrollToPage(index) }
+                            },
                             selectedContentColor = SpotifyGreen,
                             unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             text = {
@@ -167,7 +182,11 @@ fun CloudScreen(
                                     } else {
                                         ArchiveGrid(
                                             items = playlistItems,
-                                            onClick = { id, name, img -> onNavigateToSpotifyPlaylist(id, name, img) }
+                                            onClick = { id, name, img ->
+                                                keyboardController?.hide()
+                                                focusManager.clearFocus()
+                                                onNavigateToSpotifyPlaylist(id, name, img)
+                                            }
                                         )
                                     }
                                 }
@@ -177,7 +196,11 @@ fun CloudScreen(
                                     } else {
                                         ArchiveGrid(
                                             items = albumItems,
-                                            onClick = { id, name, img -> onNavigateToSpotifyAlbum(id, name, img) }
+                                            onClick = { id, name, img ->
+                                                keyboardController?.hide()
+                                                focusManager.clearFocus()
+                                                onNavigateToSpotifyAlbum(id, name, img)
+                                            }
                                         )
                                     }
                                 }
@@ -192,12 +215,15 @@ fun CloudScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CloudHeader(
+fun CloudHeader(
     query: String,
     onQueryChange: (String) -> Unit,
     onRefresh: () -> Unit,
     onYouTubeSearchClick: () -> Unit
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp).statusBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -213,7 +239,11 @@ private fun CloudHeader(
 
             Row {
                 IconButton(
-                    onClick = onYouTubeSearchClick,
+                    onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onYouTubeSearchClick()
+                    },
                     modifier = Modifier
                         .size(42.dp)
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
@@ -224,7 +254,11 @@ private fun CloudHeader(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 IconButton(
-                    onClick = onRefresh,
+                    onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onRefresh()
+                    },
                     modifier = Modifier
                         .size(42.dp)
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape)
@@ -242,12 +276,24 @@ private fun CloudHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp)
-                .glassEffect(CircleShape),
+                .glassEffect(CircleShape)
+                .testTag(KeyboardTestTags.CLOUD_SEARCH_FIELD),
             placeholder = { Text("Search the cloud...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search,
+                keyboardType = KeyboardType.Text
+            ),
+            keyboardActions = KeyboardActions(
+                onSearch = { keyboardController?.hide() }
+            ),
             leadingIcon = { Icon(WitcherIcons.Search, null, tint = SpotifyGreen, modifier = Modifier.size(20.dp)) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
+                    IconButton(onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onQueryChange("")
+                    }) {
                         Icon(WitcherIcons.Close, "Clear", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
                     }
                 }
