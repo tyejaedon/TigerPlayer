@@ -49,6 +49,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -69,9 +70,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.tigerplayer.R
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.data.model.AudioTrack
@@ -104,11 +110,20 @@ fun CoverScreenLibraryTabRow(
         modifier = modifier.testTag(CoverScreenTestTags.LIBRARY_TABS)
     ) {
         CoverScreenLibraryTab.entries.forEach { tab ->
+            val tabTitle = when (tab) {
+                CoverScreenLibraryTab.ARTISTS -> stringResource(R.string.coverscreen_tab_artists)
+                CoverScreenLibraryTab.ALBUMS -> stringResource(R.string.coverscreen_tab_albums)
+                CoverScreenLibraryTab.SONGS -> stringResource(R.string.coverscreen_tab_songs)
+                CoverScreenLibraryTab.PLAYLISTS -> stringResource(R.string.coverscreen_tab_playlists)
+                CoverScreenLibraryTab.SPOTIFY_PLAYLISTS -> stringResource(R.string.coverscreen_tab_spotify_playlists)
+            }
             Tab(
                 selected = tab == selectedTab,
                 onClick = { onTabSelected(tab) },
-                modifier = Modifier.testTag(CoverScreenTestTags.libraryTab(tab.name)),
-                text = { Text(tab.label) }
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag(CoverScreenTestTags.libraryTab(tab.name)),
+                text = { Text(tabTitle) }
             )
         }
     }
@@ -141,6 +156,9 @@ fun CoverScreenLibraryMenu(
     var searchQuery by remember { mutableStateOf("") }
     var debouncedSearchQuery by remember { mutableStateOf("") }
     var voiceSearchError by remember { mutableStateOf<String?>(null) }
+    val voiceSearchNoSpeechError = stringResource(R.string.coverscreen_voice_search_no_speech)
+    val searchPrompt = stringResource(R.string.coverscreen_search_prompt)
+    val voiceSearchUnavailableError = stringResource(R.string.coverscreen_voice_search_unavailable)
     val voiceSearchAvailable = remember(context) {
         SpeechRecognizer.isRecognitionAvailable(context)
     }
@@ -155,7 +173,7 @@ fun CoverScreenLibraryMenu(
                 searchQuery = recognizedText
                 voiceSearchError = null
             } else {
-                voiceSearchError = "No speech was recognized. Try again or type to search."
+                voiceSearchError = voiceSearchNoSpeechError
             }
         }
     }
@@ -263,11 +281,12 @@ fun CoverScreenLibraryMenu(
         }
     }
 
+    val libraryDesc = stringResource(R.string.coverscreen_description_library)
     Surface(
         modifier = modifier
             .fillMaxSize()
             .testTag(CoverScreenTestTags.LIBRARY_MENU)
-            .semantics { contentDescription = "Cover screen library" },
+            .semantics { contentDescription = libraryDesc },
         color = MaterialTheme.colorScheme.background,
         shape = RoundedCornerShape(20.dp)
     ) {
@@ -334,28 +353,50 @@ fun CoverScreenLibraryMenu(
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val backToPlaybackLabel = stringResource(R.string.coverscreen_action_back_to_playback)
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.testTag(CoverScreenTestTags.LIBRARY_BACK)
+                        modifier = Modifier
+                            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                            .minimumInteractiveComponentSize()
+                            .semantics {
+                                role = Role.Button
+                                onClick(label = backToPlaybackLabel) {
+                                    onDismiss()
+                                    true
+                                }
+                            }
+                            .testTag(CoverScreenTestTags.LIBRARY_BACK)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to playback"
+                            contentDescription = backToPlaybackLabel
                         )
                     }
                     Text(
-                        text = "Library",
+                        text = stringResource(R.string.coverscreen_title_library),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
                     if (!searchActive) {
+                        val searchLibraryLabel = stringResource(R.string.coverscreen_action_search_library)
                         IconButton(
                             onClick = { searchActive = true },
-                            modifier = Modifier.testTag(CoverScreenTestTags.SEARCH_OPEN)
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                .minimumInteractiveComponentSize()
+                                .semantics {
+                                    role = Role.Button
+                                    onClick(label = searchLibraryLabel) {
+                                        searchActive = true
+                                        true
+                                    }
+                                }
+                                .testTag(CoverScreenTestTags.SEARCH_OPEN)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Search,
-                                contentDescription = "Search library"
+                                contentDescription = searchLibraryLabel
                             )
                         }
                     }
@@ -379,12 +420,12 @@ fun CoverScreenLibraryMenu(
                                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                                 )
-                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Search your music")
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, searchPrompt)
                             }
                             try {
                                 speechLauncher.launch(intent)
                             } catch (error: ActivityNotFoundException) {
-                                voiceSearchError = "Voice search is unavailable. Type to search instead."
+                                voiceSearchError = voiceSearchUnavailableError
                             }
                         },
                         onClose = {
@@ -483,16 +524,20 @@ fun CoverScreenLibraryMenu(
                                         onClick = {
                                             libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
                                         },
-                                        label = { Text("Local") },
-                                        modifier = Modifier.testTag(CoverScreenTestTags.LOCAL_SOURCE)
+                                        label = { Text(stringResource(R.string.coverscreen_source_local)) },
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .testTag(CoverScreenTestTags.LOCAL_SOURCE)
                                     )
                                     FilterChip(
                                         selected = selectedSource == CoverScreenLibrarySource.SPOTIFY,
                                         onClick = {
                                             libraryViewModel.selectSource(CoverScreenLibrarySource.SPOTIFY)
                                         },
-                                        label = { Text("Spotify") },
-                                        modifier = Modifier.testTag(CoverScreenTestTags.SPOTIFY_SOURCE)
+                                        label = { Text(stringResource(R.string.coverscreen_source_spotify)) },
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .testTag(CoverScreenTestTags.SPOTIFY_SOURCE)
                                     )
                                 }
                                 CoverScreenArtistsGrid(
@@ -562,7 +607,7 @@ private fun AlbumPicker(
     onAlbumSelected: (CoverScreenAlbum) -> Unit
 ) {
     if (albums.isEmpty()) {
-        EmptyLibraryMessage("No albums available")
+        EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_albums))
     } else {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 144.dp),
@@ -591,7 +636,7 @@ private fun LocalPlaylistPicker(
     onPlaylistSelected: (Playlist) -> Unit
 ) {
     if (playlists.isEmpty()) {
-        EmptyLibraryMessage("No playlists available")
+        EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_playlists))
     } else {
         LazyColumn(contentPadding = PaddingValues(12.dp)) {
             items(playlists.size, key = { playlists[it].id }) { index ->
@@ -618,11 +663,11 @@ internal fun SpotifyPlaylistPicker(
 ) {
     if (!authenticated) {
         EmptyLibraryMessage(
-            message = "Sign in to Spotify to browse your playlists",
+            message = stringResource(R.string.coverscreen_auth_required),
             testTag = CoverScreenTestTags.LIBRARY_SPOTIFY_AUTH_REQUIRED
         )
     } else if (playlists.isEmpty()) {
-        EmptyLibraryMessage("No Spotify playlists available")
+        EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_spotify_playlists))
     } else {
         LazyColumn(contentPadding = PaddingValues(12.dp)) {
             items(playlists.size, key = { playlists[it].id }) { index ->
@@ -655,8 +700,13 @@ private fun LibraryTile(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 48.dp)
+            .minimumInteractiveComponentSize()
             .padding(vertical = 4.dp)
-            .clickable(onClick = onClick)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = description,
+                onClick = onClick
+            )
             .semantics { contentDescription = description },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         shape = RoundedCornerShape(14.dp)
@@ -697,7 +747,7 @@ private fun EmptyLibraryMessage(message: String, testTag: String? = null) {
             modifier = Modifier
                 .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
                 .semantics { contentDescription = message },
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
         )
     }
 }
@@ -709,7 +759,7 @@ private fun SongPicker(
     onAddToQueue: (AudioTrack) -> Unit
 ) {
     if (tracks.isEmpty()) {
-        EmptyLibraryMessage("No songs available")
+        EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_songs))
     } else {
         var revealedTrackId by remember { mutableStateOf<String?>(null) }
         var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
@@ -772,8 +822,13 @@ private fun SongTrackRow(
         Surface(
             modifier = Modifier
                 .weight(1f)
+                .defaultMinSize(minHeight = 48.dp)
+                .minimumInteractiveComponentSize()
                 .clip(RoundedCornerShape(14.dp))
                 .combinedClickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.coverscreen_action_play_now),
+                    onLongClickLabel = stringResource(R.string.coverscreen_action_add_to_queue),
                     onClick = onPlay,
                     onLongClick = {
                         onRevealQueue()
@@ -839,24 +894,45 @@ private fun SongTrackRow(
                 )
             }
         }
+        val addToQueueLabel = stringResource(R.string.coverscreen_action_add_to_queue)
         if (isQueueRevealed) {
             TextButton(
                 onClick = {
                     onAddToQueue()
                     onDismissQueue()
                 },
-                modifier = Modifier.testTag(CoverScreenTestTags.songQueue(track.id))
+                modifier = Modifier
+                    .defaultMinSize(minHeight = 48.dp)
+                    .minimumInteractiveComponentSize()
+                    .semantics {
+                        role = Role.Button
+                        onClick(label = addToQueueLabel) {
+                            onAddToQueue()
+                            onDismissQueue()
+                            true
+                        }
+                    }
+                    .testTag(CoverScreenTestTags.songQueue(track.id))
             ) {
-                Text("Add to queue")
+                Text(addToQueueLabel)
             }
         }
         Box {
             IconButton(
                 onClick = onAddToQueue,
                 modifier = Modifier
-                    .size(44.dp)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .minimumInteractiveComponentSize()
+                    .size(48.dp)
                     .testTag(CoverScreenTestTags.queueTrack(track.id))
-                    .semantics { contentDescription = "Add ${track.title} to queue" }
+                    .semantics {
+                        role = Role.Button
+                        onClick(label = addToQueueLabel) {
+                            onAddToQueue()
+                            true
+                        }
+                        contentDescription = "Add ${track.title} to queue"
+                    }
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.QueueMusic,
@@ -868,14 +944,14 @@ private fun SongTrackRow(
                 onDismissRequest = onDismissOptions
             ) {
                 DropdownMenuItem(
-                    text = { Text("Play now") },
+                    text = { Text(stringResource(R.string.coverscreen_action_play_now)) },
                     onClick = {
                         onDismissOptions()
                         onPlay()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Add to queue") },
+                    text = { Text(stringResource(R.string.coverscreen_action_add_to_queue)) },
                     onClick = {
                         onDismissOptions()
                         onAddToQueue()

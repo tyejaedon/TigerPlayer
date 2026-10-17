@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +32,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,10 +48,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 
 @Composable
@@ -88,6 +95,7 @@ fun CoverScreenAlbumsView(
                 )
             }
     ) {
+        val backToAlbumsText = stringResource(R.string.coverscreen_action_back_to_albums)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -96,14 +104,24 @@ fun CoverScreenAlbumsView(
         ) {
             IconButton(
                 onClick = onBack,
-                modifier = Modifier.testTag(CoverScreenTestTags.ALBUM_BACK)
+                modifier = Modifier
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .minimumInteractiveComponentSize()
+                    .semantics {
+                        role = Role.Button
+                        onClick(label = backToAlbumsText) {
+                            onBack()
+                            true
+                        }
+                    }
+                    .testTag(CoverScreenTestTags.ALBUM_BACK)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back to albums"
+                    contentDescription = backToAlbumsText
                 )
             }
-            Text(text = "Back to albums", style = MaterialTheme.typography.labelLarge)
+            Text(text = backToAlbumsText, style = MaterialTheme.typography.labelLarge)
         }
         LazyColumn(
             modifier = Modifier
@@ -120,7 +138,7 @@ fun CoverScreenAlbumsView(
                 ) {
                     AsyncImage(
                         model = album.artworkUrl,
-                        contentDescription = "${album.name} artwork",
+                        contentDescription = stringResource(R.string.coverscreen_artwork_album_description, album.name),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(148.dp)
@@ -139,6 +157,7 @@ fun CoverScreenAlbumsView(
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(10.dp))
+                    val playAllLabel = stringResource(R.string.coverscreen_action_play_all)
                     Button(
                         onClick = {
                             if (tracks.isNotEmpty()) {
@@ -146,14 +165,27 @@ fun CoverScreenAlbumsView(
                                 onPlayAll(tracks)
                             }
                         },
-                        modifier = Modifier.testTag(CoverScreenTestTags.PLAY_ALL)
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = 48.dp)
+                            .minimumInteractiveComponentSize()
+                            .semantics {
+                                role = Role.Button
+                                onClick(label = playAllLabel) {
+                                    if (tracks.isNotEmpty()) {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        onPlayAll(tracks)
+                                    }
+                                    true
+                                }
+                            }
+                            .testTag(CoverScreenTestTags.PLAY_ALL)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = null
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Play all")
+                        Text(text = stringResource(R.string.coverscreen_action_play_all))
                     }
                 }
             }
@@ -219,8 +251,13 @@ private fun TrackRow(
         Surface(
             modifier = Modifier
                 .weight(1f)
+                .defaultMinSize(minHeight = 48.dp)
+                .minimumInteractiveComponentSize()
                 .clip(RoundedCornerShape(14.dp))
                 .combinedClickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(R.string.coverscreen_action_play_now),
+                    onLongClickLabel = stringResource(R.string.coverscreen_action_remove_from_queue),
                     onClick = onPlay,
                     onLongClick = onShowOptions
                 )
@@ -283,21 +320,42 @@ private fun TrackRow(
                 )
             }
         }
+        val removeFromQueueLabel = stringResource(R.string.coverscreen_action_remove_from_queue)
+        val addToQueueLabel = stringResource(R.string.coverscreen_action_add_to_queue)
         if (isRemoveRevealed) {
             TextButton(
                 onClick = onRemoveFromQueue,
-                modifier = Modifier.testTag(CoverScreenTestTags.removeTrack(track.id))
+                modifier = Modifier
+                    .defaultMinSize(minHeight = 48.dp)
+                    .minimumInteractiveComponentSize()
+                    .semantics {
+                        role = Role.Button
+                        onClick(label = removeFromQueueLabel) {
+                            onRemoveFromQueue()
+                            true
+                        }
+                    }
+                    .testTag(CoverScreenTestTags.removeTrack(track.id))
             ) {
-                Text("Remove")
+                Text(stringResource(R.string.coverscreen_action_remove))
             }
         }
         Box {
             IconButton(
                 onClick = onAddToQueue,
                 modifier = Modifier
-                    .size(44.dp)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .minimumInteractiveComponentSize()
+                    .size(48.dp)
                     .testTag(CoverScreenTestTags.queueTrack(track.id))
-                    .semantics { contentDescription = "Add ${track.title} to queue" }
+                    .semantics {
+                        role = Role.Button
+                        onClick(label = addToQueueLabel) {
+                            onAddToQueue()
+                            true
+                        }
+                        contentDescription = "Add ${track.title} to queue"
+                    }
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.QueueMusic,
@@ -309,21 +367,21 @@ private fun TrackRow(
                 onDismissRequest = onDismissOptions
             ) {
                 DropdownMenuItem(
-                    text = { Text("Play now") },
+                    text = { Text(stringResource(R.string.coverscreen_action_play_now)) },
                     onClick = {
                         onDismissOptions()
                         onPlay()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Add to queue") },
+                    text = { Text(stringResource(R.string.coverscreen_action_add_to_queue)) },
                     onClick = {
                         onDismissOptions()
                         onAddToQueue()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Remove from queue") },
+                    text = { Text(stringResource(R.string.coverscreen_action_remove_from_queue)) },
                     onClick = {
                         onDismissOptions()
                         onRemoveFromQueue()

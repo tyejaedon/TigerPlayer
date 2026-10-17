@@ -3,4 +3,66 @@
     <string name="attr_bluetooth_device_management">Bluetooth device management</string>
     <string name="attr_weather_location">Weather by device location</string>
     <string name="attr_player_motion_sensor">Player motion sensor effects</string>
+
+    <!-- Cover Screen Gesture Hints -->
+    <string name="coverscreen_gesture_tap_play_pause">Tap to play or pause</string>
+    <string name="coverscreen_gesture_swipe_next">Swipe next</string>
+    <string name="coverscreen_gesture_swipe_prev">Swipe previous</string>
+    <string name="coverscreen_gesture_swipe_up_queue">Swipe up for queue</string>
+    <string name="coverscreen_gesture_swipe_down_close">Swipe down to close</string>
+    <string name="coverscreen_gesture_long_press_settings">Long press for playback settings</string>
+    <string name="coverscreen_gesture_instructions">Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down to close.</string>
+
+    <!-- Cover Screen Playback Controls -->
+    <string name="coverscreen_action_previous">Previous track</string>
+    <string name="coverscreen_action_play">Play</string>
+    <string name="coverscreen_action_pause">Pause</string>
+    <string name="coverscreen_action_next">Next track</string>
+    <string name="coverscreen_action_queue">Open queue</string>
+    <string name="coverscreen_action_library">Open library</string>
+    <string name="coverscreen_action_play_all">Play all</string>
+    <string name="coverscreen_action_close_queue">Close queue</string>
+    <string name="coverscreen_action_search_library">Search library</string>
+    <string name="coverscreen_action_back_to_albums">Back to albums</string>
+    <string name="coverscreen_action_back_to_playback">Back to playback</string>
+    <string name="coverscreen_action_add_to_queue">Add to queue</string>
+    <string name="coverscreen_action_play_now">Play now</string>
+    <string name="coverscreen_action_remove_from_queue">Remove from queue</string>
+    <string name="coverscreen_action_remove">Remove</string>
+
+    <!-- Cover Screen Status Subtitles -->
+    <string name="coverscreen_status_now_playing">NOW PLAYING</string>
+    <string name="coverscreen_status_paused">PAUSED</string>
+    <string name="coverscreen_status_flex_mode_active">FLEX MODE ACTIVE</string>
+    <string name="coverscreen_status_no_lyrics_found">NO LYRICS FOUND</string>
+
+    <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_artists">Artists</string>
+    <string name="coverscreen_tab_albums">Albums</string>
+    <string name="coverscreen_tab_songs">Songs</string>
+    <string name="coverscreen_tab_playlists">Playlists</string>
+    <string name="coverscreen_tab_spotify_playlists">Spotify Playlists</string>
+
+    <!-- Cover Screen Empty States -->
+    <string name="coverscreen_empty_artists">No artists available</string>
+    <string name="coverscreen_empty_albums">No albums available</string>
+    <string name="coverscreen_empty_songs">No songs available</string>
+    <string name="coverscreen_empty_playlists">No playlists available</string>
+    <string name="coverscreen_empty_spotify_playlists">No Spotify playlists available</string>
+    <string name="coverscreen_auth_required">Sign in to Spotify to browse your playlists</string>
+
+    <!-- Cover Screen Library & Search -->
+    <string name="coverscreen_source_local">Local</string>
+    <string name="coverscreen_source_spotify">Spotify</string>
+    <string name="coverscreen_title_library">Library</string>
+    <string name="coverscreen_description_library">Cover screen library</string>
+    <string name="coverscreen_artwork_description">Album art for %1$s by %2$s</string>
+    <string name="coverscreen_artwork_album_description">%1$s artwork</string>
+    <string name="coverscreen_default_title">TIGER PLAYER</string>
+    <string name="coverscreen_default_artist">WITCHER ARCHIVE</string>
+    <string name="coverscreen_unknown_title">Unknown title</string>
+    <string name="coverscreen_unknown_artist">Unknown artist</string>
+    <string name="coverscreen_search_prompt">Search your music</string>
+    <string name="coverscreen_voice_search_no_speech">No speech was recognized. Try again or type to search.</string>
+    <string name="coverscreen_voice_search_unavailable">Voice search is unavailable. Type to search instead.</string>
 </resources>

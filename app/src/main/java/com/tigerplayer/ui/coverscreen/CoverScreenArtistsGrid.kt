@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,11 +40,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.tigerplayer.R
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.tigerplayer.data.model.Artist
@@ -68,28 +75,30 @@ fun CoverScreenArtistsGrid(
 
     if (currentArtist == null) {
         if (artists.isEmpty()) {
+            val emptyMsg = stringResource(R.string.coverscreen_empty_artists)
             Box(
                 modifier = modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.ARTISTS_EMPTY_STATE)
-                    .semantics { contentDescription = "No artists available" },
+                    .semantics { contentDescription = emptyMsg },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No artists available",
+                    text = emptyMsg,
                     modifier = Modifier.semantics {
-                        contentDescription = "No artists available"
+                        contentDescription = emptyMsg
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {
+            val tabTitle = stringResource(R.string.coverscreen_tab_artists)
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 144.dp),
                 modifier = modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.ARTISTS_GRID)
-                    .semantics { contentDescription = "Artists" },
+                    .semantics { contentDescription = tabTitle },
                 contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -131,15 +140,24 @@ fun CoverScreenArtistsGrid(
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val backDesc = stringResource(R.string.coverscreen_tab_artists)
                 IconButton(
                     onClick = { selectedArtist = null },
-                    modifier = Modifier.semantics {
-                        contentDescription = "Back to artists"
-                    }.testTag(CoverScreenTestTags.ARTIST_BACK)
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        .minimumInteractiveComponentSize()
+                        .semantics {
+                            role = Role.Button
+                            onClick(label = backDesc) {
+                                selectedArtist = null
+                                true
+                            }
+                            contentDescription = backDesc
+                        }.testTag(CoverScreenTestTags.ARTIST_BACK)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back to artists"
+                        contentDescription = backDesc
                     )
                 }
                 Text(
@@ -151,7 +169,7 @@ fun CoverScreenArtistsGrid(
             if (artistAlbums.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "No albums available",
+                        text = stringResource(R.string.coverscreen_empty_albums),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -184,9 +202,15 @@ private fun ArtistCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+            .minimumInteractiveComponentSize()
             .testTag(CoverScreenTestTags.artist(artist.id))
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .clickable(
+                role = Role.Button,
+                onClickLabel = artist.name,
+                onClick = onClick
+            ),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
         shape = RoundedCornerShape(16.dp)
     ) {
@@ -248,9 +272,15 @@ private fun AlbumCard(album: CoverScreenAlbum, onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+            .minimumInteractiveComponentSize()
             .testTag(CoverScreenTestTags.album(album.id))
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = album.name,
+                onClick = onClick
+            )
             .semantics {
                 contentDescription = "${album.name}, ${album.trackCount} tracks"
             },

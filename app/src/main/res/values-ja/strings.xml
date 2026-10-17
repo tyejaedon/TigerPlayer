@@ -1,0 +1,68 @@
+<resources>
+    <string name="app_name">TigerPlayer</string>
+    <string name="attr_bluetooth_device_management">Bluetoothデバイス管理</string>
+    <string name="attr_weather_location">端末位置情報による天気</string>
+    <string name="attr_player_motion_sensor">プレーヤーモーションセンサー効果</string>
+
+    <!-- Cover Screen Gesture Hints -->
+    <string name="coverscreen_gesture_tap_play_pause">タップで再生または一時停止</string>
+    <string name="coverscreen_gesture_swipe_next">スワイプで次の曲</string>
+    <string name="coverscreen_gesture_swipe_prev">スワイプで前の曲</string>
+    <string name="coverscreen_gesture_swipe_up_queue">上にスワイプして再生キューを表示</string>
+    <string name="coverscreen_gesture_swipe_down_close">下にスワイプして閉じる</string>
+    <string name="coverscreen_gesture_long_press_settings">長押しで再生設定</string>
+    <string name="coverscreen_gesture_instructions">カバースクリーンミニプレーヤー。タップで再生または一時停止。左スワイプで次へ、右スワイプで前へ、上スワイプでキュー、下スワイプで閉じます。</string>
+
+    <!-- Cover Screen Playback Controls -->
+    <string name="coverscreen_action_previous">前の曲</string>
+    <string name="coverscreen_action_play">再生</string>
+    <string name="coverscreen_action_pause">一時停止</string>
+    <string name="coverscreen_action_next">次の曲</string>
+    <string name="coverscreen_action_queue">キューを開く</string>
+    <string name="coverscreen_action_library">ライブラリを開く</string>
+    <string name="coverscreen_action_play_all">すべて再生</string>
+    <string name="coverscreen_action_close_queue">キューを閉じる</string>
+    <string name="coverscreen_action_search_library">ライブラリを検索</string>
+    <string name="coverscreen_action_back_to_albums">アルバム一覧に戻る</string>
+    <string name="coverscreen_action_back_to_playback">再生画面に戻る</string>
+    <string name="coverscreen_action_add_to_queue">キューに追加</string>
+    <string name="coverscreen_action_play_now">今すぐ再生</string>
+    <string name="coverscreen_action_remove_from_queue">キューから削除</string>
+    <string name="coverscreen_action_remove">削除</string>
+
+    <!-- Cover Screen Status Subtitles -->
+    <string name="coverscreen_status_now_playing">再生中</string>
+    <string name="coverscreen_status_paused">一時停止中</string>
+    <string name="coverscreen_status_flex_mode_active">フレックスモード作動中</string>
+    <string name="coverscreen_status_no_lyrics_found">歌詞が見つかりません</string>
+
+    <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_artists">アーティスト</string>
+    <string name="coverscreen_tab_albums">アルバム</string>
+    <string name="coverscreen_tab_songs">曲</string>
+    <string name="coverscreen_tab_playlists">プレイリスト</string>
+    <string name="coverscreen_tab_spotify_playlists">Spotifyプレイリスト</string>
+
+    <!-- Cover Screen Empty States -->
+    <string name="coverscreen_empty_artists">利用可能なアーティストがいません</string>
+    <string name="coverscreen_empty_albums">利用可能なアルバムがありません</string>
+    <string name="coverscreen_empty_songs">利用可能な曲がありません</string>
+    <string name="coverscreen_empty_playlists">利用可能なプレイリストがありません</string>
+    <string name="coverscreen_empty_spotify_playlists">利用可能なSpotifyプレイリストがありません</string>
+    <string name="coverscreen_auth_required">プレイリストを閲覧するにはSpotifyにログインしてください</string>
+
+    <!-- Cover Screen Library & Search -->
+    <string name="coverscreen_source_local">ローカル</string>
+    <string name="coverscreen_source_spotify">Spotify</string>
+    <string name="coverscreen_title_library">ライブラリ</string>
+    <string name="coverscreen_description_library">カバースクリーンライブラリ</string>
+    <string name="coverscreen_artwork_description">%2$sの%1$sのアートワーク</string>
+    <string name="coverscreen_artwork_album_description">%1$sのアートワーク</string>
+    <string name="coverscreen_default_title">TIGER PLAYER</string>
+    <string name="coverscreen_default_artist">WITCHER ARCHIVE</string>
+    <string name="coverscreen_unknown_title">不明なタイトル</string>
+    <string name="coverscreen_unknown_artist">不明なアーティスト</string>
+    <string name="coverscreen_search_prompt">音楽を検索</string>
+    <string name="coverscreen_voice_search_no_speech">音声が認識されませんでした。もう一度試すか、入力して検索してください。</string>
+    <string name="coverscreen_voice_search_unavailable">音声検索は利用できません。入力して検索してください。</string>
+</resources>

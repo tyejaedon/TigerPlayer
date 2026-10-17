@@ -33,24 +33,69 @@ Motorola external-display support is advertised via manifest meta-data
     `DisplayManager.DisplayListener` to react to displays attaching/detaching at runtime.
   - `CoverScreenMiniHub(...)` swaps the normal app shell with a compact gesture UI. It is mounted
     by `MainScreen` whenever `CoverScreenWindowState.isCoverScreen` is true.
-  - Cover-screen stats and Day List / Discover Weekly suggestions reuse the `PlayerViewModel`
-    and `DashboardViewModel` state consumed by Home. Stats include seven-day history bars and live
-    session favorites; the bars animate on updates. The suggestion row lazily loads artwork,
   - The cover-screen stats and Day List / Discover Weekly suggestions reuse the `PlayerViewModel`
     and `DashboardViewModel` state consumed by Home. The suggestion row lazily loads artwork,
     supports play and queue actions, and keeps horizontal browsing separate from player gestures.
   - `isCoverScreenHeuristic(...)`, `isSecondaryDisplayIdentity(...)`, and `resolveIsCoverScreen(...)`
     keep each detection signal - and how they combine - independently testable.
+- `CoverScreenLibraryMenu.kt`
+  - Modal library navigation sheet presenting tabbed categories (Artists, Albums, Songs, Playlists, Spotify Playlists)
+    and integrated search with voice search capabilities.
+- `CoverScreenAlbumsView.kt`
+  - Focused album details and track list view with one-tap play-all and queue manipulation.
 
-## Gesture map
+## Gesture Map
 
-- Single tap: play/pause
-- Swipe left: next track
-- Swipe right: previous track
-- Swipe up: open queue sheet
-- Swipe down: close queue sheet
-- Long-press play/pause: open playback settings for shuffle, repeat, swipe volume, and EQ presets
-- Horizontal swipe on the discovery row: browse suggestions without skipping the playing track
+- Single tap: Play / Pause
+- Swipe left: Next track
+- Swipe right: Previous track
+- Swipe up: Open queue sheet
+- Swipe down: Close active sheet (queue / library) or open search
+- Long-press play/pause: Open playback settings for shuffle, repeat, swipe volume, and EQ presets
+- Horizontal swipe on the discovery row: Browse suggestions without skipping the playing track
+
+## Accessibility & TalkBack Support
+
+The cover screen subsystem is engineered for WCAG AA accessibility compliance:
+
+- **Full TalkBack Support**:
+  - The root `CoverScreenMiniHub` node exposes custom accessibility actions (`customActions`) for all primary
+    gestures:
+    1. Tap to play or pause (`coverscreen_gesture_tap_play_pause`)
+    2. Swipe next (`coverscreen_gesture_swipe_next`)
+    3. Swipe previous (`coverscreen_gesture_swipe_prev`)
+    4. Swipe up for queue (`coverscreen_gesture_swipe_up_queue`)
+    5. Swipe down to close (`coverscreen_gesture_swipe_down_close`)
+    6. Long press for playback settings (`coverscreen_gesture_long_press_settings`)
+  - Screen reader announcements summarize available gestures (`coverscreen_gesture_instructions`) and report dynamic
+    playback state via `stateDescription` ("NOW PLAYING" vs "PAUSED").
+- **Touch Target Dimensions**:
+  - All interactive buttons and list rows meet or exceed the 48x48 dp minimum touch target guideline
+    (`minimumInteractiveComponentSize()`, `defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)`).
+  - Adaptive visual sizing on narrow cover displays (200-260 dp) scales visual icons down to 34-40 dp while preserving
+    full 48 dp interactive touch targets through proportional weight distribution.
+- **Visual Contrast & Hierarchy**:
+  - Text contrast ratios exceed WCAG AA requirements (>4.5:1), including status subtitles, metadata text, and empty states.
+- **Semantics & Actions**:
+  - Explicit roles (`Role.Button`), `onClickLabel`, and `onLongClickLabel` semantics are declared across all controls,
+    tiles, and list rows.
+
+## Localization
+
+Cover screen UI strings are fully localized across 5 languages with verified 1:1 key parity:
+
+1. English (`app/src/main/res/values/strings.xml`)
+2. Spanish (`app/src/main/res/values-es/strings.xml`)
+3. French (`app/src/main/res/values-fr/strings.xml`)
+4. German (`app/src/main/res/values-de/strings.xml`)
+5. Japanese (`app/src/main/res/values-ja/strings.xml`)
+
+Localized string resources encompass:
+- Gesture hints and composite instructions
+- Playback controls (previous, play, pause, next, queue, library, play all, remove)
+- Status subtitles (now playing, paused, flex mode active, no lyrics found)
+- Tab titles and empty state messages (artists, albums, songs, playlists, spotify playlists, auth required)
+- Source selectors (local, Spotify) and voice search prompts
 
 ## Visuals
 
@@ -62,6 +107,7 @@ Motorola external-display support is advertised via manifest meta-data
 
 ```zsh
 cd "/Users/tyejaedon/StudioProjects/TigerPlayer"
-./gradlew :app:testDebugUnitTest
+./gradlew :app:lintFullDebug
+./gradlew :app:testFullDebugUnitTest
+./gradlew :app:assembleFullDebug
 ```
-

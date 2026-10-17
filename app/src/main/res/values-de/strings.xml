@@ -1,0 +1,68 @@
+<resources>
+    <string name="app_name">TigerPlayer</string>
+    <string name="attr_bluetooth_device_management">Bluetooth-Geräteverwaltung</string>
+    <string name="attr_weather_location">Wetter nach Gerätestandort</string>
+    <string name="attr_player_motion_sensor">Player-Bewegungssensoreffekte</string>
+
+    <!-- Cover Screen Gesture Hints -->
+    <string name="coverscreen_gesture_tap_play_pause">Tippen zum Abspielen oder Anhalten</string>
+    <string name="coverscreen_gesture_swipe_next">Wischen für nächsten Titel</string>
+    <string name="coverscreen_gesture_swipe_prev">Wischen für vorherigen Titel</string>
+    <string name="coverscreen_gesture_swipe_up_queue">Nach oben wischen für Warteschlange</string>
+    <string name="coverscreen_gesture_swipe_down_close">Nach unten wischen zum Schließen</string>
+    <string name="coverscreen_gesture_long_press_settings">Lange drücken für Wiedergabeeinstellungen</string>
+    <string name="coverscreen_gesture_instructions">Cover-Minispieler. Tippen für Wiedergabe oder Pause. Nach links für weiter, nach rechts für zurück, nach oben für Warteschlange, nach unten zum Schließen.</string>
+
+    <!-- Cover Screen Playback Controls -->
+    <string name="coverscreen_action_previous">Vorheriger Titel</string>
+    <string name="coverscreen_action_play">Abspielen</string>
+    <string name="coverscreen_action_pause">Anhalten</string>
+    <string name="coverscreen_action_next">Nächster Titel</string>
+    <string name="coverscreen_action_queue">Warteschlange öffnen</string>
+    <string name="coverscreen_action_library">Bibliothek öffnen</string>
+    <string name="coverscreen_action_play_all">Alle abspielen</string>
+    <string name="coverscreen_action_close_queue">Warteschlange schließen</string>
+    <string name="coverscreen_action_search_library">Bibliothek durchsuchen</string>
+    <string name="coverscreen_action_back_to_albums">Zurück zu Alben</string>
+    <string name="coverscreen_action_back_to_playback">Zurück zur Wiedergabe</string>
+    <string name="coverscreen_action_add_to_queue">Zur Warteschlange hinzufügen</string>
+    <string name="coverscreen_action_play_now">Jetzt abspielen</string>
+    <string name="coverscreen_action_remove_from_queue">Aus Warteschlange entfernen</string>
+    <string name="coverscreen_action_remove">Entfernen</string>
+
+    <!-- Cover Screen Status Subtitles -->
+    <string name="coverscreen_status_now_playing">WIEDERGABE</string>
+    <string name="coverscreen_status_paused">ANGEHALTEN</string>
+    <string name="coverscreen_status_flex_mode_active">FLEX-MODUS AKTIV</string>
+    <string name="coverscreen_status_no_lyrics_found">KEIN SONGTEXT GEFUNDEN</string>
+
+    <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_artists">Künstler</string>
+    <string name="coverscreen_tab_albums">Alben</string>
+    <string name="coverscreen_tab_songs">Titel</string>
+    <string name="coverscreen_tab_playlists">Playlists</string>
+    <string name="coverscreen_tab_spotify_playlists">Spotify-Playlists</string>
+
+    <!-- Cover Screen Empty States -->
+    <string name="coverscreen_empty_artists">Keine Künstler verfügbar</string>
+    <string name="coverscreen_empty_albums">Keine Alben verfügbar</string>
+    <string name="coverscreen_empty_songs">Keine Titel verfügbar</string>
+    <string name="coverscreen_empty_playlists">Keine Playlists verfügbar</string>
+    <string name="coverscreen_empty_spotify_playlists">Keine Spotify-Playlists verfügbar</string>
+    <string name="coverscreen_auth_required">Bei Spotify anmelden, um Playlists zu durchsuchen</string>
+
+    <!-- Cover Screen Library & Search -->
+    <string name="coverscreen_source_local">Lokal</string>
+    <string name="coverscreen_source_spotify">Spotify</string>
+    <string name="coverscreen_title_library">Bibliothek</string>
+    <string name="coverscreen_description_library">Cover-Bildschirm-Bibliothek</string>
+    <string name="coverscreen_artwork_description">Albumcover für %1$s von %2$s</string>
+    <string name="coverscreen_artwork_album_description">%1$s Cover</string>
+    <string name="coverscreen_default_title">TIGER PLAYER</string>
+    <string name="coverscreen_default_artist">WITCHER ARCHIV</string>
+    <string name="coverscreen_unknown_title">Unbekannter Titel</string>
+    <string name="coverscreen_unknown_artist">Unbekannter Künstler</string>
+    <string name="coverscreen_search_prompt">Musik durchsuchen</string>
+    <string name="coverscreen_voice_search_no_speech">Keine Sprache erkannt. Erneut versuchen oder tippen.</string>
+    <string name="coverscreen_voice_search_unavailable">Sprachsuche nicht verfügbar. Tippen zum Suchen.</string>
+</resources>
