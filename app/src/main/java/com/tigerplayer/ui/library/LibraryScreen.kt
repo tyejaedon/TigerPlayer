@@ -104,18 +104,24 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
 
     var isSearchActive by remember { mutableStateOf(false) }
-    val query = uiState.searchQuery
+    val rawSearchQuery by viewModel.rawSearchQuery.collectAsState()
+    val debouncedQuery = uiState.searchQuery
 
-    val matchedArtists = remember(query, uiState.artists) {
-        if (query.isBlank()) emptyList()
-        else uiState.artists.filter { it.name.contains(query, ignoreCase = true) }
+    val matchedArtists = remember(debouncedQuery, uiState.artists) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.artists.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
     }
 
-    val matchedAlbums = remember(query, uiState.tracks) {
-        if (query.isBlank()) emptyList()
+    val matchedAlbums = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
         else uiState.tracks
-            .filter { it.album.contains(query, ignoreCase = true) }
+            .filter { it.album.contains(debouncedQuery, ignoreCase = true) }
             .distinctBy { it.album.lowercase().trim() }
+    }
+
+    val matchedTracks = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.tracks.filter { it.title.contains(debouncedQuery, ignoreCase = true) }
     }
 
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -129,7 +135,7 @@ fun LibraryScreen(
             .imePadding()
     ) {
         AnimatedLibraryHeader(
-            query = query,
+            query = rawSearchQuery,
             isSearchActive = isSearchActive,
             onSearchToggle = {
                 isSearchActive = !isSearchActive
@@ -149,7 +155,7 @@ fun LibraryScreen(
         )
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (query.isNotEmpty()) {
+            if (rawSearchQuery.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 120.dp)
@@ -160,6 +166,7 @@ fun LibraryScreen(
                         viewModel = viewModel,
                         matchedArtists = matchedArtists,
                         matchedAlbums = matchedAlbums,
+                        matchedTracks = matchedTracks,
                         onNavigateToAlbum = { album ->
                             keyboardController?.hide()
                             focusManager.clearFocus()
@@ -1381,6 +1388,7 @@ fun LazyListScope.renderSearchResults(
     viewModel: PlayerViewModel,
     matchedArtists: List<LibraryArtist>,
     matchedAlbums: List<AudioTrack>,
+    matchedTracks: List<AudioTrack>,
     onNavigateToAlbum: (String) -> Unit,
     onNavigatetoArtist: (String) -> Unit,
     artistDetails: Map<String, ArtistDetails>,
@@ -1488,7 +1496,6 @@ fun LazyListScope.renderSearchResults(
         }
     }
 
-    val matchedTracks = uiState.tracks.filter { it.title.contains(uiState.searchQuery, ignoreCase = true) }
     if (matchedTracks.isNotEmpty()) {
         item {
             Text(

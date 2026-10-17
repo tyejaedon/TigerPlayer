@@ -17,7 +17,6 @@ import com.tigerplayer.ui.home.UserStatistics
 import com.tigerplayer.ui.player.LibraryArtist
 import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
@@ -70,14 +69,12 @@ class LibraryEngine @Inject constructor(
         val allTracks: List<AudioTrack>
     )
 
-    // 🔥 THE FIX: Added FlowPreview and debounce(250) to prevent keyboard typing lag
-    @OptIn(FlowPreview::class)
     fun getAggregatedLibraryFlow(
         unifiedTracksFlow: Flow<List<AudioTrack>>,
         trackSortOrder: Flow<SortOrder> = flowOf(SortOrder.TITLE),
         albumSortOrder: Flow<SortOrder> = flowOf(SortOrder.TITLE)
     ): Flow<LibraryAggregation> {
-        return combine(unifiedTracksFlow, _searchQuery.debounce(250), trackSortOrder, albumSortOrder) { tracks, query, tSort, aSort ->
+        return combine(unifiedTracksFlow, _searchQuery, trackSortOrder, albumSortOrder) { tracks, query, tSort, aSort ->
             aggregateLibrary(tracks, query, tSort, aSort)
         }
     }
