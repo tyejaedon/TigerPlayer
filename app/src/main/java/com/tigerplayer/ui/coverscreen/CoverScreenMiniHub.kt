@@ -69,6 +69,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tigerplayer.R
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
@@ -292,6 +295,33 @@ fun CoverScreenMiniHub(
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isLifecycleActive by remember {
+        mutableStateOf(
+            CoverScreenPerformanceManager.isLifecycleStateActive(lifecycleOwner.lifecycle.currentState)
+        )
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            isLifecycleActive = CoverScreenPerformanceManager.resolveLifecycleRenderingState(
+                event = event,
+                currentState = isLifecycleActive
+            )
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val hasModalOverlay = CoverScreenPerformanceManager.isModalOverlayActive(
+        queueVisible = queueVisible,
+        libraryVisible = libraryVisible,
+        playbackSettingsVisible = playbackSettingsVisible
+    )
+    val isRenderingActive = isLifecycleActive && !hasModalOverlay
 
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
@@ -613,16 +643,19 @@ fun CoverScreenMiniHub(
         }
 
         // WAVEFORM (Visual Anchor)
-        if (!queueVisible) {
+        if (!hasModalOverlay) {
             CoverMicroWaveform(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
                 energy = uiState.audioReactiveFrame.energy,
+                isPlaying = uiState.isPlaying,
+                isRenderingActive = isRenderingActive,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(if (windowState.hasSeparatingHinge) 16.dp else 12.dp)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .testTag(CoverScreenTestTags.MICRO_WAVEFORM)
             )
         }
 
@@ -717,6 +750,25 @@ fun CoverScreenMiniHub(
                     searchOnLibraryOpen = false
                 },
                 showSearchInitially = searchOnLibraryOpen
+            )
+        }
+
+        AnimatedVisibility(
+            visible = playbackSettingsVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenPlaybackSettings(
+                isShuffleEnabled = uiState.isShuffleEnabled,
+                repeatMode = uiState.repeatMode,
+                volume = uiState.coverScreenVolume,
+                selectedEqPreset = uiState.coverScreenEqPreset.displayName,
+                onToggleShuffle = playerViewModel::toggleShuffle,
+                onCycleRepeat = playerViewModel::toggleRepeat,
+                onAdjustVolume = playerViewModel::adjustCoverScreenVolume,
+                onSelectEqPreset = playerViewModel::setCoverScreenEqPreset,
+                onClose = { playbackSettingsVisible = false }
             )
         }
     }
@@ -1051,50 +1103,49 @@ internal fun CoverControlButton(
 }
 
 @Composable
-private fun CoverMicroWaveform(
+internal fun CoverMicroWaveform(
     amplitudes: List<Float>,
     bass: Float,
     energy: Float,
+    isPlaying: Boolean = true,
+    isRenderingActive: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(label = "CoverWave")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (Math.PI * 2.0).toFloat(),
-        animationSpec = infiniteRepeatable(animation = tween(durationMillis = 820, easing = LinearEasing)),
-        label = "CoverWavePhase"
-    )
-    val animatedEnergy by animateFloatAsState(
-        targetValue = (0.2f + energy * 0.9f).coerceIn(0.2f, 1.2f),
-        animationSpec = tween(120),
-        label = "CoverWaveEnergy"
-    )
+    val shouldAnimate = CoverScreenPerformanceManager.shouldAnimate(isPlaying, isRenderingActive)
+    val (phase, animatedEnergy) = if (shouldAnimate) {
+        val transition = rememberInfiniteTransition(label = "CoverWave")
+        val animatedPhase by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = (Math.PI * 2.0).toFloat(),
+            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 820, easing = LinearEasing)),
+            label = "CoverWavePhase"
+        )
+        val energyState by animateFloatAsState(
+            targetValue = (0.2f + energy * 0.9f).coerceIn(0.2f, 1.2f),
+            animationSpec = tween(120),
+            label = "CoverWaveEnergy"
+        )
+        Pair(animatedPhase, energyState)
+    } else {
+        Pair(0f, 0.2f)
+    }
 
     val points = remember(amplitudes) {
-        if (amplitudes.isEmpty()) {
-            List(32) { 0.2f }
-        } else {
-            List(32) { idx ->
-                val sourceIndex = ((idx / 31f) * (amplitudes.lastIndex.coerceAtLeast(0))).toInt()
-                amplitudes[sourceIndex].coerceIn(0f, 1f)
-            }
-        }
+        CoverScreenPerformanceManager.calculateWaveformPoints(amplitudes, 32)
     }
+    val reusablePath = remember { Path() }
 
     Canvas(modifier = modifier) {
         val centerY = size.height / 2f
-        val step = size.width / (points.size - 1).coerceAtLeast(1)
-
-        val path = Path().apply {
-            moveTo(0f, centerY)
-            points.forEachIndexed { index, amp ->
-                val x = index * step
-                val oscillation = sin(phase + index * 0.42f)
-                val reactive = (amp * 0.65f + bass * 0.35f) * animatedEnergy
-                val y = centerY + oscillation * reactive * (size.height * 0.48f)
-                lineTo(x, y)
-            }
-        }
+        val path = CoverScreenPerformanceManager.populateWaveformPath(
+            path = reusablePath,
+            points = points,
+            width = size.width,
+            height = size.height,
+            phase = phase,
+            bass = if (shouldAnimate) bass else 0f,
+            energy = animatedEnergy
+        )
 
         drawLine(
             color = TigerNeonOrange.copy(alpha = 0.2f),

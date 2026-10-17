@@ -52,6 +52,7 @@ object CoverScreenTestTags {
     const val PLAYBACK_SHUFFLE = "cover_screen_playback_shuffle"
     const val PLAYBACK_REPEAT = "cover_screen_playback_repeat"
     const val PLAYBACK_VOLUME = "cover_screen_playback_volume"
+    const val MICRO_WAVEFORM = "cover_screen_micro_waveform"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"
