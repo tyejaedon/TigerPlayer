@@ -2,11 +2,13 @@ package com.tigerplayer.ui.coverscreen
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.tigerplayer.ui.theme.TigerPlayerTheme
@@ -48,7 +50,7 @@ class CoverScreenSearchBarTest {
     }
 
     @Test
-    fun unavailableVoiceSearchIsExplainedAndDisabled() {
+    fun unavailableVoiceSearchIsDisabledAndStatusHiddenWhenNoError() {
         composeRule.setContent {
             TigerPlayerTheme {
                 CoverScreenSearchBar(
@@ -56,14 +58,34 @@ class CoverScreenSearchBarTest {
                     onQueryChange = {},
                     onVoiceSearch = {},
                     onClose = {},
-                    voiceSearchAvailable = false
+                    voiceSearchAvailable = false,
+                    voiceSearchError = null
                 )
             }
         }
 
         composeRule.onNodeWithTag(CoverScreenTestTags.SEARCH_VOICE).assertIsNotEnabled()
+        composeRule.onNodeWithTag(CoverScreenTestTags.SEARCH_VOICE_STATUS).assertDoesNotExist()
+    }
+
+    @Test
+    fun voiceSearchErrorIsDisplayedWhenExplicitlyProvided() {
+        val errorMessage = "Voice search failed to recognize speech"
+        composeRule.setContent {
+            TigerPlayerTheme {
+                CoverScreenSearchBar(
+                    query = "",
+                    onQueryChange = {},
+                    onVoiceSearch = {},
+                    onClose = {},
+                    voiceSearchAvailable = true,
+                    voiceSearchError = errorMessage
+                )
+            }
+        }
+
         composeRule.onNodeWithTag(CoverScreenTestTags.SEARCH_VOICE_STATUS).assertIsDisplayed()
-        composeRule.onNodeWithText("Voice search is unavailable on this device").assertIsDisplayed()
+        composeRule.onNodeWithText(errorMessage).assertIsDisplayed()
     }
 
     @Test
@@ -83,5 +105,22 @@ class CoverScreenSearchBarTest {
 
         composeRule.onNodeWithTag(CoverScreenTestTags.SEARCH_CLOSE).performClick()
         composeRule.runOnIdle { assertTrue(closed) }
+    }
+
+    @Test
+    fun searchActionInvokesCleanly() {
+        composeRule.setContent {
+            TigerPlayerTheme {
+                CoverScreenSearchBar(
+                    query = "Miles Davis",
+                    onQueryChange = {},
+                    onVoiceSearch = {},
+                    onClose = {},
+                    voiceSearchAvailable = true
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(CoverScreenTestTags.SEARCH_FIELD).performImeAction()
     }
 }

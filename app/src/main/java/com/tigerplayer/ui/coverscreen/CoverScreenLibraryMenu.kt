@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -68,6 +69,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -141,6 +144,8 @@ fun CoverScreenLibraryMenu(
     val density = LocalDensity.current
     val context = LocalContext.current
     val view = LocalView.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val artists by libraryViewModel.artists.collectAsStateWithLifecycle()
     val selectedSource by libraryViewModel.selectedSource.collectAsStateWithLifecycle()
@@ -259,6 +264,8 @@ fun CoverScreenLibraryMenu(
             selectedAlbum != null -> selectedAlbum = null
             selectedPlaylist != null -> selectedPlaylist = null
             searchActive -> {
+                keyboardController?.hide()
+                focusManager.clearFocus()
                 searchActive = false
                 voiceSearchError = null
             }
@@ -290,7 +297,11 @@ fun CoverScreenLibraryMenu(
         color = MaterialTheme.colorScheme.background,
         shape = RoundedCornerShape(20.dp)
     ) {
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+        ) {
             if (selectedAlbum != null || selectedPlaylist != null) {
                 val album = selectedAlbum
                 val playlist = selectedPlaylist
@@ -335,77 +346,6 @@ fun CoverScreenLibraryMenu(
                     onPlayAll = playerViewModel::playAll
                 )
             } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 4.dp, end = 12.dp, top = 4.dp)
-                        .pointerInput(Unit) {
-                            var totalDrag = 0f
-                            val swipeThreshold = with(density) { 80.dp.toPx() }
-                            detectHorizontalDragGestures(
-                                onHorizontalDrag = { _, amount -> totalDrag += amount },
-                                onDragEnd = {
-                                    if (totalDrag > swipeThreshold) onDismiss()
-                                    totalDrag = 0f
-                                },
-                                onDragCancel = { totalDrag = 0f }
-                            )
-                        },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val backToPlaybackLabel = stringResource(R.string.coverscreen_action_back_to_playback)
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                            .minimumInteractiveComponentSize()
-                            .semantics {
-                                role = Role.Button
-                                onClick(label = backToPlaybackLabel) {
-                                    onDismiss()
-                                    true
-                                }
-                            }
-                            .testTag(CoverScreenTestTags.LIBRARY_BACK)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = backToPlaybackLabel
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.coverscreen_title_library),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (!searchActive) {
-                        val searchLibraryLabel = stringResource(R.string.coverscreen_action_search_library)
-                        IconButton(
-                            onClick = { searchActive = true },
-                            modifier = Modifier
-                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                                .minimumInteractiveComponentSize()
-                                .semantics {
-                                    role = Role.Button
-                                    onClick(label = searchLibraryLabel) {
-                                        searchActive = true
-                                        true
-                                    }
-                                }
-                                .testTag(CoverScreenTestTags.SEARCH_OPEN)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Search,
-                                contentDescription = searchLibraryLabel
-                            )
-                        }
-                    }
-                    Icon(
-                        imageVector = Icons.Filled.LibraryMusic,
-                        contentDescription = null
-                    )
-                }
-
                 if (searchActive) {
                     CoverScreenSearchBar(
                         query = searchQuery,
@@ -429,13 +369,84 @@ fun CoverScreenLibraryMenu(
                             }
                         },
                         onClose = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                             searchActive = false
                             voiceSearchError = null
                         },
                         voiceSearchAvailable = voiceSearchAvailable,
                         voiceSearchError = voiceSearchError,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 4.dp, end = 12.dp, top = 4.dp)
+                            .pointerInput(Unit) {
+                                var totalDrag = 0f
+                                val swipeThreshold = with(density) { 80.dp.toPx() }
+                                detectHorizontalDragGestures(
+                                    onHorizontalDrag = { _, amount -> totalDrag += amount },
+                                    onDragEnd = {
+                                        if (totalDrag > swipeThreshold) onDismiss()
+                                        totalDrag = 0f
+                                    },
+                                    onDragCancel = { totalDrag = 0f }
+                                )
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val backToPlaybackLabel = stringResource(R.string.coverscreen_action_back_to_playback)
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                .minimumInteractiveComponentSize()
+                                .semantics {
+                                    role = Role.Button
+                                    onClick(label = backToPlaybackLabel) {
+                                        onDismiss()
+                                        true
+                                    }
+                                }
+                                .testTag(CoverScreenTestTags.LIBRARY_BACK)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = backToPlaybackLabel
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.coverscreen_title_library),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        val searchLibraryLabel = stringResource(R.string.coverscreen_action_search_library)
+                        IconButton(
+                            onClick = { searchActive = true },
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                .minimumInteractiveComponentSize()
+                                .semantics {
+                                    role = Role.Button
+                                    onClick(label = searchLibraryLabel) {
+                                        searchActive = true
+                                        true
+                                    }
+                                }
+                                .testTag(CoverScreenTestTags.SEARCH_OPEN)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = searchLibraryLabel
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Filled.LibraryMusic,
+                            contentDescription = null
+                        )
+                    }
                 }
 
                 if (searchActive && debouncedSearchQuery.isNotBlank()) {
@@ -451,6 +462,8 @@ fun CoverScreenLibraryMenu(
                         },
                         tracks = playerState.allTracks,
                         onArtistSelected = { artist ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
                                 spotifyAlbums.firstOrNull { album ->
@@ -470,6 +483,8 @@ fun CoverScreenLibraryMenu(
                             }
                         },
                         onAlbumSelected = { album ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                             if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
                                 spotifyAlbums.firstOrNull { it.id == album.id }?.let {
                                     cloudViewModel.playSpotifyCollection(it.uri, it.name)
@@ -480,11 +495,15 @@ fun CoverScreenLibraryMenu(
                             }
                         },
                         onPlayTrack = { track ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             playerViewModel.playTrack(track)
                             onDismiss()
                         },
                         onQueueTrack = { track ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             playerViewModel.addToQueue(track)
                         },
