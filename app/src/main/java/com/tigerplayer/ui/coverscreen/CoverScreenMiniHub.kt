@@ -76,6 +76,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
+import androidx.window.layout.WindowMetricsCalculator
 import coil.compose.AsyncImage
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.LyricsDisplay
@@ -149,11 +150,44 @@ internal fun resolveIsCoverScreen(
     heightDp: Int,
     hasSeparatingHinge: Boolean,
     isSecondaryDisplay: Boolean,
-    isInMultiWindowMode: Boolean = false
+    isInMultiWindowMode: Boolean = false,
+    imeBottomDp: Int = 0
 ): Boolean {
     if (isSecondaryDisplay) return true
     if (isInMultiWindowMode) return false
-    return isCoverScreenHeuristic(widthDp, heightDp) && !hasSeparatingHinge
+    val effectiveHeight = heightDp + imeBottomDp
+    return isCoverScreenHeuristic(widthDp, effectiveHeight) && !hasSeparatingHinge
+}
+
+/**
+ * Computes base display/window dimensions in dp immune to soft keyboard (IME) resizing.
+ * Precedence:
+ * 1. [WindowMetricsCalculator.computeMaximumWindowMetrics]: Physical display bounds for the activity.
+ * 2. Un-insetted fallback: configuration height + IME bottom insets in dp.
+ */
+internal fun resolveBaseWindowDimensions(
+    activity: Activity?,
+    configurationWidthDp: Int,
+    configurationHeightDp: Int,
+    density: Float,
+    imeBottomDp: Int = 0
+): Pair<Int, Int> {
+    if (activity != null) {
+        try {
+            val bounds = WindowMetricsCalculator.getOrCreate().computeMaximumWindowMetrics(activity).bounds
+            if (bounds.width() > 0 && bounds.height() > 0 && density > 0f) {
+                val w = (bounds.width() / density).toInt()
+                val h = (bounds.height() / density).toInt()
+                if (w > 0 && h > 0) {
+                    return Pair(w, h)
+                }
+            }
+        } catch (_: Throwable) {
+            // Fall through to insets-adjusted configuration
+        }
+    }
+    val uninsettedHeight = configurationHeightDp + imeBottomDp
+    return Pair(configurationWidthDp, uninsettedHeight)
 }
 
 private fun Activity.currentDisplayIdOrDefault(): Int {
@@ -175,6 +209,9 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val density = LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+    val imeBottomDp = with(density) { imeBottom.toDp().value.toInt() }
 
     // Bumped by the DisplayManager.DisplayListener below whenever a display attaches, detaches,
     // or changes. A true secondary display (Motorola-style) appearing/disappearing at runtime
@@ -241,17 +278,34 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
     val isSecondaryDisplay = isSecondaryDisplayIdentity(displayId)
     val isInMultiWindowMode = activity?.isInMultiWindowMode == true
 
+    val (baseWidthDp, baseHeightDp) = remember(
+        activity,
+        configuration.screenWidthDp,
+        configuration.screenHeightDp,
+        density.density,
+        imeBottomDp,
+        displayChangeTick
+    ) {
+        resolveBaseWindowDimensions(
+            activity = activity,
+            configurationWidthDp = configuration.screenWidthDp,
+            configurationHeightDp = configuration.screenHeightDp,
+            density = density.density,
+            imeBottomDp = imeBottomDp
+        )
+    }
+
     val isCover = resolveIsCoverScreen(
-        widthDp = configuration.screenWidthDp,
-        heightDp = configuration.screenHeightDp,
+        widthDp = baseWidthDp,
+        heightDp = baseHeightDp,
         hasSeparatingHinge = hasSeparatingHinge,
         isSecondaryDisplay = isSecondaryDisplay,
         isInMultiWindowMode = isInMultiWindowMode
     )
 
     return remember(
-        configuration.screenWidthDp,
-        configuration.screenHeightDp,
+        baseWidthDp,
+        baseHeightDp,
         isCover,
         hasSeparatingHinge,
         displayId,
@@ -259,8 +313,8 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         isInMultiWindowMode
     ) {
         CoverScreenWindowState(
-            widthDp = configuration.screenWidthDp,
-            heightDp = configuration.screenHeightDp,
+            widthDp = baseWidthDp,
+            heightDp = baseHeightDp,
             isCoverScreen = isCover,
             hasSeparatingHinge = hasSeparatingHinge,
             displayId = displayId,
