@@ -17,8 +17,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +35,6 @@ data class ArtistDetails(
     val bio: String?,
     val genres: List<String> = emptyList(),
     val localPlayCount: Int = 0,
-    val popularity: Int = 0,
     val minutesListened: Int = 0,
     // Local library popularity share: artist minutes / lifetime minutes * 100.
     val listeningSharePercent: Float = 0f
@@ -57,7 +63,7 @@ class MediaDataRepository @Inject constructor(
                 // Gather temporal stats directly from the local records
                 val localCount = tigerDao.getArtistPlayCount(cleanArtist)
                 val localMinutes = tigerDao.getArtistMinutesListened(cleanArtist)
-                val lifetimeMinutes = (tigerDao.getTotalListeningTimeMs().first() / 60_000L)
+                val lifetimeMinutes = ((tigerDao.getTotalListeningTimeMs().first() ?: 0L) / 60_000L)
                     .toInt()
                     .coerceAtLeast(0)
                 val listeningSharePercent = calculateListeningSharePercent(
@@ -136,7 +142,6 @@ class MediaDataRepository @Inject constructor(
                                     imageUrl = imageUrl,
                                     bio = finalBio,
                                     genres = genreList,
-                                    popularity = spotifyDetail?.popularity ?: 0,
                                     localPlayCount = localCount,
                                     minutesListened = localMinutes,
                                     listeningSharePercent = listeningSharePercent
@@ -203,12 +208,12 @@ class MediaDataRepository @Inject constructor(
     private fun normalizeArtistNameForComparison(name: String?): String {
         if (name.isNullOrBlank()) return ""
         val withoutDiacritics = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-        return withoutDiacritics.lowercase().replace(Regex("[^a-z0-9]"), "")
+            .replace(DIACRITICS_REGEX, "")
+        return withoutDiacritics.lowercase().replace(NON_ALPHANUMERIC_REGEX, "")
     }
 
     private fun List<LastFmImage>.getBestImage(): String? {
-        return this.filter { !it.url.orEmpty().contains("2a96cbd8b46e442fc41c2b86b821562f") }
+        return this.filter { !it.url.orEmpty().contains(LASTFM_PLACEHOLDER_HASH) }
             .let { filtered ->
                 filtered.find { it.size == "mega" }?.url
                     ?: filtered.find { it.size == "extralarge" }?.url
@@ -224,7 +229,7 @@ class MediaDataRepository @Inject constructor(
             (artist.popularity ?: 0) > 50 -> "A RENOWNED MASTER"
             else -> "AN EMERGING FORCE"
         }
-        return "Known in the archives as $renown of $genreText. Their potency is marked at ${artist.popularity ?: 0}/100."
+        return "Known in the archives as $renown of $genreText."
     }
 
     suspend fun clearArtistCache() {
@@ -244,23 +249,14 @@ class MediaDataRepository @Inject constructor(
             val cleanAlbum = cleanSearchTerm(album)
 
             // 1. SURGICAL SEARCH QUERY: track:"Title" artist:"Artist" album:"Album"
-            // Double quotes inside the search query force Spotify to perform an EXACT match search.
             val strictQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\" album:\"$cleanAlbum\""
-
-            // Note: Using a general track search is superior because Track items contain
-            // direct high-resolution links to their parent Album image arrays.
             val response = spotifyApiService.searchTrack("Bearer $token", strictQuery)
 
             if (response.isSuccessful) {
                 val trackItem = response.body()?.tracks?.items?.firstOrNull()
 
-                // 2. THE SECURITY GUARD: Verify the search result against our clean criteria
-                // to eliminate false positives entirely.
-                val matchTitle = trackItem?.name?.equals(cleanTitle, ignoreCase = true) == true
-                val matchArtist = trackItem?.artists?.any { it.name.equals(cleanArtist, ignoreCase = true) } == true
-
-                if (matchTitle && matchArtist) {
-                    trackItem.album?.images?.firstOrNull()?.url
+                if (isMatchingTrack(trackItem, cleanTitle, cleanArtist)) {
+                    trackItem?.album?.images?.firstOrNull()?.url
                 } else {
                     // FALLBACK QUERY: If the exact album metadata is too noisy, search strictly by Track & Artist.
                     val fallbackQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\""
@@ -268,11 +264,8 @@ class MediaDataRepository @Inject constructor(
 
                     if (fallbackResponse.isSuccessful) {
                         val fallbackTrack = fallbackResponse.body()?.tracks?.items?.firstOrNull()
-                        val fbMatchTitle = fallbackTrack?.name?.equals(cleanTitle, ignoreCase = true) == true
-                        val fbMatchArtist = fallbackTrack?.artists?.any { it.name.equals(cleanArtist, ignoreCase = true) } == true
-
-                        if (fbMatchTitle && fbMatchArtist) {
-                            fallbackTrack.album?.images?.firstOrNull()?.url
+                        if (isMatchingTrack(fallbackTrack, cleanTitle, cleanArtist)) {
+                            fallbackTrack?.album?.images?.firstOrNull()?.url
                         } else null
                     } else null
                 }
@@ -287,6 +280,13 @@ class MediaDataRepository @Inject constructor(
 
         emit(highResUrl)
     }.flowOn(Dispatchers.IO)
+
+    private fun isMatchingTrack(track: SpotifyTrack?, cleanTitle: String, cleanArtist: String): Boolean {
+        if (track == null) return false
+        val matchTitle = track.name.equals(cleanTitle, ignoreCase = true)
+        val matchArtist = track.artists.any { it.name.equals(cleanArtist, ignoreCase = true) }
+        return matchTitle && matchArtist
+    }
 
     suspend fun getInfinitePlayRecommendations(
         anchorTrack: AudioTrack,
@@ -457,5 +457,11 @@ class MediaDataRepository @Inject constructor(
             Log.e("MediaRepo", "Failed to batch import chants: ${e.message}")
             false
         }
+    }
+
+    private companion object {
+        val DIACRITICS_REGEX = Regex("\\p{Mn}+")
+        val NON_ALPHANUMERIC_REGEX = Regex("[^a-z0-9]")
+        const val LASTFM_PLACEHOLDER_HASH = "2a96cbd8b46e442fc41c2b86b821562f"
     }
 }
