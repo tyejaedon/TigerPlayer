@@ -31,6 +31,15 @@ data class AudioReactiveFrame(
     val analysisCostMicros: Float = 0f
 )
 
+/**
+ * Real-time audio DSP processor embedded directly into ExoPlayer's DefaultAudioSink pipeline.
+ *
+ * Responsibilities:
+ * - Parametric Equalizer: Implements multi-band digital biquad / State Variable Filters (SVF).
+ * - ReplayGain Scaling: Dynamically scales linear audio gain with peak clipping protection (smart/track/album mode).
+ * - Acoustic Environment: Simulates spatial acoustics and reverberation modes (Studio, Concert Hall, Club, Audiophile Direct).
+ * - Spectral Analysis: Feeds low-latency spectral band energies to downstream audio-reactive consumers.
+ */
 @UnstableApi
 @Singleton
 class AdaptiveDspEngine @Inject constructor(

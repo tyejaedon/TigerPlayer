@@ -35,8 +35,7 @@ class NetworkEngine @Inject constructor(
     private val _remoteTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
 
     /**
-     * 1. THE AUTO RITUAL
-     * Emits a boolean true only if valid credentials exist and the server ping succeeds.
+     * Emits true when configured Navidrome credentials exist and a lightweight ping succeeds.
      */
     val autoConnectEvent: Flow<Boolean> = combine(
         navidromePrefs.serverUrl,
@@ -53,8 +52,8 @@ class NetworkEngine @Inject constructor(
     }
 
     /**
-     * 2. SYNC ARCHIVES
-     * Fetches all remote tracks from Navidrome and maps them to AudioTracks.
+     * Synchronizes track catalog from Navidrome server into in-memory remote stream list.
+     * Track URIs are signed dynamically at request time to prevent credential leakage.
      */
     suspend fun syncNavidromeArchives() {
         val user = navidromePrefs.username.firstOrNull()
@@ -74,8 +73,7 @@ class NetworkEngine @Inject constructor(
     }
 
     /**
-     * 3. CONNECT TO NAVIDROME
-     * Validates credentials and returns a Kotlin Result so the ViewModel can handle UI success/error.
+     * Validates Navidrome server connection credentials and returns a Kotlin Result for UI handling.
      *
      * [allowCleartext] must be explicitly set by the caller (after user acknowledgement) before
      * an `http://` server address is permitted; otherwise this fails with

@@ -46,6 +46,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * Application-scoped controller managing IPC communication with [AudioPlayerService].
+ *
+ * Responsibilities:
+ * - Connects asynchronously to MediaSession via [SessionToken] and exposes reactive playback StateFlows.
+ * - Serializes and deserializes track queues using 18 metadata fields embedded in MediaItem extras,
+ *   ensuring queue restoration without requiring database re-queries.
+ * - Tracks audio routing changes (becoming noisy, Bluetooth A2DP connect/disconnect).
+ * - Drives periodic playback position polling (250 ms) and background persistence (15 s).
+ * - Manages sleep timer countdown and graceful fade-out.
+ */
 @Singleton
 class MediaControllerManager @Inject constructor(
     @param:ApplicationContext private val context: Context,

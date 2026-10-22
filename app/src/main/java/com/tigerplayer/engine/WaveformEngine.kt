@@ -36,7 +36,7 @@ class WaveformEngine @Inject constructor(
 
         val deferred = async(Dispatchers.IO) {
             try {
-                // 1. Archive Check
+                // 1. Check persistent Room cache to avoid redundant hardware decoding
                 val cached = tigerDao.getWaveformCache(track.id)
                 if (cached != null && cached.amplitudesBlob.isNotEmpty()) {
                     return@async cached.amplitudesBlob.map { (it.toInt() and 0xFF) / 255f }
@@ -45,7 +45,7 @@ class WaveformEngine @Inject constructor(
                 val durationSec = (track.durationMs / 1000).toInt()
                 val targetBars = (durationSec / 1.5).toInt().coerceIn(40, 100)
 
-                // 2. Hardware Extraction Ritual
+                // 2. Hardware MediaCodec extraction: seek to strategic points rather than dense decoding
                 val waveform = if (track.isLocal) {
                     val raw = extractRealWaveformFast(track, targetBars)
                     if (raw.isNotEmpty()) processAndSmooth(raw) else emptyList()
@@ -53,7 +53,7 @@ class WaveformEngine @Inject constructor(
                     emptyList()
                 }
 
-                // 3. Finalization & Fallback
+                // 3. Persist downsampled 8-bit normalized waveform blob in Room
                 val finalWaveform = waveform.ifEmpty {
                     generateDeterministicWaveform(track.id, targetBars, track.durationMs)
                 }

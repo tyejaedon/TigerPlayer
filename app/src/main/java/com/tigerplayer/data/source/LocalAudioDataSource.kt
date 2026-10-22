@@ -19,8 +19,10 @@ class LocalAudioDataSource @Inject constructor(
 ) {
 
     /**
-     * THE INDEXING RITUAL
-     * Streams scan progress back to the UI so the user isn't left in the dark.
+     * Queries MediaStore for external audio tracks.
+     * Emits [ScanStatus.Started] with total count followed by [ScanStatus.Completed].
+     * Query is constrained to music files (excluding ringtones and notifications) and FLAC audio.
+     * Executed strictly on Dispatchers.IO to preserve main-thread responsiveness.
      */
     fun getLocalAudioFiles(): Flow<ScanStatus> = flow {
         val tracks = mutableListOf<AudioTrack>()
@@ -56,7 +58,7 @@ class LocalAudioDataSource @Inject constructor(
             val total = cursor.count
             emit(ScanStatus.Started(total))
 
-            // SPEED HACK: Fetch indices OUTSIDE the loop
+            // Hoist column index resolution outside the cursor iteration loop to minimize per-row JNI lookups.
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)

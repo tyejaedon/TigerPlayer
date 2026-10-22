@@ -13,6 +13,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+- **Architecture & Documentation**: Added comprehensive PlantUML architectural design guide (docs/architecture/architecture-design.md) and essential inline code comments across core modules (service/, engine/, data/, ui/), documenting threading models, domain invariants, and Media3 audio pipelines while removing stale line-number comments and decorative emoji banners. (#268)
 - **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
   album counts, artist album lists, and swipe-back navigation. (#220)
 - **Cover screen**: added album track browsing with play, add-to-queue, remove-from-queue swipe,

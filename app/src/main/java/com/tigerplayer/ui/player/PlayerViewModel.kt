@@ -111,6 +111,13 @@ data class PlayerUiState(
  * delegating core responsibilities to focused, testable, and independently scoped components.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
+/**
+ * Central coordinator ViewModel acting as a backward-compatible facade.
+ *
+ * Coordinates scoped ViewModels ([PlaybackViewModel], [LibraryViewModel], [StatsViewModel])
+ * and the application-scoped [PlaybackStateManager]. Delegates operations directly to their
+ * respective domains while providing a unified contract for legacy navigation routes and tests.
+ */
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     val playbackStateManager: PlaybackStateManager,

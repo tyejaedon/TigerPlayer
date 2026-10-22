@@ -38,7 +38,9 @@ class LibraryEngine @Inject constructor(
         const val RECENTLY_ADDED_ID = -2L
     }
 
-    // --- SEARCH & AGGREGATION RITUALS ---
+    // --- In-Memory Library Aggregation & Filtering ---
+    // Aggregates tracks, artists, and albums in-memory to support instant reactive search
+    // and multi-criterion sorting without issuing repeated disk queries on rapid typing.
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 

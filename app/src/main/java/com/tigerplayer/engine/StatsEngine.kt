@@ -281,9 +281,9 @@ class StatsEngine @Inject constructor(
     }
 
     /**
-     * 🔥 UPGRADED TEMPORAL ENGINE
-     * Replaces rolling math (e.g. 24 hours ago) with absolute Calendar boundaries.
-     * "Today" now accurately begins at 12:00 AM.
+     * Computes the epoch timestamp representing the start of the requested time window.
+     * Uses absolute Calendar boundaries (e.g., local midnight for "Today") rather than
+     * rolling durations (e.g. now - 24 hours) to ensure stats align with calendar days.
      */
     private fun calculateStartTimeForFilter(filter: String): Long {
         val calendar = Calendar.getInstance().apply {

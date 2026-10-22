@@ -14,9 +14,11 @@ import javax.inject.Singleton
 import kotlin.math.*
 
 /**
- * THE ENERGY ANALYZER: FftProcessor
- * Captures audio energy in perceptual bands for the Fluid Vortex and UI.
- * Optimized with a high-performance throttle to maintain 60FPS UI performance.
+ * Media3 [BaseAudioProcessor] intercepting PCM audio to compute real-time spectral FFT energy.
+ *
+ * Feeds visualizer engines (GPU fluid vortex, spectrum bars) and audio-reactive haptics
+ * with normalized 6-band energy distributions and spectral centroid calculations.
+ * Throttles emissions (~42 FPS / 24 ms) to balance visual fluidity against CPU utilization.
  */
 
 private const val UPDATE_INTERVAL_MS = 24L // ~42 FPS, sweet spot for visuals vs CPU

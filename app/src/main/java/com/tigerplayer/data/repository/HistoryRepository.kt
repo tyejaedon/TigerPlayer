@@ -55,11 +55,11 @@ class HistoryRepository @Inject constructor(
     /** The window analytics actually cover. `0` means all history is trustworthy. */
     val statsEpochMs: Flow<Long> = statsEpoch.epochMs
 
-    // --- 1. RECENT CHANTS ---
+    // Recently played tracks stream, floored at statsEpoch to prevent inflated historical entries.
     val recentTracks: Flow<List<PlaybackHistoryEntity>> =
         statsEpoch.effectiveStart(0L).flatMapLatest { tigerDao.getRecentTracks(it) }
 
-    // --- 2. AGGREGATE POWER ---
+    // Aggregate listening duration metrics floored at local midnight or beginning of week.
     val totalListeningTime: Flow<Long?> = getTotalListeningTime(0L)
 
     // Today's stats refreshed automatically
@@ -67,7 +67,7 @@ class HistoryRepository @Inject constructor(
 
     val topArtistThisWeek: Flow<String?> = getTopArtist(getStartOfWeek())
 
-    // --- 3. ANALYTICAL QUERIES ---
+    // Analytical aggregate queries (top artists, top tracks, sonic footprint metrics).
     fun getTopArtist(startTime: Long = 0L): Flow<String?> =
         statsEpoch.effectiveStart(startTime).flatMapLatest { tigerDao.getTopArtist(it) }
 
