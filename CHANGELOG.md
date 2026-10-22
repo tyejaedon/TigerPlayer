@@ -30,6 +30,10 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 - **Cover screen**: surfaced Day List and Discover Weekly suggestions with artwork, play/queue
   actions, horizontal browsing, and refreshable empty-feed feedback. (#227)
 
+### Changed
+
+- **Architecture**: Decomposed the monolithic `PlayerViewModel` god object into scoped ViewModels (`PlaybackViewModel`, `LibraryViewModel`, `StatsViewModel`) backed by an application-scoped `PlaybackStateManager` singleton, eliminating redundant recompositions and coroutine collector overhead. (#72)
+
 ### Fixed
 
 ## [2.1.3] - 2026-10-12
