@@ -10,6 +10,7 @@ import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.AudioReactiveFrame
+import com.tigerplayer.engine.FluidRenderer
 import com.tigerplayer.engine.LibraryEngine
 import com.tigerplayer.engine.MetadataEngine
 import com.tigerplayer.engine.NetworkEngine
@@ -18,6 +19,8 @@ import com.tigerplayer.engine.StatsEngine
 import com.tigerplayer.engine.WaveformEngine
 import com.tigerplayer.service.MediaControllerManager
 import com.tigerplayer.ui.home.HomeUiState
+import com.tigerplayer.ui.player.PlaybackState
+import com.tigerplayer.ui.player.PlaybackStateManager
 import com.tigerplayer.utils.BluetoothDeviceInfo
 import com.tigerplayer.utils.BluetoothDeviceManager
 import io.mockk.coEvery
@@ -46,7 +49,9 @@ class PlayerViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
 
+    private val playbackStateManager = mockk<PlaybackStateManager>(relaxed = true)
     private val playbackEngine = mockk<PlaybackEngine>(relaxed = true)
+    private val fluidRenderer = mockk<FluidRenderer>(relaxed = true)
     private val mediaControllerManager = mockk<MediaControllerManager>(relaxed = true)
     private val metadataEngine = mockk<MetadataEngine>(relaxed = true)
     private val statsEngine = mockk<StatsEngine>(relaxed = true)
@@ -67,6 +72,7 @@ class PlayerViewModelTest {
         every { playbackEngine.spotifyPlaybackState } returns MutableStateFlow(null)
         every { playbackEngine.spotifyReauthRequired } returns MutableStateFlow(false)
         every { playbackEngine.getQueueSnapshotFlow() } returns flowOf(MediaControllerManager.QueueSnapshot())
+        every { playbackStateManager.playbackState } returns MutableStateFlow(PlaybackState())
 
         every { mediaControllerManager.isPlaying } returns MutableStateFlow(false)
         every { mediaControllerManager.currentPosition } returns MutableStateFlow(0L)
@@ -107,6 +113,7 @@ class PlayerViewModelTest {
     }
 
     private fun viewModel(): PlayerViewModel = PlayerViewModel(
+        playbackStateManager = playbackStateManager,
         playbackEngine = playbackEngine,
         mediaControllerManager = mediaControllerManager,
         metadataEngine = metadataEngine,
@@ -119,7 +126,8 @@ class PlayerViewModelTest {
         playbackPrefs = playbackPrefs,
         audioRepository = audioRepository,
         youtubeRepository = youtubeRepository,
-        bluetoothDeviceManager = bluetoothDeviceManager
+        bluetoothDeviceManager = bluetoothDeviceManager,
+        fluidRenderer = fluidRenderer
     )
 
     @Test
@@ -154,8 +162,7 @@ class PlayerViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0.42f, viewModel.uiState.value.coverScreenVolume, 0.001f)
-        coVerify(exactly = 1) { settingsDataStore.setCoverScreenVolume(0.42f) }
-        verify(exactly = 1) { mediaControllerManager.setVolume(0.42f) }
+        verify(exactly = 1) { playbackStateManager.setCoverScreenVolume(0.42f) }
 
         viewModel.setCoverScreenVolume(Float.NaN)
         advanceUntilIdle()
@@ -180,7 +187,7 @@ class PlayerViewModelTest {
 
         viewModel.playAll(tracks)
 
-        verify(exactly = 1) { playbackEngine.setPlaylistAndPlay(tracks, 0) }
+        verify(exactly = 1) { playbackStateManager.playAll(tracks) }
     }
 
     @Test
@@ -189,7 +196,7 @@ class PlayerViewModelTest {
 
         viewModel.playAll(emptyList())
 
-        verify(exactly = 0) { playbackEngine.setPlaylistAndPlay(any(), any()) }
+        verify(exactly = 0) { playbackStateManager.playAll(any()) }
     }
 
     @Test

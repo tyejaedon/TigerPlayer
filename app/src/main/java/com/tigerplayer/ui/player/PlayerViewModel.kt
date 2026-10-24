@@ -151,7 +151,8 @@ class PlayerViewModel @Inject constructor(
         playbackPrefs: PlaybackPrefs,
         audioRepository: AudioRepository,
         youtubeRepository: YouTubeRepository,
-        bluetoothDeviceManager: BluetoothDeviceManager
+        bluetoothDeviceManager: BluetoothDeviceManager,
+        fluidRenderer: FluidRenderer
     ) : this(
         playbackStateManager = PlaybackStateManager(
             playbackEngine = playbackEngine,
@@ -177,7 +178,8 @@ class PlayerViewModel @Inject constructor(
         playbackPrefs = playbackPrefs,
         audioRepository = audioRepository,
         youtubeRepository = youtubeRepository,
-        bluetoothDeviceManager = bluetoothDeviceManager
+        bluetoothDeviceManager = bluetoothDeviceManager,
+        fluidRenderer = fluidRenderer
     )
 
     private val _uiState = MutableStateFlow(PlayerUiState())
