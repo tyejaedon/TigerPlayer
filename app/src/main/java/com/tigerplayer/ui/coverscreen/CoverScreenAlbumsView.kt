@@ -44,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
@@ -248,12 +251,14 @@ private fun TrackRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .defaultMinSize(minHeight = 48.dp)
                 .minimumInteractiveComponentSize()
                 .clip(RoundedCornerShape(14.dp))
+                .glassEffect(RoundedCornerShape(14.dp))
+                .background(Color.Black.copy(alpha = 0.25f))
                 .combinedClickable(
                     role = Role.Button,
                     onClickLabel = stringResource(R.string.coverscreen_action_play_now),
@@ -265,9 +270,7 @@ private fun TrackRow(
                 .semantics {
                     contentDescription =
                         "${track.title}, $artistName, ${formatTrackDuration(track.durationMs)}"
-                },
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
-            shape = RoundedCornerShape(14.dp)
+                }
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),

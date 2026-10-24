@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.graphics.Color
+import com.tigerplayer.ui.theme.glassEffect
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -76,6 +78,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.AsyncImage
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -94,6 +102,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 enum class CoverScreenLibraryTab(val label: String) {
+    HISTORY("History"),
+    CONSTELLATION("Constellation"),
     ARTISTS("Artists"),
     ALBUMS("Albums"),
     SONGS("Songs"),
@@ -114,6 +124,8 @@ fun CoverScreenLibraryTabRow(
     ) {
         CoverScreenLibraryTab.entries.forEach { tab ->
             val tabTitle = when (tab) {
+                CoverScreenLibraryTab.HISTORY -> "History"
+                CoverScreenLibraryTab.CONSTELLATION -> "Constellation"
                 CoverScreenLibraryTab.ARTISTS -> stringResource(R.string.coverscreen_tab_artists)
                 CoverScreenLibraryTab.ALBUMS -> stringResource(R.string.coverscreen_tab_albums)
                 CoverScreenLibraryTab.SONGS -> stringResource(R.string.coverscreen_tab_songs)
@@ -153,7 +165,8 @@ fun CoverScreenLibraryMenu(
     val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
     val spotifyAlbums by cloudViewModel.userAlbums.collectAsStateWithLifecycle()
     val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
-    var selectedTab by remember { mutableStateOf(CoverScreenLibraryTab.ARTISTS) }
+    val recentTracks by playerViewModel.recentTracks.collectAsStateWithLifecycle()
+    var selectedTab by remember { mutableStateOf(CoverScreenLibraryTab.HISTORY) }
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
@@ -531,6 +544,21 @@ fun CoverScreenLibraryMenu(
                         label = "Cover screen library tab"
                     ) { tab ->
                         when (tab) {
+                            CoverScreenLibraryTab.HISTORY -> HistoryPicker(
+                                tracks = recentTracks,
+                                onPlayTrack = { track ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    playerViewModel.playTrack(track)
+                                }
+                            )
+                            CoverScreenLibraryTab.CONSTELLATION -> CoverScreenConstellationView(
+                                viewModel = hiltViewModel(),
+                                onArtistSelected = { artistName ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    playerViewModel.onSearchQueryChanged(artistName)
+                                    selectedTab = CoverScreenLibraryTab.ARTISTS
+                                }
+                            )
                             CoverScreenLibraryTab.ARTISTS -> Column {
                                 Row(
                                     modifier = Modifier
@@ -768,6 +796,72 @@ private fun EmptyLibraryMessage(message: String, testTag: String? = null) {
                 .semantics { contentDescription = message },
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
         )
+    }
+}
+
+@Composable
+private fun HistoryPicker(
+    tracks: List<AudioTrack>,
+    onPlayTrack: (AudioTrack) -> Unit
+) {
+    if (tracks.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = "No recent history",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(tracks, key = { it.id }) { track ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .glassEffect(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = 0.25f))
+                    .clickable(
+                        onClickLabel = "Play ${track.title}",
+                        onClick = { onPlayTrack(track) }
+                    )
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = track.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = track.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -25,6 +25,12 @@ private val ARTIST_PRESEED_STAGGER = 150.milliseconds
 
 private const val TAG = "MetadataEngine"
 
+/**
+ * Manages fetching, caching, and observing artist metadata, album artwork, lyrics,
+ * and profile pre-seeding for tracks and artists.
+ *
+ * `@Singleton` ensures artist cache observation and metadata requests share a consistent state.
+ */
 @Singleton
 class MetadataEngine @Inject constructor(
     private val mediaDataRepository: MediaDataRepository,
@@ -33,9 +39,7 @@ class MetadataEngine @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Reactive artist details stream backed by Room database ground truth.
-    // Updates immediately across all observing screens (e.g. Constellation graph, now-playing)
-    // when new metadata or artwork is fetched from remote APIs.
+    /** Reactive state flow mapping normalized artist names to their cached [ArtistDetails] from Room. */
     val artistDetails: StateFlow<Map<String, ArtistDetails>> = tigerDao.getAllArtistCache()
         .map { list ->
             list.associate { entity ->
@@ -50,11 +54,16 @@ class MetadataEngine @Inject constructor(
         .stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
     private val _currentLyrics = MutableStateFlow<String?>(null)
+    /** Observable state flow representing the lyrics of the currently playing track. */
     val currentLyrics: StateFlow<String?> = _currentLyrics.asStateFlow()
 
     private val _currentArtistImageUrl = MutableStateFlow<String?>(null)
+    /** Observable state flow representing the artist image URL for the currently playing track. */
     val currentArtistImageUrl: StateFlow<String?> = _currentArtistImageUrl.asStateFlow()
 
+    /**
+     * Observes detailed artist profile data including local play counts and listening share percentage.
+     */
     fun observeArtistProfile(artistName: String): Flow<ArtistDetails?> {
         val normalizedName = ArtistUtils.getBaseArtist(artistName).trim()
         val normalizedKey = normalizedName.lowercase()
@@ -82,29 +91,28 @@ class MetadataEngine @Inject constructor(
                 bio = cachedProfile?.bio,
                 genres = cachedProfile?.genres ?: emptyList(),
                 localPlayCount = stats?.playCount ?: 0,
-                popularity = cachedProfile?.popularity ?: 0,
                 minutesListened = minutesListened,
                 listeningSharePercent = listeningSharePercent
             )
         }.distinctUntilChanged()
     }
 
+    /** Clears active track metadata (lyrics and artist image URL). */
     fun clearTrackMetadata() {
         _currentLyrics.value = null
         _currentArtistImageUrl.value = null
     }
 
+    /** Fetches and populates metadata (artist image and lyrics) for the given [track]. */
     @OptIn(FlowPreview::class)
     suspend fun fetchTrackMetadata(track: AudioTrack) {
         coroutineScope {
             launch {
-                // Observe for at least one emission that has an image, or time out.
                 mediaDataRepository.getArtistDetails(track.artist)
                     .filter { it.imageUrl != null }
                     .take(1)
                     .timeout(3000.milliseconds)
                     .catch {
-                        // If timeout or no image, take whatever the first emission was (cache)
                         try {
                             emit(mediaDataRepository.getArtistDetails(track.artist).first())
                         } catch (e: Exception) { /* Silent fail */ }
@@ -122,15 +130,12 @@ class MetadataEngine @Inject constructor(
         }
     }
 
+    /** Fetches an artist profile by name. */
     suspend fun fetchArtistProfile(artistName: String) {
-        // We don't need to update a manual map anymore, the DB observer handles it.
         mediaDataRepository.getArtistDetails(artistName).take(2).collect()
     }
 
-    /**
-     * 🔥 THE FIX 2: Non-destructive refresh.
-     * We no longer clear the whole cache. We just trigger fresh fetches for requested artists.
-     */
+    /** Non-destructively refreshes artist profiles for the specified list of artist names. */
     @OptIn(FlowPreview::class)
     suspend fun forceRefreshArtistProfiles(artistNames: List<String>) {
         val normalizedNames = artistNames
@@ -140,7 +145,6 @@ class MetadataEngine @Inject constructor(
 
         if (normalizedNames.isEmpty()) return
 
-        // Fetch in parallel for better constellation performance
         coroutineScope {
             normalizedNames.forEach { name ->
                 launch {
@@ -159,6 +163,7 @@ class MetadataEngine @Inject constructor(
         }
     }
 
+    /** Fetches high-resolution Spotify album artwork URI for a track. */
     suspend fun fetchSpotifyHighResArt(title: String, artist: String, album: String): Uri? {
         var highResUrl: String? = null
         try {
@@ -171,6 +176,7 @@ class MetadataEngine @Inject constructor(
         return highResUrl?.toUri()
     }
 
+    /** Pre-seeds the artist cache in parallel with concurrency limiting for a list of tracks. */
     @OptIn(FlowPreview::class)
     suspend fun preSeedArtistCache(tracks: List<AudioTrack>) {
         if (tracks.isEmpty()) return

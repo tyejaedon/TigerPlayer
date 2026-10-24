@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +44,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -76,9 +78,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
+import com.tigerplayer.engine.FluidVortexView
 import androidx.window.layout.WindowMetricsCalculator
 import coil.compose.AsyncImage
 import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.equalizer.AuralNexusViewModel
+import com.tigerplayer.ui.settings.SettingsViewModel
+import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.player.LyricsDisplay
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.TigerNeonOrange
@@ -329,6 +335,7 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
 fun CoverScreenMiniHub(
     playerViewModel: PlayerViewModel,
     dashboardViewModel: DashboardViewModel,
+    prismViewModel: PrismViewModel,
     windowState: CoverScreenWindowState,
     modifier: Modifier = Modifier
 ) {
@@ -347,8 +354,13 @@ fun CoverScreenMiniHub(
     var libraryVisible by remember { mutableStateOf(false) }
     var playbackSettingsVisible by remember { mutableStateOf(false) }
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
+    var nexusVisible by remember { mutableStateOf(false) }
+    var prismVisible by remember { mutableStateOf(false) }
+    var settingsVisible by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
+    var seekerTouchBounds by remember { mutableStateOf<Rect?>(null) }
+    var fullBleedLyricsVisible by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var isLifecycleActive by remember {
@@ -373,9 +385,19 @@ fun CoverScreenMiniHub(
     val hasModalOverlay = CoverScreenPerformanceManager.isModalOverlayActive(
         queueVisible = queueVisible,
         libraryVisible = libraryVisible,
-        playbackSettingsVisible = playbackSettingsVisible
+        playbackSettingsVisible = playbackSettingsVisible,
+        prismVisible = prismVisible,
+        nexusVisible = nexusVisible,
+        settingsVisible = settingsVisible
     )
     val isRenderingActive = isLifecycleActive && !hasModalOverlay
+
+    // Drive FluidRenderer with audio data when rendering is active
+    LaunchedEffect(uiState.audioReactiveFrame, isRenderingActive) {
+        if (isRenderingActive && uiState.isPlaying) {
+            playerViewModel.fluidRenderer.updateEnergyField(uiState.audioReactiveFrame.spectralBands)
+        }
+    }
 
     val swipeThresholdPx = with(density) { 56.dp.toPx() }
     val tapSlopPx = with(density) { 10.dp.toPx() }
@@ -467,7 +489,8 @@ fun CoverScreenMiniHub(
                 tapSlopPx = tapSlopPx,
                 shouldIgnoreGestureAt = { position ->
                     val positionInRoot = coverScreenCoordinates?.localToRoot(position) ?: position
-                    discoveryTouchBounds?.contains(positionInRoot) == true
+                    (discoveryTouchBounds?.contains(positionInRoot) == true) ||
+                            (seekerTouchBounds?.contains(positionInRoot) == true)
                 },
                 onTap = {
                     if (libraryVisible) return@coverScreenGestures
@@ -498,17 +521,16 @@ fun CoverScreenMiniHub(
                 }
             )
     ) {
-        // BACKGROUND BLUR
-        if (track != null) {
-            AsyncImage(
-                model = track.artworkUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(32.dp)
-            )
-        }
+        // FLUID VORTEX BACKGROUND (Phase 2 Arcane Glass)
+        AndroidView(
+            factory = { ctx ->
+                FluidVortexView(ctx).apply {
+                    setFluidRenderer(playerViewModel.fluidRenderer)
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -561,7 +583,8 @@ fun CoverScreenMiniHub(
                         currentPosition = uiState.currentPosition,
                         isLarge = true,
                         statsVisible = true,
-                        screenHeightDp = windowState.heightDp.dp
+                        screenHeightDp = windowState.heightDp.dp,
+                        onDoubleTap = { fullBleedLyricsVisible = true }
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     CoverAccessibleControls(
@@ -638,7 +661,8 @@ fun CoverScreenMiniHub(
                     currentPosition = uiState.currentPosition,
                     isLarge = false,
                     statsVisible = true,
-                    screenHeightDp = windowState.heightDp.dp
+                    screenHeightDp = windowState.heightDp.dp,
+                    onDoubleTap = { fullBleedLyricsVisible = true }
                 )
                 Spacer(modifier = Modifier.height(if (isTightScreen) 6.dp else 10.dp))
                 CoverAccessibleControls(
@@ -696,19 +720,37 @@ fun CoverScreenMiniHub(
             }
         }
 
+        // FULL-BLEED LYRICS MODE
+        AnimatedVisibility(
+            visible = fullBleedLyricsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenLyricsView(
+                lyrics = uiState.currentLyrics,
+                currentPosition = uiState.currentPosition,
+                onDoubleTap = { fullBleedLyricsVisible = false }
+            )
+        }
+
         // WAVEFORM (Visual Anchor)
-        if (!hasModalOverlay) {
+        if (!hasModalOverlay && !fullBleedLyricsVisible) {
             CoverMicroWaveform(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
                 energy = uiState.audioReactiveFrame.energy,
                 isPlaying = uiState.isPlaying,
                 isRenderingActive = isRenderingActive,
+                duration = track?.durationMs ?: 1L,
+                currentPosition = uiState.currentPosition,
+                onSeek = { playerViewModel.seekTo(it) },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(if (windowState.hasSeparatingHinge) 16.dp else 12.dp)
+                    .height(if (windowState.hasSeparatingHinge) 24.dp else 24.dp)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .onGloballyPositioned { seekerTouchBounds = it.boundsInRoot() }
                     .testTag(CoverScreenTestTags.MICRO_WAVEFORM)
             )
         }
@@ -822,7 +864,55 @@ fun CoverScreenMiniHub(
                 onCycleRepeat = playerViewModel::toggleRepeat,
                 onAdjustVolume = playerViewModel::adjustCoverScreenVolume,
                 onSelectEqPreset = playerViewModel::setCoverScreenEqPreset,
+                onOpenPrism = {
+                    playbackSettingsVisible = false
+                    prismVisible = true
+                },
+                onOpenNexus = {
+                    playbackSettingsVisible = false
+                    nexusVisible = true
+                },
+                onOpenSettings = {
+                    playbackSettingsVisible = false
+                    settingsVisible = true
+                },
                 onClose = { playbackSettingsVisible = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = prismVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenPrismView(
+                prismViewModel = prismViewModel,
+                onClose = { prismVisible = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = nexusVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenNexusView(
+                viewModel = hiltViewModel<AuralNexusViewModel>(),
+                onClose = { nexusVisible = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = settingsVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenSettingsView(
+                viewModel = hiltViewModel<SettingsViewModel>(),
+                onClose = { settingsVisible = false }
             )
         }
     }
@@ -836,6 +926,7 @@ private fun TrackInfoText(
     currentPosition: Long,
     isLarge: Boolean,
     statsVisible: Boolean,
+    onDoubleTap: () -> Unit = {},
     screenHeightDp: Dp = LocalConfiguration.current.screenHeightDp.dp
 ) {
     val isTight = screenHeightDp > 0.dp && screenHeightDp <= 360.dp
@@ -853,6 +944,13 @@ private fun TrackInfoText(
         isLarge = isLarge,
         statsVisible = statsVisible
     )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTap() }) },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
 
     Spacer(modifier = Modifier.height(spacerHeight))
 
@@ -899,6 +997,7 @@ private fun TrackInfoText(
         style = MaterialTheme.typography.labelSmall,
         letterSpacing = 1.sp
     )
+    }
 }
 
 /**
@@ -1163,9 +1262,15 @@ internal fun CoverMicroWaveform(
     energy: Float,
     isPlaying: Boolean = true,
     isRenderingActive: Boolean = true,
+    duration: Long = 1L,
+    currentPosition: Long = 0L,
+    onSeek: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val shouldAnimate = CoverScreenPerformanceManager.shouldAnimate(isPlaying, isRenderingActive)
+    var isDragging by remember { mutableStateOf(false) }
+    var dragProgress by remember { mutableFloatStateOf(0f) }
+
     val (phase, animatedEnergy) = if (shouldAnimate) {
         val transition = rememberInfiniteTransition(label = "CoverWave")
         val animatedPhase by transition.animateFloat(
@@ -1189,8 +1294,30 @@ internal fun CoverMicroWaveform(
     }
     val reusablePath = remember { Path() }
 
-    Canvas(modifier = modifier) {
+    Canvas(
+        modifier = modifier.pointerInput(Unit) {
+            var widthPx = 0f
+            detectDragGestures(
+                onDragStart = { offset ->
+                    isDragging = true
+                    widthPx = size.width.toFloat()
+                    dragProgress = (offset.x / widthPx).coerceIn(0f, 1f)
+                },
+                onDragEnd = {
+                    isDragging = false
+                    onSeek((dragProgress * duration).toLong())
+                },
+                onDragCancel = { isDragging = false }
+            ) { change, _ ->
+                dragProgress = (change.position.x / widthPx).coerceIn(0f, 1f)
+                change.consume()
+            }
+        }
+    ) {
         val centerY = size.height / 2f
+        val progress = if (isDragging) dragProgress else (currentPosition.toFloat() / duration.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
+        val progressX = size.width * progress
+
         val path = CoverScreenPerformanceManager.populateWaveformPath(
             path = reusablePath,
             points = points,
@@ -1201,11 +1328,11 @@ internal fun CoverMicroWaveform(
             energy = animatedEnergy
         )
 
-        drawLine(
-            color = TigerNeonOrange.copy(alpha = 0.2f),
-            start = Offset(0f, centerY),
-            end = Offset(size.width, centerY),
-            strokeWidth = 1f
+        // Background Path
+        drawPath(
+            path = path,
+            color = Color.White.copy(alpha = 0.15f),
+            style = Stroke(width = 3f, cap = StrokeCap.Round)
         )
 
         drawPath(
@@ -1217,6 +1344,13 @@ internal fun CoverMicroWaveform(
             path = path,
             color = TigerNeonOrange,
             style = Stroke(width = 2f, cap = StrokeCap.Round)
+        )
+
+        // Seeker Thumb
+        drawCircle(
+            color = Color.White,
+            radius = 4.dp.toPx(),
+            center = Offset(progressX, centerY)
         )
     }
 }

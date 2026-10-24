@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -62,6 +65,9 @@ fun CoverScreenPlaybackSettings(
     onCycleRepeat: () -> Unit,
     onAdjustVolume: (Float) -> Unit,
     onSelectEqPreset: (CoverScreenEqPreset) -> Unit,
+    onOpenPrism: () -> Unit = {},
+    onOpenNexus: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -115,6 +121,45 @@ fun CoverScreenPlaybackSettings(
                     ) {
                         Icon(Icons.Filled.Close, contentDescription = "Close playback settings")
                     }
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenPrism,
+                    modifier = Modifier.fillMaxWidth().testTag("CoverScreenPrismButton")
+                ) {
+                    Icon(
+                        Icons.Rounded.GraphicEq,
+                        contentDescription = "Open Sonic Prism",
+                        tint = com.tigerplayer.ui.theme.TigerCyberCyan
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sonic Prism (3-Stem Mix)")
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenNexus,
+                    modifier = Modifier.fillMaxWidth().testTag("CoverScreenNexusButton")
+                ) {
+                    Icon(
+                        Icons.Rounded.GraphicEq,
+                        contentDescription = "Open Nexus Spatial EQ",
+                        tint = com.tigerplayer.ui.theme.TigerNeonOrange
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Nexus Spatial 3D EQ")
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.fillMaxWidth().testTag("CoverScreenSettingsButton")
+                ) {
+                    Icon(
+                        Icons.Rounded.Settings,
+                        contentDescription = "Open App Settings",
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("App Preferences & Settings")
                 }
 
                 Row(

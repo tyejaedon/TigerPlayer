@@ -128,11 +128,6 @@ fun ArtistVanguardStats(profile: ArtistDetails?, accentColor: Color) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
                 )
-                Text(
-                    text = "Global Resonance: ${profile?.popularity ?: 0}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-                )
             }
 
 

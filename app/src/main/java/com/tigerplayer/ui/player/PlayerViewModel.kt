@@ -133,7 +133,8 @@ class PlayerViewModel @Inject constructor(
     private val playbackPrefs: PlaybackPrefs,
     private val audioRepository: AudioRepository,
     val youtubeRepository: YouTubeRepository,
-    private val bluetoothDeviceManager: BluetoothDeviceManager
+    private val bluetoothDeviceManager: BluetoothDeviceManager,
+    val fluidRenderer: FluidRenderer
 ) : ViewModel() {
 
     // Backward-compatible constructor for existing tests and non-Hilt callers
@@ -150,7 +151,8 @@ class PlayerViewModel @Inject constructor(
         playbackPrefs: PlaybackPrefs,
         audioRepository: AudioRepository,
         youtubeRepository: YouTubeRepository,
-        bluetoothDeviceManager: BluetoothDeviceManager
+        bluetoothDeviceManager: BluetoothDeviceManager,
+        fluidRenderer: FluidRenderer
     ) : this(
         playbackStateManager = PlaybackStateManager(
             playbackEngine = playbackEngine,
@@ -176,7 +178,8 @@ class PlayerViewModel @Inject constructor(
         playbackPrefs = playbackPrefs,
         audioRepository = audioRepository,
         youtubeRepository = youtubeRepository,
-        bluetoothDeviceManager = bluetoothDeviceManager
+        bluetoothDeviceManager = bluetoothDeviceManager,
+        fluidRenderer = fluidRenderer
     )
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -216,6 +219,14 @@ class PlayerViewModel @Inject constructor(
             viewModelScope,
             SharingStarted.WhileSubscribed(replayExpirationMillis = 5.minutes.inWholeMilliseconds),
             CoverScreenStatsSnapshot()
+        )
+
+    val recentTracks: StateFlow<List<AudioTrack>> = libraryEngine.getHomeUiStateFlow(unifiedTracksFlow)
+        .map { it.recentlyPlayedTracks }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyList()
         )
 
     val customPlaylists: StateFlow<List<Playlist>> = combine(

@@ -20,6 +20,12 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
+/**
+ * Extracts, smooths, and caches audio waveform amplitudes for visualizers and player UI.
+ *
+ * Utilizes hardware-accelerated [MediaExtractor] and [MediaCodec] sampling across strategic seek points,
+ * with Room caching and concurrent request deduplication via [ConcurrentHashMap] and [Deferred].
+ */
 class WaveformEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val tigerDao: TigerDao,
@@ -28,7 +34,10 @@ class WaveformEngine @Inject constructor(
 
     /**
      * Retrieves the audio waveform with studio-grade smoothing and scaling.
-     * Uses a Concurrent Map of Deferreds to prevent redundant decodes without global blocking.
+     * Uses a concurrent map of deferred to prevent redundant decodes without global blocking.
+     *
+     * @param track The [AudioTrack] to extract or load waveform for.
+     * @return List of float amplitude values normalized between 0.0 and 1.0.
      */
     suspend fun getWaveform(track: AudioTrack): List<Float> = coroutineScope {
         val existing = activeRequests[track.id]
@@ -36,7 +45,7 @@ class WaveformEngine @Inject constructor(
 
         val deferred = async(Dispatchers.IO) {
             try {
-                // 1. Check persistent Room cache to avoid redundant hardware decoding
+                // 1. Database Cache Check
                 val cached = tigerDao.getWaveformCache(track.id)
                 if (cached != null && cached.amplitudesBlob.isNotEmpty()) {
                     return@async cached.amplitudesBlob.map { (it.toInt() and 0xFF) / 255f }
@@ -45,7 +54,7 @@ class WaveformEngine @Inject constructor(
                 val durationSec = (track.durationMs / 1000).toInt()
                 val targetBars = (durationSec / 1.5).toInt().coerceIn(40, 100)
 
-                // 2. Hardware MediaCodec extraction: seek to strategic points rather than dense decoding
+                // 2. Hardware Extraction
                 val waveform = if (track.isLocal) {
                     val raw = extractRealWaveformFast(track, targetBars)
                     if (raw.isNotEmpty()) processAndSmooth(raw) else emptyList()
@@ -53,7 +62,7 @@ class WaveformEngine @Inject constructor(
                     emptyList()
                 }
 
-                // 3. Persist downsampled 8-bit normalized waveform blob in Room
+                // 3. Finalization & Fallback
                 val finalWaveform = waveform.ifEmpty {
                     generateDeterministicWaveform(track.id, targetBars, track.durationMs)
                 }
@@ -72,9 +81,8 @@ class WaveformEngine @Inject constructor(
     }
 
     /**
-     * Optimized Hardware Extraction:
-     * Instead of 100 seeks (which kills MediaCodec performance), we seek to 8 strategic
-     * points and decode a contiguous block. This is 10x faster and much more stable.
+     * Extracts waveform amplitudes quickly by seeking to strategic points across the track duration
+     * and decoding short sample blocks via [MediaExtractor] and [MediaCodec].
      */
     private fun extractRealWaveformFast(track: AudioTrack, targetBars: Int): List<Float> {
         val rawAmplitudes = mutableListOf<Float>()
@@ -94,16 +102,14 @@ class WaveformEngine @Inject constructor(
             val mime = format.getString(MediaFormat.KEY_MIME) ?: return emptyList()
             val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 1)
 
-            // Attempt hardware, fall back to software to prevent codec exhaustion
             codec = try {
                 MediaCodec.createDecoderByType(mime)
             } catch (e: Exception) {
-                // c2.android.* and OMX.google.* are typical software decoders
                 val swMime = if (mime.contains("mp3")) "audio/mpeg" else mime
                 try { MediaCodec.createByCodecName("c2.android.${swMime.substringAfter("/")}.decoder") }
                 catch (e2: Exception) { MediaCodec.createDecoderByType(mime) }
             }
-            
+
             codec.configure(format, null, null, 0)
             codec.start()
 
@@ -111,7 +117,7 @@ class WaveformEngine @Inject constructor(
             val timeoutUs = 1500L
             val numSeeks = 8
             val durationUs = track.durationMs * 1000L
-            val samplesPerSeek = 16384 // Decode a significant chunk at each point
+            val samplesPerSeek = 16384
 
             for (s in 0 until numSeeks) {
                 val seekTimeUs = (durationUs / numSeeks) * s
@@ -135,11 +141,9 @@ class WaveformEngine @Inject constructor(
                         if (outBuffer != null && info.size > 0) {
                             outBuffer.order(ByteOrder.nativeOrder())
                             val shortBuffer = outBuffer.asShortBuffer()
-                            
-                            // Peek with average pooling for better transient preservation
+
                             var peak = 0f
                             while (shortBuffer.hasRemaining()) {
-                                // CHANNEL AVERAGING (Stereo Mosh-Pit protection)
                                 var sum = 0f
                                 var actualSamples = 0
                                 for (c in 0 until channels) {
@@ -151,11 +155,9 @@ class WaveformEngine @Inject constructor(
                                 }
                                 val sample = if (actualSamples > 0) sum / actualSamples else 0f
                                 if (sample > peak) peak = sample
-                                
-                                // Efficient Skip logic
+
                                 if (shortBuffer.hasRemaining()) {
                                     val skip = (shortBuffer.remaining() / 16).coerceAtLeast(1)
-                                    // Ensure we skip in multiples of channels to maintain phase
                                     val channelAwareSkip = (skip / channels) * channels
                                     if (channelAwareSkip > 0) {
                                         shortBuffer.position((shortBuffer.position() + channelAwareSkip).coerceAtMost(shortBuffer.limit()))
@@ -180,7 +182,6 @@ class WaveformEngine @Inject constructor(
 
         if (rawAmplitudes.isEmpty()) return emptyList()
 
-        // AVERAGE POOLING: Downsample to targetBars with better transient preservation
         val step = rawAmplitudes.size.toFloat() / targetBars
         return List(targetBars) { i ->
             val start = (i * step).toInt()
@@ -193,10 +194,11 @@ class WaveformEngine @Inject constructor(
         }
     }
 
+    /** Processes and smooths raw amplitude values using moving average weighting and scaling. */
     private fun processAndSmooth(raw: List<Float>): List<Float> {
         if (raw.isEmpty()) return emptyList()
         val maxVal = raw.maxOrNull() ?: 1f
-        val scaled = raw.map { (it / maxVal).pow(0.5f) } // Slightly less aggressive scaling
+        val scaled = raw.map { (it / maxVal).pow(0.5f) }
 
         val smoothed = mutableListOf<Float>()
         for (i in scaled.indices) {
@@ -209,6 +211,7 @@ class WaveformEngine @Inject constructor(
         return smoothed
     }
 
+    /** Generates a pseudo-random deterministic waveform as a fallback when decoding fails. */
     private fun generateDeterministicWaveform(seed: String, bars: Int, duration: Long): List<Float> {
         val random = Random(seed.hashCode().toLong() + duration)
         val raw = List(bars) { 0.2f + random.nextFloat() * 0.8f }

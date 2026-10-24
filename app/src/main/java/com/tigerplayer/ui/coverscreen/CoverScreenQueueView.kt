@@ -22,6 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.tigerplayer.ui.theme.glassEffect
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -31,6 +33,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -68,10 +71,8 @@ fun CoverScreenQueueView(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 160.dp, max = 260.dp)
-            .background(
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                RoundedCornerShape(20.dp)
-            )
+            .glassEffect(RoundedCornerShape(20.dp))
+            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
         Row(
@@ -196,12 +197,12 @@ fun CoverScreenQueueView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
+                            .then(
+                                if (isCurrent) Modifier.glassEffect(RoundedCornerShape(10.dp)) else Modifier
+                            )
                             .background(
-                                if (isCurrent) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
-                                }
+                                if (isCurrent) com.tigerplayer.ui.theme.TigerNeonOrange.copy(alpha = 0.2f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
                             )
                             .then(swipeModifier)
                             .clickable { onTrackTapped(track) }
