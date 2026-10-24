@@ -22,6 +22,12 @@ import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import kotlin.random.Random
 
+/**
+ * Orchestrates local and remote music library data, aggregation, sorting, searching,
+ * playlist manipulation, and custom folder indexing.
+ *
+ * Serves as the domain engine layer between ViewModels and data repositories.
+ */
 class LibraryEngine @Inject constructor(
     private val historyRepository: HistoryRepository,
     private val audioRepository: AudioRepository,
@@ -29,24 +35,30 @@ class LibraryEngine @Inject constructor(
     private val musicFolderRepository: MusicFolderRepository
 ) {
 
+    /** Supported sorting criteria for tracks and albums in the library. */
     enum class SortOrder {
         TITLE, ARTIST, DATE_ADDED, RELEASE_DATE
     }
 
     companion object {
+        /** Reserved playlist ID for liked songs. */
         const val LIKED_SONGS_ID = -1L
+        /** Reserved playlist ID for recently added tracks. */
         const val RECENTLY_ADDED_ID = -2L
     }
 
-    // --- In-Memory Library Aggregation & Filtering ---
-    // Aggregates tracks, artists, and albums in-memory to support instant reactive search
-    // and multi-criterion sorting without issuing repeated disk queries on rapid typing.
     private val _searchQuery = MutableStateFlow("")
+    /** Observable state flow representing the current library search query string. */
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    /** Updates the current search query filter. */
     fun updateSearchQuery(query: String) { _searchQuery.value = query }
+    /** Clears the active search query. */
     fun clearSearch() { _searchQuery.value = "" }
 
+    /**
+     * Container holding aggregated library state including filtered tracks, artists, and albums.
+     */
     data class LibraryAggregation(
         val tracks: List<AudioTrack>,
         val filteredTracks: List<AudioTrack>,
@@ -54,6 +66,9 @@ class LibraryEngine @Inject constructor(
         val albums: List<LibraryAlbum>
     )
 
+    /**
+     * Domain model representing an aggregated music album in the library.
+     */
     data class LibraryAlbum(
         val name: String,
         val artist: String,
@@ -63,6 +78,7 @@ class LibraryEngine @Inject constructor(
         val artworkUri: Uri?
     )
 
+    /** Internal state container for home screen statistics and history. */
     private data class HomeBaseState(
         val recentEntities: List<PlaybackHistoryEntity>,
         val totalMs: Long,
@@ -71,6 +87,9 @@ class LibraryEngine @Inject constructor(
         val allTracks: List<AudioTrack>
     )
 
+    /**
+     * Combines unified tracks, search query, and sorting preferences into an aggregated library flow.
+     */
     fun getAggregatedLibraryFlow(
         unifiedTracksFlow: Flow<List<AudioTrack>>,
         trackSortOrder: Flow<SortOrder> = flowOf(SortOrder.TITLE),
@@ -81,6 +100,9 @@ class LibraryEngine @Inject constructor(
         }
     }
 
+    /**
+     * Performs pure aggregation, filtering, and sorting of tracks into tracks, artists, and albums.
+     */
     fun aggregateLibrary(
         tracks: List<AudioTrack>,
         query: String = "",
@@ -141,7 +163,9 @@ class LibraryEngine @Inject constructor(
         )
     }
 
-    // --- HOME & DISCOVER RITUALS ---
+    /**
+     * Exposes the [HomeUiState] flow containing listening statistics, recent tracks, and recommendations.
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getHomeUiStateFlow(allTracksFlow: Flow<List<AudioTrack>>): Flow<HomeUiState> {
         val recommendationTicker = flow {
@@ -211,24 +235,28 @@ class LibraryEngine @Inject constructor(
         }
     }
 
-    // --- PLAYLIST & GRIMOIRE VAULTS ---
+    /** Returns a flow of custom user playlists. */
     fun getCustomPlaylists(): Flow<List<Playlist>> = audioRepository.getCustomPlaylists()
 
+    /** Creates a new custom playlist with the specified [name]. */
     suspend fun createPlaylist(name: String) = audioRepository.createPlaylist(name)
 
+    /** Deletes the playlist identified by [playlistId]. */
     suspend fun deletePlaylist(playlistId: Long) {
         mediaDataRepository.deletePlaylist(playlistId)
     }
 
+    /** Renames the specified playlist. */
     suspend fun renamePlaylist(playlistId: Long, newName: String) {
         mediaDataRepository.renamePlaylist(playlistId, newName)
     }
 
+    /** Adds a track to a playlist. */
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
         audioRepository.addTrackToPlaylist(playlistId, trackId)
     }
 
-
+    /** Returns tracks for a specific playlist ID, handling virtual playlists like [RECENTLY_ADDED_ID]. */
     fun getPlaylistTracks(playlistId: Long, currentLibrary: List<AudioTrack>): Flow<List<AudioTrack>> {
         return when (playlistId) {
             RECENTLY_ADDED_ID -> flowOf(currentLibrary.reversed().take(20))
@@ -236,23 +264,21 @@ class LibraryEngine @Inject constructor(
         }
     }
 
-    // NEW: Remove track from a specific playlist
+    /** Removes a track from a specific playlist. */
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
         audioRepository.removeTrackFromPlaylist(playlistId, trackId)
     }
 
-    // NEW: Save custom rearranged order of the playlist
+    /** Saves a reordered sequence of tracks for a playlist. */
     suspend fun savePlaylistOrder(playlistId: Long, reorderedTracks: List<AudioTrack>) {
-        // Implementation depends on your DAO. Usually requires updating a `position` column.
         val trackIds = reorderedTracks.map { it.id }
         mediaDataRepository.updatePlaylistOrder(playlistId, trackIds)
         Log.d("LibraryEngine", "Playlist $playlistId reordered successfully.")
     }
 
-    // NEW: Update Playlist Cover Art using persistent URI permission
+    /** Updates playlist custom artwork taking persistable URI permission. */
     suspend fun updatePlaylistArtwork(context: Context, playlistId: Long, uri: Uri) {
         try {
-            // Take persistable permission so the app can read this URI after reboot
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             mediaDataRepository.updatePlaylistArtwork(playlistId, uri.toString())
             Log.d("LibraryEngine", "Artwork updated for playlist $playlistId")
@@ -261,7 +287,7 @@ class LibraryEngine @Inject constructor(
         }
     }
 
-    // --- LIKED SONGS ---
+    /** Toggles the liked status of an audio track, updating the liked songs playlist. */
     suspend fun toggleTrackLikeStatus(track: AudioTrack): Boolean {
         val newState = !track.isLiked
         if (newState) {
@@ -274,36 +300,29 @@ class LibraryEngine @Inject constructor(
         return newState
     }
 
-    /**
-     * LOCAL AUDIO SCANNING
-     * Passes through the scan status flow so the ViewModel can update UI progress bars.
-     */
-
+    /** Returns a flow tracking local audio media store scan progress. */
     fun getLocalAudioScanFlow(forceRefresh: Boolean = false): Flow<com.tigerplayer.data.source.LocalAudioDataSource.ScanStatus> {
         return audioRepository.getLocalTracksWithProgress(forceRefresh)
     }
 
-    // --- CUSTOM MUSIC FOLDERS (issue #50) ---
-
+    /** Returns a flow of custom music folders (issue #50). */
     fun getMusicFolders(): Flow<List<MusicFolder>> = musicFolderRepository.getFolders()
 
-    /**
-     * @param isExcluded true adds [treeUri] as an exclude entry (hidden everywhere), false adds
-     * it as an include root scanned for tracks. Returns false if the persistable permission grant
-     * failed, in which case nothing was saved and the caller should not trigger a rescan.
-     */
+    /** Adds a custom music folder URI (either included or excluded). */
     suspend fun addMusicFolder(treeUri: Uri, isExcluded: Boolean): Boolean {
         return musicFolderRepository.addFolder(treeUri, isExcluded)
     }
 
+    /** Removes a custom music folder by its URI string. */
     suspend fun removeMusicFolder(uriString: String) {
         musicFolderRepository.removeFolder(uriString)
     }
 
-    /** Builds the folder-browser index for the current local library snapshot. */
+    /** Builds the folder browser index for the given list of tracks. */
     fun buildFolderIndex(tracks: List<AudioTrack>): Map<String, FolderTreeBuilder.FolderContents> =
         FolderTreeBuilder.index(tracks)
 
+    /** Ensures the synthetic "Liked Songs" playlist exists in storage. */
     private suspend fun ensureLikedPlaylistExists() {
         val playlists = audioRepository.getCustomPlaylists().first()
         if (playlists.none { it.id == LIKED_SONGS_ID }) {

@@ -17,63 +17,82 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
 /**
- * Centralized physical constants and tuning coefficients for the GPU audio-reactive
- * Navier-Stokes fluid simulation.
+ * Configuration parameters and physical tuning constants for audio-reactive fluid dynamics.
+ * Centralizes dissipation rates, vorticity confinement, splat radii, and texture internal formats.
  */
 object FluidConfig {
-    const val VELOCITY_DISSIPATION = 0.988f // Reduced slightly for more "viscous" feel
-    const val DENSITY_DISSIPATION = 0.980f  // Reduced slightly to feel "heavier"
-    const val VORTICITY_CONFINEMENT = 22.0f // Toned down for smoother swirls
-    
-    // Splat gain constants (tuned for current audio engine calibration)
+    /** Velocity dissipation rate per frame (closer to 1.0 retains momentum longer). */
+    const val VELOCITY_DISSIPATION = 0.988f
+    /** Density dissipation rate per frame governing smoke/color fade speed. */
+    const val DENSITY_DISSIPATION = 0.980f
+    /** Vorticity confinement strength maintaining swirling eddy details. */
+    const val VORTICITY_CONFINEMENT = 22.0f
+
+    /** Base radius for bass-reactive fluid splats. */
     const val BASS_SPLAT_RADIUS_BASE = 0.15f
+    /** Scale factor multiplying bass energy to expand splat radius. */
     const val BASS_SPLAT_RADIUS_SCALE = 0.28f
-    const val BASS_SPLAT_POWER_SCALE = 32.0f // Boosted for more impact
+    /** Power scale multiplying bass energy for HDR brightness impact. */
+    const val BASS_SPLAT_POWER_SCALE = 32.0f
+    /** Base force for rotational swirl injection. */
     const val SWIRL_FORCE_BASE = 4.0f
+    /** Scale factor multiplying high-mid energy for rotational force. */
     const val SWIRL_FORCE_SCALE = 12.0f
-    
-    // Bandwidth-optimized formats for scalar fields
+
+    /** Bandwidth-optimized internal texture format for scalar simulation fields (R16F). */
     const val SCALAR_INTERNAL_FORMAT = GLES30.GL_R16F
+    /** Pixel data format corresponding to scalar fields. */
     const val SCALAR_FORMAT = GLES30.GL_RED
 }
 
 /**
- * Real-time OpenGL ES 3.0 Navier-Stokes fluid dynamics simulation.
- * Employs 16-bit float ping-pong framebuffers for velocity advection, vorticity confinement,
- * pressure Poisson solving, and audio-reactive density splatting.
+ * GPU-accelerated fluid dynamics renderer implementing real-time Navier-Stokes simulations
+ * driven by audio frequency band energies.
+ *
+ * Implements [GLSurfaceView.Renderer] to execute ping-pong advection, diffusion, vorticity,
+ * pressure projection, and post-processing bloom effects on OpenGL ES 3.0.
+ *
+ * @property context Application context injected by Hilt.
  */
 @Singleton
 class FluidRenderer @Inject constructor(
     @ApplicationContext private val context: Context
 ) : GLSurfaceView.Renderer {
 
+    /** Represents a localized touch or audio node force input field. */
     data class NodeField(val x: Float, val y: Float, val intensity: Float)
 
-    // Simulation resolution (Power of 2 for optimal GPU texture sampling)
+    /** Internal simulation grid width (power of 2 for GPU texture efficiency). */
     private val simWidth = 128
+    /** Internal simulation grid height (power of 2 for GPU texture efficiency). */
     private val simHeight = 128
+    /** Current surface viewport width in pixels. */
     private var screenWidth = 0
+    /** Current surface viewport height in pixels. */
     private var screenHeight = 0
 
-    private var currentGlContextHash = 0
+    /** Hash of the active EGL context to detect context loss and re-initialize. */
+    private val currentGlContextHash = java.util.concurrent.atomic.AtomicInteger(0)
 
-    // Thread-safe inputs
+    // Thread-safe atomic references for asynchronous audio engine inputs
     private val currentEnergy = AtomicReference<List<Float>>(List(6) { 0f })
     private val currentNodes = AtomicReference<List<NodeField>>(emptyList())
     private val currentTimeline = AtomicReference(Pair(0f, 0f))
 
-    // FBO Resources
+    // Simulation ping-pong and FBO resources
     private var velocityRes: PingPongBuffer? = null
     private var densityRes: PingPongBuffer? = null
     private var pressureRes: PingPongBuffer? = null
     private var divergenceRes: FrameBuffer? = null
     private var curlRes: FrameBuffer? = null
 
+    // Post-processing framebuffers for HDR scene rendering and bloom
     private var sceneRes: FrameBuffer? = null
     private var bloomPrefilterRes: FrameBuffer? = null
     private var bloomPingRes: FrameBuffer? = null
     private var bloomPongRes: FrameBuffer? = null
 
+    // Shader program handles
     private var advectionShader: Shader? = null
     private var curlShader: Shader? = null
     private var vorticityShader: Shader? = null
@@ -86,25 +105,30 @@ class FluidRenderer @Inject constructor(
     private var blurShader: Shader? = null
     private var bloomCompositeShader: Shader? = null
 
+    /** Vertex array object ID for full-screen quad rendering. */
     private var quadVao: Int = 0
+    /** Vertex buffer object ID for full-screen quad rendering. */
     private var quadVbo: Int = 0
+    /** Timestamp of the previous frame in nanoseconds for delta-time calculation. */
     private var lastFrameTime = System.nanoTime()
 
+    /** Updates the audio frequency band energies driving fluid forces. */
     fun updateEnergyField(bands: List<Float>) { currentEnergy.set(bands) }
+    /** Updates interactive node fields. */
     fun updateNodeField(nodes: List<NodeField>) { currentNodes.set(nodes) }
+    /** Updates timeline progress and amplitude metrics. */
     fun updateTimelineEnergy(progress: Float, amp: Float) { currentTimeline.set(Pair(progress, amp)) }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         val glContextHash = gl.hashCode()
-        if (glContextHash == currentGlContextHash) return
-        if (currentGlContextHash != 0) release()
-        currentGlContextHash = glContextHash
+        if (glContextHash == currentGlContextHash.get()) return
+        if (currentGlContextHash.get() != 0) release()
+        currentGlContextHash.set(glContextHash)
 
         GLES30.glClearColor(0f, 0f, 0f, 0f)
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
 
-        // Initialize high-precision buffers
-        // RGBA16F for vectors/colors, R16F for scalar fields to save bandwidth
+        // Initialize simulation ping-pong buffers and FBOs
         velocityRes = PingPongBuffer(simWidth, simHeight)
         densityRes = PingPongBuffer(simWidth, simHeight)
         pressureRes = PingPongBuffer(
@@ -123,6 +147,7 @@ class FluidRenderer @Inject constructor(
             FluidConfig.SCALAR_FORMAT
         )
 
+        // Compile and link simulation and post-processing shaders
         advectionShader = Shader(FluidShaders.vert, FluidShaders.advectionFrag)
         curlShader = Shader(FluidShaders.vert, FluidShaders.curlFrag)
         vorticityShader = Shader(FluidShaders.vert, FluidShaders.vorticityFrag)
@@ -142,6 +167,7 @@ class FluidRenderer @Inject constructor(
         lastFrameTime = System.nanoTime()
     }
 
+    /** Sets up the vertex array object and vertex buffer object for rendering a full-screen quad. */
     private fun setupQuad() {
         val vao = IntArray(1)
         val vbo = IntArray(1)
@@ -152,7 +178,7 @@ class FluidRenderer @Inject constructor(
 
         GLES30.glBindVertexArray(quadVao)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)
-        val quad = FluidMathUtils.fullScreenQuad // Should be -1 to 1 coordinates
+        val quad = FluidMathUtils.fullScreenQuad
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, quad.capacity() * 4, quad, GLES30.GL_STATIC_DRAW)
         GLES30.glEnableVertexAttribArray(0)
         GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0)
@@ -160,28 +186,26 @@ class FluidRenderer @Inject constructor(
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-        // Lock the internal screen dimensions
         screenWidth = width
         screenHeight = height
         rebuildPostFxBuffers(width, height)
     }
+
     override fun onDrawFrame(gl: GL10?) {
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-
-        // Clear to TRANSPARENT black (The 0.0f alpha is the key)
         GLES30.glClearColor(0.0f, 0.0f, 0.0f, 0.0f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         val currentTime = System.nanoTime()
-        // STABILIZATION: Clamp dt to prevent Navier-Stokes explosions while allowing smooth 60fps
         val dt = ((currentTime - lastFrameTime) / 1_000_000_000f).coerceIn(0.008f, 0.022f)
         lastFrameTime = currentTime
 
-        // 2. ACTIVATE THE ENGINE
-        injectForces()   // We'll fix this next
+        injectForces()
         stepSimulation(dt)
         renderToDisplay()
     }
+
+    /** Injects audio-reactive forces and density splats into the velocity and density fields. */
     private fun injectForces() {
         val bands = currentEnergy.get()
 
@@ -189,29 +213,26 @@ class FluidRenderer @Inject constructor(
         GLES30.glBindVertexArray(quadVao)
 
         if (bands.isNotEmpty()) {
-            // 1. Extract Bass & Treble for different visual layers
             val bass = (bands[0] + bands[1]) * 0.5f
             val highMid = bands[3]
 
             if (bass > 0.02f) {
-                // PULSE RADIUS: The ball grows based on volume
-                val dynamicRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE + 
+                val dynamicRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE +
                         (bass * FluidConfig.BASS_SPLAT_RADIUS_SCALE).coerceAtMost(0.3f)
-
-                // INTENSITY: More energy = more "White" core (HDR)
                 val power = (bass * FluidConfig.BASS_SPLAT_POWER_SCALE).coerceIn(2f, 40f)
 
-                // CORE VORTEX (White/Blue mix)
-                // Center is (0.5, 0.5) - This ensures it stays centered!
+                // Inject density splat at the center
                 applySplat(0.5f, 0.5f, dynamicRadius, floatArrayOf(power * 0.5f, power * 0.8f, power * 3.0f), true)
 
-                // VELOCITY SWIRL: Rotates based on the High-Mids
+                // Inject rotational velocity swirl
                 val swirlForce = FluidConfig.SWIRL_FORCE_BASE + (highMid * FluidConfig.SWIRL_FORCE_SCALE)
                 applySplat(0.5f, 0.5f, dynamicRadius * 1.2f, floatArrayOf(swirlForce, -swirlForce, 0f), false)
             }
         }
         GLES30.glBindVertexArray(0)
     }
+
+    /** Applies a single force or density splat at given normalized coordinates. */
     private fun applySplat(x: Float, y: Float, r: Float, color: FloatArray, isDensity: Boolean) {
         val shader = splatShader ?: return
         shader.use()
@@ -221,7 +242,6 @@ class FluidRenderer @Inject constructor(
 
         val target = if (isDensity) densityRes else velocityRes
         target?.let {
-            // 🔥 FIX: Bind the texture to unit 0 and tell the shader to look at unit 0
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, it.readTexture)
             shader.setUniform("uTarget", 0)
@@ -230,19 +250,13 @@ class FluidRenderer @Inject constructor(
             it.swap()
         }
     }
+
+    /** Advances the Navier-Stokes fluid simulation by one time step ([dt]). */
     private fun stepSimulation(dt: Float) {
         val bands = currentEnergy.get()
         val kick = bands.getOrElse(0) { 0f }.coerceIn(0f, 1f)
-        val lowEnergy = (
-            bands.getOrElse(0) { 0f } +
-                bands.getOrElse(1) { 0f } +
-                bands.getOrElse(2) { 0f }
-            ) / 3f
-        val highEnergy = (
-            bands.getOrElse(3) { 0f } +
-                bands.getOrElse(4) { 0f } +
-                bands.getOrElse(5) { 0f }
-            ) / 3f
+        val lowEnergy = (bands.getOrElse(0) { 0f } + bands.getOrElse(1) { 0f } + bands.getOrElse(2) { 0f }) / 3f
+        val highEnergy = (bands.getOrElse(3) { 0f } + bands.getOrElse(4) { 0f } + bands.getOrElse(5) { 0f }) / 3f
         val expansion = ((lowEnergy - highEnergy) * 0.08f).coerceIn(-0.09f, 0.09f)
         val flowSpeed = (0.90f + lowEnergy * 0.42f + kick * 0.33f).coerceIn(0.75f, 1.75f)
         val turbulence = (0.08f + highEnergy * 0.26f + kick * 0.18f).coerceIn(0.04f, 0.55f)
@@ -253,6 +267,7 @@ class FluidRenderer @Inject constructor(
         GLES30.glViewport(0, 0, simWidth, simHeight)
         GLES30.glBindVertexArray(quadVao)
 
+        // 1. Advection
         advectionShader?.let { shader ->
             shader.use()
             shader.setUniform("uDt", dt)
@@ -265,14 +280,12 @@ class FluidRenderer @Inject constructor(
             bindTexture(0, velocityRes?.readTexture ?: 0)
             shader.setUniform("uVelocity", 0)
 
-            // Move Velocity
             bindTexture(1, velocityRes?.readTexture ?: 0)
             shader.setUniform("uSource", 1)
             shader.setUniform("uDissipation", FluidConfig.VELOCITY_DISSIPATION)
             velocityRes?.write(shader, false)
             velocityRes?.swap()
 
-            // Move Density
             bindTexture(0, velocityRes?.readTexture ?: 0)
             bindTexture(1, densityRes?.readTexture ?: 0)
             shader.setUniform("uSource", 1)
@@ -281,6 +294,7 @@ class FluidRenderer @Inject constructor(
             densityRes?.swap()
         }
 
+        // Curl and Vorticity Confinement
         curlShader?.let { curlS ->
             curlS.use()
             bindTexture(0, velocityRes?.readTexture ?: 0)
@@ -302,7 +316,7 @@ class FluidRenderer @Inject constructor(
             velocityRes?.swap()
         }
 
-        // 2. Projection (Divergence -> Pressure -> Gradient Subtract)
+        // Pressure Projection
         divergenceShader?.let { divS ->
             divS.use()
             bindTexture(0, velocityRes?.readTexture ?: 0)
@@ -318,7 +332,6 @@ class FluidRenderer @Inject constructor(
             presS.setUniform("uDivergence", 1)
             presS.setUniform("uExpansion", expansion)
             presS.setUniform("uTexelSize", texelX, texelY)
-            // 20 Iterations is the sweet spot for mobile (Stability vs Performance)
             repeat(20) {
                 bindTexture(0, pressureRes?.readTexture ?: 0)
                 presS.setUniform("uPressure", 0)
@@ -341,6 +354,7 @@ class FluidRenderer @Inject constructor(
         GLES30.glBindVertexArray(0)
     }
 
+    /** Renders the final fluid simulation combined with HDR bloom post-processing to the screen. */
     private fun renderToDisplay() {
         val shader = displayShader ?: return
         val density = densityRes ?: return
@@ -363,7 +377,7 @@ class FluidRenderer @Inject constructor(
 
         GLES30.glBindVertexArray(quadVao)
 
-        // Pass 1: density -> chromatic HDR scene
+        // Pass 1: Render density to chromatic HDR scene
         shader.use()
         bindTexture(0, density.readTexture)
         shader.setUniform("uDensity", 0)
@@ -371,14 +385,14 @@ class FluidRenderer @Inject constructor(
         shader.setUniform("uBandsHigh", high0, high1, high2)
         scene.write(shader, false)
 
-        // Pass 2: bright-pass prefilter
+        // Pass 2: Bright-pass prefilter for bloom
         prefilterShader.use()
         bindTexture(0, scene.texture)
         prefilterShader.setUniform("uSource", 0)
         prefilterShader.setUniform("uThreshold", (0.68f - avgEnergy * 0.2f).coerceIn(0.38f, 0.75f))
         prefilter.write(prefilterShader, false)
 
-        // Pass 3: separable blur (2 passes)
+        // Pass 3: Separable blur (horizontal and vertical passes)
         blur.use()
         bindTexture(0, prefilter.texture)
         blur.setUniform("uTexture", 0)
@@ -391,7 +405,7 @@ class FluidRenderer @Inject constructor(
         blur.setUniform("uTexelDir", 0.0f, 1.0f / prefilter.height)
         bloomB.write(blur, false)
 
-        // Pass 4: composite on default framebuffer
+        // Pass 4: Composite scene and bloom onto the display framebuffer
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, screenWidth, screenHeight)
         GLES30.glEnable(GLES30.GL_BLEND)
@@ -409,11 +423,13 @@ class FluidRenderer @Inject constructor(
         GLES30.glBindVertexArray(0)
     }
 
+    /** Binds a texture ID to the specified texture unit. */
     private fun bindTexture(unit: Int, textureId: Int) {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
     }
 
+    /** Rebuilds post-processing framebuffers when the surface dimensions change. */
     private fun rebuildPostFxBuffers(width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
 
@@ -430,6 +446,7 @@ class FluidRenderer @Inject constructor(
         bloomPongRes = FrameBuffer(bloomW, bloomH)
     }
 
+    /** Releases all GPU resources, shaders, and FBOs. */
     fun release() {
         GLES30.glDeleteVertexArrays(1, intArrayOf(quadVao), 0)
         GLES30.glDeleteBuffers(1, intArrayOf(quadVbo), 0)
@@ -448,6 +465,6 @@ class FluidRenderer @Inject constructor(
             blurShader,
             bloomCompositeShader
         ).forEach { it?.release() }
-        currentGlContextHash = 0
+        currentGlContextHash.set(0)
     }
 }

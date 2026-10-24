@@ -81,6 +81,9 @@ fun MainScreen(
     val isCoverScreen = windowState.isCoverScreen
     val sharedDashboardViewModel = dashboardViewModel ?: hiltViewModel()
 
+    val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val prismViewModel: PrismViewModel = hiltViewModel()
+
     // Audio must load regardless of shell: the cover-screen mini hub reads the same
     // playerViewModel.uiState as the full shell.
     LaunchedEffect(Unit) {
@@ -93,6 +96,7 @@ fun MainScreen(
         CoverScreenMiniHub(
             playerViewModel = playerViewModel,
             dashboardViewModel = sharedDashboardViewModel,
+            prismViewModel = prismViewModel,
             windowState = windowState,
             modifier = Modifier
                 .fillMaxSize()
@@ -106,9 +110,6 @@ fun MainScreen(
 
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
-
-    val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
-    val prismViewModel: PrismViewModel = hiltViewModel()
 
     var playerState by remember { mutableStateOf(PlayerSheetState.MINI) }
     val isExpanded = playerState == PlayerSheetState.EXPANDED

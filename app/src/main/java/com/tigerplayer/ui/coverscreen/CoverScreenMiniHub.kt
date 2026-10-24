@@ -79,6 +79,7 @@ import androidx.window.layout.WindowLayoutInfo
 import androidx.window.layout.WindowMetricsCalculator
 import coil.compose.AsyncImage
 import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.player.LyricsDisplay
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.TigerNeonOrange
@@ -329,6 +330,7 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
 fun CoverScreenMiniHub(
     playerViewModel: PlayerViewModel,
     dashboardViewModel: DashboardViewModel,
+    prismViewModel: PrismViewModel,
     windowState: CoverScreenWindowState,
     modifier: Modifier = Modifier
 ) {
@@ -347,6 +349,7 @@ fun CoverScreenMiniHub(
     var libraryVisible by remember { mutableStateOf(false) }
     var playbackSettingsVisible by remember { mutableStateOf(false) }
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
+    var prismVisible by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
 
@@ -373,7 +376,8 @@ fun CoverScreenMiniHub(
     val hasModalOverlay = CoverScreenPerformanceManager.isModalOverlayActive(
         queueVisible = queueVisible,
         libraryVisible = libraryVisible,
-        playbackSettingsVisible = playbackSettingsVisible
+        playbackSettingsVisible = playbackSettingsVisible,
+        prismVisible = prismVisible
     )
     val isRenderingActive = isLifecycleActive && !hasModalOverlay
 
@@ -822,7 +826,23 @@ fun CoverScreenMiniHub(
                 onCycleRepeat = playerViewModel::toggleRepeat,
                 onAdjustVolume = playerViewModel::adjustCoverScreenVolume,
                 onSelectEqPreset = playerViewModel::setCoverScreenEqPreset,
+                onOpenPrism = {
+                    playbackSettingsVisible = false
+                    prismVisible = true
+                },
                 onClose = { playbackSettingsVisible = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = prismVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenPrismView(
+                prismViewModel = prismViewModel,
+                onClose = { prismVisible = false }
             )
         }
     }

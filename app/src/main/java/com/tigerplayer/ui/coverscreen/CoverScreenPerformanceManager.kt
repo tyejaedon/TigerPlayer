@@ -96,9 +96,10 @@ object CoverScreenPerformanceManager {
     fun isModalOverlayActive(
         queueVisible: Boolean,
         libraryVisible: Boolean,
-        playbackSettingsVisible: Boolean
+        playbackSettingsVisible: Boolean,
+        prismVisible: Boolean = false
     ): Boolean {
-        return queueVisible || libraryVisible || playbackSettingsVisible
+        return queueVisible || libraryVisible || playbackSettingsVisible || prismVisible
     }
 
     /**

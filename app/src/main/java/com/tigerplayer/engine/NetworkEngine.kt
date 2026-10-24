@@ -20,10 +20,16 @@ import javax.inject.Inject
  * expected to catch this, surface a warning to the user, and retry with acknowledgement -
  * this is the actual per-connection scoping for cleartext traffic (issue #47); the static
  * network security config cannot know the user's server address ahead of time.
+ *
+ * @property url The unencrypted server URL that triggered the exception.
  */
 class CleartextNotAcknowledgedException(val url: String) :
     Exception("Server address '$url' uses an unencrypted (http://) connection.")
 
+/**
+ * Orchestrates network connections, Navidrome server authentication, archive synchronization,
+ * and unified library flow generation.
+ */
 class NetworkEngine @Inject constructor(
     private val navidromePrefs: NavidromePrefs,
     private val hostManager: SubsonicHostManager,
@@ -31,12 +37,9 @@ class NetworkEngine @Inject constructor(
     private val audioRepository: AudioRepository,
     private val authManager: SpotifyAuthManager
 ) {
-    // Exposes remote tracks to be observed by the ViewModel
     private val _remoteTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
 
-    /**
-     * Emits true when configured Navidrome credentials exist and a lightweight ping succeeds.
-     */
+    /** Emits a boolean true only if valid Navidrome credentials exist and server ping succeeds. */
     val autoConnectEvent: Flow<Boolean> = combine(
         navidromePrefs.serverUrl,
         navidromePrefs.username,
@@ -51,10 +54,7 @@ class NetworkEngine @Inject constructor(
         }
     }
 
-    /**
-     * Synchronizes track catalog from Navidrome server into in-memory remote stream list.
-     * Track URIs are signed dynamically at request time to prevent credential leakage.
-     */
+    /** Fetches all remote tracks from Navidrome and maps them to [AudioTrack] domain models. */
     suspend fun syncNavidromeArchives() {
         val user = navidromePrefs.username.firstOrNull()
         val pass = navidromePrefs.password.firstOrNull()
@@ -65,7 +65,6 @@ class NetworkEngine @Inject constructor(
         }
 
         navidromeRepository.getAllRemoteTracks(user, pass).onSuccess { remoteList ->
-            // Mapping carries no credentials; URIs are signed at request time (issue #44).
             _remoteTracks.value = remoteList.map { it.toAudioTrack() }
         }.onFailure { error ->
             Log.e("NetworkEngine", "Failed to sync Navidrome: ${error.message}")
@@ -73,11 +72,13 @@ class NetworkEngine @Inject constructor(
     }
 
     /**
-     * Validates Navidrome server connection credentials and returns a Kotlin Result for UI handling.
+     * Validates Navidrome credentials and persists them upon success.
      *
-     * [allowCleartext] must be explicitly set by the caller (after user acknowledgement) before
-     * an `http://` server address is permitted; otherwise this fails with
-     * [CleartextNotAcknowledgedException] rather than silently sending credentials in the clear.
+     * @param url Server base URL.
+     * @param user Username.
+     * @param pass Password.
+     * @param allowCleartext Whether to allow unencrypted http:// connections without prompting.
+     * @return A [Result] indicating success or failure (such as [CleartextNotAcknowledgedException]).
      */
     suspend fun connectToNavidrome(
         url: String,
@@ -98,10 +99,7 @@ class NetworkEngine @Inject constructor(
         }
     }
 
-    /**
-     * 4. REFRESH LIBRARY
-     * Exposes the flow of unified tracks (local + remote) based on current credentials.
-     */
+    /** Returns the unified library flow (local + remote tracks). */
     suspend fun getUnifiedLibraryFlow(): Flow<List<AudioTrack>> {
         val user = navidromePrefs.username.firstOrNull()
         val pass = navidromePrefs.password.firstOrNull()
@@ -112,21 +110,13 @@ class NetworkEngine @Inject constructor(
         return audioRepository.getUnifiedTracks(user, pass, url)
     }
 
-    /**
-     * 6. SPOTIFY AUTH
-     *
-     * With the Authorization Code + PKCE flow, [SpotifyAuthManager.exchangeCodeForToken] already
-     * persists the freshly exchanged token before this hook fires (issue #46 migration). This
-     * remains as an explicit acknowledgement point for callers rather than re-deriving token
-     * state here.
-     */
+    /** Acknowledges successful Spotify authentication. */
     fun onAuthSuccess(newToken: String) {
         val persisted = authManager.getToken() == newToken
         Log.d("NetworkEngine", "Spotify auth success acknowledged (matches persisted token=$persisted).")
     }
 
-    // --- UTILS ---
-
+    /** Ensures URL has protocol prefix and trailing slash. */
     private fun String.ensureValidUrl(): String {
         val clean = when {
             startsWith("http://") || startsWith("https://") -> this

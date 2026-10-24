@@ -15,6 +15,14 @@ import com.tigerplayer.data.model.AudioTrack
  */
 object FolderTreeBuilder {
 
+    /**
+     * Represents the contents of a specific folder path in the library hierarchy.
+     *
+     * @property path The absolute or relative storage path of this folder.
+     * @property name The display name of the folder (or "Root" for the synthetic root).
+     * @property subfolders List of direct child directory paths contained within this folder.
+     * @property tracks List of audio tracks residing directly in this folder.
+     */
     data class FolderContents(
         val path: String,
         val name: String,
@@ -22,13 +30,22 @@ object FolderTreeBuilder {
         val tracks: List<AudioTrack>
     )
 
+    /** Synthetic root path key used for top-level directory grouping. */
     private const val ROOT = ""
 
+    /**
+     * Indexes a flat list of audio tracks into a hierarchical map of folder contents.
+     *
+     * @param tracks Flat list of [AudioTrack] instances representing the local library.
+     * @return A map associating each directory path string with its [FolderContents].
+     */
     fun index(tracks: List<AudioTrack>): Map<String, FolderContents> {
+        // Group tracks by their parent directory path, filtering out blank paths.
         val tracksByDir = tracks
             .filter { !it.path.isNullOrBlank() }
             .groupBy { it.path!!.substringBeforeLast('/', missingDelimiterValue = ROOT) }
 
+        // Collect all distinct directories and their ancestor paths.
         val allDirs = sortedSetOf(ROOT)
         tracksByDir.keys.forEach { dir ->
             var current = dir
@@ -39,6 +56,7 @@ object FolderTreeBuilder {
             }
         }
 
+        // Map each directory to its immediate child subdirectories.
         val childrenByParent = allDirs
             .groupBy { it.substringBeforeLast('/', missingDelimiterValue = ROOT) }
             .mapValues { (parent, children) -> children.filter { it != parent } }
