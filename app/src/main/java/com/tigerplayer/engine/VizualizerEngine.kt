@@ -7,11 +7,9 @@ import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 
 /**
- * THE STABILIZED FLUID VORTEX
- * Optimized for Samsung/Snapdragon BLASTBufferQueue lifecycles.
- *
- * STATUS: Hole-punching successful. The surface is now transparent and
- * awaiting GPU density injection.
+ * Translucent GLSurfaceView host for OpenGL fluid visualization.
+ * Configured with 32-bit RGBA8888 translucent pixel format and Z-order media overlay
+ * to composite behind Compose UI glassmorphic layers without surface flashing.
  */
 class FluidVortexView @JvmOverloads constructor(
     context: Context,
@@ -45,8 +43,7 @@ class FluidVortexView @JvmOverloads constructor(
     }
 
     /**
-     * THE RELEASE RITUAL
-     * Ensures GPU resources are freed when the user collapses the player.
+     * Releases GPU textures, shaders, and FBO attachments when detached from window.
      */
     override fun onDetachedFromWindow() {
         // FIXED: Restore the release call to prevent orphan GPU textures/FBOs

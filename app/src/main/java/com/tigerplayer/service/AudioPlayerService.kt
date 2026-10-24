@@ -70,6 +70,18 @@ import kotlin.time.Duration.Companion.milliseconds
 data class PeqBand(val type: String, val frequency: Float, val gain: Float, val q: Float)
 data class PeqProfile(val name: String, val preamp: Float, val bands: List<PeqBand>, val rawText: String = "")
 
+/**
+ * Foreground media session service managing the ExoPlayer playback engine.
+ *
+ * Responsibilities:
+ * - Manages MediaSession lifecycle and foreground notification with MediaStyle.
+ * - Configures ExoPlayer DefaultAudioSink with custom AudioProcessor chain:
+ *   [AdaptiveDspEngine] -> [FftProcessor] -> [WaveformCaptureProcessor].
+ * - Handles OEM-specific hardware quirks (e.g. disabling float output on Samsung to avoid HAL buffer crashes).
+ * - Manages hardware offload state transitions with volume ramp fading ([offloadTransitionMutex]).
+ * - Resolves dynamic Navidrome streaming credentials at request time via [ResolvingDataSource].
+ * - Dispatches audio-reactive haptic feedback pulses based on real-time FFT bass and flux.
+ */
 @Suppress("DEPRECATION")
 @UnstableApi
 @AndroidEntryPoint

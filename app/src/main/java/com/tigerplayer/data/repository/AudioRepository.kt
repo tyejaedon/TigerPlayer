@@ -123,9 +123,9 @@ class AudioRepository @Inject constructor(
     }
 
     /**
-     * THE MASTER ARCHIVE
-     * Combines local high-fidelity FLACs/MP3s and Navidrome remote streams.
-     * Ensures local files are prioritized for bit-perfect output.
+     * Combines local high-fidelity tracks (from Room cache) and Navidrome remote streams.
+     * Ensures local files and remote tracks are merged into a single alphabetically sorted list
+     * without blocking callers or leaking credentials (remote URIs are resolved on-demand).
      */
     fun getUnifiedTracks(
         user: String?,
@@ -164,8 +164,9 @@ class AudioRepository @Inject constructor(
 
 
     /**
-     * LOCAL CACHE LOGIC
-     * retrieves bit-perfect local files from the internal vault.
+     * Retrieves locally cached audio tracks. On first access (or when [forceRefresh] is true),
+     * triggers an incremental reconcile against MediaStore and configured SAF directories.
+     * Executed strictly on Dispatchers.IO to maintain main-safety.
      */
     fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = flow {
         val shouldScan = forceRefresh || hasPrimedLocalScan.compareAndSet(false, true)
@@ -305,15 +306,14 @@ class AudioRepository @Inject constructor(
     }
 
 
-    // ==========================================
-    // --- GRIMOIRE (PLAYLIST) OPERATIONS ---
-    // ==========================================
+    // --- Playlist Persistence & Reordering Operations ---
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
         return playlistDao.getPlaylistsWithCount()
             .onEach { list ->
-                Log.d("AudioRepository", "Archive Emission: Found ${list.size} playlists")
-                list.forEach { Log.d("AudioRepository", "Playlist: ${it.name} ID: ${it.id}") }
+                if (com.tigerplayer.BuildConfig.DEBUG) {
+                    Log.d(TAG, "Playlists loaded: ${list.size}")
+                }
             }
     }
     suspend fun createPlaylist(name: String, id: Long? = null) {
@@ -331,13 +331,15 @@ class AudioRepository @Inject constructor(
         tigerDao.updateTrackLikeStatus(trackId, isLiked)
     }
 
-    // 🔥 NEW: Persist the HD Artwork
+    /**
+     * Persists updated high-resolution artwork URI in Room.
+     * Called when artwork is asynchronously fetched by MetadataEngine.
+     */
     suspend fun updateTrackArtworkUri(trackId: String, newUri: String) {
         tigerDao.updateTrackArtworkUri(trackId, newUri)
     }
 
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
-        // AudioRepository.kt line 194
         playlistDao.addTrackToPlaylist(playlistId, trackId)
     }
      fun getAllTracksStats() = tigerDao.getAllTracksStats()
@@ -353,7 +355,6 @@ class AudioRepository @Inject constructor(
 
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
-        // AudioRepository.kt line 211
         playlistDao.removeTrackAndReorder(playlistId, trackId)
 
 
@@ -394,9 +395,10 @@ class AudioRepository @Inject constructor(
 
     // Inside LibraryEngine or AudioRepository
     suspend fun savePlaylistOrder(playlistId: Long, tracks: List<AudioTrack>) {
-        // 🛡️ STOP THE GHOST: Don't allow operations on ID -1 or 0
+        // Invariant guard: synthetic playlist IDs (-1 for Liked Songs, -2 for Recently Added)
+        // are computed dynamically and cannot have custom user-defined track orders persisted.
         if (playlistId <= 0) {
-            Log.e("LibraryEngine", "Abort! Attempted to reorder invalid playlist ID: $playlistId")
+            Log.e(TAG, "Attempted to reorder synthetic or invalid playlist ID: $playlistId")
             return
         }
 

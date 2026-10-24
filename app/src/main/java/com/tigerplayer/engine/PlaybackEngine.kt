@@ -9,6 +9,13 @@ import com.tigerplayer.service.MediaControllerManager
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
+/**
+ * Core playback coordinator responsible for transport arbitration.
+ *
+ * Directs playback commands to either Media3 ExoPlayer ([MediaControllerManager])
+ * or Spotify App Remote ([SpotifyRepository]). Enforces mutual exclusion: starting Spotify
+ * pauses local playback, and starting local playback pauses Spotify remote playback.
+ */
 class PlaybackEngine @Inject constructor(
     private val mediaControllerManager: MediaControllerManager,
     private val spotifyRepository: SpotifyRepository

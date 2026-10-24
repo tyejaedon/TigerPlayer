@@ -33,8 +33,9 @@ class MetadataEngine @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // 🔥 THE FIX: artistDetails is now reactive to the database ground truth.
-    // This ensures that images fetched on the Artist Screen appear in the Constellation instantly.
+    // Reactive artist details stream backed by Room database ground truth.
+    // Updates immediately across all observing screens (e.g. Constellation graph, now-playing)
+    // when new metadata or artwork is fetched from remote APIs.
     val artistDetails: StateFlow<Map<String, ArtistDetails>> = tigerDao.getAllArtistCache()
         .map { list ->
             list.associate { entity ->

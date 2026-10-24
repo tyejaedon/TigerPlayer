@@ -17,8 +17,8 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
 /**
- * CONFIGURATION ARCHIVE: The Physical Laws
- * Centralizes magic numbers for audio-reactive fluid tuning.
+ * Centralized physical constants and tuning coefficients for the GPU audio-reactive
+ * Navier-Stokes fluid simulation.
  */
 object FluidConfig {
     const val VELOCITY_DISSIPATION = 0.988f // Reduced slightly for more "viscous" feel
@@ -38,8 +38,9 @@ object FluidConfig {
 }
 
 /**
- * THE SUPREME GPU VORTEX: FluidRenderer
- * Optimized for 16-bit Float precision and high-dynamic range audio reactivity.
+ * Real-time OpenGL ES 3.0 Navier-Stokes fluid dynamics simulation.
+ * Employs 16-bit float ping-pong framebuffers for velocity advection, vorticity confinement,
+ * pressure Poisson solving, and audio-reactive density splatting.
  */
 @Singleton
 class FluidRenderer @Inject constructor(
