@@ -97,9 +97,10 @@ object CoverScreenPerformanceManager {
         queueVisible: Boolean,
         libraryVisible: Boolean,
         playbackSettingsVisible: Boolean,
-        prismVisible: Boolean = false
+        prismVisible: Boolean = false,
+        nexusVisible: Boolean = false
     ): Boolean {
-        return queueVisible || libraryVisible || playbackSettingsVisible || prismVisible
+        return queueVisible || libraryVisible || playbackSettingsVisible || prismVisible || nexusVisible
     }
 
     /**

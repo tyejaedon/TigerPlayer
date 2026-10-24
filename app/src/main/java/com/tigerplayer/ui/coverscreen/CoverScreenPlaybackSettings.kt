@@ -65,6 +65,7 @@ fun CoverScreenPlaybackSettings(
     onAdjustVolume: (Float) -> Unit,
     onSelectEqPreset: (CoverScreenEqPreset) -> Unit,
     onOpenPrism: () -> Unit = {},
+    onOpenNexus: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -131,6 +132,19 @@ fun CoverScreenPlaybackSettings(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Sonic Prism (3-Stem Mix)")
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenNexus,
+                    modifier = Modifier.fillMaxWidth().testTag("CoverScreenNexusButton")
+                ) {
+                    Icon(
+                        Icons.Rounded.GraphicEq,
+                        contentDescription = "Open Nexus Spatial EQ",
+                        tint = com.tigerplayer.ui.theme.TigerNeonOrange
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Nexus Spatial 3D EQ")
                 }
 
                 Row(

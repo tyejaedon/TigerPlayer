@@ -82,6 +82,7 @@ import com.tigerplayer.engine.FluidVortexView
 import androidx.window.layout.WindowMetricsCalculator
 import coil.compose.AsyncImage
 import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.equalizer.AuralNexusViewModel
 import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.player.LyricsDisplay
 import com.tigerplayer.ui.player.PlayerViewModel
@@ -352,6 +353,7 @@ fun CoverScreenMiniHub(
     var libraryVisible by remember { mutableStateOf(false) }
     var playbackSettingsVisible by remember { mutableStateOf(false) }
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
+    var nexusVisible by remember { mutableStateOf(false) }
     var prismVisible by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
@@ -382,7 +384,8 @@ fun CoverScreenMiniHub(
         queueVisible = queueVisible,
         libraryVisible = libraryVisible,
         playbackSettingsVisible = playbackSettingsVisible,
-        prismVisible = prismVisible
+        prismVisible = prismVisible,
+        nexusVisible = nexusVisible
     )
     val isRenderingActive = isLifecycleActive && !hasModalOverlay
 
@@ -862,6 +865,10 @@ fun CoverScreenMiniHub(
                     playbackSettingsVisible = false
                     prismVisible = true
                 },
+                onOpenNexus = {
+                    playbackSettingsVisible = false
+                    nexusVisible = true
+                },
                 onClose = { playbackSettingsVisible = false }
             )
         }
@@ -875,6 +882,18 @@ fun CoverScreenMiniHub(
             CoverScreenPrismView(
                 prismViewModel = prismViewModel,
                 onClose = { prismVisible = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = nexusVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenNexusView(
+                viewModel = hiltViewModel<AuralNexusViewModel>(),
+                onClose = { nexusVisible = false }
             )
         }
     }
