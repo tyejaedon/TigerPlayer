@@ -219,6 +219,14 @@ class PlayerViewModel @Inject constructor(
             CoverScreenStatsSnapshot()
         )
 
+    val recentTracks: StateFlow<List<AudioTrack>> = libraryEngine.getHomeUiStateFlow(unifiedTracksFlow)
+        .map { it.recentlyPlayedTracks }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyList()
+        )
+
     val customPlaylists: StateFlow<List<Playlist>> = combine(
         libraryEngine.getCustomPlaylists(),
         _playlistSortOrder
