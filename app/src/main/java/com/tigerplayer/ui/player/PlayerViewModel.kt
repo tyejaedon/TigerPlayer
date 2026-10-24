@@ -133,7 +133,8 @@ class PlayerViewModel @Inject constructor(
     private val playbackPrefs: PlaybackPrefs,
     private val audioRepository: AudioRepository,
     val youtubeRepository: YouTubeRepository,
-    private val bluetoothDeviceManager: BluetoothDeviceManager
+    private val bluetoothDeviceManager: BluetoothDeviceManager,
+    val fluidRenderer: FluidRenderer
 ) : ViewModel() {
 
     // Backward-compatible constructor for existing tests and non-Hilt callers
