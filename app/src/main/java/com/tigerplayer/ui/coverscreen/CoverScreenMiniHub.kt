@@ -356,6 +356,7 @@ fun CoverScreenMiniHub(
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var seekerTouchBounds by remember { mutableStateOf<Rect?>(null) }
+    var fullBleedLyricsVisible by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var isLifecycleActive by remember {
@@ -576,7 +577,8 @@ fun CoverScreenMiniHub(
                         currentPosition = uiState.currentPosition,
                         isLarge = true,
                         statsVisible = true,
-                        screenHeightDp = windowState.heightDp.dp
+                        screenHeightDp = windowState.heightDp.dp,
+                        onDoubleTap = { fullBleedLyricsVisible = true }
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     CoverAccessibleControls(
@@ -653,7 +655,8 @@ fun CoverScreenMiniHub(
                     currentPosition = uiState.currentPosition,
                     isLarge = false,
                     statsVisible = true,
-                    screenHeightDp = windowState.heightDp.dp
+                    screenHeightDp = windowState.heightDp.dp,
+                    onDoubleTap = { fullBleedLyricsVisible = true }
                 )
                 Spacer(modifier = Modifier.height(if (isTightScreen) 6.dp else 10.dp))
                 CoverAccessibleControls(
@@ -711,8 +714,22 @@ fun CoverScreenMiniHub(
             }
         }
 
+        // FULL-BLEED LYRICS MODE
+        AnimatedVisibility(
+            visible = fullBleedLyricsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenLyricsView(
+                lyrics = uiState.currentLyrics,
+                currentPosition = uiState.currentPosition,
+                onDoubleTap = { fullBleedLyricsVisible = false }
+            )
+        }
+
         // WAVEFORM (Visual Anchor)
-        if (!hasModalOverlay) {
+        if (!hasModalOverlay && !fullBleedLyricsVisible) {
             CoverMicroWaveform(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
@@ -871,6 +888,7 @@ private fun TrackInfoText(
     currentPosition: Long,
     isLarge: Boolean,
     statsVisible: Boolean,
+    onDoubleTap: () -> Unit = {},
     screenHeightDp: Dp = LocalConfiguration.current.screenHeightDp.dp
 ) {
     val isTight = screenHeightDp > 0.dp && screenHeightDp <= 360.dp
@@ -888,6 +906,13 @@ private fun TrackInfoText(
         isLarge = isLarge,
         statsVisible = statsVisible
     )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTap() }) },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
 
     Spacer(modifier = Modifier.height(spacerHeight))
 
@@ -934,6 +959,7 @@ private fun TrackInfoText(
         style = MaterialTheme.typography.labelSmall,
         letterSpacing = 1.sp
     )
+    }
 }
 
 /**
