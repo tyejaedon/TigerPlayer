@@ -103,6 +103,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 enum class CoverScreenLibraryTab(val label: String) {
     HISTORY("History"),
+    CONSTELLATION("Constellation"),
     ARTISTS("Artists"),
     ALBUMS("Albums"),
     SONGS("Songs"),
@@ -124,6 +125,7 @@ fun CoverScreenLibraryTabRow(
         CoverScreenLibraryTab.entries.forEach { tab ->
             val tabTitle = when (tab) {
                 CoverScreenLibraryTab.HISTORY -> "History"
+                CoverScreenLibraryTab.CONSTELLATION -> "Constellation"
                 CoverScreenLibraryTab.ARTISTS -> stringResource(R.string.coverscreen_tab_artists)
                 CoverScreenLibraryTab.ALBUMS -> stringResource(R.string.coverscreen_tab_albums)
                 CoverScreenLibraryTab.SONGS -> stringResource(R.string.coverscreen_tab_songs)
@@ -547,6 +549,14 @@ fun CoverScreenLibraryMenu(
                                 onPlayTrack = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.playTrack(track)
+                                }
+                            )
+                            CoverScreenLibraryTab.CONSTELLATION -> CoverScreenConstellationView(
+                                viewModel = hiltViewModel(),
+                                onArtistSelected = { artistName ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    playerViewModel.onSearchQueryChanged(artistName)
+                                    selectedTab = CoverScreenLibraryTab.ARTISTS
                                 }
                             )
                             CoverScreenLibraryTab.ARTISTS -> Column {
