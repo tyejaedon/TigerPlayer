@@ -83,6 +83,7 @@ import androidx.window.layout.WindowMetricsCalculator
 import coil.compose.AsyncImage
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.equalizer.AuralNexusViewModel
+import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.player.LyricsDisplay
 import com.tigerplayer.ui.player.PlayerViewModel
@@ -355,6 +356,7 @@ fun CoverScreenMiniHub(
     var searchOnLibraryOpen by remember { mutableStateOf(false) }
     var nexusVisible by remember { mutableStateOf(false) }
     var prismVisible by remember { mutableStateOf(false) }
+    var settingsVisible by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var seekerTouchBounds by remember { mutableStateOf<Rect?>(null) }
@@ -385,7 +387,8 @@ fun CoverScreenMiniHub(
         libraryVisible = libraryVisible,
         playbackSettingsVisible = playbackSettingsVisible,
         prismVisible = prismVisible,
-        nexusVisible = nexusVisible
+        nexusVisible = nexusVisible,
+        settingsVisible = settingsVisible
     )
     val isRenderingActive = isLifecycleActive && !hasModalOverlay
 
@@ -869,6 +872,10 @@ fun CoverScreenMiniHub(
                     playbackSettingsVisible = false
                     nexusVisible = true
                 },
+                onOpenSettings = {
+                    playbackSettingsVisible = false
+                    settingsVisible = true
+                },
                 onClose = { playbackSettingsVisible = false }
             )
         }
@@ -894,6 +901,18 @@ fun CoverScreenMiniHub(
             CoverScreenNexusView(
                 viewModel = hiltViewModel<AuralNexusViewModel>(),
                 onClose = { nexusVisible = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = settingsVisible,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CoverScreenSettingsView(
+                viewModel = hiltViewModel<SettingsViewModel>(),
+                onClose = { settingsVisible = false }
             )
         }
     }

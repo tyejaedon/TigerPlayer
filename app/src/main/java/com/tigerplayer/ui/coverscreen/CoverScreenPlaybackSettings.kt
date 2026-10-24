@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -66,6 +67,7 @@ fun CoverScreenPlaybackSettings(
     onSelectEqPreset: (CoverScreenEqPreset) -> Unit,
     onOpenPrism: () -> Unit = {},
     onOpenNexus: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -145,6 +147,19 @@ fun CoverScreenPlaybackSettings(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Nexus Spatial 3D EQ")
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.fillMaxWidth().testTag("CoverScreenSettingsButton")
+                ) {
+                    Icon(
+                        Icons.Rounded.Settings,
+                        contentDescription = "Open App Settings",
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("App Preferences & Settings")
                 }
 
                 Row(
