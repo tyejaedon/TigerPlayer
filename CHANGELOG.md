@@ -13,6 +13,14 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [2.1.4] - 2026-10-24
+
+### Added
+
 - **Architecture & Documentation**: Added comprehensive PlantUML architectural design guide (docs/architecture/architecture-design.md) and essential inline code comments across core modules (service/, engine/, data/, ui/), documenting threading models, domain invariants, and Media3 audio pipelines while removing stale line-number comments and decorative emoji banners. (#268)
 - **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
   album counts, artist album lists, and swipe-back navigation. (#220)
@@ -30,12 +38,23 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   count, top artists, a seven-day history chart, and a shortcut to Sonic Footprint. (#226)
 - **Cover screen**: surfaced Day List and Discover Weekly suggestions with artwork, play/queue
   actions, horizontal browsing, and refreshable empty-feed feedback. (#227)
+- **Cover screen**: added Songs tab and Play All button to the cover screen library. (#253)
+- **Cover screen**: integrated Spotify playlists with a 15-minute TTL cache on the cover screen. (#230)
+- **Cover screen & UI**: accessibility semantics, TalkBack announcements, and localization support. (#231)
+- **UI / Input**: keyboard options, IME actions, auto-focus, and insets padding across input fields. (#261)
+- **Cover screen parity**: Arcane Glass UI, spatial 3D EQ nexus, constellation library view, and cover screen settings. (#269)
 
 ### Changed
 
 - **Architecture**: Decomposed the monolithic `PlayerViewModel` god object into scoped ViewModels (`PlaybackViewModel`, `LibraryViewModel`, `StatsViewModel`) backed by an application-scoped `PlaybackStateManager` singleton, eliminating redundant recompositions and coroutine collector overhead. (#72)
+- **Performance**: Decoupled raw search query input from global `PlayerUiState` to eliminate typing latency. (#262)
+- **Cover screen performance**: Optimized rendering frame pacing and battery consumption on outer displays. (#232)
 
 ### Fixed
+
+- **Cover screen**: Prevent lyrics display clipping on small foldable displays. (#252)
+- **Cover screen**: Prevent playback controls overflow on compact screens. (#251)
+- **Cover screen**: Prevent unmounting and viewport clipping during IME keyboard resize events. (#260)
 
 ## [2.1.3] - 2026-10-12
 
