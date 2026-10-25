@@ -138,6 +138,25 @@ fun CoverScreenSettingsView(
                 ) {
                     Text("Rescan Local Music Library")
                 }
+
+                if (settingsState.coverScreenPreviewMode) {
+                    Button(
+                        onClick = {
+                            viewModel.setCoverScreenPreviewMode(false)
+                            onClose()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = TigerNeonOrange.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Exit Cover Screen Preview",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
     }

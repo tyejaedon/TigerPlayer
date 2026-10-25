@@ -88,7 +88,8 @@ data class TigerSettingsState(
     val replayGainPreampDb: Float = 0f,
     val replayGainPreventClipping: Boolean = true,
     val coverScreenVolume: Float = 1f,
-    val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE
+    val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
+    val coverScreenPreviewMode: Boolean = false
 )
 
 @Singleton
@@ -129,7 +130,8 @@ class SettingsDataStore @Inject constructor(
             coverScreenEqPreset = enumOrDefault(
                 prefs[COVER_SCREEN_EQ_PRESET],
                 CoverScreenEqPreset.NEURAL_ADAPTIVE
-            )
+            ),
+            coverScreenPreviewMode = prefs[COVER_SCREEN_PREVIEW_MODE] ?: false
         )
     }
 
@@ -225,6 +227,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[COVER_SCREEN_EQ_PRESET] = preset.name }
     }
 
+    suspend fun setCoverScreenPreviewMode(enabled: Boolean) {
+        dataStore.edit { it[COVER_SCREEN_PREVIEW_MODE] = enabled }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -258,5 +264,6 @@ class SettingsDataStore @Inject constructor(
         val REPLAY_GAIN_PREVENT_CLIPPING = booleanPreferencesKey("replay_gain_prevent_clipping")
         val COVER_SCREEN_VOLUME = floatPreferencesKey("cover_screen_volume")
         val COVER_SCREEN_EQ_PRESET = stringPreferencesKey("cover_screen_eq_preset")
+        val COVER_SCREEN_PREVIEW_MODE = booleanPreferencesKey("cover_screen_preview_mode")
     }
 }
