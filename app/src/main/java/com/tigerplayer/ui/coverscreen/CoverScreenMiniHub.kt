@@ -126,29 +126,30 @@ fun isCoverScreenHeuristic(widthDp: Int, heightDp: Int): Boolean {
     val longEdge = max(widthDp, heightDp)
     if (shortEdge <= 0 || longEdge <= 0) return false
     val aspectRatio = longEdge.toFloat() / shortEdge.toFloat()
-    return shortEdge in 200..420 && longEdge <= 460 && aspectRatio <= 1.5f
+    return shortEdge in 180..440 && longEdge <= 480 && aspectRatio <= 1.55f
 }
 
 /**
  * True when the window is hosted on a genuinely distinct physical [Display] (the Motorola-style
- * true-secondary-display model) rather than merely being resized on the default display (the
- * Samsung Z Flip/Fold resize model, where no second display ever exists). This is the
- * authoritative signal on devices that expose it; the dp/hinge heuristic is only a fallback for
- * devices where it does not apply.
+ * true-secondary-display model or Samsung FlexWindow secondary display) rather than merely being
+ * resized on the default display. Any non-default display (displayId != DEFAULT_DISPLAY, e.g. 1)
+ * is an authoritative secondary/cover display signal.
  */
-fun isSecondaryDisplayIdentity(displayId: Int): Boolean {
-    return displayId != Display.DEFAULT_DISPLAY
+fun isSecondaryDisplayIdentity(displayId: Int?): Boolean {
+    if (displayId == null) return false
+    return displayId != Display.DEFAULT_DISPLAY && displayId != Display.INVALID_DISPLAY
 }
 
 /**
  * Combines the displayId identity signal with the dp/hinge heuristic and rejects ordinary
  * user-resize states. Precedence:
- * 1. A true secondary display ([isSecondaryDisplay]) is authoritative — there is no ambiguity,
+ * 1. Force preview flag ([forcePreview]) allows previewing cover UI on any display.
+ * 2. A true secondary display ([isSecondaryDisplay]) is authoritative — there is no ambiguity,
  *    so it wins even if the window happens to also report multi-window mode.
- * 2. Multi-window mode (split-screen, freeform/desktop-mode, Samsung DeX pop-up view) means the
+ * 3. Multi-window mode (split-screen, freeform/desktop-mode, Samsung DeX pop-up view) means the
  *    small size is a user resize choice on the *same* display, not a real device posture, so it
  *    is rejected outright.
- * 3. Otherwise, resize-model devices (no second display ever exists) fall back to the dp-size +
+ * 4. Otherwise, resize-model devices (no second display ever exists) fall back to the dp-size +
  *    hinge heuristic.
  */
 internal fun resolveIsCoverScreen(
@@ -157,8 +158,10 @@ internal fun resolveIsCoverScreen(
     hasSeparatingHinge: Boolean,
     isSecondaryDisplay: Boolean,
     isInMultiWindowMode: Boolean = false,
-    imeBottomDp: Int = 0
+    imeBottomDp: Int = 0,
+    forcePreview: Boolean = false
 ): Boolean {
+    if (forcePreview) return true
     if (isSecondaryDisplay) return true
     if (isInMultiWindowMode) return false
     val effectiveHeight = heightDp + imeBottomDp
@@ -167,66 +170,66 @@ internal fun resolveIsCoverScreen(
 
 /**
  * Computes base display/window dimensions in dp immune to soft keyboard (IME) resizing.
- * Precedence:
- * 1. [WindowMetricsCalculator.computeMaximumWindowMetrics]: Physical display bounds for the activity.
- * 2. Un-insetted fallback: configuration height + IME bottom insets in dp.
+ * Un-insetted height is computed by adding the IME keyboard inset to the configuration height,
+ * preserving exact window dimensions without inflating to the maximum unfolded display bounds.
  */
 internal fun resolveBaseWindowDimensions(
-    activity: Activity?,
+    activity: Activity? = null,
     configurationWidthDp: Int,
     configurationHeightDp: Int,
-    density: Float,
+    density: Float = 1f,
     imeBottomDp: Int = 0
 ): Pair<Int, Int> {
-    if (activity != null) {
-        try {
-            val bounds = WindowMetricsCalculator.getOrCreate().computeMaximumWindowMetrics(activity).bounds
-            if (bounds.width() > 0 && bounds.height() > 0 && density > 0f) {
-                val w = (bounds.width() / density).toInt()
-                val h = (bounds.height() / density).toInt()
-                if (w > 0 && h > 0) {
-                    return Pair(w, h)
-                }
-            }
-        } catch (_: Throwable) {
-            // Fall through to insets-adjusted configuration
-        }
-    }
     val uninsettedHeight = configurationHeightDp + imeBottomDp
     return Pair(configurationWidthDp, uninsettedHeight)
 }
 
-private fun Activity.currentDisplayIdOrDefault(): Int {
-    return try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display?.displayId ?: Display.DEFAULT_DISPLAY
-        } else {
-            @Suppress("DEPRECATION")
-            windowManager?.defaultDisplay?.displayId ?: Display.DEFAULT_DISPLAY
+/**
+ * Resolves the display ID for the current composition across View, Context, and Activity.
+ * On Android foldables/dual-screen devices, the outer cover panel is a secondary display
+ * (displayId != Display.DEFAULT_DISPLAY, typically displayId = 1).
+ */
+internal fun resolveDisplayId(
+    context: Context?,
+    activity: Activity?,
+    view: android.view.View?
+): Int {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val viewDisplayId = runCatching { view?.display?.displayId }.getOrNull()
+        if (viewDisplayId != null && viewDisplayId != Display.INVALID_DISPLAY) {
+            return viewDisplayId
         }
-    } catch (e: UnsupportedOperationException) {
-        // Context.display throws for non-visual/application contexts on some OEM builds.
-        Display.DEFAULT_DISPLAY
+        val contextDisplayId = runCatching { context?.display?.displayId }.getOrNull()
+        if (contextDisplayId != null && contextDisplayId != Display.INVALID_DISPLAY) {
+            return contextDisplayId
+        }
+        val activityDisplayId = runCatching { activity?.display?.displayId }.getOrNull()
+        if (activityDisplayId != null && activityDisplayId != Display.INVALID_DISPLAY) {
+            return activityDisplayId
+        }
     }
+    @Suppress("DEPRECATION")
+    return view?.display?.displayId
+        ?: activity?.windowManager?.defaultDisplay?.displayId
+        ?: Display.DEFAULT_DISPLAY
 }
 
 @Composable
-fun rememberCoverScreenWindowState(): CoverScreenWindowState {
+fun rememberCoverScreenWindowState(
+    forcePreview: Boolean = false
+): CoverScreenWindowState {
     val context = LocalContext.current
+    val view = LocalView.current
     val activity = remember(context) { context.findActivity() }
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val density = LocalDensity.current
     val imeBottom = WindowInsets.ime.getBottom(density)
     val imeBottomDp = with(density) { imeBottom.toDp().value.toInt() }
 
-    // Bumped by the DisplayManager.DisplayListener below whenever a display attaches, detaches,
-    // or changes. A true secondary display (Motorola-style) appearing/disappearing at runtime
-    // does not necessarily change this window's own Configuration, so without this tick the
-    // state would only refresh on an unrelated recomposition.
     var displayChangeTick by remember { mutableStateOf(0) }
 
-    DisposableEffect(activity) {
-        val displayManager = activity?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+    DisposableEffect(activity, view) {
+        val displayManager = (activity ?: context).getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         val listener = if (displayManager != null) {
             object : DisplayManager.DisplayListener {
                 override fun onDisplayAdded(displayId: Int) {
@@ -278,17 +281,15 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         ?.displayFeatures
         ?.any { it is FoldingFeature && it.isSeparating } == true
 
-    val displayId = remember(activity, displayChangeTick) {
-        activity?.currentDisplayIdOrDefault() ?: Display.DEFAULT_DISPLAY
+    val displayId = remember(activity, view, displayChangeTick) {
+        resolveDisplayId(context = context, activity = activity, view = view)
     }
     val isSecondaryDisplay = isSecondaryDisplayIdentity(displayId)
     val isInMultiWindowMode = activity?.isInMultiWindowMode == true
 
     val (baseWidthDp, baseHeightDp) = remember(
-        activity,
         configuration.screenWidthDp,
         configuration.screenHeightDp,
-        density.density,
         imeBottomDp,
         displayChangeTick
     ) {
@@ -306,7 +307,8 @@ fun rememberCoverScreenWindowState(): CoverScreenWindowState {
         heightDp = baseHeightDp,
         hasSeparatingHinge = hasSeparatingHinge,
         isSecondaryDisplay = isSecondaryDisplay,
-        isInMultiWindowMode = isInMultiWindowMode
+        isInMultiWindowMode = isInMultiWindowMode,
+        forcePreview = forcePreview
     )
 
     return remember(

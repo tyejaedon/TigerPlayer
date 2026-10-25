@@ -42,9 +42,11 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
+import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.Vibration
@@ -258,6 +260,22 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            // --- COVER SCREEN & OUTER DISPLAY ---
+            MatrixSection(title = "Cover Screen & Foldables", icon = Icons.Rounded.ScreenRotation, accent = accent) {
+                ListItem(
+                    headlineContent = { Text("COVER SCREEN PREVIEW", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Force compact cover screen UI on standard displays") },
+                    leadingContent = { Icon(Icons.Rounded.PhoneAndroid, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.coverScreenPreviewMode,
+                            onCheckedChange = viewModel::setCoverScreenPreviewMode
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
             }
 
             // --- AUDIO ENGINE SECTION ---

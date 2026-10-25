@@ -208,6 +208,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setResumeOnWiredHeadsetConnect(enabled) }
     }
 
+    fun setCoverScreenPreviewMode(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setCoverScreenPreviewMode(enabled) }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             settingsDataStore.resetToDefaults()

@@ -17,6 +17,18 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+## [2.1.5] - 2026-10-25
+
+### Added
+
+- **Cover screen preview**: added `coverScreenPreviewMode` preference in settings and an exit button in cover screen settings, enabling cover screen UI preview and testing on standard phone displays. (#275)
+
+### Fixed
+
+- **Cover screen detection**: resolved foldable outer display detection failure caused by `computeMaximumWindowMetrics` inflating window bounds to unfolded screen dimensions (1080x2640 px / 411x1005 dp) on Samsung Galaxy Z Flip and resize-model foldables. Reconstructed true un-insetted height directly from `configurationHeightDp` and `imeBottomDp`. (#275)
+- **Cover screen display identity**: hardened secondary display resolution across `LocalView.current.display`, `LocalContext.current.display`, and `Activity.display` with `Display.INVALID_DISPLAY` guarding, ensuring Motorola Razr and external displays are detected reliably before and after window attachment. (#275)
+- **Cover screen heuristics**: expanded short edge (180..440 dp), long edge (<= 480 dp), and aspect ratio (<= 1.55f) bounds to support edge-to-edge clamshell outer panels. (#275)
+
 ## [2.1.4] - 2026-10-24
 
 ### Added
