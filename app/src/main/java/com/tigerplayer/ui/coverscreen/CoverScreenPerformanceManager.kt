@@ -99,9 +99,33 @@ object CoverScreenPerformanceManager {
         playbackSettingsVisible: Boolean,
         prismVisible: Boolean = false,
         nexusVisible: Boolean = false,
-        settingsVisible: Boolean = false
+        settingsVisible: Boolean = false,
+        discoveryDetailVisible: Boolean = false
     ): Boolean {
-        return queueVisible || libraryVisible || playbackSettingsVisible || prismVisible || nexusVisible || settingsVisible
+        return queueVisible || libraryVisible || playbackSettingsVisible || prismVisible || nexusVisible || settingsVisible || discoveryDetailVisible
+    }
+
+    /**
+     * Determines whether any modal overlay is currently visible.
+     */
+    fun hasModalOverlay(
+        libraryVisible: Boolean = false,
+        queueVisible: Boolean = false,
+        playbackSettingsVisible: Boolean = false,
+        prismVisible: Boolean = false,
+        nexusVisible: Boolean = false,
+        settingsVisible: Boolean = false,
+        discoveryDetailVisible: Boolean = false
+    ): Boolean {
+        return isModalOverlayActive(
+            queueVisible = queueVisible,
+            libraryVisible = libraryVisible,
+            playbackSettingsVisible = playbackSettingsVisible,
+            prismVisible = prismVisible,
+            nexusVisible = nexusVisible,
+            settingsVisible = settingsVisible,
+            discoveryDetailVisible = discoveryDetailVisible
+        )
     }
 
     /**

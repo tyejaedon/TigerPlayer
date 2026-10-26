@@ -285,4 +285,25 @@ class CoverScreenPerformanceTest {
             )
         )
     }
+
+    @Test
+    fun `hasModalOverlay detects any active modal overlay with flexible named args`() {
+        assertFalse(
+            CoverScreenPerformanceManager.hasModalOverlay(
+                libraryVisible = false,
+                queueVisible = false
+            )
+        )
+        assertTrue(
+            CoverScreenPerformanceManager.hasModalOverlay(
+                libraryVisible = true,
+                queueVisible = false
+            )
+        )
+        assertTrue(
+            CoverScreenPerformanceManager.hasModalOverlay(
+                discoveryDetailVisible = true
+            )
+        )
+    }
 }
