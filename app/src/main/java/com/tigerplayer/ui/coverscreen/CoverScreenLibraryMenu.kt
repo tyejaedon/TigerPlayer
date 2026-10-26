@@ -107,6 +107,7 @@ import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.remote.model.SpotifyPlaylist
 import com.tigerplayer.ui.cloud.CloudViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
@@ -162,7 +163,8 @@ fun CoverScreenLibraryMenu(
     modifier: Modifier = Modifier,
     showSearchInitially: Boolean = false,
     libraryViewModel: CoverScreenLibraryViewModel = hiltViewModel(),
-    cloudViewModel: CloudViewModel = hiltViewModel()
+    cloudViewModel: CloudViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -175,6 +177,7 @@ fun CoverScreenLibraryMenu(
     val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
     val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableStateOf(CoverScreenLibraryTab.HISTORY) }
+    var showSettings by remember { mutableStateOf(false) }
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
@@ -269,6 +272,7 @@ fun CoverScreenLibraryMenu(
 
     BackHandler(enabled = true) {
         when {
+            showSettings -> showSettings = false
             selectedAlbum != null -> selectedAlbum = null
             selectedPlaylist != null -> selectedPlaylist = null
             searchActive -> {
@@ -310,7 +314,12 @@ fun CoverScreenLibraryMenu(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            if (selectedAlbum != null || selectedPlaylist != null) {
+            if (showSettings) {
+                CoverScreenSettingsView(
+                    viewModel = settingsViewModel,
+                    onClose = { showSettings = false }
+                )
+            } else if (selectedAlbum != null || selectedPlaylist != null) {
                 val album = selectedAlbum
                 val playlist = selectedPlaylist
                 val albumTracks = if (album == null) {
@@ -459,10 +468,31 @@ fun CoverScreenLibraryMenu(
                                 contentDescription = searchLibraryLabel
                             )
                         }
-                        Icon(
-                            imageVector = Icons.Filled.LibraryMusic,
-                            contentDescription = null
-                        )
+                        val settingsLabel = "Settings"
+                        IconButton(
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                showSettings = true
+                            },
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                .minimumInteractiveComponentSize()
+                                .semantics {
+                                    role = Role.Button
+                                    onClick(label = settingsLabel) {
+                                        showSettings = true
+                                        true
+                                    }
+                                    contentDescription = settingsLabel
+                                }
+                                .testTag("cover_screen_settings_open")
+                        ) {
+                            Icon(
+                                imageVector = WitcherIcons.Settings,
+                                contentDescription = settingsLabel,
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 

@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
@@ -163,7 +164,7 @@ fun CoverScreenArtistsGrid(
         }
 
         val ambientBrush = rememberTigerAmbientGradient(
-            dominantColor = MaterialTheme.aardBlue,
+            accent = MaterialTheme.aardBlue,
             baseTopAlpha = 0.16f
         )
 
@@ -193,7 +194,7 @@ fun CoverScreenArtistsGrid(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .glassEffect()
+                            .glassEffect(RectangleShape)
                             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically

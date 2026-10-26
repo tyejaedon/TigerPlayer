@@ -205,7 +205,7 @@ fun CoverScreenStatsView(
                             .padding(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = filter.uppercase(Locale.getDefault()),
+                            text = filter.uppercase(Locale.ROOT),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
                             color = textColor,
@@ -383,7 +383,7 @@ fun CoverScreenStatsView(
                                     )
                                 }
                                 Text(
-                                    text = String.format(Locale.getDefault(), "%.1f%% of lifetime listening", statsState.globalListeningSharePercent),
+                                    text = String.format(Locale.ROOT, "%.1f%% of lifetime listening", statsState.globalListeningSharePercent),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = AardBlue.copy(alpha = 0.9f),
                                     fontWeight = FontWeight.Bold,
@@ -640,7 +640,7 @@ private fun CoverRelativeTrackStatRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = item.secondaryText.uppercase(Locale.getDefault()),
+                    text = item.secondaryText.uppercase(Locale.ROOT),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
                     fontWeight = FontWeight.Bold,
@@ -706,7 +706,7 @@ private fun CoverStatRow(
             )
             Text(
                 text = if (item.secondaryText.isNotBlank()) {
-                    "${item.playCount} SUMMONS • ${item.secondaryText.uppercase(Locale.getDefault())}"
+                    "${item.playCount} SUMMONS • ${item.secondaryText.uppercase(Locale.ROOT)}"
                 } else {
                     "${item.playCount} SUMMONS"
                 },
@@ -730,7 +730,7 @@ private fun CoverDetailedSectionTitle(main: String, sub: String) {
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = sub.uppercase(Locale.getDefault()),
+            text = sub.uppercase(Locale.ROOT),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             fontWeight = FontWeight.Bold,

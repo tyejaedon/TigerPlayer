@@ -27,6 +27,7 @@ import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
 import kotlin.math.max
 import kotlin.math.min
+import com.tigerplayer.utils.findActivity
 
 private const val TAG = "CoverScreenWindowState"
 
@@ -262,13 +263,5 @@ fun rememberCoverScreenWindowState(
             isSecondaryDisplay = isSecondaryDisplay,
             isInMultiWindowMode = isInMultiWindowMode
         )
-    }
-}
-
-internal tailrec fun Context.findActivity(): Activity? {
-    return when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> null
     }
 }

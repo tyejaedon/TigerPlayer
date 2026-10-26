@@ -1,4 +1,4 @@
-﻿package com.tigerplayer.ui.coverscreen
+package com.tigerplayer.ui.coverscreen
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.BorderStroke
@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
@@ -106,7 +107,7 @@ fun CoverScreenAlbumsView(
     var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
     val ambientBrush = rememberTigerAmbientGradient(
-        dominantColor = MaterialTheme.aardBlue,
+        accent = MaterialTheme.aardBlue,
         baseTopAlpha = 0.22f
     )
 
@@ -132,7 +133,7 @@ fun CoverScreenAlbumsView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .glassEffect()
+                    .glassEffect(RectangleShape)
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
