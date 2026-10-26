@@ -133,6 +133,23 @@ After the PR is merged to `master`:
 - The milestone is updated (issue count decreases).
 - The branch can be deleted.
 
+### Step 7: Calendar Task Sync (AIRP Phase 5 Completion)
+
+After the issue is closed on GitHub, record the completion on Google Calendar via the `gcalendar` integration:
+
+```powershell
+.\scripts\calendar-sync.ps1 -IssueId <ID>
+```
+
+- Pivots the event into a completed task/checklist with `✅ [CLOSED] #<ID> <Title>`.
+- Colors the event Basil/Green (`--color 10`).
+- Sets `--transparency transparent` so completed tasks do not block calendar availability.
+- Updates the event description with a verified task completion checklist.
+- If all issues for a milestone are completed, run:
+  ```powershell
+  .\scripts\calendar-sync.ps1 -MilestoneTitle "<Milestone Name>"
+  ```
+
 ---
 
 ## ❌ Anti-Patterns: Never Do This

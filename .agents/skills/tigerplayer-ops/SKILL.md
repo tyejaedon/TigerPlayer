@@ -54,3 +54,24 @@ Verify each flavor independently:
 - Inspect `PlaybackEngine.kt` and `PlaybackService.kt` for MediaSession callbacks.
 - Ensure all remote calls to Spotify App Remote are safely isolated behind `SpotifyAppRemoteClient` interface.
 - Never import `com.spotify.android.appremote.*` in common `src/main` code.
+
+## 5. Google Calendar Task & Milestone Sync
+
+TigerPlayer integrates with Google Calendar via the `/gcalendar` skill. When an issue or milestone is completed:
+
+```powershell
+# Sync a completed issue to Google Calendar as a green completed task checklist:
+.\scripts\calendar-sync.ps1 -IssueId <ID>
+
+# Sync a completed milestone:
+.\scripts\calendar-sync.ps1 -MilestoneTitle "<Milestone Name>"
+
+# Sync recent closed issues in batch:
+.\scripts\calendar-sync.ps1 -SyncRecentClosed 5
+```
+
+- Pivots the event into a completed task/checklist with `✅ [CLOSED] #<ID> <Title>` (or `🏁 [COMPLETED] Milestone: <Title>`).
+- Sets the event color to Basil/Green (`--color 10`).
+- Sets `--transparency transparent` so completed tasks do not block calendar schedule.
+- Populates the description with a markdown task checklist and issue/milestone links.
+
