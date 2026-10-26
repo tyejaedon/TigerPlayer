@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tigerplayer.ui.theme.igniRed
@@ -58,7 +60,11 @@ fun LyricsDisplay(
     lyrics: String?,
     currentPosition: Long,
     textColor: Color,
-    activeColor: Color = Color.Red
+    activeColor: Color = Color.Red,
+    activeFontSize: TextUnit = 24.sp,
+    inactiveFontSize: TextUnit = 20.sp,
+    plainLyricsFontSize: TextUnit = 24.sp,
+    lineVerticalPadding: Dp = 12.dp
 ) {
     val parsed = remember(lyrics) { parseLrc(lyrics) }
 
@@ -87,7 +93,10 @@ fun LyricsDisplay(
             Text(
                 text = lyrics.trim(),
                 color = textColor.copy(0.8f),
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    fontSize = plainLyricsFontSize
+                ),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(vertical = 32.dp, horizontal = 24.dp)
             )
@@ -140,11 +149,11 @@ fun LyricsDisplay(
                         color = if (isActive) activeColor else textColor.copy(0.4f),
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.Black,
-                            fontSize = if (isActive) 24.sp else 20.sp
+                            fontSize = if (isActive) activeFontSize else inactiveFontSize
                         ),
                         textAlign = TextAlign.Center,
                         modifier = Modifier
-                            .padding(vertical = 12.dp, horizontal = 24.dp)
+                            .padding(vertical = lineVerticalPadding, horizontal = 24.dp)
                             .graphicsLayer {
                                 scaleX = scale
                                 scaleY = scale
