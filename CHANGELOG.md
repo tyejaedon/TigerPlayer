@@ -13,6 +13,10 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+- **Sandbox to Beta Promotion Pipeline**: Staging and promotion workflow (`promote-to-beta.yml`) linking `sandbox/experimentation` to the `beta` branch. (#283)
+- **Beta Production Release Pipeline**: Automated build, sign (v2 scheme with release keystore), audit, and export of FOSS/Full release APKs and AAB as GitHub Pre-Releases (`beta-release.yml`). (#283)
+- **Dynamic SemVer Version Coding**: Dynamic `versionCode` and `versionName` injection via Gradle properties with monotonic SemVer formula for beta releases. (#283)
+
 ### Changed
 
 ### Fixed
