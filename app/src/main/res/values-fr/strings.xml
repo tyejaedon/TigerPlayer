@@ -12,6 +12,7 @@
     <string name="coverscreen_gesture_swipe_down_close">Balayer vers le bas pour fermer</string>
     <string name="coverscreen_gesture_long_press_settings">Appui long pour les paramètres de lecture</string>
     <string name="coverscreen_gesture_instructions">Mini lecteur d\'écran externe. Appuyez pour lire ou mettre en pause. Balayez vers la gauche pour suivant, à droite pour précédent, haut pour la file et bas pour fermer.</string>
+    <string name="coverscreen_talkback_gesture_instructions">Mini lecteur d\'écran externe. Appuyez pour lire ou mettre en pause. Balayez vers la gauche pour suivant, à droite pour précédent, haut pour la file et bas pour fermer.</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Piste précédente</string>
