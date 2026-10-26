@@ -30,8 +30,8 @@ configure<ApplicationExtension> {
         minSdk = 29
         //noinspection OldTargetApi
         targetSdk = 36
-        versionCode = 6
-        versionName = "2.1.5"
+        versionCode = 7
+        versionName = "2.1.6-beta.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Spotify Manifest Placeholders
