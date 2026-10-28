@@ -185,6 +185,22 @@ Do not treat existing code in these areas as a pattern to copy. Each has an open
 - **Test tags:** UI elements needing instrumentation coverage get a `testTag`; centralize them like
   the existing `PrismTestTags`.
 - **Commits:** Conventional Commits, per AIRP Phase 4.
+- **Pull Requests:**
+  - **Milestone:** Every PR must be assigned to the same milestone as its parent issue (`--milestone "<milestone>"`). Never leave PR milestones blank.
+  - **Labels:** Every PR must propagate all relevant labels from the issue (`--label "<label1>,<label2>"`: e.g., `area:*`, `documentation`, `tech-debt`, `parity`, `differentiator`, `P0-blocker`/`P1-high`/`P2-medium`).
+  - **Assignee:** Every PR must be explicitly assigned to the agent or author (`--assignee "@me"`).
+  - **Issue Linkage:** PR description MUST include `Closes #<ID>` (or `Fixes #<ID>`) on its own line. This enables GitHub to automatically link and close the issue upon merge and decrement the milestone counter.
+  - **Canonical `gh` Command:**
+    ```powershell
+    gh pr create `
+      --title "<type>(<scope>): <summary> (closes #<ID>)" `
+      --body "## Summary`n...`n`nCloses #<ID>" `
+      --base master `
+      --head <branch-name> `
+      --milestone "<milestone>" `
+      --label "<label1>,<label2>" `
+      --assignee "@me"
+    ```
 
 ---
 
@@ -197,4 +213,5 @@ Do not treat existing code in these areas as a pattern to copy. Each has an open
 - [ ] Room schema change (if any) has a migration + migration test
 - [ ] Change is scoped to the issue; no drive-by refactors
 - [ ] User-visible change has an entry in `CHANGELOG.md` under `[Unreleased]`
+- [ ] Pull request created with matching milestone, appropriate labels, assignee, and explicit `Closes #<ID>` linkage
 
