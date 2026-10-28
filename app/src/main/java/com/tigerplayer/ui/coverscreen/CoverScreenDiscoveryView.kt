@@ -178,16 +178,17 @@ fun CoverScreenDiscoveryView(
         }
     }
 
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .testTag(CoverScreenTestTags.DISCOVERY_VIEW),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         // DAYLIST BUTTON (Time-Phase Themed)
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .height(38.dp)
                 .clickable(onClick = handleOpenDaylist),
             shape = RoundedCornerShape(19.dp),
@@ -198,17 +199,18 @@ fun CoverScreenDiscoveryView(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
+                    modifier = Modifier.weight(1f, fill = false),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .clip(CircleShape)
                             .background(dayPhase.accent.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
@@ -217,7 +219,7 @@ fun CoverScreenDiscoveryView(
                             imageVector = Icons.Rounded.Timer,
                             contentDescription = null,
                             tint = dayPhase.accent,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                     Text(
@@ -225,18 +227,20 @@ fun CoverScreenDiscoveryView(
                         color = Color.White,
                         fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.labelMedium,
-                        letterSpacing = 1.sp,
+                        letterSpacing = 0.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(4.dp))
 
                 if (daylistTracks.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(dayPhase.accent.copy(alpha = 0.2f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -252,7 +256,7 @@ fun CoverScreenDiscoveryView(
                         color = dayPhase.accent.copy(alpha = 0.8f),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
+                        letterSpacing = 0.5.sp
                     )
                 }
             }
@@ -261,7 +265,7 @@ fun CoverScreenDiscoveryView(
         // DISCOVERY WEEKLY BUTTON (Emerald Neon Themed)
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .height(38.dp)
                 .clickable(onClick = handleOpenDiscovery),
             shape = RoundedCornerShape(19.dp),
@@ -272,17 +276,18 @@ fun CoverScreenDiscoveryView(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
+                    modifier = Modifier.weight(1f, fill = false),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF67F7B1).copy(alpha = 0.18f)),
                         contentAlignment = Alignment.Center
@@ -291,7 +296,7 @@ fun CoverScreenDiscoveryView(
                             imageVector = Icons.Rounded.Bolt,
                             contentDescription = null,
                             tint = Color(0xFF67F7B1),
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                     Text(
@@ -299,16 +304,20 @@ fun CoverScreenDiscoveryView(
                         color = Color.White,
                         fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.labelMedium,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(4.dp))
 
                 if (discoveryWeeklyTracks.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(Color(0xFF67F7B1).copy(alpha = 0.2f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -324,7 +333,7 @@ fun CoverScreenDiscoveryView(
                         color = Color(0xFF67F7B1).copy(alpha = 0.8f),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
+                        letterSpacing = 0.5.sp
                     )
                 }
             }
