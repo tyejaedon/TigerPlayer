@@ -101,41 +101,41 @@ internal data class CoverDayPhase(
     val mist: Color
 )
 
+internal fun resolveCoverDayPhase(hour: Int): CoverDayPhase = when (hour) {
+    in 5..11 -> CoverDayPhase(
+        label = "MORNING WAVE",
+        headline = "Sunrise Kinetic Arc",
+        subtitle = "Brighter rhythms to start momentum.",
+        accent = Color(0xFFFFC857),
+        mist = Color(0xFF56361B)
+    )
+    in 12..16 -> CoverDayPhase(
+        label = "AFTERNOON FLOW",
+        headline = "Midday Signal Drift",
+        subtitle = "Steady grooves to keep focus locked.",
+        accent = Color(0xFF4FC3F7),
+        mist = Color(0xFF1C3140)
+    )
+    in 17..21 -> CoverDayPhase(
+        label = "EVENING GLOW",
+        headline = "Twilight Pulse Network",
+        subtitle = "Warm textures for sunset sessions.",
+        accent = Color(0xFFFF7A59),
+        mist = Color(0xFF3A1F25)
+    )
+    else -> CoverDayPhase(
+        label = "NIGHT ECHO",
+        headline = "Afterdark Resonance Grid",
+        subtitle = "Low-light atmospheres and deep bass lanes.",
+        accent = Color(0xFFB388FF),
+        mist = Color(0xFF231C37)
+    )
+}
+
 @Composable
 internal fun rememberCoverDayPhase(): CoverDayPhase {
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-    return remember(hour) {
-        when (hour) {
-            in 5..11 -> CoverDayPhase(
-                label = "MORNING WAVE",
-                headline = "Sunrise Kinetic Arc",
-                subtitle = "Brighter rhythms to start momentum.",
-                accent = Color(0xFFFFC857),
-                mist = Color(0xFF56361B)
-            )
-            in 12..16 -> CoverDayPhase(
-                label = "AFTERNOON FLOW",
-                headline = "Midday Signal Drift",
-                subtitle = "Steady grooves to keep focus locked.",
-                accent = Color(0xFF4FC3F7),
-                mist = Color(0xFF1C3140)
-            )
-            in 17..21 -> CoverDayPhase(
-                label = "EVENING GLOW",
-                headline = "Twilight Pulse Network",
-                subtitle = "Warm textures for sunset sessions.",
-                accent = Color(0xFFFF7A59),
-                mist = Color(0xFF3A1F25)
-            )
-            else -> CoverDayPhase(
-                label = "NIGHT ECHO",
-                headline = "Afterdark Resonance Grid",
-                subtitle = "Low-light atmospheres and deep bass lanes.",
-                accent = Color(0xFFB388FF),
-                mist = Color(0xFF231C37)
-            )
-        }
-    }
+    return remember(hour) { resolveCoverDayPhase(hour) }
 }
 
 /**

@@ -7,7 +7,56 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
+
+/**
+ * Pure classifier for discriminating single-tap vs. double-tap gestures.
+ *
+ * When a double-tap listener is active, single-tap actions are scheduled with a debounce window
+ * ([doubleTapTimeoutMs]) so that the first tap of a double tap does not accidentally trigger
+ * single-tap actions (such as pausing audio playback when double-tapping to toggle visualizers).
+ */
+internal class TapGestureClassifier(
+    private val doubleTapTimeoutMs: Long = 300L,
+    private val maxDoubleTapDistancePx: Float = 60f
+) {
+    private var lastTapTimeMs = 0L
+    private var lastTapPosition = Offset.Zero
+
+    sealed interface Result {
+        data object SingleTapImmediate : Result
+        data object DoubleTap : Result
+        data object ScheduleSingleTap : Result
+    }
+
+    fun onSlopTap(position: Offset, hasDoubleTapListener: Boolean, currentTimeMs: Long): Result {
+        if (!hasDoubleTapListener) {
+            lastTapTimeMs = 0L
+            return Result.SingleTapImmediate
+        }
+
+        val isDoubleTap = (currentTimeMs - lastTapTimeMs < doubleTapTimeoutMs) &&
+                (position - lastTapPosition).getDistance() < maxDoubleTapDistancePx
+
+        return if (isDoubleTap) {
+            lastTapTimeMs = 0L
+            Result.DoubleTap
+        } else {
+            lastTapTimeMs = currentTimeMs
+            lastTapPosition = position
+            Result.ScheduleSingleTap
+        }
+    }
+
+    fun reset() {
+        lastTapTimeMs = 0L
+        lastTapPosition = Offset.Zero
+    }
+}
 
 /**
  * Custom pointer input modifier handling cover-screen swipe and tap gestures while respecting
@@ -23,13 +72,12 @@ internal fun Modifier.coverScreenGestures(
     onSwipeUp: () -> Unit,
     onSwipeDown: () -> Unit,
     onDoubleTap: (() -> Unit)? = null
-): Modifier {
-    var lastTapTimeMs = 0L
-    var lastTapPosition = Offset.Zero
-    val doubleTapTimeoutMs = 350L
+): Modifier = pointerInput(swipeThresholdPx, tapSlopPx, onDoubleTap) {
+    coroutineScope {
+        val classifier = TapGestureClassifier(doubleTapTimeoutMs = 300L, maxDoubleTapDistancePx = 60f)
+        var pendingTapJob: Job? = null
 
-    return pointerInput(swipeThresholdPx, tapSlopPx, onDoubleTap) {
-        awaitEachGesture {
+        this@pointerInput.awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
             val ignoreGesture = shouldIgnoreGestureAt(down.position)
 
@@ -67,34 +115,48 @@ internal fun Modifier.coverScreenGestures(
 
             when {
                 absX <= tapSlopPx && absY <= tapSlopPx -> {
-                    val now = System.currentTimeMillis()
-                    val isDoubleTap = onDoubleTap != null &&
-                            (now - lastTapTimeMs < doubleTapTimeoutMs) &&
-                            (down.position - lastTapPosition).getDistance() < 60f
-
-                    if (isDoubleTap) {
-                        lastTapTimeMs = 0L
-                        onDoubleTap()
-                    } else {
-                        lastTapTimeMs = now
-                        lastTapPosition = down.position
-                        onTap()
+                    when (classifier.onSlopTap(down.position, onDoubleTap != null, System.currentTimeMillis())) {
+                        TapGestureClassifier.Result.SingleTapImmediate -> {
+                            pendingTapJob?.cancel()
+                            pendingTapJob = null
+                            onTap()
+                        }
+                        TapGestureClassifier.Result.DoubleTap -> {
+                            pendingTapJob?.cancel()
+                            pendingTapJob = null
+                            onDoubleTap?.invoke()
+                        }
+                        TapGestureClassifier.Result.ScheduleSingleTap -> {
+                            pendingTapJob?.cancel()
+                            pendingTapJob = launch {
+                                delay(300L)
+                                onTap()
+                            }
+                        }
                     }
                 }
                 !startedAtTopEdge && absX > absY && totalX <= -swipeThresholdPx -> {
-                    lastTapTimeMs = 0L
+                    classifier.reset()
+                    pendingTapJob?.cancel()
+                    pendingTapJob = null
                     onSwipeLeft()
                 }
                 !startedAtTopEdge && absX > absY && totalX >= swipeThresholdPx -> {
-                    lastTapTimeMs = 0L
+                    classifier.reset()
+                    pendingTapJob?.cancel()
+                    pendingTapJob = null
                     onSwipeRight()
                 }
                 !startedAtTopEdge && absY > absX && totalY <= -swipeThresholdPx -> {
-                    lastTapTimeMs = 0L
+                    classifier.reset()
+                    pendingTapJob?.cancel()
+                    pendingTapJob = null
                     onSwipeUp()
                 }
                 absY > absX && totalY >= swipeThresholdPx -> {
-                    lastTapTimeMs = 0L
+                    classifier.reset()
+                    pendingTapJob?.cancel()
+                    pendingTapJob = null
                     onSwipeDown()
                 }
             }

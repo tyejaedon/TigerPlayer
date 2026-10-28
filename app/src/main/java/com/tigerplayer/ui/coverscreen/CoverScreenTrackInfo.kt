@@ -124,6 +124,8 @@ internal fun calculateCoverLyricsBoxHeight(
     return adaptiveHeight.coerceAtMost(120.dp).coerceAtLeast(minLineHeight)
 }
 
+internal const val COVER_MEDIA_CYCLE_PAGE_COUNT = 2
+
 /**
  * View cycle targets for the swipable media area in [TrackInfoText]:
  * Dot 1 (index 0) = Album artwork
@@ -160,7 +162,7 @@ internal fun CoverScreenMediaCycleViewport(
                     onDragEnd = {
                         if (totalDragX < -swipeThresholdPx) {
                             // Swiped Left: advance view (0 -> 1)
-                            onViewIndexChanged((currentViewIndex + 1).coerceAtMost(1))
+                            onViewIndexChanged((currentViewIndex + 1).coerceAtMost(COVER_MEDIA_CYCLE_PAGE_COUNT - 1))
                         } else if (totalDragX > swipeThresholdPx) {
                             // Swiped Right: previous view (1 -> 0)
                             onViewIndexChanged((currentViewIndex - 1).coerceAtLeast(0))
@@ -313,7 +315,7 @@ internal fun TrackInfoText(
                                 },
                                 onDragEnd = {
                                     if (columnDragX < -swipeThresholdPx) {
-                                        currentViewIndex = (currentViewIndex + 1).coerceAtMost(1)
+                                        currentViewIndex = (currentViewIndex + 1).coerceAtMost(COVER_MEDIA_CYCLE_PAGE_COUNT - 1)
                                     } else if (columnDragX > swipeThresholdPx) {
                                         currentViewIndex = (currentViewIndex - 1).coerceAtLeast(0)
                                     }
@@ -352,7 +354,7 @@ internal fun TrackInfoText(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        (0..1).forEach { index ->
+                        (0 until COVER_MEDIA_CYCLE_PAGE_COUNT).forEach { index ->
                             val isActive = index == currentViewIndex
                             val dotWidth by animateDpAsState(
                                 targetValue = if (isActive) 14.dp else 5.dp,

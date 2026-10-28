@@ -111,6 +111,8 @@ class FluidRenderer @Inject constructor(
     private var quadVbo: Int = 0
     /** Timestamp of the previous frame in nanoseconds for delta-time calculation. */
     private var lastFrameTime = System.nanoTime()
+    /** Monotonically accumulated animation seconds for ambient idle breathing. */
+    private var ambientTimeSec = 0f
 
     /** Updates the audio frequency band energies driving fluid forces. */
     fun updateEnergyField(bands: List<Float>) { currentEnergy.set(bands) }
@@ -199,6 +201,7 @@ class FluidRenderer @Inject constructor(
         val currentTime = System.nanoTime()
         val dt = ((currentTime - lastFrameTime) / 1_000_000_000f).coerceIn(0.008f, 0.022f)
         lastFrameTime = currentTime
+        ambientTimeSec += dt
 
         injectForces()
         stepSimulation(dt)
@@ -212,7 +215,7 @@ class FluidRenderer @Inject constructor(
         GLES30.glViewport(0, 0, simWidth, simHeight)
         GLES30.glBindVertexArray(quadVao)
 
-        val timeSec = System.nanoTime() / 1_000_000_000f
+        val timeSec = ambientTimeSec
         val bass = if (bands.isNotEmpty()) (bands[0] + bands[1]) * 0.5f else 0f
         val highMid = if (bands.size > 3) bands[3] else 0f
 

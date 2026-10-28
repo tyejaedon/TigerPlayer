@@ -96,13 +96,13 @@ fun CoverScreenMiniHub(
     var isVortexImmersive by remember { mutableStateOf(false) }
 
     val vortexBlurRadius by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (isVortexImmersive) 0.dp else 6.dp,
+        targetValue = calculateVortexBlurRadius(isVortexImmersive),
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
         label = "VortexBlurAnimation"
     )
 
     val scrimAlpha by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (isVortexImmersive) 0f else 0.55f,
+        targetValue = calculateVortexScrimAlpha(isVortexImmersive),
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
         label = "VortexScrimAnimation"
     )
@@ -342,7 +342,7 @@ fun CoverScreenMiniHub(
                         onMediaCyclePositioned = { mediaCycleTouchBounds = it },
                         screenHeightDp = windowState.heightDp.dp
                     )
-                    if (!isVortexImmersive) {
+                    if (shouldShowCoverControls(isVortexImmersive)) {
                         Spacer(modifier = Modifier.height(10.dp))
                         CoverAccessibleControls(
                             isPlaying = uiState.isPlaying,
@@ -400,7 +400,7 @@ fun CoverScreenMiniHub(
                     onMediaCyclePositioned = { mediaCycleTouchBounds = it },
                     screenHeightDp = windowState.heightDp.dp
                 )
-                if (!isVortexImmersive) {
+                if (shouldShowCoverControls(isVortexImmersive)) {
                     Spacer(modifier = Modifier.height(if (isTightScreen) 6.dp else 10.dp))
                     CoverAccessibleControls(
                         isPlaying = uiState.isPlaying,
@@ -438,7 +438,7 @@ fun CoverScreenMiniHub(
         }
 
         // WAVEFORM (Visual Anchor)
-        if (!hasModalOverlay && !fullBleedLyricsVisible && !isVortexImmersive) {
+        if (shouldShowCoverWaveform(hasModalOverlay, fullBleedLyricsVisible, isVortexImmersive)) {
             CoverMicroWaveform(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
@@ -495,3 +495,17 @@ fun CoverScreenMiniHub(
         )
     }
 }
+
+internal fun calculateVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp =
+    if (isVortexImmersive) 0.dp else 6.dp
+
+internal fun calculateVortexScrimAlpha(isVortexImmersive: Boolean): Float =
+    if (isVortexImmersive) 0f else 0.55f
+
+internal fun shouldShowCoverControls(isVortexImmersive: Boolean): Boolean = !isVortexImmersive
+
+internal fun shouldShowCoverWaveform(
+    hasModalOverlay: Boolean,
+    fullBleedLyricsVisible: Boolean,
+    isVortexImmersive: Boolean
+): Boolean = !hasModalOverlay && !fullBleedLyricsVisible && !isVortexImmersive

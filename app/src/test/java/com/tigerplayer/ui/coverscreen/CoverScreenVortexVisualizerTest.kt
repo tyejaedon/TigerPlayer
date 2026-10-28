@@ -32,48 +32,34 @@ class CoverScreenVortexVisualizerTest {
 
     @Test
     fun `media cycle viewport target count is exactly two for album artwork and synced lyrics`() {
-        // Dot 1 (index 0) = Album art, Dot 2 (index 1) = Lyrics
-        val maxIndex = 1
-        val pageCount = maxIndex + 1
+        // Dot 1 (index 0) = Album art, Dot 2 (index 1) = Synced Lyrics
+        val pageCount = COVER_MEDIA_CYCLE_PAGE_COUNT
         assertEquals(2, pageCount)
     }
 
     @Test
-    fun `immersive mode suppresses controls, discovery view, and micro-waveform for pure visualizer`() {
-        // When isVortexImmersive is true:
-        val isVortexImmersive = true
-
-        val shouldShowControls = !isVortexImmersive
-        val shouldShowDiscovery = !isVortexImmersive
-        val shouldShowWaveform = !isVortexImmersive
-        val shouldShowMediaCycle = !isVortexImmersive
-
-        assertFalse("Controls must be hidden in immersive mode", shouldShowControls)
-        assertFalse("Discovery view must be hidden in immersive mode", shouldShowDiscovery)
-        assertFalse("Waveform must be hidden in immersive mode", shouldShowWaveform)
-        assertFalse("Media cycle must be hidden in immersive mode", shouldShowMediaCycle)
+    fun `immersive mode suppresses controls and micro-waveform for pure visualizer`() {
+        assertFalse("Controls must be hidden in immersive mode", shouldShowCoverControls(isVortexImmersive = true))
+        assertFalse(
+            "Waveform must be hidden in immersive mode",
+            shouldShowCoverWaveform(hasModalOverlay = false, fullBleedLyricsVisible = false, isVortexImmersive = true)
+        )
     }
 
     @Test
-    fun `normal mode displays all controls, discovery view, and micro-waveform`() {
-        val isVortexImmersive = false
-
-        val shouldShowControls = !isVortexImmersive
-        val shouldShowDiscovery = !isVortexImmersive
-        val shouldShowWaveform = !isVortexImmersive
-        val shouldShowMediaCycle = !isVortexImmersive
-
-        assertTrue("Controls must be visible in normal mode", shouldShowControls)
-        assertTrue("Discovery view must be visible in normal mode", shouldShowDiscovery)
-        assertTrue("Waveform must be visible in normal mode", shouldShowWaveform)
-        assertTrue("Media cycle must be visible in normal mode", shouldShowMediaCycle)
-    }
-
-    companion object {
-        internal fun calculateVortexBlurRadius(isVortexImmersive: Boolean) =
-            if (isVortexImmersive) 0.dp else 6.dp
-
-        internal fun calculateVortexScrimAlpha(isVortexImmersive: Boolean) =
-            if (isVortexImmersive) 0f else 0.55f
+    fun `normal mode displays controls and micro-waveform when not occluded`() {
+        assertTrue("Controls must be visible in normal mode", shouldShowCoverControls(isVortexImmersive = false))
+        assertTrue(
+            "Waveform must be visible in normal mode without overlay or full-bleed lyrics",
+            shouldShowCoverWaveform(hasModalOverlay = false, fullBleedLyricsVisible = false, isVortexImmersive = false)
+        )
+        assertFalse(
+            "Waveform must be suppressed when modal overlay is visible",
+            shouldShowCoverWaveform(hasModalOverlay = true, fullBleedLyricsVisible = false, isVortexImmersive = false)
+        )
+        assertFalse(
+            "Waveform must be suppressed when full bleed lyrics are visible",
+            shouldShowCoverWaveform(hasModalOverlay = false, fullBleedLyricsVisible = true, isVortexImmersive = false)
+        )
     }
 }
