@@ -212,22 +212,31 @@ class FluidRenderer @Inject constructor(
         GLES30.glViewport(0, 0, simWidth, simHeight)
         GLES30.glBindVertexArray(quadVao)
 
-        if (bands.isNotEmpty()) {
-            val bass = (bands[0] + bands[1]) * 0.5f
-            val highMid = bands[3]
+        val timeSec = System.nanoTime() / 1_000_000_000f
+        val bass = if (bands.isNotEmpty()) (bands[0] + bands[1]) * 0.5f else 0f
+        val highMid = if (bands.size > 3) bands[3] else 0f
 
-            if (bass > 0.02f) {
-                val dynamicRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE +
-                        (bass * FluidConfig.BASS_SPLAT_RADIUS_SCALE).coerceAtMost(0.3f)
-                val power = (bass * FluidConfig.BASS_SPLAT_POWER_SCALE).coerceIn(2f, 40f)
+        if (bass > 0.02f) {
+            val dynamicRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE +
+                    (bass * FluidConfig.BASS_SPLAT_RADIUS_SCALE).coerceAtMost(0.3f)
+            val power = (bass * FluidConfig.BASS_SPLAT_POWER_SCALE).coerceIn(2f, 40f)
 
-                // Inject density splat at the center
-                applySplat(0.5f, 0.5f, dynamicRadius, floatArrayOf(power * 0.5f, power * 0.8f, power * 3.0f), true)
+            // Inject density splat at the center
+            applySplat(0.5f, 0.5f, dynamicRadius, floatArrayOf(power * 0.5f, power * 0.8f, power * 3.0f), true)
 
-                // Inject rotational velocity swirl
-                val swirlForce = FluidConfig.SWIRL_FORCE_BASE + (highMid * FluidConfig.SWIRL_FORCE_SCALE)
-                applySplat(0.5f, 0.5f, dynamicRadius * 1.2f, floatArrayOf(swirlForce, -swirlForce, 0f), false)
-            }
+            // Inject rotational velocity swirl
+            val swirlForce = FluidConfig.SWIRL_FORCE_BASE + (highMid * FluidConfig.SWIRL_FORCE_SCALE)
+            applySplat(0.5f, 0.5f, dynamicRadius * 1.2f, floatArrayOf(swirlForce, -swirlForce, 0f), false)
+        } else {
+            // Ambient idle breathing swirl so the visualizer is never pitch black
+            val ambientCycle = (kotlin.math.sin(timeSec.toDouble() * 0.8) * 0.5 + 0.5).toFloat()
+            val ambientX = 0.5f + (kotlin.math.cos(timeSec.toDouble() * 0.5) * 0.15).toFloat()
+            val ambientY = 0.5f + (kotlin.math.sin(timeSec.toDouble() * 0.5) * 0.15).toFloat()
+            val ambientRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE * (0.8f + ambientCycle * 0.4f)
+            val ambientPower = 1.8f + ambientCycle * 2.2f
+
+            applySplat(ambientX, ambientY, ambientRadius, floatArrayOf(ambientPower * 0.4f, ambientPower * 0.7f, ambientPower * 2.2f), true)
+            applySplat(ambientX, ambientY, ambientRadius * 1.1f, floatArrayOf(2.5f, -2.5f, 0f), false)
         }
         GLES30.glBindVertexArray(0)
     }

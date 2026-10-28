@@ -21,9 +21,14 @@ internal fun Modifier.coverScreenGestures(
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
     onSwipeUp: () -> Unit,
-    onSwipeDown: () -> Unit
+    onSwipeDown: () -> Unit,
+    onDoubleTap: (() -> Unit)? = null
 ): Modifier {
-    return pointerInput(swipeThresholdPx, tapSlopPx) {
+    var lastTapTimeMs = 0L
+    var lastTapPosition = Offset.Zero
+    val doubleTapTimeoutMs = 350L
+
+    return pointerInput(swipeThresholdPx, tapSlopPx, onDoubleTap) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
             val ignoreGesture = shouldIgnoreGestureAt(down.position)
@@ -61,11 +66,37 @@ internal fun Modifier.coverScreenGestures(
             if (ignoreGesture) return@awaitEachGesture
 
             when {
-                absX <= tapSlopPx && absY <= tapSlopPx -> onTap()
-                !startedAtTopEdge && absX > absY && totalX <= -swipeThresholdPx -> onSwipeLeft()
-                !startedAtTopEdge && absX > absY && totalX >= swipeThresholdPx -> onSwipeRight()
-                !startedAtTopEdge && absY > absX && totalY <= -swipeThresholdPx -> onSwipeUp()
-                absY > absX && totalY >= swipeThresholdPx -> onSwipeDown()
+                absX <= tapSlopPx && absY <= tapSlopPx -> {
+                    val now = System.currentTimeMillis()
+                    val isDoubleTap = onDoubleTap != null &&
+                            (now - lastTapTimeMs < doubleTapTimeoutMs) &&
+                            (down.position - lastTapPosition).getDistance() < 60f
+
+                    if (isDoubleTap) {
+                        lastTapTimeMs = 0L
+                        onDoubleTap()
+                    } else {
+                        lastTapTimeMs = now
+                        lastTapPosition = down.position
+                        onTap()
+                    }
+                }
+                !startedAtTopEdge && absX > absY && totalX <= -swipeThresholdPx -> {
+                    lastTapTimeMs = 0L
+                    onSwipeLeft()
+                }
+                !startedAtTopEdge && absX > absY && totalX >= swipeThresholdPx -> {
+                    lastTapTimeMs = 0L
+                    onSwipeRight()
+                }
+                !startedAtTopEdge && absY > absX && totalY <= -swipeThresholdPx -> {
+                    lastTapTimeMs = 0L
+                    onSwipeUp()
+                }
+                absY > absX && totalY >= swipeThresholdPx -> {
+                    lastTapTimeMs = 0L
+                    onSwipeDown()
+                }
             }
         }
     }

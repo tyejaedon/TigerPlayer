@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,19 @@ fun CoverScreenMiniHub(
     var seekerTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var mediaCycleTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var fullBleedLyricsVisible by remember { mutableStateOf(false) }
+    var isVortexImmersive by remember { mutableStateOf(false) }
+
+    val vortexBlurRadius by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isVortexImmersive) 0.dp else 6.dp,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
+        label = "VortexBlurAnimation"
+    )
+
+    val scrimAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVortexImmersive) 0f else 0.55f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
+        label = "VortexScrimAnimation"
+    )
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var isLifecycleActive by remember { mutableStateOf(true) }
@@ -114,6 +128,26 @@ fun CoverScreenMiniHub(
         discoveryDetailVisible = discoveryDetailVisible || daylistDetailVisible
     )
     val isRenderingActive = isLifecycleActive && !hasModalOverlay
+
+    LaunchedEffect(uiState.audioReactiveFrame, isRenderingActive, uiState.isPlaying) {
+        if (isRenderingActive) {
+            val bands = if (uiState.isPlaying) {
+                uiState.audioReactiveFrame.spectralBands.ifEmpty {
+                    listOf(
+                        uiState.audioReactiveFrame.bass,
+                        uiState.audioReactiveFrame.bass,
+                        uiState.audioReactiveFrame.mid,
+                        uiState.audioReactiveFrame.mid,
+                        uiState.audioReactiveFrame.treble,
+                        uiState.audioReactiveFrame.treble
+                    )
+                }
+            } else {
+                emptyList()
+            }
+            playerViewModel.fluidRenderer.updateEnergyField(bands)
+        }
+    }
 
     val density = LocalDensity.current
     val swipeThresholdPx = remember(density) { with(density) { 48.dp.toPx() } }
@@ -194,47 +228,59 @@ fun CoverScreenMiniHub(
                     queueVisible = false
                     searchOnLibraryOpen = true
                     libraryVisible = true
-                }
+                },
+                onDoubleTap = if (isVortexImmersive) {
+                    {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        isVortexImmersive = false
+                    }
+                } else null
             )
     ) {
         val backgroundArtModel = remember(track?.artworkUri, uiState.artistImageUrl) {
             uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: track?.artworkUri
         }
 
-        // ARTIST/ARTWORK BACKGROUND (Mimics fullscreen app, brighter with modest blur)
-        if (backgroundArtModel != null) {
-            AsyncImage(
-                model = backgroundArtModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(16.dp)
-            )
-        } else {
+        // BACKGROUND: Fluid Vortex (primary) with Artist/Artwork photo as fallback
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (backgroundArtModel != null) {
+                AsyncImage(
+                    model = backgroundArtModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(16.dp)
+                )
+            }
+
             AndroidView(
                 factory = { ctx ->
                     FluidVortexView(ctx).apply {
                         setFluidRenderer(playerViewModel.fluidRenderer)
                     }
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(vortexBlurRadius)
             )
-        }
 
-        // SOFT SCRIM OVERLAY (brighter for optimal visibility)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.25f),
-                            TigerSurfaceCharcoal.copy(alpha = 0.55f)
+            // SOFT SCRIM OVERLAY (animates to clear in immersive mode)
+            if (scrimAlpha > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.25f * (scrimAlpha / 0.55f)),
+                                    TigerSurfaceCharcoal.copy(alpha = scrimAlpha)
+                                )
+                            )
                         )
-                    )
                 )
-        )
+            }
+        }
 
         // HINGE / FLEX-MODE AWARE DUAL DISPLAY
         if (windowState.hasSeparatingHinge) {
@@ -269,7 +315,7 @@ fun CoverScreenMiniHub(
                         .fillMaxHeight()
                         .padding(horizontal = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                    verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.SpaceBetween
                 ) {
                     TrackInfoText(
                         track = track,
@@ -278,7 +324,11 @@ fun CoverScreenMiniHub(
                         currentPosition = uiState.currentPosition,
                         isLarge = true,
                         statsVisible = false,
-                        fluidRenderer = playerViewModel.fluidRenderer,
+                        isVortexImmersive = isVortexImmersive,
+                        onToggleVortexImmersive = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            isVortexImmersive = !isVortexImmersive
+                        },
                         onOpenQueue = {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             queueVisible = true
@@ -290,10 +340,68 @@ fun CoverScreenMiniHub(
                             libraryVisible = true
                         },
                         onMediaCyclePositioned = { mediaCycleTouchBounds = it },
-                        screenHeightDp = windowState.heightDp.dp,
-                        onDoubleTap = { fullBleedLyricsVisible = true }
+                        screenHeightDp = windowState.heightDp.dp
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    if (!isVortexImmersive) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        CoverAccessibleControls(
+                            isPlaying = uiState.isPlaying,
+                            isShuffleEnabled = uiState.isShuffleEnabled,
+                            repeatMode = uiState.repeatMode,
+                            onToggleShuffle = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleShuffle() },
+                            onCycleRepeat = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleRepeat() },
+                            onLongPressPlayPause = {
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                queueVisible = false
+                                libraryVisible = false
+                                playbackSettingsVisible = true
+                            },
+                            onTogglePlayPause = { view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); playerViewModel.togglePlayPause() },
+                            onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
+                            onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
+                        )
+                    }
+                }
+            }
+        } else {
+            // STANDARD / COMPACT COVER DISPLAY
+            val isTightScreen = windowState.heightDp in 1..360
+            val verticalPadding = if (isTightScreen) 4.dp else 8.dp
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = verticalPadding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.SpaceBetween
+            ) {
+                TrackInfoText(
+                    track = track,
+                    subtitle = if (uiState.isPlaying) stringResource(R.string.coverscreen_status_now_playing) else stringResource(R.string.coverscreen_status_paused),
+                    lyrics = uiState.currentLyrics,
+                    currentPosition = uiState.currentPosition,
+                    isLarge = false,
+                    statsVisible = false,
+                    isVortexImmersive = isVortexImmersive,
+                    onToggleVortexImmersive = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        isVortexImmersive = !isVortexImmersive
+                    },
+                    onOpenQueue = {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = true
+                    },
+                    onOpenLibrary = {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = false
+                        searchOnLibraryOpen = false
+                        libraryVisible = true
+                    },
+                    onMediaCyclePositioned = { mediaCycleTouchBounds = it },
+                    screenHeightDp = windowState.heightDp.dp
+                )
+                if (!isVortexImmersive) {
+                    Spacer(modifier = Modifier.height(if (isTightScreen) 6.dp else 10.dp))
                     CoverAccessibleControls(
                         isPlaying = uiState.isPlaying,
                         isShuffleEnabled = uiState.isShuffleEnabled,
@@ -310,80 +418,27 @@ fun CoverScreenMiniHub(
                         onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
                         onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
                     )
+                    Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 8.dp))
+                    CoverScreenDiscoveryView(
+                        daylistTracks = daylistTracks,
+                        discoveryWeeklyTracks = discoveryWeeklyTracks,
+                        daylistMeta = daylistMeta,
+                        discoveryMeta = discoveryMeta,
+                        onPlayTrack = playerViewModel::playTrack,
+                        onQueueTrack = playerViewModel::addToQueue,
+                        onRefresh = dashboardViewModel::refreshForYou,
+                        onOpenDiscoveryDetail = { discoveryDetailVisible = true },
+                        onOpenDaylistDetail = { daylistDetailVisible = true },
+                        modifier = Modifier.onGloballyPositioned {
+                            discoveryTouchBounds = it.boundsInRoot()
+                        }
+                    )
                 }
-            }
-        } else {
-            // STANDARD / COMPACT COVER DISPLAY
-            val isTightScreen = windowState.heightDp in 1..360
-            val topPadding = if (isTightScreen) 4.dp else 8.dp
-            val bottomPadding = if (isTightScreen) 26.dp else 30.dp
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 12.dp, end = 12.dp, top = topPadding, bottom = bottomPadding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                TrackInfoText(
-                    track = track,
-                    subtitle = if (uiState.isPlaying) stringResource(R.string.coverscreen_status_now_playing) else stringResource(R.string.coverscreen_status_paused),
-                    lyrics = uiState.currentLyrics,
-                    currentPosition = uiState.currentPosition,
-                    isLarge = false,
-                    statsVisible = false,
-                    fluidRenderer = playerViewModel.fluidRenderer,
-                    onOpenQueue = {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        queueVisible = true
-                    },
-                    onOpenLibrary = {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        queueVisible = false
-                        searchOnLibraryOpen = false
-                        libraryVisible = true
-                    },
-                    onMediaCyclePositioned = { mediaCycleTouchBounds = it },
-                    screenHeightDp = windowState.heightDp.dp,
-                    onDoubleTap = { fullBleedLyricsVisible = true }
-                )
-                Spacer(modifier = Modifier.height(if (isTightScreen) 6.dp else 10.dp))
-                CoverAccessibleControls(
-                    isPlaying = uiState.isPlaying,
-                    isShuffleEnabled = uiState.isShuffleEnabled,
-                    repeatMode = uiState.repeatMode,
-                    onToggleShuffle = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleShuffle() },
-                    onCycleRepeat = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleRepeat() },
-                    onLongPressPlayPause = {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        queueVisible = false
-                        libraryVisible = false
-                        playbackSettingsVisible = true
-                    },
-                    onTogglePlayPause = { view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); playerViewModel.togglePlayPause() },
-                    onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
-                    onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
-                )
-                Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 8.dp))
-                CoverScreenDiscoveryView(
-                    daylistTracks = daylistTracks,
-                    discoveryWeeklyTracks = discoveryWeeklyTracks,
-                    daylistMeta = daylistMeta,
-                    discoveryMeta = discoveryMeta,
-                    onPlayTrack = playerViewModel::playTrack,
-                    onQueueTrack = playerViewModel::addToQueue,
-                    onRefresh = dashboardViewModel::refreshForYou,
-                    onOpenDiscoveryDetail = { discoveryDetailVisible = true },
-                    onOpenDaylistDetail = { daylistDetailVisible = true },
-                    modifier = Modifier.onGloballyPositioned {
-                        discoveryTouchBounds = it.boundsInRoot()
-                    }
-                )
             }
         }
 
         // WAVEFORM (Visual Anchor)
-        if (!hasModalOverlay && !fullBleedLyricsVisible) {
+        if (!hasModalOverlay && !fullBleedLyricsVisible && !isVortexImmersive) {
             CoverMicroWaveform(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,

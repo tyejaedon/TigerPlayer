@@ -127,8 +127,7 @@ internal fun calculateCoverLyricsBoxHeight(
 /**
  * View cycle targets for the swipable media area in [TrackInfoText]:
  * Dot 1 (index 0) = Album artwork
- * Dot 2 (index 1) = Synced lyrics (CoverScreenLyricsView/LyricsDisplay)
- * Dot 3 (index 2) = Fluid vortex audio-reactive canvas
+ * Dot 2 (index 1) = Synced lyrics (LyricsDisplay)
  */
 @Composable
 internal fun CoverScreenMediaCycleViewport(
@@ -137,11 +136,10 @@ internal fun CoverScreenMediaCycleViewport(
     track: AudioTrack?,
     lyrics: String?,
     currentPosition: Long,
-    fluidRenderer: FluidRenderer?,
     isLarge: Boolean,
     minLineHeight: Dp,
     targetHeight: Dp,
-    onDoubleTapLyrics: () -> Unit = {},
+    onDoubleTapAlbumArt: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var totalDragX by remember { mutableFloatStateOf(0f) }
@@ -161,10 +159,10 @@ internal fun CoverScreenMediaCycleViewport(
                     },
                     onDragEnd = {
                         if (totalDragX < -swipeThresholdPx) {
-                            // Swiped Left: advance view (0 -> 1 -> 2)
-                            onViewIndexChanged((currentViewIndex + 1).coerceAtMost(2))
+                            // Swiped Left: advance view (0 -> 1)
+                            onViewIndexChanged((currentViewIndex + 1).coerceAtMost(1))
                         } else if (totalDragX > swipeThresholdPx) {
-                            // Swiped Right: previous view (2 -> 1 -> 0)
+                            // Swiped Right: previous view (1 -> 0)
                             onViewIndexChanged((currentViewIndex - 1).coerceAtLeast(0))
                         }
                     }
@@ -190,7 +188,7 @@ internal fun CoverScreenMediaCycleViewport(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapLyrics() }) },
+                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapAlbumArt() }) },
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(
@@ -207,34 +205,22 @@ internal fun CoverScreenMediaCycleViewport(
                     }
                 }
                 // Dot 2: Lyrics View
-                1 -> {
-                    LyricsDisplay(
-                        lyrics = lyrics,
-                        currentPosition = currentPosition,
-                        textColor = Color.White,
-                        activeColor = TigerNeonOrange,
-                        activeFontSize = if (isLarge) 22.sp else 20.sp,
-                        inactiveFontSize = if (isLarge) 18.sp else 16.sp,
-                        plainLyricsFontSize = if (isLarge) 20.sp else 18.sp,
-                        lineVerticalPadding = if (isLarge) 10.dp else 8.dp
-                    )
-                }
-                // Dot 3: Fluid Vortex
                 else -> {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapAlbumArt() }) },
                         contentAlignment = Alignment.Center
                     ) {
-                        AndroidView(
-                            factory = { ctx ->
-                                FluidVortexView(ctx).apply {
-                                    fluidRenderer?.let { setFluidRenderer(it) }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
+                        LyricsDisplay(
+                            lyrics = lyrics,
+                            currentPosition = currentPosition,
+                            textColor = Color.White,
+                            activeColor = TigerNeonOrange,
+                            activeFontSize = if (isLarge) 22.sp else 20.sp,
+                            inactiveFontSize = if (isLarge) 18.sp else 16.sp,
+                            plainLyricsFontSize = if (isLarge) 20.sp else 18.sp,
+                            lineVerticalPadding = if (isLarge) 10.dp else 8.dp
                         )
                     }
                 }
@@ -251,10 +237,10 @@ internal fun TrackInfoText(
     currentPosition: Long,
     isLarge: Boolean,
     statsVisible: Boolean,
-    fluidRenderer: FluidRenderer? = null,
+    isVortexImmersive: Boolean = false,
+    onToggleVortexImmersive: () -> Unit = {},
     onOpenQueue: () -> Unit = {},
     onOpenLibrary: () -> Unit = {},
-    onDoubleTap: () -> Unit = {},
     onMediaCyclePositioned: (Rect) -> Unit = {},
     screenHeightDp: Dp = LocalConfiguration.current.screenHeightDp.dp
 ) {
@@ -274,7 +260,7 @@ internal fun TrackInfoText(
         statsVisible = statsVisible
     )
 
-    // View index: 0 = Album (dot 1), 1 = Lyrics (dot 2), 2 = Vortex (dot 3)
+    // View index: 0 = Album (dot 1), 1 = Lyrics (dot 2)
     var currentViewIndex by remember { mutableIntStateOf(0) }
     var columnDragX by remember { mutableFloatStateOf(0f) }
     val swipeThresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
@@ -282,7 +268,7 @@ internal fun TrackInfoText(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTap() }) },
+            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onToggleVortexImmersive() }) },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
@@ -295,39 +281,45 @@ internal fun TrackInfoText(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(
-                onClick = onOpenQueue,
-                modifier = Modifier
-                    .size(32.dp)
-                    .testTag(CoverScreenTestTags.queueTrack("open"))
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = stringResource(R.string.coverscreen_action_queue),
-                    tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(20.dp)
-                )
+            if (!isVortexImmersive) {
+                IconButton(
+                    onClick = onOpenQueue,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .testTag(CoverScreenTestTags.queueTrack("open"))
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = stringResource(R.string.coverscreen_action_queue),
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.size(32.dp))
             }
 
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 6.dp)
-                    .pointerInput(currentViewIndex) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { columnDragX = 0f },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                columnDragX += dragAmount
-                            },
-                            onDragEnd = {
-                                if (columnDragX < -swipeThresholdPx) {
-                                    currentViewIndex = (currentViewIndex + 1).coerceAtMost(2)
-                                } else if (columnDragX > swipeThresholdPx) {
-                                    currentViewIndex = (currentViewIndex - 1).coerceAtLeast(0)
+                    .pointerInput(currentViewIndex, isVortexImmersive) {
+                        if (!isVortexImmersive) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { columnDragX = 0f },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    columnDragX += dragAmount
+                                },
+                                onDragEnd = {
+                                    if (columnDragX < -swipeThresholdPx) {
+                                        currentViewIndex = (currentViewIndex + 1).coerceAtMost(1)
+                                    } else if (columnDragX > swipeThresholdPx) {
+                                        currentViewIndex = (currentViewIndex - 1).coerceAtLeast(0)
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -350,74 +342,81 @@ internal fun TrackInfoText(
                     letterSpacing = 1.2.sp
                 )
 
-                // Ellipsis dot scroll indicator syncing with the 3 views:
-                // Dot 1 (index 0) = Album, Dot 2 (index 1) = Lyrics, Dot 3 (index 2) = Vortex
-                Row(
-                    modifier = Modifier
-                        .padding(top = 4.dp, bottom = 2.dp)
-                        .testTag("cover_media_cycle_dots"),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    (0..2).forEach { index ->
-                        val isActive = index == currentViewIndex
-                        val dotWidth by animateDpAsState(
-                            targetValue = if (isActive) 14.dp else 5.dp,
-                            label = "DotWidth_$index"
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(width = dotWidth, height = 5.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isActive) TigerNeonOrange else Color.White.copy(alpha = 0.35f)
-                                )
-                                .clickable { currentViewIndex = index }
-                        )
+                // Ellipsis dot scroll indicator syncing with the 2 views:
+                // Dot 1 (index 0) = Album, Dot 2 (index 1) = Lyrics
+                if (!isVortexImmersive) {
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 4.dp, bottom = 2.dp)
+                            .testTag("cover_media_cycle_dots"),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        (0..1).forEach { index ->
+                            val isActive = index == currentViewIndex
+                            val dotWidth by animateDpAsState(
+                                targetValue = if (isActive) 14.dp else 5.dp,
+                                label = "DotWidth_$index"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(width = dotWidth, height = 5.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isActive) TigerNeonOrange else Color.White.copy(alpha = 0.35f)
+                                    )
+                                    .clickable { currentViewIndex = index }
+                            )
+                        }
                     }
                 }
             }
 
-            IconButton(
-                onClick = onOpenLibrary,
-                modifier = Modifier
-                    .size(32.dp)
-                    .testTag(CoverScreenTestTags.LIBRARY_OPEN)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.LibraryMusic,
-                    contentDescription = stringResource(R.string.coverscreen_action_library),
-                    tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(20.dp)
-                )
+            if (!isVortexImmersive) {
+                IconButton(
+                    onClick = onOpenLibrary,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .testTag(CoverScreenTestTags.LIBRARY_OPEN)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LibraryMusic,
+                        contentDescription = stringResource(R.string.coverscreen_action_library),
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.size(32.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(spacerHeight))
+        if (!isVortexImmersive) {
+            Spacer(modifier = Modifier.height(spacerHeight))
 
-        CoverScreenMediaCycleViewport(
-            currentViewIndex = currentViewIndex,
-            onViewIndexChanged = { currentViewIndex = it },
-            track = track,
-            lyrics = lyrics,
-            currentPosition = currentPosition,
-            fluidRenderer = fluidRenderer,
-            isLarge = isLarge,
-            minLineHeight = minLineHeight,
-            targetHeight = targetLyricsHeight,
-            onDoubleTapLyrics = onDoubleTap,
-            modifier = Modifier.onGloballyPositioned {
-                onMediaCyclePositioned(it.boundsInRoot())
-            }
-        )
+            CoverScreenMediaCycleViewport(
+                currentViewIndex = currentViewIndex,
+                onViewIndexChanged = { currentViewIndex = it },
+                track = track,
+                lyrics = lyrics,
+                currentPosition = currentPosition,
+                isLarge = isLarge,
+                minLineHeight = minLineHeight,
+                targetHeight = targetLyricsHeight,
+                onDoubleTapAlbumArt = onToggleVortexImmersive,
+                modifier = Modifier.onGloballyPositioned {
+                    onMediaCyclePositioned(it.boundsInRoot())
+                }
+            )
 
-        Spacer(modifier = Modifier.height(spacerHeight))
+            Spacer(modifier = Modifier.height(spacerHeight))
 
-        Text(
-            text = subtitle,
-            color = Color.White.copy(alpha = 0.72f),
-            style = MaterialTheme.typography.labelSmall,
-            letterSpacing = 1.sp
-        )
+            Text(
+                text = subtitle,
+                color = Color.White.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.sp
+            )
+        }
     }
 }
