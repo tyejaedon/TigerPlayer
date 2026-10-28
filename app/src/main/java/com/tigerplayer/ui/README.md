@@ -54,6 +54,13 @@ Think of the **UI Compartment** as the "dashboard, instrument panel, and stage" 
 
 ## 3. Core Feature Sub-compartments
 
+For detailed architectural specifications of each UI sub-compartment, see:
+- 📱 **[Player Experience Sub-compartment](./player/README.md)**: Full player, mini player, AGSL visualizers, and state coordinators.
+- 📚 **[Library Navigation Sub-compartment](./library/README.md)**: Multi-tab lists, search debouncing, and alphabetic fast-scroll.
+- 🎛️ **[Sonic Prism Sub-compartment](./prism/README.md)**: 3-stem vocal/beat/instrument real-time isolator.
+- 📱 **[Foldable Cover Screen Sub-compartment](./coverscreen/README.md)**: Outer screen mini hub and display ID detection.
+- 🎨 **[Design System & Theming Sub-compartment](./theme/README.md)**: Arcane Glass, dominant color extraction, and contrast safety.
+
 ### 1. Player Experience (`ui/player/`)
 * **`FullPlayerScreen`**: The primary full-screen playback experience including album artwork, dynamic blur backdrop, seekbar, and playback controls.
 * **`MiniPlayer`**: The persistent bottom player bar visible across navigation tabs, displaying active track title, artist, progress indicator, and play/pause controls.

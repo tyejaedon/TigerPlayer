@@ -58,6 +58,12 @@ Think of the **Data Compartment** as the "library, vault, and filing cabinet" of
 
 ## 3. Core Sub-compartments & Classes
 
+For deeper technical specifications, see the dedicated sub-compartment guides:
+- 📁 **[Repository Sub-compartment](./repository/README.md)**: SSoT coordination, diffing algorithms, and main-safety contracts.
+- 📁 **[Local Persistence Sub-compartment](./local/README.md)**: Room database schema, DAOs, migration rules, and encrypted preferences.
+- 📁 **[Data Source Sub-compartment](./source/README.md)**: Android MediaStore queries, SAF folder scanning, and permissions.
+- 📁 **[Remote Network Sub-compartment](./remote/README.md)**: Subsonic/Navidrome streaming, LRCLIB lyrics, and PKCE auth.
+
 ### 1. Repository Layer (`data/repository/`)
 * **`AudioRepository`**: The central repository unifying local MediaStore tracks, Storage Access Framework files, and remote Navidrome tracks into a cohesive `Flow<List<AudioTrack>>`.
   - *Diffing & Sync:* Uses `LibraryCacheDiffer` to perform fast in-memory diffing against Room database entities, avoiding unnecessary disk rewrites.

@@ -490,9 +490,19 @@ Detailed, standalone PlantUML specifications are maintained in this directory:
 
 ### Per-Module Compartment Guides
 
-Each primary codebase folder provides a detailed compartment README:
+Each primary codebase folder and sub-compartment provides a detailed README:
 
 - **[Domain Engine Compartment](../../app/src/main/java/com/tigerplayer/engine/README.md)**: Math algorithms, Cytotoxic SVF equalizers, Prism 3-stem Linkwitz-Riley crossovers, Schroeder hall reverberation, and look-ahead peak limiting.
 - **[Service & Playback Runtime Compartment](../../app/src/main/java/com/tigerplayer/service/README.md)**: MediaSessionService lifecycle, ExoPlayer audio processor chain, volume ramp fading, dynamic Navidrome URL signing, and audio-reactive haptics.
-- **[Data & Persistence Compartment](../../app/src/main/java/com/tigerplayer/data/README.md)**: Room database schema, Single Source of Truth repositories, DataStore preferences, Subsonic/Spotify remote APIs, and PKCE security.
-- **[UI & Presentation Compartment](../../app/src/main/java/com/tigerplayer/ui/README.md)**: Jetpack Compose screens, MVI/StateFlow architecture, Arcane Glass design system, 60/120 FPS zero-allocation performance rules, and cover screen mini hubs.
+- **[Data & Persistence Compartment](../../app/src/main/java/com/tigerplayer/data/README.md)**: Unified library data layer, with dedicated sub-guides for:
+  - **[Local Persistence (`data/local/`)](../../app/src/main/java/com/tigerplayer/data/local/README.md)**: Room database schema, DAOs, migration rules, and encrypted preferences.
+  - **[Repositories (`data/repository/`)](../../app/src/main/java/com/tigerplayer/data/repository/README.md)**: SSoT architecture, library diffing, and main-safety contracts.
+  - **[Remote Network (`data/remote/`)](../../app/src/main/java/com/tigerplayer/data/remote/README.md)**: Subsonic/Navidrome streaming, LRCLIB lyrics, and PKCE auth.
+  - **[Data Sources (`data/source/`)](../../app/src/main/java/com/tigerplayer/data/source/README.md)**: Android MediaStore queries and SAF folder scanning.
+- **[UI & Presentation Compartment](../../app/src/main/java/com/tigerplayer/ui/README.md)**: Jetpack Compose screens, MVI/StateFlow architecture, and 60/120 FPS performance rules, with sub-guides for:
+  - **[Player Experience (`ui/player/`)](../../app/src/main/java/com/tigerplayer/ui/player/README.md)**: Full player, mini player, AGSL visualizers, and state coordinators.
+  - **[Library Navigation (`ui/library/`)](../../app/src/main/java/com/tigerplayer/ui/library/README.md)**: Multi-tab lists, search debouncing, and alphabetic fast-scroll.
+  - **[Design System (`ui/theme/`)](../../app/src/main/java/com/tigerplayer/ui/theme/README.md)**: Arcane Glass, dominant color extraction, and contrast safety.
+  - **[Sonic Prism (`ui/prism/`)](../../app/src/main/java/com/tigerplayer/ui/prism/README.md)**: Real-time 3-stem frequency isolator.
+  - **[Cover Screen (`ui/coverscreen/`)](../../app/src/main/java/com/tigerplayer/ui/coverscreen/README.md)**: Outer screen mini hub and display ID detection.
+- **[Navigation Compartment](../../app/src/main/java/com/tigerplayer/navigation/README.md)**: Route definitions, NavHost configuration, and animated screen transitions.
