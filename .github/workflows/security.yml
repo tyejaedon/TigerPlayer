@@ -2,9 +2,9 @@ name: Supply-chain security
 
 on:
   pull_request:
-    branches: [main, master]
+    branches: [main, master, beta]
   push:
-    branches: [main, master]
+    branches: [main, master, beta]
   schedule:
     - cron: "23 4 * * 1"
   workflow_dispatch:
