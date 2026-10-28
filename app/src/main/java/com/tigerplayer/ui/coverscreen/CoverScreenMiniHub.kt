@@ -393,10 +393,11 @@ fun CoverScreenMiniHub(
                 duration = track?.durationMs ?: 1L,
                 currentPosition = uiState.currentPosition,
                 onSeek = { playerViewModel.seekTo(it) },
+                artworkUri = track?.artworkUri,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(if (windowState.hasSeparatingHinge) 24.dp else 24.dp)
+                    .height(30.dp)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
                     .onGloballyPositioned { seekerTouchBounds = it.boundsInRoot() }
                     .testTag(CoverScreenTestTags.MICRO_WAVEFORM)

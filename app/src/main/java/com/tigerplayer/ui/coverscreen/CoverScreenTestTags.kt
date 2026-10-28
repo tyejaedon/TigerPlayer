@@ -53,6 +53,9 @@ object CoverScreenTestTags {
     const val PLAYBACK_REPEAT = "cover_screen_playback_repeat"
     const val PLAYBACK_VOLUME = "cover_screen_playback_volume"
     const val MICRO_WAVEFORM = "cover_screen_micro_waveform"
+    const val MICRO_WAVEFORM_CURRENT_TIME = "cover_screen_micro_waveform_current_time"
+    const val MICRO_WAVEFORM_END_TIME = "cover_screen_micro_waveform_end_time"
+    const val MICRO_WAVEFORM_SLIDER = "cover_screen_micro_waveform_slider"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"
