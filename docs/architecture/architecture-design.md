@@ -466,3 +466,33 @@ Repo --> Screen : HomeScreen "Heavy Rotation" & Stats recompose automatically
 3. **Audio Hardware Offload Transitions**:
    - Offload toggling (`routeToSystemDecoderDsp`) performs an asynchronous volume fade-down, pauses the hardware sink, drains audio buffers (`SINK_DRAIN_DELAY`), switches format, and ramps volume back up.
    - Guarded by `offloadTransitionMutex` to ensure mid-fade cancellations never leave the player in a muted state.
+
+
+---
+
+## 6. Compartment Documentation & PlantUML Specifications
+
+TigerPlayer enforces the **`audio-pipeline-explainer`** documentation methodology across all core source packages:
+- **Plain-English Conceptual Introductions:** Every module begins with an accessible explanation of its purpose and mental model for both newcomers and seasoned developers.
+- **Inline Jargon Definitions:** Specialized terms (e.g. *PCM, SVF, HAL, AudioSink, AGSL*) are defined in place upon first appearance.
+- **Tabulated Jargon Glossaries:** Each module concludes with a structured terminology table covering plain-English definition, pipeline role, and failure consequences.
+- **Scope & Limitations Transparency:** Explicit documentation of thread boundaries, hardware quirk handling (e.g., Samsung HAL float bypass), and active technical debt.
+
+### Dedicated PlantUML Architecture Models
+
+Detailed, standalone PlantUML specifications are maintained in this directory:
+
+| Diagram File | Description & Focus |
+|---|---|
+| [`system-compartments.puml`](./system-compartments.puml) | **Full System Compartments:** End-to-end component wiring across UI, ViewModel, Engine, Service, Repository, and Persistence layers. |
+| [`audio-pipeline-lifecycle.puml`](./audio-pipeline-lifecycle.puml) | **AudioProcessor Pipeline & Offload Lifecycle:** Sequence flow from ExoPlayer decoders through `AdaptiveDspEngine`, `FftProcessor`, `WaveformCaptureProcessor`, to the Audio HAL, including the 4-phase mutex-guarded offload volume ramp. |
+| [`data-convergence-architecture.puml`](./data-convergence-architecture.puml) | **Multi-Source Data Ingestion & Dual Transport:** Ingestion flow from Local MediaStore, Navidrome Subsonic, and Spotify Remote into Room DB, surfaced via `AudioRepository` and routed by `PlaybackEngine`. |
+
+### Per-Module Compartment Guides
+
+Each primary codebase folder provides a detailed compartment README:
+
+- **[Domain Engine Compartment](../../app/src/main/java/com/tigerplayer/engine/README.md)**: Math algorithms, Cytotoxic SVF equalizers, Prism 3-stem Linkwitz-Riley crossovers, Schroeder hall reverberation, and look-ahead peak limiting.
+- **[Service & Playback Runtime Compartment](../../app/src/main/java/com/tigerplayer/service/README.md)**: MediaSessionService lifecycle, ExoPlayer audio processor chain, volume ramp fading, dynamic Navidrome URL signing, and audio-reactive haptics.
+- **[Data & Persistence Compartment](../../app/src/main/java/com/tigerplayer/data/README.md)**: Room database schema, Single Source of Truth repositories, DataStore preferences, Subsonic/Spotify remote APIs, and PKCE security.
+- **[UI & Presentation Compartment](../../app/src/main/java/com/tigerplayer/ui/README.md)**: Jetpack Compose screens, MVI/StateFlow architecture, Arcane Glass design system, 60/120 FPS zero-allocation performance rules, and cover screen mini hubs.

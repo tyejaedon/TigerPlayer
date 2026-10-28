@@ -1,0 +1,110 @@
+@startuml system-compartments
+!theme plain
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName sans-serif
+skinparam roundCorner 8
+skinparam linetype ortho
+
+title TigerPlayer - System Compartment Architecture
+
+package "1. UI Layer (Jetpack Compose)" as UILayer #E8F0FE {
+    [FullPlayerScreen] as FullPlayer
+    [MiniPlayer] as MiniPlayer
+    [LibraryScreen] as LibraryScreen
+    [HomeScreen] as HomeScreen
+    [SonicPrismScreen] as PrismScreen
+    [CoverScreenDiscoveryView] as CoverScreen
+    [ConstellationLayout] as Constellation
+}
+
+package "2. Presentation & ViewModel Layer" as VMLayer #E6F4EA {
+    [PlaybackViewModel] as PlaybackVM
+    [LibraryViewModel] as LibraryVM
+    [StatsViewModel] as StatsVM
+    [PrismViewModel] as PrismVM
+    [SettingsViewModel] as SettingsVM
+    [PlaybackStateManager\n(@Singleton Coordination)] as StateMgr
+}
+
+package "3. Domain Engine Layer (@Inject)" as EngineLayer #FEF7E0 {
+    [PlaybackEngine\n(Transport Coordinator)] as PlaybackEng
+    [AdaptiveDspEngine\n(AudioProcessor / EQ / Reverb / Prism)] as DspEng
+    [LibraryEngine\n(Indexing & Folder Tree)] as LibraryEng
+    [StatsEngine\n(Listening Analytics)] as StatsEng
+    [MetadataEngine\n(Lyrics & Artwork Enrichment)] as MetadataEng
+    [WaveformEngine\n(PCM Downsampling)] as WaveformEng
+    [FluidRenderEngine\n(Fluid Shader Physics)] as FluidEng
+    [NetworkEngine\n(Network State Observer)] as NetEng
+}
+
+package "4. Service & Audio Runtime Layer" as ServiceLayer #FCE8E6 {
+    [AudioPlayerService\n(MediaSessionService / Foreground)] as AudioService
+    [MediaControllerManager\n(IPC Transport Bridge / Queue)] as MediaCtrl
+    [FftProcessor\n(6-Band Spectral Analysis)] as FftProc
+    [WaveformCaptureProcessor\n(Ring-Buffer Capture)] as WaveProc
+    [AudioReactiveHaptics\n(VibratorManager Motor Sync)] as Haptics
+}
+
+package "5. Repository Layer (@Singleton)" as RepoLayer #F3E8FD {
+    [AudioRepository\n(Unified Library Source)] as AudioRepo
+    [HistoryRepository\n(Play Events & Metrics)] as HistoryRepo
+    [LyricsRepository\n(LRCLIB & Local LRC)] as LyricsRepo
+    [SpotifyRepository\n(App Remote SDK Bridge)] as SpotifyRepo
+    [NavidromeRepository\n(Subsonic REST Client)] as NaviRepo
+}
+
+package "6. Data Sources, OS Drivers & Remote Services" as DataLayer #F1F3F4 {
+    database "TigerDatabase\n(Room Persistence)" as RoomDB
+    [LocalAudioDataSource\n(Android MediaStore)] as MediaStore
+    [DataStore / EncryptedPrefs] as Prefs
+    [Android Audio HAL\n(AudioTrack / Offload Sink)] as AudioHAL
+    cloud "Navidrome Server\n(Subsonic API)" as SubsonicCloud
+    cloud "Spotify App / Cloud\n(PKCE Auth & Remote)" as SpotifyCloud
+    cloud "LRCLIB / Last.fm" as MetadataCloud
+}
+
+' Wiring between UI and ViewModels
+FullPlayer --> PlaybackVM
+MiniPlayer --> PlaybackVM
+LibraryScreen --> LibraryVM
+PrismScreen --> PrismVM
+CoverScreen --> PlaybackVM
+CoverScreen --> LibraryVM
+
+' ViewModels talk to StateMgr and Engines
+PlaybackVM --> StateMgr
+LibraryVM --> LibraryEng
+StatsVM --> StatsEng
+PrismVM --> DspEng
+PlaybackVM --> PlaybackEng
+
+' Engines orchestrate Repositories and Services
+PlaybackEng --> MediaCtrl
+PlaybackEng --> SpotifyRepo
+DspEng --> AudioService
+LibraryEng --> AudioRepo
+StatsEng --> HistoryRepo
+MetadataEng --> LyricsRepo
+MetadataEng --> NaviRepo
+
+' Service layer interacts with ExoPlayer and HAL
+AudioService --> DspEng
+AudioService --> FftProc
+AudioService --> WaveProc
+AudioService --> AudioHAL
+AudioService --> Haptics
+MediaCtrl --> AudioService
+
+' Repositories interact with Local and Remote Data Sources
+AudioRepo --> RoomDB
+AudioRepo --> MediaStore
+AudioRepo --> NaviRepo
+HistoryRepo --> RoomDB
+LyricsRepo --> RoomDB
+LyricsRepo --> MetadataCloud
+NaviRepo --> SubsonicCloud
+SpotifyRepo --> SpotifyCloud
+
+@enduml
