@@ -6,6 +6,7 @@ import com.tigerplayer.data.model.ArtistSource
 import com.tigerplayer.data.model.AudioTrack
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -57,6 +58,35 @@ class CoverScreenLibraryViewModelTest {
         assertEquals(listOf("Ambient Group", "The Echoes"), page.map { it.name })
     }
 
+
+    @Test
+    fun `default selected tab is HISTORY`() = runTest {
+        val viewModel = CoverScreenLibraryViewModel(
+            audioRepository = mockk(relaxed = true),
+            spotifyRepository = mockk(relaxed = true),
+            ioDispatcher = StandardTestDispatcher(testScheduler)
+        )
+
+        assertEquals(CoverScreenLibraryTab.HISTORY, viewModel.selectedTab.value)
+    }
+
+    @Test
+    fun `selectTab updates and remembers selected tab`() = runTest {
+        val viewModel = CoverScreenLibraryViewModel(
+            audioRepository = mockk(relaxed = true),
+            spotifyRepository = mockk(relaxed = true),
+            ioDispatcher = StandardTestDispatcher(testScheduler)
+        )
+
+        viewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
+        assertEquals(CoverScreenLibraryTab.ARTISTS, viewModel.selectedTab.value)
+
+        viewModel.selectTab(CoverScreenLibraryTab.SONGS)
+        assertEquals(CoverScreenLibraryTab.SONGS, viewModel.selectedTab.value)
+
+        viewModel.selectTab(CoverScreenLibraryTab.SPOTIFY_PLAYLISTS)
+        assertEquals(CoverScreenLibraryTab.SPOTIFY_PLAYLISTS, viewModel.selectedTab.value)
+    }
     @Test
     fun `CoverScreenLibraryTab contains SONGS placed between ALBUMS and PLAYLISTS`() {
         val tabs = CoverScreenLibraryTab.entries

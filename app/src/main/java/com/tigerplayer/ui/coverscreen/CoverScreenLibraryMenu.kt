@@ -176,7 +176,7 @@ fun CoverScreenLibraryMenu(
     val playlists by playerViewModel.customPlaylists.collectAsStateWithLifecycle()
     val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
     val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
-    var selectedTab by remember { mutableStateOf(CoverScreenLibraryTab.HISTORY) }
+    val selectedTab by libraryViewModel.selectedTab.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
@@ -540,7 +540,7 @@ fun CoverScreenLibraryMenu(
                     CoverScreenLibraryTabRow(
                         selectedTab = selectedTab,
                         onTabSelected = { tab ->
-                            selectedTab = tab
+                            libraryViewModel.selectTab(tab)
                         }
                     )
 
@@ -562,7 +562,7 @@ fun CoverScreenLibraryMenu(
                                 onArtistSelected = { artistName ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.onSearchQueryChanged(artistName)
-                                    selectedTab = CoverScreenLibraryTab.ARTISTS
+                                    libraryViewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
                                 }
                             )
                             CoverScreenLibraryTab.CONSTELLATION -> CoverScreenConstellationView(
@@ -570,7 +570,7 @@ fun CoverScreenLibraryMenu(
                                 onArtistSelected = { artistName ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.onSearchQueryChanged(artistName)
-                                    selectedTab = CoverScreenLibraryTab.ARTISTS
+                                    libraryViewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
                                 }
                             )
                             CoverScreenLibraryTab.ARTISTS -> CoverScreenArtistsGrid(
