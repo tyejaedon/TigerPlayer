@@ -23,6 +23,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Changed
 
+- **Android Gradle Plugin**: updated AGP from 9.4.1 to 9.5.0 and refreshed dependency verification metadata. (#296)
+
 ### Fixed
 
 ## [2.1.6-beta.1] - 2026-10-27
