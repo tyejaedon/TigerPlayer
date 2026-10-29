@@ -13,6 +13,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+- **Graphics & Rendering Engine framework**: added `graphics-rendering-engine` workspace skill, `graphics-rendering-specialist` subagent, and engineering reference manuals covering OpenGL ES 3.0/3.2, Vulkan compute migration, and mobile GPU microarchitectures (Qualcomm Adreno GMEM, ARM Mali TBDR, PowerVR). (#293)
+- **Graphics architecture & guardrails**: updated `AGENTS.md` with strict zero-allocation render loop invariants, mandatory shader compile/link assertions, and 16-bit half-float texture bandwidth optimizations. (#293)
 - **Sandbox to Beta Promotion Pipeline**: Staging and promotion workflow (`promote-to-beta.yml`) linking `sandbox/experimentation` to the `beta` branch. (#283)
 - **Beta Production Release Pipeline**: Automated build, sign (v2 scheme with release keystore), audit, and export of FOSS/Full release APKs and AAB as GitHub Pre-Releases (`beta-release.yml`). (#283)
 - **Dynamic SemVer Version Coding**: Dynamic `versionCode` and `versionName` injection via Gradle properties with monotonic SemVer formula for beta releases. (#283)
