@@ -126,6 +126,12 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
 - Never call `Dispatchers.Main` blocking work from a repository.
 - Always rethrow `CancellationException`. Never swallow it in a `catch (e: Exception)`.
 
+**Graphics & Rendering Pipeline:**
+
+- Decouple audio calculation from frame rendering: telemetry from `AdaptiveDspEngine` is read via thread-safe atomic references or confluent `StateFlow` without locking the audio thread.
+- All OpenGL / Vulkan resources must have deterministic lifecycles: implement `release()` on all buffers, textures, FBOs, and shader programs.
+- SurfaceView / GLSurfaceView lifecycles must handle EGL context loss gracefully by recreating GPU resources upon context recreation.
+
 ---
 
 ## 5. Guardrails — do not do these
@@ -153,6 +159,10 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
    the issue exists and is assigned** (see point 0 above). Use `git checkout -b fix/issue-<ID>-<slug>`
    and land changes via a pull request with explicit `closes #<ID>` linkage. See
    `.github/instructions/git-workflow.instructions.md` and AGENT-WORKFLOW-CHECKLIST.md.
+10. **Never** allocate objects (`new`, lambdas, arrays, collections, formatters, strings) inside `onDrawFrame()`, `draw()`, or any per-frame render callback. All buffers, uniform caches, and scratch arrays must be pre-allocated during surface creation or initialization.
+11. **Never** compile shaders or link programs without checking `GL_COMPILE_STATUS` and `GL_LINK_STATUS`. Failures must log detailed `glGetShaderInfoLog` diagnostics and throw descriptive exceptions.
+12. **Never** use 32-bit floating-point textures (`GL_RGBA32F`, `GL_R32F`) for real-time mobile simulation when 16-bit half-float (`GL_RGBA16F`, `GL_R16F`) suffices. Respect mobile GPU memory bandwidth limits to avoid thermal throttling.
+13. **Never** perform synchronous GPU-to-CPU readbacks (`glReadPixels`, `glGetTexImage`) during the active render loop.
 
 ---
 
@@ -185,6 +195,22 @@ Do not treat existing code in these areas as a pattern to copy. Each has an open
 - **Test tags:** UI elements needing instrumentation coverage get a `testTag`; centralize them like
   the existing `PrismTestTags`.
 - **Commits:** Conventional Commits, per AIRP Phase 4.
+- **Pull Requests:**
+  - **Milestone:** Every PR must be assigned to the same milestone as its parent issue (`--milestone "<milestone>"`). Never leave PR milestones blank.
+  - **Labels:** Every PR must propagate all relevant labels from the issue (`--label "<label1>,<label2>"`: e.g., `area:*`, `documentation`, `tech-debt`, `parity`, `differentiator`, `P0-blocker`/`P1-high`/`P2-medium`).
+  - **Assignee:** Every PR must be explicitly assigned to the agent or author (`--assignee "@me"`).
+  - **Issue Linkage:** PR description MUST include `Closes #<ID>` (or `Fixes #<ID>`) on its own line. This enables GitHub to automatically link and close the issue upon merge and decrement the milestone counter.
+  - **Canonical `gh` Command:**
+    ```powershell
+    gh pr create `
+      --title "<type>(<scope>): <summary> (closes #<ID>)" `
+      --body "## Summary`n...`n`nCloses #<ID>" `
+      --base master `
+      --head <branch-name> `
+      --milestone "<milestone>" `
+      --label "<label1>,<label2>" `
+      --assignee "@me"
+    ```
 
 ---
 
@@ -197,4 +223,5 @@ Do not treat existing code in these areas as a pattern to copy. Each has an open
 - [ ] Room schema change (if any) has a migration + migration test
 - [ ] Change is scoped to the issue; no drive-by refactors
 - [ ] User-visible change has an entry in `CHANGELOG.md` under `[Unreleased]`
+- [ ] Pull request created with matching milestone, appropriate labels, assignee, and explicit `Closes #<ID>` linkage
 

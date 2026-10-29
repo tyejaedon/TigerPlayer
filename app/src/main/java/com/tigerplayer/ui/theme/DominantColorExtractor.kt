@@ -11,6 +11,12 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.min
 
+data class CoverNeonPalette(
+    val primary: Color,
+    val secondary: Color,
+    val trackBackground: Color = Color.White.copy(alpha = 0.12f)
+)
+
 object DominantColorExtractor {
 
     private val neonTokens: List<Color> = listOf(
@@ -36,6 +42,20 @@ object DominantColorExtractor {
         extractSnappedNeonInternal(bitmap, fallback)
     }
 
+    suspend fun extractCoverNeonPalette(
+        drawable: Drawable?,
+        fallback: CoverNeonPalette = CoverNeonPalette(TigerNeonOrange, TigerElectricAmber)
+    ): CoverNeonPalette = withContext(Dispatchers.Default) {
+        extractCoverNeonPaletteInternal(drawable?.toBitmapSafely(), fallback)
+    }
+
+    suspend fun extractCoverNeonPalette(
+        bitmap: Bitmap?,
+        fallback: CoverNeonPalette = CoverNeonPalette(TigerNeonOrange, TigerElectricAmber)
+    ): CoverNeonPalette = withContext(Dispatchers.Default) {
+        extractCoverNeonPaletteInternal(bitmap, fallback)
+    }
+
     fun snapToNearestNeon(extracted: Color): Color {
         return neonTokens.minByOrNull { candidate ->
             neonDistance(extracted, candidate)
@@ -57,6 +77,46 @@ object DominantColorExtractor {
             ?: return fallback
 
         return snapToNearestNeon(Color(sourceColorInt))
+    }
+
+    private fun extractCoverNeonPaletteInternal(
+        bitmap: Bitmap?,
+        fallback: CoverNeonPalette
+    ): CoverNeonPalette {
+        if (bitmap == null || bitmap.width <= 0 || bitmap.height <= 0) return fallback
+
+        val palette = Palette.from(bitmap)
+            .maximumColorCount(16)
+            .clearFilters()
+            .generate()
+
+        val primaryInt = palette.vibrantSwatch?.rgb
+            ?: palette.dominantSwatch?.rgb
+            ?: palette.lightVibrantSwatch?.rgb
+            ?: palette.mutedSwatch?.rgb
+            ?: return fallback
+
+        val primaryNeon = snapToNearestNeon(Color(primaryInt))
+
+        val secondaryInt = palette.lightVibrantSwatch?.rgb
+            ?: palette.mutedSwatch?.rgb
+            ?: palette.darkVibrantSwatch?.rgb
+            ?: palette.dominantSwatch?.rgb
+
+        val secondaryCandidate = if (secondaryInt != null) snapToNearestNeon(Color(secondaryInt)) else null
+        val secondaryNeon = if (secondaryCandidate != null && secondaryCandidate != primaryNeon) {
+            secondaryCandidate
+        } else {
+            getHarmonizingNeon(primaryNeon)
+        }
+
+        return CoverNeonPalette(primary = primaryNeon, secondary = secondaryNeon)
+    }
+
+    fun getHarmonizingNeon(primary: Color): Color {
+        val idx = neonTokens.indexOf(primary)
+        if (idx == -1) return TigerElectricAmber
+        return neonTokens[(idx + 2) % neonTokens.size]
     }
 
     private fun neonDistance(a: Color, b: Color): Float {
@@ -105,4 +165,3 @@ object DominantColorExtractor {
         return out
     }
 }
-

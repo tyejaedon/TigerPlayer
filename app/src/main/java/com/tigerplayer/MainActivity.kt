@@ -36,6 +36,7 @@ import androidx.navigation.compose.rememberNavController
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.repository.PkceGenerator
+import com.tigerplayer.data.repository.SpotifyAuthError
 import com.tigerplayer.data.repository.SpotifyAuthManager
 import com.tigerplayer.navigation.TigerPlayerNavGraph
 import com.tigerplayer.ui.player.PipVisualizerSurface
@@ -156,14 +157,15 @@ class MainActivity : ComponentActivity() {
                     try {
                         val token = authManager.exchangeCodeForToken(code, redirectUri, verifier)
                         if (token.isNotEmpty()) {
+                            authManager.clearAuthError()
                             playerViewModel.onAuthSuccess(token)
                             Log.d("SpotifyAuth", "Token exchange complete. Spotify App Remote will connect on playback request.")
                         } else {
-                            authMessage.value = "Spotify login returned an empty token. Please retry."
+                            authManager.setAuthError(SpotifyAuthError.emptyToken())
                         }
                     } catch (e: Exception) {
                         Log.e("SpotifyAuth", "Ritual failed during token exchange: ${e.message}")
-                        authMessage.value = "Spotify token exchange failed. Check connection and retry."
+                        authManager.setAuthError(SpotifyAuthError.tokenExchangeFailed(e.message))
                     } finally {
                         pendingCodeVerifier = null
                     }
@@ -171,7 +173,7 @@ class MainActivity : ComponentActivity() {
             }
             error != null -> {
                 Log.e("SpotifyAuth", "Auth Error: $error")
-                authMessage.value = "Spotify auth error: $error"
+                authManager.setAuthError(SpotifyAuthError.fromCallback(error))
                 pendingCodeVerifier = null
             }
             else -> {
@@ -216,19 +218,18 @@ class MainActivity : ComponentActivity() {
     }
 
     fun authenticateSpotify() {
+        authManager.clearAuthError()
         val clientId = BuildConfig.SPOTIFY_CLIENT_ID
 
         if (clientId.startsWith("MISSING_")) {
             Log.e("SpotifyAuth", "Spotify client ID is missing in BuildConfig/secrets.properties")
-            Toast.makeText(this, "Spotify is not configured on this build.", Toast.LENGTH_SHORT).show()
-            authMessage.value = "Spotify is not configured on this build."
+            authManager.setAuthError(SpotifyAuthError.missingClientId())
             return
         }
 
         if (!hasInternetConnection()) {
             Log.e("SpotifyAuth", "Auth launch blocked: no active internet connection")
-            Toast.makeText(this, "No internet connection. Try again when online.", Toast.LENGTH_SHORT).show()
-            authMessage.value = "No internet connection. Try again when online."
+            authManager.setAuthError(SpotifyAuthError.noInternet())
             return
         }
 

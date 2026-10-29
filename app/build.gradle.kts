@@ -30,8 +30,13 @@ configure<ApplicationExtension> {
         minSdk = 29
         //noinspection OldTargetApi
         targetSdk = 36
-        versionCode = 5
-        versionName = "2.1.4"
+        // Dynamic version code/name injection (used for beta/release pipelines) with committed fallback
+        versionCode = project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull()
+            ?: System.getenv("BETA_VERSION_CODE")?.toIntOrNull()
+            ?: 7
+        versionName = project.findProperty("VERSION_NAME")?.toString()
+            ?: System.getenv("BETA_VERSION_NAME")
+            ?: "2.1.6-beta.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Spotify Manifest Placeholders

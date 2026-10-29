@@ -1,0 +1,86 @@
+@startuml data-convergence-architecture
+!theme plain
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName sans-serif
+skinparam roundCorner 8
+
+title TigerPlayer - Multi-Source Data Convergence & Dual-Transport Routing
+
+package "Heterogeneous Audio Sources" as Sources #E8F0FE {
+    [Local MediaStore\n(Device Storage / SAF)] as LocalSource
+    [Navidrome Server\n(Subsonic REST / JSON API)] as NavidromeSource
+    [Spotify Catalog & Client\n(App Remote & Web API)] as SpotifySource
+    [LRCLIB / Last.fm\n(Lyrics & Metadata Cloud)] as CloudMeta
+}
+
+package "Ingestion & Sync Layer" as Ingestion #FEF7E0 {
+    [LocalAudioDataSource] as LocalDS
+    [SafFolderScanner] as SafScanner
+    [NavidromeRepository] as NaviRepo
+    [SpotifyAuthManager (PKCE)] as SpotifyAuth
+    [LyricsRepository] as LyricsRepo
+}
+
+package "Persistent Cache Layer (Room DB)" as Storage #E6F4EA {
+    database "TigerDatabase" as DB {
+        [CachedTrackEntity] as TrackTable
+        [ArtistCacheEntity] as ArtistTable
+        [PlaylistEntity] as PlaylistTable
+        [MusicFolderEntity] as FolderTable
+        [PlaybackHistoryEntity] as HistoryTable
+    }
+}
+
+package "Single Source of Truth Layer" as SSoT #FCE8E6 {
+    [AudioRepository\n(@Singleton Domain Gateway)] as AudioRepo
+    [HistoryRepository\n(Listening Analytics Engine)] as HistoryRepo
+}
+
+package "Playback Transport Routing (Dual Engine)" as Routing #F3E8FD {
+    [PlaybackEngine\n(Transport Router Facade)] as PlaybackEngine
+    [MediaControllerManager\n(Local & Navidrome ExoPlayer)] as MediaCtrl
+    [SpotifyRepository\n(Spotify App Remote SDK)] as SpotifyRepo
+}
+
+' Connections from raw sources to ingestors
+LocalSource --> LocalDS
+LocalSource --> SafScanner
+NavidromeSource --> NaviRepo
+SpotifySource --> SpotifyAuth
+SpotifySource --> SpotifyRepo
+CloudMeta --> LyricsRepo
+
+' Ingestion to Room Cache
+LocalDS --> TrackTable: Upsert Tracks
+SafScanner --> FolderTable: Map Folder Tree
+NaviRepo --> TrackTable: Cache Remote Tracks
+NaviRepo --> ArtistTable: Cache Artist Metadata
+LyricsRepo --> DB: Cache Lyrics (LRCLIB)
+
+' Room Cache to Repositories
+TrackTable --> AudioRepo
+ArtistTable --> AudioRepo
+FolderTable --> AudioRepo
+PlaylistTable --> AudioRepo
+HistoryTable --> HistoryRepo
+
+' AudioRepository to Playback Orchestration
+AudioRepo --> PlaybackEngine: Track Selection (AudioTrack domain model)
+
+' Dual Transport Resolution
+PlaybackEngine --> MediaCtrl: Route if track.id is Local / Navidrome
+PlaybackEngine --> SpotifyRepo: Route if track.id starts with "spotify:"
+
+note right of PlaybackEngine
+  **Dual-Transport Orchestration:**
+  If playing local track:
+    1. spotifyRepo.pause()
+    2. mediaControllerManager.setPlaylistAndPlay()
+  If playing Spotify track:
+    1. mediaControllerManager.pause()
+    2. spotifyRepo.playUri()
+end note
+
+@enduml

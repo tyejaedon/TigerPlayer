@@ -1,0 +1,139 @@
+name: Promote to Beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: 'Source branch to promote from'
+        required: true
+        default: 'sandbox/experimentation'
+        type: string
+      target_branch:
+        description: 'Target branch to promote to'
+        required: true
+        default: 'beta'
+        type: string
+      auto_merge:
+        description: 'Automatically merge if fast-forwardable (otherwise creates/updates PR)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote changes to Beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Verify branches and differences
+        id: branch_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE="${{ inputs.source_branch }}"
+          TARGET="${{ inputs.target_branch }}"
+
+          echo "Resolving source branch '$SOURCE' and target branch '$TARGET'..."
+
+          # Fetch branches
+          git fetch origin "$SOURCE":"$SOURCE" || {
+            echo "::error::Source branch $SOURCE does not exist on origin."
+            exit 1
+          }
+
+          # Check if target branch exists on origin; if not, create it from master
+          if git ls-remote --exit-code --heads origin "$TARGET" > /dev/null 2>&1; then
+            git fetch origin "$TARGET":"$TARGET"
+            echo "Target branch $TARGET exists on remote."
+          else
+            echo "Target branch $TARGET does not exist on remote. Creating $TARGET from origin/master..."
+            git checkout -b "$TARGET" origin/master
+            git push origin "$TARGET"
+          fi
+
+          # Check commit difference
+          COMMITS_AHEAD=$(git rev-list --count "$TARGET..$SOURCE" || echo "0")
+          echo "Commits ahead of $TARGET: $COMMITS_AHEAD"
+          echo "commits_ahead=$COMMITS_AHEAD" >> $GITHUB_OUTPUT
+
+          if [[ "$COMMITS_AHEAD" -eq 0 ]]; then
+            echo "No new commits on $SOURCE compared to $TARGET. Nothing to promote."
+            exit 0
+          fi
+
+      - name: Process promotion
+        if: steps.branch_check.outputs.commits_ahead != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE="${{ inputs.source_branch }}"
+          TARGET="${{ inputs.target_branch }}"
+          AUTO_MERGE="${{ inputs.auto_merge }}"
+
+          if [[ "$AUTO_MERGE" == "true" ]]; then
+            echo "Attempting fast-forward merge of $SOURCE into $TARGET..."
+            git checkout "$TARGET"
+            git merge --ff-only "$SOURCE" || {
+              echo "Fast-forward merge not possible. Falling back to creating PR."
+              AUTO_MERGE="false"
+            }
+            if [[ "$AUTO_MERGE" == "true" ]]; then
+              git push origin "$TARGET"
+              echo "Successfully promoted $SOURCE into $TARGET via fast-forward merge."
+              exit 0
+            fi
+          fi
+
+          # PR-based promotion
+          echo "Checking for existing open PR from $SOURCE to $TARGET..."
+          EXISTING_PR=$(gh pr list --head "$SOURCE" --base "$TARGET" --state open --json number --jq '.[0].number // empty')
+
+          PR_TITLE="chore(beta): promote $SOURCE to $TARGET"
+          PR_BODY=$(printf '%s\n' \
+            "## Beta Staging Promotion" \
+            "" \
+            "This automated pull request promotes validated experimental changes from \`$SOURCE\` into \`$TARGET\`." \
+            "" \
+            "### Promotion Details" \
+            "- **Source Branch:** \`$SOURCE\`" \
+            "- **Target Branch:** \`$TARGET\`" \
+            "- **Promoted By:** \`${{ github.actor }}\` (Workflow Run: #${{ github.run_number }})" \
+            "" \
+            "### Quality Verification" \
+            "All standard quality gates (\`android-ci.yml\`, \`security.yml\`) will validate this pull request before it can land on \`$TARGET\`. Once merged into \`$TARGET\`, the beta release pipeline will assemble and sign the beta distribution artifacts.")
+
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "Existing PR #$EXISTING_PR found. Updating..."
+            gh pr edit "$EXISTING_PR" --title "$PR_TITLE" --body "$PR_BODY"
+            echo "PR #$EXISTING_PR updated."
+          else
+            echo "Creating new PR..."
+            gh pr create \
+              --base "$TARGET" \
+              --head "$SOURCE" \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY"
+            echo "PR created successfully."
+          fi

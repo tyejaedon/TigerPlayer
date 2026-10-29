@@ -12,6 +12,7 @@
     <string name="coverscreen_gesture_swipe_down_close">下にスワイプして閉じる</string>
     <string name="coverscreen_gesture_long_press_settings">長押しで再生設定</string>
     <string name="coverscreen_gesture_instructions">カバースクリーンミニプレーヤー。タップで再生または一時停止。左スワイプで次へ、右スワイプで前へ、上スワイプでキュー、下スワイプで閉じます。</string>
+    <string name="coverscreen_talkback_gesture_instructions">カバースクリーンミニプレーヤー。タップで再生または一時停止。左スワイプで次へ、右スワイプで前へ、上スワイプでキュー、下スワイプで閉じます。</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">前の曲</string>

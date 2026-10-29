@@ -12,6 +12,7 @@
     <string name="coverscreen_gesture_swipe_down_close">Deslizar hacia abajo para cerrar</string>
     <string name="coverscreen_gesture_long_press_settings">Mantener presionado para ajustes de reproducción</string>
     <string name="coverscreen_gesture_instructions">Minirreproductor de pantalla externa. Toca para reproducir o pausar. Desliza a la izquierda para siguiente, a la derecha para anterior, arriba para cola y abajo para cerrar.</string>
+    <string name="coverscreen_talkback_gesture_instructions">Minirreproductor de pantalla externa. Toca para reproducir o pausar. Desliza a la izquierda para siguiente, a la derecha para anterior, arriba para cola y abajo para cerrar.</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Pista anterior</string>

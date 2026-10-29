@@ -2,7 +2,11 @@ package com.tigerplayer.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.app.Activity
+import android.content.Context
 import android.net.Uri
+import com.tigerplayer.BuildConfig
+import com.tigerplayer.MainActivity
 import com.tigerplayer.data.backup.BackupManager
 import com.tigerplayer.data.backup.RestoreStrategy
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
@@ -14,12 +18,14 @@ import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.MusicFolder
+import com.tigerplayer.data.repository.SpotifyAuthError
 import com.tigerplayer.data.repository.SpotifyAuthManager
 import com.tigerplayer.data.repository.SpotifyRepository
 import com.tigerplayer.data.source.LocalAudioDataSource
 import com.tigerplayer.engine.LibraryEngine
 import com.tigerplayer.service.HapticsDebugMonitor
 import com.tigerplayer.service.HapticsDebugState
+import com.tigerplayer.utils.findActivity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -112,6 +118,32 @@ class SettingsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5_000L),
         initialValue = ConnectedAccountsState()
     )
+
+    val spotifyAuthError: StateFlow<SpotifyAuthError?> = spotifyAuthManager.authError
+
+    fun dismissSpotifyAuthError() {
+        spotifyAuthManager.clearAuthError()
+    }
+
+    /**
+     * Initiates Spotify login via the hosting [MainActivity]'s PKCE Custom Tab flow.
+     * If the activity cannot be resolved or credentials are unconfigured, surfaces a structured
+     * [SpotifyAuthError] dialog.
+     */
+    fun loginSpotify(context: Context) {
+        val activity = context.findActivity() as? MainActivity
+        loginSpotify(activity)
+    }
+
+    fun loginSpotify(activity: Activity?) {
+        if (activity is MainActivity) {
+            activity.authenticateSpotify()
+        } else {
+            if (BuildConfig.SPOTIFY_CLIENT_ID.startsWith("MISSING_")) {
+                spotifyAuthManager.setAuthError(SpotifyAuthError.missingClientId())
+            }
+        }
+    }
 
     private var rescanJob: Job? = null
 
@@ -206,6 +238,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setResumeOnWiredHeadsetConnect(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setResumeOnWiredHeadsetConnect(enabled) }
+    }
+
+    fun setCoverScreenPreviewMode(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setCoverScreenPreviewMode(enabled) }
     }
 
     fun resetToDefaults() {

@@ -13,9 +13,50 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+- **Graphics & Rendering Engine framework**: added `graphics-rendering-engine` workspace skill, `graphics-rendering-specialist` subagent, and engineering reference manuals covering OpenGL ES 3.0/3.2, Vulkan compute migration, and mobile GPU microarchitectures (Qualcomm Adreno GMEM, ARM Mali TBDR, PowerVR). (#293)
+- **Graphics architecture & guardrails**: updated `AGENTS.md` with strict zero-allocation render loop invariants, mandatory shader compile/link assertions, and 16-bit half-float texture bandwidth optimizations. (#293)
+- **Sandbox to Beta Promotion Pipeline**: Staging and promotion workflow (`promote-to-beta.yml`) linking `sandbox/experimentation` to the `beta` branch. (#283)
+- **Beta Production Release Pipeline**: Automated build, sign (v2 scheme with release keystore), audit, and export of FOSS/Full release APKs and AAB as GitHub Pre-Releases (`beta-release.yml`). (#283)
+- **Dynamic SemVer Version Coding**: Dynamic `versionCode` and `versionName` injection via Gradle properties with monotonic SemVer formula for beta releases. (#283)
+- **System architecture & compartment documentation**: added comprehensive per-module `README.md` specifications across `engine/`, `service/`, `data/`, and `ui/` compartments using the `audio-pipeline-explainer` framework (plain-English mental models, class breakdowns, thread safety boundaries, active limitations, and tabulated jargon glossaries). (#286)
+- **PlantUML architecture specifications**: added dedicated architectural diagrams for system compartment wiring (`system-compartments.puml`), Media3 `AudioProcessor` pipeline and mutex-guarded offload transition lifecycle (`audio-pipeline-lifecycle.puml`), and multi-source data convergence and dual-transport routing (`data-convergence-architecture.puml`). (#286)
+
 ### Changed
 
+- **Android Gradle Plugin**: updated AGP from 9.4.1 to 9.5.0 and refreshed dependency verification metadata. (#296)
+
 ### Fixed
+
+## [2.1.6-beta.1] - 2026-10-27
+
+### Added
+
+- **Spotify diagnostics & setup dialog**: added `SpotifyAuthError` model and `SpotifyAuthErrorDialog`, converting cryptic OAuth callbacks and configuration omissions into actionable developer and setup guidance (missing `secrets.properties` keys, redirect URI whitelisting, account permissions, and offline state) with accessible 48dp dismiss and retry actions.
+- **Cover screen settings**: added full `CoverScreenSettingsView` mirroring all primary app preferences, including Spotify authentication controls, AMOLED black toggles, neon accent swatches, PiP controls, and playback parameters.
+- **Cover screen navigation**: wired interactive settings launcher button in `CoverScreenLibraryMenu` with haptic feedback and back-gesture handling.
+- **Context extensions**: added `Context.findActivity()` utility for safe unnesting across wrapped UI contexts.
+
+### Changed
+
+- **Spotify authentication workflow**: replaced fleeting transient toasts with persistent, user-friendly Arcane Glass diagnostics dialogs across both normal and cover screen modes. Added explicit CONNECT buttons when disconnected and confirmation-guarded DISCONNECT buttons when authenticated.
+- **Cover screen visual overhaul**: refreshed Album and Song tabs, artist detailed grids, and playback views to Arcane Glass visual standards.
+
+### Fixed
+
+- **Compose observable locale**: replaced non-observable `Locale.getDefault()` invocations with `Locale.ROOT` in `CoverScreenStatsView`, resolving Android Lint compiler errors.
+- **Cover screen UI layout bindings**: resolved Button and ButtonDefaults import references, and aligned `rememberTigerAmbientGradient` parameter conventions.
+
+## [2.1.5] - 2026-10-25
+
+### Added
+
+- **Cover screen preview**: added `coverScreenPreviewMode` preference in settings and an exit button in cover screen settings, enabling cover screen UI preview and testing on standard phone displays. (#275)
+
+### Fixed
+
+- **Cover screen detection**: resolved foldable outer display detection failure caused by `computeMaximumWindowMetrics` inflating window bounds to unfolded screen dimensions (1080x2640 px / 411x1005 dp) on Samsung Galaxy Z Flip and resize-model foldables. Reconstructed true un-insetted height directly from `configurationHeightDp` and `imeBottomDp`. (#275)
+- **Cover screen display identity**: hardened secondary display resolution across `LocalView.current.display`, `LocalContext.current.display`, and `Activity.display` with `Display.INVALID_DISPLAY` guarding, ensuring Motorola Razr and external displays are detected reliably before and after window attachment. (#275)
+- **Cover screen heuristics**: expanded short edge (180..440 dp), long edge (<= 480 dp), and aspect ratio (<= 1.55f) bounds to support edge-to-edge clamshell outer panels. (#275)
 
 ## [2.1.4] - 2026-10-24
 

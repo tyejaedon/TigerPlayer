@@ -47,6 +47,8 @@ import com.tigerplayer.ui.player.MiniPlayer
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.prism.SonicPrismRoute
+import com.tigerplayer.ui.settings.SettingsViewModel
+import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.ui.theme.glassEffect
 
 // ------------------------------
@@ -72,12 +74,18 @@ fun MainScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToQueue: () -> Unit,
     dashboardViewModel: DashboardViewModel? = null,
+    settingsViewModel: SettingsViewModel? = null,
     // Test-only seam: rememberCoverScreenWindowState() needs a real Activity/display to produce a
     // genuine cover-screen Configuration, which an instrumented Compose test can't simulate. Left
     // null in production so real callers are unaffected (see CoverScreenMountingTest).
     windowStateOverride: CoverScreenWindowState? = null
 ) {
-    val windowState = windowStateOverride ?: rememberCoverScreenWindowState()
+    val effectiveSettingsViewModel = if (windowStateOverride == null) (settingsViewModel ?: hiltViewModel()) else null
+    val settingsState by effectiveSettingsViewModel?.settingsState?.collectAsStateWithLifecycle()
+        ?: remember { mutableStateOf(TigerSettingsState()) }
+    val windowState = windowStateOverride ?: rememberCoverScreenWindowState(
+        forcePreview = settingsState.coverScreenPreviewMode
+    )
     val isCoverScreen = windowState.isCoverScreen
     val sharedDashboardViewModel = dashboardViewModel ?: hiltViewModel()
 

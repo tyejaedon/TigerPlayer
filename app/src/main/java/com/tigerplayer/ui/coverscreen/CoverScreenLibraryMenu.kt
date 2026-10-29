@@ -46,9 +46,20 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Color
 import com.tigerplayer.ui.theme.glassEffect
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
+import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
+import com.tigerplayer.ui.theme.bounceClick
+
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -96,13 +107,14 @@ import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.remote.model.SpotifyPlaylist
 import com.tigerplayer.ui.cloud.CloudViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 enum class CoverScreenLibraryTab(val label: String) {
-    HISTORY("History"),
+    HISTORY("Stats"),
     CONSTELLATION("Constellation"),
     ARTISTS("Artists"),
     ALBUMS("Albums"),
@@ -124,7 +136,7 @@ fun CoverScreenLibraryTabRow(
     ) {
         CoverScreenLibraryTab.entries.forEach { tab ->
             val tabTitle = when (tab) {
-                CoverScreenLibraryTab.HISTORY -> "History"
+                CoverScreenLibraryTab.HISTORY -> "Stats"
                 CoverScreenLibraryTab.CONSTELLATION -> "Constellation"
                 CoverScreenLibraryTab.ARTISTS -> stringResource(R.string.coverscreen_tab_artists)
                 CoverScreenLibraryTab.ALBUMS -> stringResource(R.string.coverscreen_tab_albums)
@@ -151,7 +163,8 @@ fun CoverScreenLibraryMenu(
     modifier: Modifier = Modifier,
     showSearchInitially: Boolean = false,
     libraryViewModel: CoverScreenLibraryViewModel = hiltViewModel(),
-    cloudViewModel: CloudViewModel = hiltViewModel()
+    cloudViewModel: CloudViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -160,13 +173,11 @@ fun CoverScreenLibraryMenu(
     val focusManager = LocalFocusManager.current
     val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val artists by libraryViewModel.artists.collectAsStateWithLifecycle()
-    val selectedSource by libraryViewModel.selectedSource.collectAsStateWithLifecycle()
     val playlists by playerViewModel.customPlaylists.collectAsStateWithLifecycle()
     val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
-    val spotifyAlbums by cloudViewModel.userAlbums.collectAsStateWithLifecycle()
     val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
-    val recentTracks by playerViewModel.recentTracks.collectAsStateWithLifecycle()
-    var selectedTab by remember { mutableStateOf(CoverScreenLibraryTab.HISTORY) }
+    val selectedTab by libraryViewModel.selectedTab.collectAsStateWithLifecycle()
+    var showSettings by remember { mutableStateOf(false) }
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
@@ -235,19 +246,6 @@ fun CoverScreenLibraryMenu(
             }
             .sortedBy { it.name.lowercase() }
     }
-    val spotifyCoverAlbums = remember(spotifyAlbums) {
-        spotifyAlbums.flatMap { album ->
-            album.artists.map { artist ->
-                CoverScreenAlbum(
-                    id = album.id,
-                    artistId = artist.id,
-                    name = album.name,
-                    trackCount = album.totalTracks ?: 0,
-                    artworkUrl = album.images?.firstOrNull()?.url
-                )
-            }
-        }
-    }
     val filteredLocalAlbums = remember(localAlbums, debouncedSearchQuery, playerState.allTracks) {
         if (debouncedSearchQuery.isBlank()) localAlbums else localAlbums.filter { album ->
             album.name.contains(debouncedSearchQuery, ignoreCase = true) ||
@@ -274,6 +272,7 @@ fun CoverScreenLibraryMenu(
 
     BackHandler(enabled = true) {
         when {
+            showSettings -> showSettings = false
             selectedAlbum != null -> selectedAlbum = null
             selectedPlaylist != null -> selectedPlaylist = null
             searchActive -> {
@@ -315,7 +314,12 @@ fun CoverScreenLibraryMenu(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            if (selectedAlbum != null || selectedPlaylist != null) {
+            if (showSettings) {
+                CoverScreenSettingsView(
+                    viewModel = settingsViewModel,
+                    onClose = { showSettings = false }
+                )
+            } else if (selectedAlbum != null || selectedPlaylist != null) {
                 val album = selectedAlbum
                 val playlist = selectedPlaylist
                 val albumTracks = if (album == null) {
@@ -356,7 +360,16 @@ fun CoverScreenLibraryMenu(
                         val index = playerState.queue.indexOfFirst { it.id == track.id }
                         if (index >= 0) playerViewModel.removeFromQueue(index)
                     },
-                    onPlayAll = playerViewModel::playAll
+                    onPlayAll = playerViewModel::playAll,
+                    currentTrackId = playerState.currentTrack?.id,
+                    isPlaying = playerState.isPlaying,
+                    onShufflePlay = { tracksToPlay ->
+                        if (tracksToPlay.isNotEmpty()) {
+                            val shuffled = tracksToPlay.shuffled()
+                            playerViewModel.playTrack(shuffled.first())
+                            shuffled.drop(1).forEach(playerViewModel::addToQueue)
+                        }
+                    }
                 )
             } else {
                 if (searchActive) {
@@ -455,10 +468,31 @@ fun CoverScreenLibraryMenu(
                                 contentDescription = searchLibraryLabel
                             )
                         }
-                        Icon(
-                            imageVector = Icons.Filled.LibraryMusic,
-                            contentDescription = null
-                        )
+                        val settingsLabel = "Settings"
+                        IconButton(
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                showSettings = true
+                            },
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                .minimumInteractiveComponentSize()
+                                .semantics {
+                                    role = Role.Button
+                                    onClick(label = settingsLabel) {
+                                        showSettings = true
+                                        true
+                                    }
+                                    contentDescription = settingsLabel
+                                }
+                                .testTag("cover_screen_settings_open")
+                        ) {
+                            Icon(
+                                imageVector = WitcherIcons.Settings,
+                                contentDescription = settingsLabel,
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 
@@ -466,46 +500,24 @@ fun CoverScreenLibraryMenu(
                     CoverScreenSearchResults(
                         query = debouncedSearchQuery,
                         artists = artists,
-                        albums = if (selectedSource == CoverScreenLibrarySource.LOCAL) {
-                            filteredLocalAlbums
-                        } else {
-                            spotifyCoverAlbums.filter {
-                                it.name.contains(debouncedSearchQuery, ignoreCase = true)
-                            }
-                        },
+                        albums = filteredLocalAlbums,
                         tracks = playerState.allTracks,
                         onArtistSelected = { artist ->
                             keyboardController?.hide()
                             focusManager.clearFocus()
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                            if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
-                                spotifyAlbums.firstOrNull { album ->
-                                    album.artists.any { it.id == artist.id }
-                                }?.let { album ->
-                                    cloudViewModel.playSpotifyCollection(album.uri, album.name)
-                                    onDismiss()
-                                }
-                            } else {
-                                playerState.allTracks.firstOrNull { track ->
-                                    ArtistUtils.getBaseArtist(track.artist)
-                                        .equals(artist.name, ignoreCase = true)
-                                }?.let { track ->
-                                    playerViewModel.playTrack(track)
-                                    onDismiss()
-                                }
+                            playerState.allTracks.firstOrNull { track ->
+                                ArtistUtils.getBaseArtist(track.artist)
+                                    .equals(artist.name, ignoreCase = true)
+                            }?.let { track ->
+                                playerViewModel.playTrack(track)
+                                onDismiss()
                             }
                         },
                         onAlbumSelected = { album ->
                             keyboardController?.hide()
                             focusManager.clearFocus()
-                            if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
-                                spotifyAlbums.firstOrNull { it.id == album.id }?.let {
-                                    cloudViewModel.playSpotifyCollection(it.uri, it.name)
-                                    onDismiss()
-                                }
-                            } else {
-                                selectedAlbum = album
-                            }
+                            selectedAlbum = album
                         },
                         onPlayTrack = { track ->
                             keyboardController?.hide()
@@ -528,10 +540,7 @@ fun CoverScreenLibraryMenu(
                     CoverScreenLibraryTabRow(
                         selectedTab = selectedTab,
                         onTabSelected = { tab ->
-                            selectedTab = tab
-                            if (tab == CoverScreenLibraryTab.ARTISTS) {
-                                libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
-                            }
+                            libraryViewModel.selectTab(tab)
                         }
                     )
 
@@ -544,11 +553,16 @@ fun CoverScreenLibraryMenu(
                         label = "Cover screen library tab"
                     ) { tab ->
                         when (tab) {
-                            CoverScreenLibraryTab.HISTORY -> HistoryPicker(
-                                tracks = recentTracks,
+                            CoverScreenLibraryTab.HISTORY -> CoverScreenStatsView(
+                                viewModel = playerViewModel,
                                 onPlayTrack = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.playTrack(track)
+                                },
+                                onArtistSelected = { artistName ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    playerViewModel.onSearchQueryChanged(artistName)
+                                    libraryViewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
                                 }
                             )
                             CoverScreenLibraryTab.CONSTELLATION -> CoverScreenConstellationView(
@@ -556,59 +570,21 @@ fun CoverScreenLibraryMenu(
                                 onArtistSelected = { artistName ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.onSearchQueryChanged(artistName)
-                                    selectedTab = CoverScreenLibraryTab.ARTISTS
+                                    libraryViewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
                                 }
                             )
-                            CoverScreenLibraryTab.ARTISTS -> Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    FilterChip(
-                                        selected = selectedSource == CoverScreenLibrarySource.LOCAL,
-                                        onClick = {
-                                            libraryViewModel.selectSource(CoverScreenLibrarySource.LOCAL)
-                                        },
-                                        label = { Text(stringResource(R.string.coverscreen_source_local)) },
-                                        modifier = Modifier
-                                            .minimumInteractiveComponentSize()
-                                            .testTag(CoverScreenTestTags.LOCAL_SOURCE)
-                                    )
-                                    FilterChip(
-                                        selected = selectedSource == CoverScreenLibrarySource.SPOTIFY,
-                                        onClick = {
-                                            libraryViewModel.selectSource(CoverScreenLibrarySource.SPOTIFY)
-                                        },
-                                        label = { Text(stringResource(R.string.coverscreen_source_spotify)) },
-                                        modifier = Modifier
-                                            .minimumInteractiveComponentSize()
-                                            .testTag(CoverScreenTestTags.SPOTIFY_SOURCE)
-                                    )
+                            CoverScreenLibraryTab.ARTISTS -> CoverScreenArtistsGrid(
+                                artists = artists,
+                                albums = filteredLocalAlbums,
+                                tracks = playerState.allTracks,
+                                onAlbumSelected = { album ->
+                                    selectedAlbum = album
+                                },
+                                onPlayTrack = { track ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    playerViewModel.playTrack(track)
                                 }
-                                CoverScreenArtistsGrid(
-                                    artists = artists,
-                                    albums = if (selectedSource == CoverScreenLibrarySource.LOCAL) {
-                                        filteredLocalAlbums
-                                    } else {
-                                        spotifyCoverAlbums.filter {
-                                            it.name.contains(debouncedSearchQuery, ignoreCase = true)
-                                        }
-                                    },
-                                    onAlbumSelected = { album ->
-                                        if (selectedSource == CoverScreenLibrarySource.SPOTIFY) {
-                                            val spotifyAlbum = spotifyAlbums.firstOrNull { it.id == album.id }
-                                            spotifyAlbum?.let {
-                                                cloudViewModel.playSpotifyCollection(it.uri, it.name)
-                                                onDismiss()
-                                            }
-                                        } else {
-                                            selectedAlbum = album
-                                        }
-                                    }
-                                )
-                            }
+                            )
 
                             CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
                                 albums = filteredLocalAlbums,
@@ -617,6 +593,8 @@ fun CoverScreenLibraryMenu(
 
                             CoverScreenLibraryTab.SONGS -> SongPicker(
                                 tracks = filteredSongs,
+                                currentTrackId = playerState.currentTrack?.id,
+                                isPlaying = playerState.isPlaying,
                                 onPlayTrack = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.playTrack(track)
@@ -657,23 +635,134 @@ private fun AlbumPicker(
         EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_albums))
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 144.dp),
+            columns = GridCells.Adaptive(minSize = 136.dp),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(albums, key = CoverScreenAlbum::id) { album ->
-                LibraryTile(
-                    title = album.name,
-                    subtitle = "${album.trackCount} tracks",
-                    description = "Album ${album.name}",
-                    imageUrl = album.artworkUrl,
-                    icon = Icons.Filled.Album,
+                CoverScreenAlbumCard(
+                    album = album,
                     modifier = Modifier.testTag(CoverScreenTestTags.libraryAlbum(album.id)),
                     onClick = { onAlbumSelected(album) }
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CoverScreenAlbumCard(
+    album: CoverScreenAlbum,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val description = "Album ${album.name}, ${album.trackCount} tracks"
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+            .minimumInteractiveComponentSize()
+            .bounceClick(onClick = onClick)
+            .semantics {
+                role = Role.Button
+                contentDescription = description
+                onClick(label = description) {
+                    onClick()
+                    true
+                }
+            },
+        horizontalAlignment = Alignment.Start
+    ) {
+        // Square artwork container
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .shadow(
+                    elevation = 10.dp,
+                    shape = RoundedCornerShape(18.dp),
+                    spotColor = MaterialTheme.aardBlue.copy(alpha = 0.25f),
+                    ambientColor = Color.Black
+                )
+                .clip(RoundedCornerShape(18.dp))
+                .glassEffect(RoundedCornerShape(18.dp))
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.35f),
+                            Color.White.copy(alpha = 0.08f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            AsyncImage(
+                model = album.artworkUrl,
+                contentDescription = album.name,
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.ic_tiger_logo),
+                error = painterResource(R.drawable.ic_tiger_logo),
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Bottom dark gradient overlay for badge readability
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+                            startY = 180f
+                        )
+                    )
+            )
+
+            // Track count pill badge
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .glassEffect(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.60f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "${album.trackCount} CHANTS",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 8.5.sp,
+                    letterSpacing = 0.8.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Title
+        Text(
+            text = album.name,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        // Artist ID / name in uppercase
+        Text(
+            text = album.artistId.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            letterSpacing = 0.5.sp
+        )
     }
 }
 
@@ -749,37 +838,62 @@ private fun LibraryTile(
             .defaultMinSize(minHeight = 48.dp)
             .minimumInteractiveComponentSize()
             .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .glassEffect(RoundedCornerShape(14.dp))
             .clickable(
                 role = Role.Button,
                 onClickLabel = description,
                 onClick = onClick
             )
             .semantics { contentDescription = description },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        shape = RoundedCornerShape(14.dp)
+        color = Color.Black.copy(alpha = 0.30f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (imageUrl.isNullOrBlank()) {
-                Icon(icon, contentDescription = null)
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else {
-                coil.compose.AsyncImage(
+                AsyncImage(
                     model = imageUrl,
                     contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    fallback = painterResource(R.drawable.ic_tiger_logo),
+                    error = painterResource(R.drawable.ic_tiger_logo),
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(8.dp))
                 )
             }
             Column(modifier = Modifier.padding(start = 12.dp)) {
-                Text(text = title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -800,74 +914,10 @@ private fun EmptyLibraryMessage(message: String, testTag: String? = null) {
 }
 
 @Composable
-private fun HistoryPicker(
-    tracks: List<AudioTrack>,
-    onPlayTrack: (AudioTrack) -> Unit
-) {
-    if (tracks.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = "No recent history",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        return
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(tracks, key = { it.id }) { track ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .glassEffect(RoundedCornerShape(10.dp))
-                    .background(Color.Black.copy(alpha = 0.25f))
-                    .clickable(
-                        onClickLabel = "Play ${track.title}",
-                        onClick = { onPlayTrack(track) }
-                    )
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(
-                    model = track.artworkUri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = track.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = track.artist,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun SongPicker(
     tracks: List<AudioTrack>,
+    currentTrackId: String? = null,
+    isPlaying: Boolean = false,
     onPlayTrack: (AudioTrack) -> Unit,
     onAddToQueue: (AudioTrack) -> Unit
 ) {
@@ -881,11 +931,15 @@ private fun SongPicker(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(CoverScreenTestTags.SONGS_LIST),
-            contentPadding = PaddingValues(12.dp)
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(tracks, key = AudioTrack::id) { track ->
+                val isCurrent = currentTrackId != null && track.id == currentTrackId
                 SongTrackRow(
                     track = track,
+                    isCurrentTrack = isCurrent,
+                    isPlaying = isPlaying && isCurrent,
                     isQueueRevealed = revealedTrackId == track.id,
                     isOptionsExpanded = optionsTrack?.id == track.id,
                     onPlay = { onPlayTrack(track) },
@@ -904,6 +958,8 @@ private fun SongPicker(
 @OptIn(ExperimentalFoundationApi::class)
 private fun SongTrackRow(
     track: AudioTrack,
+    isCurrentTrack: Boolean = false,
+    isPlaying: Boolean = false,
     isQueueRevealed: Boolean,
     isOptionsExpanded: Boolean,
     onPlay: () -> Unit,
@@ -917,7 +973,7 @@ private fun SongTrackRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 3.dp)
             .pointerInput(track.id) {
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { _, amount -> horizontalDrag += amount },
@@ -938,6 +994,7 @@ private fun SongTrackRow(
                 .defaultMinSize(minHeight = 48.dp)
                 .minimumInteractiveComponentSize()
                 .clip(RoundedCornerShape(14.dp))
+                .glassEffect(RoundedCornerShape(14.dp))
                 .combinedClickable(
                     role = Role.Button,
                     onClickLabel = stringResource(R.string.coverscreen_action_play_now),
@@ -953,8 +1010,14 @@ private fun SongTrackRow(
                     contentDescription =
                         "${track.title}, ${track.artist}, ${formatTrackDuration(track.durationMs)}"
                 },
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
-            shape = RoundedCornerShape(14.dp)
+            color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.12f)
+            else Color.Black.copy(alpha = 0.28f),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(
+                1.dp,
+                if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.45f)
+                else Color.White.copy(alpha = 0.08f)
+            )
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -965,35 +1028,65 @@ private fun SongTrackRow(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surface),
+                        .background(
+                            if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.20f)
+                            else MaterialTheme.colorScheme.surface
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     if (track.artworkUri.toString().isBlank()) {
                         Icon(
-                            imageVector = Icons.Filled.MusicNote,
+                            imageVector = WitcherIcons.AudioTrack,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (isCurrentTrack) MaterialTheme.aardBlue
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        coil.compose.AsyncImage(
+                        AsyncImage(
                             model = track.artworkUri,
                             contentDescription = null,
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            contentScale = ContentScale.Crop,
+                            fallback = painterResource(R.drawable.ic_tiger_logo),
+                            error = painterResource(R.drawable.ic_tiger_logo),
                             modifier = Modifier.fillMaxSize()
                         )
+                    }
+
+                    if (isCurrentTrack && isPlaying) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.45f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = WitcherIcons.VolumeUp,
+                                contentDescription = null,
+                                tint = MaterialTheme.aardBlue,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = track.title,
                         style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1
+                        fontWeight = FontWeight.Bold,
+                        color = if (isCurrentTrack) MaterialTheme.aardBlue
+                        else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = track.artist,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
+                        text = track.artist.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isCurrentTrack) MaterialTheme.aardBlue.copy(alpha = 0.75f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 0.8.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Text(
@@ -1003,7 +1096,9 @@ private fun SongTrackRow(
                 )
                 Icon(
                     imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = "Play ${track.title}"
+                    contentDescription = "Play ${track.title}",
+                    tint = if (isCurrentTrack) MaterialTheme.aardBlue
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

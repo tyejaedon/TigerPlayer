@@ -125,6 +125,32 @@ class CoverScreenWindowStateTest {
     }
 
     @Test
+    fun `forcePreview overrides all heuristics and returns true on standard phone displays`() {
+        assertFalse(
+            "Standard phone without forcePreview is false",
+            resolveIsCoverScreen(
+                widthDp = 412,
+                heightDp = 915,
+                hasSeparatingHinge = false,
+                isSecondaryDisplay = false,
+                forcePreview = false
+            )
+        )
+
+        assertTrue(
+            "Standard phone with forcePreview is true",
+            resolveIsCoverScreen(
+                widthDp = 412,
+                heightDp = 915,
+                hasSeparatingHinge = true,
+                isSecondaryDisplay = false,
+                isInMultiWindowMode = true,
+                forcePreview = true
+            )
+        )
+    }
+
+    @Test
     fun `separating hinge rejects cover screen even with keyboard insets`() {
         assertFalse(
             "Separating hinge indicates opened/flex state, not outer cover display",
