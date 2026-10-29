@@ -1,0 +1,218 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//TigerPlayer//GitHub Issues Roadmap//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:TigerPlayer Roadmap & Issues
+X-WR-TIMEZONE:Africa/Nairobi
+BEGIN:VEVENT
+UID:tp-ms-v212-20261129@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261015T090000Z
+DTEND:20261129T180000Z
+SUMMARY:[Milestone] Cover Screen Correctness (v2.1.2)
+DESCRIPTION:Milestone v2.1.2 Cover Screen Correctness (Due 2026-11-29).\nIssues:\n- #251 [P1-high] Cover screen: playback buttons overflow/misalign\n- #252 [P1-high] Cover screen: LyricsDisplay hard-clipped to 72dp\n- #253 [P1-high] Cover screen library: missing Songs tab & Play All
+STATUS:CONFIRMED
+PRIORITY:1
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-251@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261015T090000Z
+DTEND:20261031T180000Z
+SUMMARY:[P1-high] #251 Cover screen: playback buttons overflow/misalign
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/251\nPriority: P1-high\nMilestone: Cover Screen Correctness (v2.1.2)
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-252@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261020T090000Z
+DTEND:20261110T180000Z
+SUMMARY:[P1-high] #252 Cover screen: LyricsDisplay is hard-clipped to 72 dp
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/252\nPriority: P1-high\nMilestone: Cover Screen Correctness (v2.1.2)
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-253@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261025T090000Z
+DTEND:20261120T180000Z
+SUMMARY:[P1-high] #253 Cover screen library: missing Songs tab and Play All
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/253\nPriority: P1-high\nMilestone: Cover Screen Correctness (v2.1.2)
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-72@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261015T090000Z
+DTEND:20261115T180000Z
+SUMMARY:[P0-blocker] #72 Split PlayerViewModel god object (603 lines)
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/72\nPriority: P0-blocker\nMilestone: Continuous / Tech Debt
+STATUS:CONFIRMED
+PRIORITY:1
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-73@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261101T090000Z
+DTEND:20261130T180000Z
+SUMMARY:[P1-high] #73 Test coverage gap: 4 highest-risk code paths
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/73\nPriority: P1-high\nMilestone: Continuous / Tech Debt
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-99@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261020T090000Z
+DTEND:20261110T180000Z
+SUMMARY:[P2-medium] #99 CI: re-enable Android instrumentation smoke
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/99\nPriority: P2-medium\nMilestone: Continuous / Tech Debt
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-ms-v22-20261231@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261101T090000Z
+DTEND:20261231T180000Z
+SUMMARY:[Milestone] v2.2 Parity (Due 2026-12-31)
+DESCRIPTION:Milestone v2.2 Parity due 2026-12-31.\nIssues:\n- #57 [P1] Synced lyrics auto-scroll\n- #58 [P1] M3U/M3U8 import/export\n- #60 [P1] MediaLibraryService (Android Auto/Wear/Assistant)\n- #61 [P2] Glance widgets\n- #62 [P2] Last.fm scrobbling\n- #63 [P2] Local tag editor\n- #64 [P2] Spotify artwork cache\n- #149 [P2] Backup restore unresolved count
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-57@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261101T090000Z
+DTEND:20261120T180000Z
+SUMMARY:[P1-high] #57 Synced lyrics timestamp parsing and auto-scroll
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/57\nPriority: P1-high\nMilestone: v2.2 Parity
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-58@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261110T090000Z
+DTEND:20261130T180000Z
+SUMMARY:[P1-high] #58 Add M3U/M3U8 playlist import and export
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/58\nPriority: P1-high\nMilestone: v2.2 Parity
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-60@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261120T090000Z
+DTEND:20261215T180000Z
+SUMMARY:[P1-high] #60 Migrate to MediaLibraryService (Android Auto / Wear OS)
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/60\nPriority: P1-high\nMilestone: v2.2 Parity
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-61@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261201T090000Z
+DTEND:20261220T180000Z
+SUMMARY:[P2-medium] #61 Ship home screen widgets using Glance
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/61\nPriority: P2-medium\nMilestone: v2.2 Parity
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-62@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261205T090000Z
+DTEND:20261225T180000Z
+SUMMARY:[P2-medium] #62 Implement Last.fm scrobbling
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/62\nPriority: P2-medium\nMilestone: v2.2 Parity
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-63@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20261210T090000Z
+DTEND:20261230T180000Z
+SUMMARY:[P2-medium] #63 Add tag editor for local files
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/63\nPriority: P2-medium\nMilestone: v2.2 Parity
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-ms-v23-20270331@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20270101T090000Z
+DTEND:20270331T180000Z
+SUMMARY:[Milestone] v2.3 Signature (Due 2027-03-31)
+DESCRIPTION:Milestone v2.3 Signature due 2027-03-31.\nIssues:\n- #65 [P2] Waveform seekbar\n- #66 [P1] Per-device AutoEq profiles\n- #67 [P2] True overlapping crossfade\n- #68 [P2] Smart playlists / rules engine\n- #69 [P2] Year in Review export\n- #70 [P2] Bit-perfect indicator\n- #150 [P2] Backup encrypted export
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-66@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20270101T090000Z
+DTEND:20270131T180000Z
+SUMMARY:[P1-high] #66 Per-device automatic EQ profiles (AutoEq Bluetooth)
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/66\nPriority: P1-high\nMilestone: v2.3 Signature
+STATUS:CONFIRMED
+PRIORITY:2
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-67@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20270115T090000Z
+DTEND:20270215T180000Z
+SUMMARY:[P2-medium] #67 Implement true overlapping crossfade
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/67\nPriority: P2-medium\nMilestone: v2.3 Signature
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-65@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20270201T090000Z
+DTEND:20270228T180000Z
+SUMMARY:[P2-medium] #65 Waveform seekbar (surface WaveformEngine)
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/65\nPriority: P2-medium\nMilestone: v2.3 Signature
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-68@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20270215T090000Z
+DTEND:20270315T180000Z
+SUMMARY:[P2-medium] #68 Smart playlists / rules engine on corrected history
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/68\nPriority: P2-medium\nMilestone: v2.3 Signature
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-69@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20270301T090000Z
+DTEND:20270325T180000Z
+SUMMARY:[P2-medium] #69 Year in Review / Wrapped shareable export
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/69\nPriority: P2-medium\nMilestone: v2.3 Signature
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+BEGIN:VEVENT
+UID:tp-issue-70@tigerplayer
+DTSTAMP:20261014T150000Z
+DTSTART:20270310T090000Z
+DTEND:20270331T180000Z
+SUMMARY:[P2-medium] #70 Bit-perfect / signal path indicator
+DESCRIPTION:https://github.com/tyejaedon/TigerPlayer/issues/70\nPriority: P2-medium\nMilestone: v2.3 Signature
+STATUS:CONFIRMED
+PRIORITY:3
+END:VEVENT
+END:VCALENDAR

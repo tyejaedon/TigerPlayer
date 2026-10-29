@@ -12,6 +12,7 @@
     <string name="coverscreen_gesture_swipe_down_close">Nach unten wischen zum Schließen</string>
     <string name="coverscreen_gesture_long_press_settings">Lange drücken für Wiedergabeeinstellungen</string>
     <string name="coverscreen_gesture_instructions">Cover-Minispieler. Tippen für Wiedergabe oder Pause. Nach links für weiter, nach rechts für zurück, nach oben für Warteschlange, nach unten zum Schließen.</string>
+    <string name="coverscreen_talkback_gesture_instructions">Cover-Minispieler. Tippen für Wiedergabe oder Pause. Nach links für weiter, nach rechts für zurück, nach oben für Warteschlange, nach unten zum Schließen.</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Vorheriger Titel</string>

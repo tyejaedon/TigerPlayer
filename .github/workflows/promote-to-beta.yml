@@ -111,20 +111,18 @@ jobs:
           EXISTING_PR=$(gh pr list --head "$SOURCE" --base "$TARGET" --state open --json number --jq '.[0].number // empty')
 
           PR_TITLE="chore(beta): promote $SOURCE to $TARGET"
-          PR_BODY=$(cat <<EOF
-## Beta Staging Promotion
-
-This automated pull request promotes validated experimental changes from \`$SOURCE\` into \`$TARGET\`.
-
-### Promotion Details
-- **Source Branch:** \`$SOURCE\`
-- **Target Branch:** \`$TARGET\`
-- **Promoted By:** \`${{ github.actor }}\` (Workflow Run: #${{ github.run_number }})
-
-### Quality Verification
-All standard quality gates (\`android-ci.yml\`, \`security.yml\`) will validate this pull request before it can land on \`$TARGET\`. Once merged into \`$TARGET\`, the beta release pipeline will assemble and sign the beta distribution artifacts.
-EOF
-)
+          PR_BODY=$(printf '%s\n' \
+            "## Beta Staging Promotion" \
+            "" \
+            "This automated pull request promotes validated experimental changes from \`$SOURCE\` into \`$TARGET\`." \
+            "" \
+            "### Promotion Details" \
+            "- **Source Branch:** \`$SOURCE\`" \
+            "- **Target Branch:** \`$TARGET\`" \
+            "- **Promoted By:** \`${{ github.actor }}\` (Workflow Run: #${{ github.run_number }})" \
+            "" \
+            "### Quality Verification" \
+            "All standard quality gates (\`android-ci.yml\`, \`security.yml\`) will validate this pull request before it can land on \`$TARGET\`. Once merged into \`$TARGET\`, the beta release pipeline will assemble and sign the beta distribution artifacts.")
 
           if [[ -n "$EXISTING_PR" ]]; then
             echo "Existing PR #$EXISTING_PR found. Updating..."

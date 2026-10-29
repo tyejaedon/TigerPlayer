@@ -34,6 +34,9 @@ class CoverScreenLibraryViewModel @Inject constructor(
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
+    private val _selectedTab = MutableStateFlow(CoverScreenLibraryTab.HISTORY)
+    val selectedTab: StateFlow<CoverScreenLibraryTab> = _selectedTab.asStateFlow()
+
     private val _selectedSource = MutableStateFlow(CoverScreenLibrarySource.LOCAL)
     val selectedSource: StateFlow<CoverScreenLibrarySource> = _selectedSource.asStateFlow()
 
@@ -73,6 +76,10 @@ class CoverScreenLibraryViewModel @Inject constructor(
         }
         .flowOn(ioDispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun selectTab(tab: CoverScreenLibraryTab) {
+        _selectedTab.value = tab
+    }
 
     fun selectSource(source: CoverScreenLibrarySource) {
         _selectedSource.value = source

@@ -27,10 +27,22 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [2.1.6-beta.1] - 2026-10-27
 
+### Added
+
+- **Spotify diagnostics & setup dialog**: added `SpotifyAuthError` model and `SpotifyAuthErrorDialog`, converting cryptic OAuth callbacks and configuration omissions into actionable developer and setup guidance (missing `secrets.properties` keys, redirect URI whitelisting, account permissions, and offline state) with accessible 48dp dismiss and retry actions.
+- **Cover screen settings**: added full `CoverScreenSettingsView` mirroring all primary app preferences, including Spotify authentication controls, AMOLED black toggles, neon accent swatches, PiP controls, and playback parameters.
+- **Cover screen navigation**: wired interactive settings launcher button in `CoverScreenLibraryMenu` with haptic feedback and back-gesture handling.
+- **Context extensions**: added `Context.findActivity()` utility for safe unnesting across wrapped UI contexts.
 
 ### Changed
 
+- **Spotify authentication workflow**: replaced fleeting transient toasts with persistent, user-friendly Arcane Glass diagnostics dialogs across both normal and cover screen modes. Added explicit CONNECT buttons when disconnected and confirmation-guarded DISCONNECT buttons when authenticated.
+- **Cover screen visual overhaul**: refreshed Album and Song tabs, artist detailed grids, and playback views to Arcane Glass visual standards.
+
 ### Fixed
+
+- **Compose observable locale**: replaced non-observable `Locale.getDefault()` invocations with `Locale.ROOT` in `CoverScreenStatsView`, resolving Android Lint compiler errors.
+- **Cover screen UI layout bindings**: resolved Button and ButtonDefaults import references, and aligned `rememberTigerAmbientGradient` parameter conventions.
 
 ## [2.1.5] - 2026-10-25
 

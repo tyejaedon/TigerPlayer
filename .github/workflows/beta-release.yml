@@ -290,26 +290,24 @@ jobs:
           V_CODE="${{ steps.versioning.outputs.version_code }}"
 
           RELEASE_TITLE="TigerPlayer v${V_NAME} (Beta)"
-          RELEASE_NOTES=$(cat <<EOF
-## TigerPlayer Beta Release: v${V_NAME}
-
-This is a pre-production beta build intended for testing upcoming features and exploratory changes.
-
-### Release Information
-- **Version Name:** \`${V_NAME}\`
-- **Version Code:** \`${V_CODE}\`
-- **Branch:** \`${GITHUB_REF#refs/heads/}\`
-- **Commit:** \`${GITHUB_SHA}\`
-- **Signing Scheme:** APK Signature Scheme v2 (Official Release Keystore)
-
-### Included Assets
-- **Full Flavor (\`TigerPlayer-${V_NAME}-full-signed.apk\`):** Full feature set including Spotify App Remote.
-- **FOSS Flavor (\`TigerPlayer-${V_NAME}-foss-signed.apk\`):** Fully open-source build with zero proprietary binaries.
-- **App Bundle (\`TigerPlayer-${V_NAME}-full.aab\`):** Play Store distributable bundle.
-- **Checksums (\`SHA256SUMS-beta-signed.txt\`):** Cryptographic SHA-256 digests.
-- **SBOM (\`tigerplayer-beta-sbom.spdx.json\`):** SPDX Software Bill of Materials.
-EOF
-)
+          RELEASE_NOTES=$(printf '%s\n' \
+            "## TigerPlayer Beta Release: v${V_NAME}" \
+            "" \
+            "This is a pre-production beta build intended for testing upcoming features and exploratory changes." \
+            "" \
+            "### Release Information" \
+            "- **Version Name:** \`${V_NAME}\`" \
+            "- **Version Code:** \`${V_CODE}\`" \
+            "- **Branch:** \`${GITHUB_REF#refs/heads/}\`" \
+            "- **Commit:** \`${GITHUB_SHA}\`" \
+            "- **Signing Scheme:** APK Signature Scheme v2 (Official Release Keystore)" \
+            "" \
+            "### Included Assets" \
+            "- **Full Flavor (\`TigerPlayer-${V_NAME}-full-signed.apk\`):** Full feature set including Spotify App Remote." \
+            "- **FOSS Flavor (\`TigerPlayer-${V_NAME}-foss-signed.apk\`):** Fully open-source build with zero proprietary binaries." \
+            "- **App Bundle (\`TigerPlayer-${V_NAME}-full.aab\`):** Play Store distributable bundle." \
+            "- **Checksums (\`SHA256SUMS-beta-signed.txt\`):** Cryptographic SHA-256 digests." \
+            "- **SBOM (\`tigerplayer-beta-sbom.spdx.json\`):** SPDX Software Bill of Materials.")
 
           echo "Checking if release $TAG already exists..."
           if gh release view "$TAG" > /dev/null 2>&1; then
