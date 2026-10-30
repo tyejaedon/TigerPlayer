@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeMute
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
@@ -68,6 +69,7 @@ fun CoverScreenPlaybackSettings(
     onOpenPrism: () -> Unit = {},
     onOpenNexus: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenHome: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -160,6 +162,19 @@ fun CoverScreenPlaybackSettings(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("App Preferences & Settings")
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenHome,
+                    modifier = Modifier.fillMaxWidth().testTag("CoverScreenHomeButton")
+                ) {
+                    Icon(
+                        Icons.Rounded.Home,
+                        contentDescription = "Open Cover Home",
+                        tint = TigerNeonOrange
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Cover Home View")
                 }
 
                 Row(

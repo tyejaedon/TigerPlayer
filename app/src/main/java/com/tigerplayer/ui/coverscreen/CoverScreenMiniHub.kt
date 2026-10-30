@@ -88,8 +88,8 @@ fun CoverScreenMiniHub(
     var settingsVisible by remember { mutableStateOf(false) }
     var discoveryDetailVisible by remember { mutableStateOf(false) }
     var daylistDetailVisible by remember { mutableStateOf(false) }
+    var homeVisible by remember { mutableStateOf(false) }
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var discoveryTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var seekerTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var mediaCycleTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var fullBleedLyricsVisible by remember { mutableStateOf(false) }
@@ -125,7 +125,7 @@ fun CoverScreenMiniHub(
         prismVisible = prismVisible,
         nexusVisible = nexusVisible,
         settingsVisible = settingsVisible,
-        discoveryDetailVisible = discoveryDetailVisible || daylistDetailVisible
+        discoveryDetailVisible = discoveryDetailVisible || daylistDetailVisible || homeVisible
     )
     val isRenderingActive = isLifecycleActive && !hasModalOverlay
 
@@ -190,7 +190,8 @@ fun CoverScreenMiniHub(
                     CustomAccessibilityAction(swipePrevLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious(); true },
                     CustomAccessibilityAction(swipeUpQueueLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = true; true },
                     CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; searchOnLibraryOpen = true; libraryVisible = true; true },
-                    CustomAccessibilityAction(longPressSettingsLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = true; true }
+                    CustomAccessibilityAction(longPressSettingsLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = true; true },
+                    CustomAccessibilityAction("Open Home") { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = false; homeVisible = true; true }
                 )
             }
             .coverScreenGestures(
@@ -198,8 +199,7 @@ fun CoverScreenMiniHub(
                 tapSlopPx = tapSlopPx,
                 shouldIgnoreGestureAt = { position ->
                     val positionInRoot = coverScreenCoordinates?.localToRoot(position) ?: position
-                    (discoveryTouchBounds?.contains(positionInRoot) == true) ||
-                            (seekerTouchBounds?.contains(positionInRoot) == true) ||
+                    (seekerTouchBounds?.contains(positionInRoot) == true) ||
                             (mediaCycleTouchBounds?.contains(positionInRoot) == true)
                 },
                 onTap = {
@@ -418,21 +418,6 @@ fun CoverScreenMiniHub(
                         onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
                         onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
                     )
-                    Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 8.dp))
-                    CoverScreenDiscoveryView(
-                        daylistTracks = daylistTracks,
-                        discoveryWeeklyTracks = discoveryWeeklyTracks,
-                        daylistMeta = daylistMeta,
-                        discoveryMeta = discoveryMeta,
-                        onPlayTrack = playerViewModel::playTrack,
-                        onQueueTrack = playerViewModel::addToQueue,
-                        onRefresh = dashboardViewModel::refreshForYou,
-                        onOpenDiscoveryDetail = { discoveryDetailVisible = true },
-                        onOpenDaylistDetail = { daylistDetailVisible = true },
-                        modifier = Modifier.onGloballyPositioned {
-                            discoveryTouchBounds = it.boundsInRoot()
-                        }
-                    )
                 }
             }
         }
@@ -482,6 +467,7 @@ fun CoverScreenMiniHub(
             onOpenPrism = { playbackSettingsVisible = false; prismVisible = true },
             onOpenNexus = { playbackSettingsVisible = false; nexusVisible = true },
             onOpenSettings = { playbackSettingsVisible = false; settingsVisible = true },
+            onOpenHome = { playbackSettingsVisible = false; homeVisible = true },
             prismVisible = prismVisible,
             onDismissPrism = { prismVisible = false },
             nexusVisible = nexusVisible,
@@ -491,7 +477,9 @@ fun CoverScreenMiniHub(
             discoveryDetailVisible = discoveryDetailVisible,
             onDismissDiscoveryDetail = { discoveryDetailVisible = false },
             daylistDetailVisible = daylistDetailVisible,
-            onDismissDaylistDetail = { daylistDetailVisible = false }
+            onDismissDaylistDetail = { daylistDetailVisible = false },
+            homeVisible = homeVisible,
+            onDismissHome = { homeVisible = false }
         )
     }
 }

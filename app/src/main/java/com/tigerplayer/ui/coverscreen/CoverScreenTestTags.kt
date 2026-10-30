@@ -7,6 +7,11 @@ package com.tigerplayer.ui.coverscreen
 object CoverScreenTestTags {
     /** Root node of [CoverScreenMiniHub]; also applied by [MainScreen] where it is mounted. */
     const val MINI_HUB_ROOT = "cover_screen_mini_hub_root"
+    const val HOME_VIEW = "cover_screen_home_view"
+    const val HOME_HEADER = "cover_screen_home_header"
+    const val HOME_DAYLIST_CARD = "cover_screen_home_daylist_card"
+    const val HOME_DISCOVERY_CARD = "cover_screen_home_discovery_card"
+    const val HOME_CLOSE_BUTTON = "cover_screen_home_close_button"
     const val ARTISTS_GRID = "cover_screen_artists_grid"
     const val ARTISTS_EMPTY_STATE = "cover_screen_artists_empty_state"
     const val ARTIST_BACK = "cover_screen_artist_back"
