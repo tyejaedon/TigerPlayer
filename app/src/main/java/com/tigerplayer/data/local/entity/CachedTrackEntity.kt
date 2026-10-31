@@ -1,8 +1,10 @@
 package com.tigerplayer.data.local.entity
 
+import androidx.core.net.toUri
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.tigerplayer.data.model.AudioTrack
 
 /**
  * THE VAULT RECORD
@@ -50,4 +52,31 @@ data class CachedTrackEntity(
     @ColumnInfo(defaultValue = "0")
     val artworkLookupAttempts: Int = 0,
     val hasEmbeddedArtwork: Boolean? = null
+)
+
+fun CachedTrackEntity.toAudioTrack(): AudioTrack = AudioTrack(
+    id = id,
+    title = title,
+    artist = artist,
+    album = album,
+    uri = uriString.toUri(),
+    artworkUri = artworkUriString.toUri(),
+    durationMs = durationMs,
+    mimeType = mimeType,
+    isLocal = true,
+    bitrate = bitrate,
+    sampleRate = sampleRate,
+    trackNumber = trackNumber,
+    path = path,
+    year = year,
+    dateAdded = dateAdded,
+    isLiked = isLiked,
+    replayGainTrackDb = replayGainTrackDb,
+    replayGainAlbumDb = replayGainAlbumDb,
+    replayGainTrackPeak = replayGainTrackPeak,
+    replayGainAlbumPeak = replayGainAlbumPeak,
+    dateModified = dateModified,
+    artworkLookupFailedAt = artworkLookupFailedAt,
+    artworkLookupAttempts = artworkLookupAttempts,
+    hasEmbeddedArtwork = hasEmbeddedArtwork
 )

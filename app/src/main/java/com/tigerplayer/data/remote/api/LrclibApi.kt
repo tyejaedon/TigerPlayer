@@ -21,4 +21,10 @@ interface LrclibApi {
         @Query("artist_name") artistName: String,
         @Query("album_name") albumName: String?
     ): Response<LrclibResponse>
+
+    @GET("api/search")
+    suspend fun searchLyrics(
+        @Query("track_name") trackName: String,
+        @Query("artist_name") artistName: String
+    ): Response<List<LrclibResponse>>
 }

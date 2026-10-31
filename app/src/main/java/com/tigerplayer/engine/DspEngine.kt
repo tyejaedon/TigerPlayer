@@ -43,7 +43,11 @@ class AdaptiveDspEngine @Inject constructor(
         // AUDIOPHILE COMPATIBILITY: Increased buffer size for Samsung HAL stability
         // during high-CPU visualizer operations.
         private const val LOOK_AHEAD_BUFFER_SIZE = 1024
-        private const val LIMITER_THRESHOLD = 0.82f
+        private const val TRUE_PEAK_THRESHOLD = 1.0f
+        @Deprecated("Replaced with transparent true-peak ceiling at 1.0f (0.0 dBFS)", ReplaceWith("TRUE_PEAK_THRESHOLD"))
+        private const val LIMITER_THRESHOLD = 1.0f
+        private const val LIMITER_ATTACK_SEC = 0.0008f // ~0.8ms look-ahead settling attack
+        private const val LIMITER_RELEASE_SEC = 0.050f // 50ms fast recovery release (no pumping)
     }
 
     private var isActive = true
@@ -59,6 +63,8 @@ class AdaptiveDspEngine @Inject constructor(
     @Volatile private var replayGainAlbumPeak: Double? = null
     @Volatile private var isSequentialAlbumPlay = false
     @Volatile private var isBitPerfect = false
+    @Volatile private var isLosslessStream = false
+    @Volatile private var hasPositiveEqBoost = false
 
     private var buffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var outputBuffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
@@ -234,8 +240,7 @@ class AdaptiveDspEngine @Inject constructor(
         } || (isBluetooth && isSamsungOutput)
 
         val sampleRate = getSampleRate()
-        agcAttackCoef = 1f - exp(-1f / (sampleRate * 0.005f)) // 5ms attack
-        agcReleaseCoef = 1f - exp(-1f / (sampleRate * 0.250f)) // 250ms release
+        updateLimiterCoefficients(sampleRate)
 
         val newDeviceFilters = mutableListOf<StateVariableFilter>()
         if (isBuiltIn) {
@@ -251,6 +256,45 @@ class AdaptiveDspEngine @Inject constructor(
     }
 
     /**
+     * Recalculates sample-rate aware attack and release coefficients for true-peak look-ahead limiter.
+     */
+    private fun updateLimiterCoefficients(sampleRate: Int) {
+        val rate = sampleRate.coerceAtLeast(8000)
+        agcAttackCoef = 1f - exp(-1f / (rate * LIMITER_ATTACK_SEC))
+        agcReleaseCoef = 1f - exp(-1f / (rate * LIMITER_RELEASE_SEC))
+    }
+
+    /**
+     * Determines whether digital overs exceeding 0 dBFS (1.0f) are physically imminent due to positive
+     * EQ boosts, reverb tail summing, stem boosting, or positive ReplayGain scaling.
+     */
+    private fun isDigitalOverImminent(): Boolean {
+        return hasPositiveEqBoost ||
+            acousticEnvironmentMode == AcousticEnvironmentMode.CONCERT_HALL ||
+            (prismMode == PrismMode.ISOLATION && (prismTargetMix.vocals > 1.0f || prismTargetMix.beats > 1.0f || prismTargetMix.instruments > 1.0f)) ||
+            replayGainLinear > 1.001f
+    }
+
+    /**
+     * Enables or disables lossless stream mode (FLAC, ALAC, WAV, AIFF, and 24-bit/32-bit Float PCM).
+     * When active and EQ bands have zero or negative boost, dynamic AGC gain reduction is completely bypassed.
+     */
+    fun setIsLosslessStream(isLossless: Boolean) {
+        this.isLosslessStream = isLossless
+    }
+
+    /** Returns whether the current stream is flagged as lossless audio. */
+    fun isLosslessStream(): Boolean = isLosslessStream
+
+    /** Updates bit-perfect DSP bypass state. */
+    fun setBitPerfect(enabled: Boolean) {
+        this.isBitPerfect = enabled
+    }
+
+    /** Returns whether bit-perfect DSP bypass is active. */
+    fun isBitPerfect(): Boolean = isBitPerfect
+
+    /**
      * Updates active parametric Equalizer bands and recalculates auto-makeup gain attenuation.
      *
      * @param nodes List of [AcousticNode] defining filter type, frequency, gain, and Q factor per band.
@@ -261,6 +305,7 @@ class AdaptiveDspEngine @Inject constructor(
 
         // FIX: Calculate total positive gain and attenuate the input by that amount
         val maxBoostDb = nodes.filter { it.gainDb > 0f }.sumOf { it.gainDb.toDouble() }.toFloat()
+        hasPositiveEqBoost = maxBoostDb > 0.001f
         autoMakeupGain = if (maxBoostDb > 0f) {
             10f.pow(-maxBoostDb / 20f)
         } else {
@@ -426,6 +471,12 @@ class AdaptiveDspEngine @Inject constructor(
             return inputAudioFormat
         }
 
+        if (inputAudioFormat.encoding == C.ENCODING_PCM_24BIT ||
+            inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT
+        ) {
+            isLosslessStream = true
+        }
+
         val isNewSampleRate = this.inputAudioFormat.sampleRate != inputAudioFormat.sampleRate
         this.inputAudioFormat = inputAudioFormat
         // Keep internal math in float, but emit PCM_16BIT so downstream Media3 processors
@@ -437,6 +488,7 @@ class AdaptiveDspEngine @Inject constructor(
         )
 
         detectAndApplyDeviceProfile()
+        updateLimiterCoefficients(inputAudioFormat.sampleRate)
         lookAheadDelaySamples = (inputAudioFormat.sampleRate * 0.0045f)
             .roundToInt()
             .coerceIn(24, LOOK_AHEAD_BUFFER_SIZE - 1)
@@ -611,7 +663,7 @@ class AdaptiveDspEngine @Inject constructor(
                 sampleR = prismFrame.right
             }
 
-            // 5. AGC / LIMITER (sample-rate aware look-ahead + smooth release)
+            // 5. TRUE-PEAK LIMITER & AGC (sample-rate aware look-ahead + smooth release)
             val delayedIndex = (lookAheadIndex - lookAheadDelaySamples + LOOK_AHEAD_BUFFER_SIZE) % LOOK_AHEAD_BUFFER_SIZE
             val delayedL = lookAheadBufferL[delayedIndex]
             val delayedR = lookAheadBufferR[delayedIndex]
@@ -620,14 +672,19 @@ class AdaptiveDspEngine @Inject constructor(
             lookAheadBufferR[lookAheadIndex] = sampleR
             lookAheadIndex = (lookAheadIndex + 1) % LOOK_AHEAD_BUFFER_SIZE
 
-            val currentPeak = max(abs(sampleL), abs(sampleR))
-            if (currentPeak > agcEnvelope) {
-                agcEnvelope += agcAttackCoef * (currentPeak - agcEnvelope)
-            } else {
-                agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
-            }
+            val shouldBypassLimiter = (isLosslessStream && !isDigitalOverImminent()) || isBitPerfect
 
-            val reduction = if (agcEnvelope > LIMITER_THRESHOLD) LIMITER_THRESHOLD / agcEnvelope else 1f
+            val reduction = if (shouldBypassLimiter) {
+                1.0f
+            } else {
+                val currentPeak = max(abs(sampleL), abs(sampleR))
+                if (currentPeak > agcEnvelope) {
+                    agcEnvelope += agcAttackCoef * (currentPeak - agcEnvelope)
+                } else {
+                    agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
+                }
+                if (agcEnvelope > TRUE_PEAK_THRESHOLD) TRUE_PEAK_THRESHOLD / agcEnvelope else 1.0f
+            }
 
             // AUDIOPHILE LIMITER: Use the look-ahead signal and apply gain reduction
             sampleL = (delayedL * reduction).coerceIn(-1.0f, 1.0f)
@@ -776,6 +833,9 @@ class AdaptiveDspEngine @Inject constructor(
         activeFilters.forEach { it.reset() }
         deviceCompensationFilters.forEach { it.reset() }
         agcEnvelope = 0f // FIXED: Clear AGC volume reduction upon seeking/re-buffering
+        lookAheadBufferL.fill(0f)
+        lookAheadBufferR.fill(0f)
+        lookAheadIndex = 0
         vinylNoiseSeed = 0x13579BDF.toInt()
         vinylNoiseDc = 0f
         hallProcessor.reset()

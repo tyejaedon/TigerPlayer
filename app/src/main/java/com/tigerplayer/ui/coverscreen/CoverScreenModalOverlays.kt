@@ -98,7 +98,8 @@ internal fun CoverScreenModalOverlays(
         CoverScreenLyricsView(
             lyrics = uiState.currentLyrics,
             currentPosition = uiState.currentPosition,
-            onDoubleTap = onDismissFullBleedLyrics
+            onDoubleTap = onDismissFullBleedLyrics,
+            onSeek = { timeMs -> playerViewModel.seekTo(timeMs) }
         )
     }
 

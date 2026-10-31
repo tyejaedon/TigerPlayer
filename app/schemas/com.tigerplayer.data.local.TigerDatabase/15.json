@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 15,
-    "identityHash": "3786eb061fb5429936e53242e2fee55a",
+    "identityHash": "a0ba67fb1d2dbdc90ec7771662ace9b9",
     "entities": [
       {
         "tableName": "playback_history",
@@ -217,7 +217,7 @@
       },
       {
         "tableName": "cached_tracks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `album` TEXT NOT NULL, `uriString` TEXT NOT NULL, `artworkUriString` TEXT NOT NULL, `durationMs` INTEGER NOT NULL, `mimeType` TEXT NOT NULL, `bitrate` INTEGER NOT NULL, `sampleRate` INTEGER NOT NULL, `trackNumber` INTEGER NOT NULL, `year` TEXT, `dateAdded` INTEGER NOT NULL, `isLiked` INTEGER NOT NULL, `path` TEXT, `replayGainTrackDb` REAL, `replayGainAlbumDb` REAL, `replayGainTrackPeak` REAL, `replayGainAlbumPeak` REAL, `dateModified` INTEGER NOT NULL DEFAULT 0, `artworkLookupFailedAt` INTEGER NOT NULL DEFAULT 0, `artworkLookupAttempts` INTEGER NOT NULL DEFAULT 0, `hasEmbeddedArtwork` INTEGER, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `album` TEXT NOT NULL, `uriString` TEXT NOT NULL, `artworkUriString` TEXT NOT NULL, `durationMs` INTEGER NOT NULL, `mimeType` TEXT NOT NULL, `bitrate` INTEGER NOT NULL, `sampleRate` INTEGER NOT NULL, `trackNumber` INTEGER NOT NULL, `year` TEXT, `dateAdded` INTEGER NOT NULL, `isLiked` INTEGER NOT NULL, `path` TEXT, `replayGainTrackDb` REAL, `replayGainAlbumDb` REAL, `replayGainTrackPeak` REAL, `replayGainAlbumPeak` REAL, `dateModified` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -333,25 +333,6 @@
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"
-          },
-          {
-            "fieldPath": "artworkLookupFailedAt",
-            "columnName": "artworkLookupFailedAt",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
-          },
-          {
-            "fieldPath": "artworkLookupAttempts",
-            "columnName": "artworkLookupAttempts",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
-          },
-          {
-            "fieldPath": "hasEmbeddedArtwork",
-            "columnName": "hasEmbeddedArtwork",
-            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -437,11 +418,181 @@
             "uriString"
           ]
         }
+      },
+      {
+        "tableName": "audio_devices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`deviceId` TEXT NOT NULL, `displayName` TEXT NOT NULL, `deviceType` TEXT NOT NULL, `lastConnectedEpochMs` INTEGER NOT NULL, `firstSeenEpochMs` INTEGER NOT NULL DEFAULT 0, `assignedPresetId` TEXT, `matchedAutoEqModel` TEXT, `matchedAutoEqSource` TEXT, `targetCurve` TEXT, `formFactor` TEXT, `lastKnownCodec` TEXT, `lastKnownBatteryLevel` INTEGER NOT NULL DEFAULT -1, `totalListeningTimeMs` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`deviceId`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "deviceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceType",
+            "columnName": "deviceType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastConnectedEpochMs",
+            "columnName": "lastConnectedEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstSeenEpochMs",
+            "columnName": "firstSeenEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "assignedPresetId",
+            "columnName": "assignedPresetId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "matchedAutoEqModel",
+            "columnName": "matchedAutoEqModel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "matchedAutoEqSource",
+            "columnName": "matchedAutoEqSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "targetCurve",
+            "columnName": "targetCurve",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "formFactor",
+            "columnName": "formFactor",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastKnownCodec",
+            "columnName": "lastKnownCodec",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastKnownBatteryLevel",
+            "columnName": "lastKnownBatteryLevel",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "-1"
+          },
+          {
+            "fieldPath": "totalListeningTimeMs",
+            "columnName": "totalListeningTimeMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "deviceId"
+          ]
+        }
+      },
+      {
+        "tableName": "device_presets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`presetId` TEXT NOT NULL, `name` TEXT NOT NULL, `deviceId` TEXT, `preampDb` REAL NOT NULL DEFAULT 0.0, `bandsJson` TEXT NOT NULL, `isAutoEq` INTEGER NOT NULL DEFAULT 0, `autoEqModel` TEXT, `autoEqSource` TEXT, `targetCurve` TEXT, `formFactor` TEXT, `createdAtEpochMs` INTEGER NOT NULL DEFAULT 0, `updatedAtEpochMs` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`presetId`))",
+        "fields": [
+          {
+            "fieldPath": "presetId",
+            "columnName": "presetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "deviceId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "preampDb",
+            "columnName": "preampDb",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0.0"
+          },
+          {
+            "fieldPath": "bandsJson",
+            "columnName": "bandsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isAutoEq",
+            "columnName": "isAutoEq",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "autoEqModel",
+            "columnName": "autoEqModel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "autoEqSource",
+            "columnName": "autoEqSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "targetCurve",
+            "columnName": "targetCurve",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "formFactor",
+            "columnName": "formFactor",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "presetId"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3786eb061fb5429936e53242e2fee55a')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a0ba67fb1d2dbdc90ec7771662ace9b9')"
     ]
   }
 }

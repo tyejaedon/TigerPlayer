@@ -57,6 +57,7 @@ import com.tigerplayer.ui.components.DiscoverCarousel
 import com.tigerplayer.ui.components.RecentlyPlayedRow
 import com.tigerplayer.ui.constellation.ConstellationScreen
 import com.tigerplayer.ui.constellation.ConstellationViewModel
+import com.tigerplayer.ui.devices.AudioDevicesHubSheet
 import com.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.extras.NowBriefWidgetWrapper
@@ -108,6 +109,7 @@ fun HomeScreen(
 
     var showConstellation by remember { mutableStateOf(false) }
     var showSonicFootprint by remember { mutableStateOf(false) }
+    var showAudioDevicesHub by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     val sonicFootprintOpenRequest by viewModel.sonicFootprintOpenRequest.collectAsStateWithLifecycle()
 
@@ -142,8 +144,9 @@ fun HomeScreen(
         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint) {
-        if (showSonicFootprint) showSonicFootprint = false
+    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub) {
+        if (showAudioDevicesHub) showAudioDevicesHub = false
+        else if (showSonicFootprint) showSonicFootprint = false
         else if (showConstellation) showConstellation = false
         else if (isStatsExpanded) isStatsExpanded = false
         else if (isSearchActive) {
@@ -238,7 +241,10 @@ fun HomeScreen(
 
                 if (uiState.connectedBluetoothDevice.isConnected) {
                     item {
-                        BluetoothNexusCard(deviceInfo = uiState.connectedBluetoothDevice)
+                        BluetoothNexusCard(
+                            deviceInfo = uiState.connectedBluetoothDevice,
+                            onManageDevices = { showAudioDevicesHub = true }
+                        )
                     }
                 }
 
@@ -411,6 +417,12 @@ fun HomeScreen(
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
             }
+        )
+    }
+
+    if (showAudioDevicesHub) {
+        AudioDevicesHubSheet(
+            onDismiss = { showAudioDevicesHub = false }
         )
     }
 }

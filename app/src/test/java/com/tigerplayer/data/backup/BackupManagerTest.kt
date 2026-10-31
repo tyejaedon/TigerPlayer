@@ -8,8 +8,11 @@ import android.net.Uri
 import com.google.gson.annotations.SerializedName
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.TigerSettingsState
+import com.tigerplayer.data.local.dao.AudioDeviceDao
 import com.tigerplayer.data.local.dao.PlaylistDao
 import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.AudioDeviceEntity
+import com.tigerplayer.data.local.entity.DevicePresetEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
@@ -38,6 +41,7 @@ class BackupManagerTest {
     private val playlistDao = mockk<PlaylistDao>()
     private val tigerDao = mockk<TigerDao>()
     private val settingsDataStore = mockk<SettingsDataStore>(relaxUnitFun = true)
+    private val audioDeviceDao = mockk<AudioDeviceDao>(relaxed = true)
 
     private lateinit var backupManager: BackupManager
     private val destination = mockk<Uri>()
@@ -53,8 +57,10 @@ class BackupManagerTest {
 
         every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
         coEvery { playlistDao.ensureSingletonLikedPlaylist(any(), any()) } returns emptyList()
+        coEvery { audioDeviceDao.getAllDevicesSync() } returns emptyList()
+        coEvery { audioDeviceDao.getAllPresetsSync() } returns emptyList()
 
-        backupManager = BackupManager(context, playlistDao, tigerDao, settingsDataStore)
+        backupManager = BackupManager(context, playlistDao, tigerDao, settingsDataStore, audioDeviceDao)
     }
 
     @Test
@@ -218,6 +224,72 @@ class BackupManagerTest {
             "timestamp",
             "source"
         )
+    }
+
+    @Test
+    fun `export and restore with audio devices and presets round-trips cleanly`() = runTest {
+        val device = AudioDeviceEntity(
+            deviceId = "AA:BB:CC:11:22:33",
+            displayName = "Sony WH-1000XM4",
+            deviceType = "BLUETOOTH",
+            lastConnectedEpochMs = 1720000000L,
+            firstSeenEpochMs = 1710000000L,
+            assignedPresetId = "preset_1",
+            matchedAutoEqModel = "Sony WH-1000XM4",
+            matchedAutoEqSource = "oratory1990",
+            targetCurve = "Harman Over-Ear 2018",
+            formFactor = "Over-Ear"
+        )
+        val preset = DevicePresetEntity(
+            presetId = "preset_1",
+            name = "Harman Curve",
+            deviceId = "AA:BB:CC:11:22:33",
+            preampDb = -4.5f,
+            bandsJson = "[{\"filterType\":\"PK\",\"frequencyHz\":100.0,\"gainDb\":2.0,\"q\":1.41}]",
+            isAutoEq = true,
+            autoEqModel = "Sony WH-1000XM4",
+            autoEqSource = "oratory1990",
+            targetCurve = "Harman Over-Ear 2018",
+            formFactor = "Over-Ear"
+        )
+
+        coEvery { audioDeviceDao.getAllDevicesSync() } returns listOf(device)
+        coEvery { audioDeviceDao.getAllPresetsSync() } returns listOf(preset)
+        coEvery { playlistDao.getAllPlaylistsSync() } returns emptyList()
+        coEvery { tigerDao.getAllHistorySync() } returns emptyList()
+
+        val output = ByteArrayOutputStream()
+        every { contentResolver.openOutputStream(destination, "wt") } returns output
+
+        val result = backupManager.exportTo(destination)
+        assertTrue(result.isSuccess)
+        val summary = result.getOrThrow()
+        assertEquals(1, summary.audioDeviceCount)
+        assertEquals(1, summary.devicePresetCount)
+
+        // Validate JSON
+        val writtenJson = output.toString(Charsets.UTF_8.name())
+        val reparsed = com.google.gson.Gson().fromJson(writtenJson, BackupManifest::class.java)
+        assertEquals(1, reparsed.audioDevices.size)
+        assertEquals("Sony WH-1000XM4", reparsed.audioDevices.first().displayName)
+        assertEquals("Harman Over-Ear 2018", reparsed.audioDevices.first().targetCurve)
+        assertEquals("Over-Ear", reparsed.audioDevices.first().formFactor)
+        assertEquals(1, reparsed.devicePresets.size)
+        assertEquals("Harman Curve", reparsed.devicePresets.first().name)
+
+        // Now test restore
+        val source = mockk<Uri>()
+        every { contentResolver.openInputStream(source) } returns ByteArrayInputStream(writtenJson.toByteArray(Charsets.UTF_8))
+        coEvery { playlistDao.insertPlaylist(any()) } returns 1L
+
+        val importResult = backupManager.importFrom(source)
+        assertTrue(importResult.isSuccess)
+        val importSummary = importResult.getOrThrow()
+        assertEquals(1, importSummary.audioDeviceCount)
+        assertEquals(1, importSummary.devicePresetCount)
+
+        coVerify { audioDeviceDao.upsertDevice(match { it.deviceId == "AA:BB:CC:11:22:33" && it.targetCurve == "Harman Over-Ear 2018" }) }
+        coVerify { audioDeviceDao.upsertPreset(match { it.presetId == "preset_1" && it.preampDb == -4.5f }) }
     }
 
     private fun sampleBackupJson(schemaVersion: Int): String {

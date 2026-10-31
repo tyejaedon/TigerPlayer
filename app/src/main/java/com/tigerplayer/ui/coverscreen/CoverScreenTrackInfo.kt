@@ -70,6 +70,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.engine.FluidRenderer
 import com.tigerplayer.engine.FluidVortexView
 import com.tigerplayer.ui.player.LyricsDisplay
@@ -143,13 +144,14 @@ internal fun CoverScreenMediaCycleViewport(
     currentViewIndex: Int,
     onViewIndexChanged: (Int) -> Unit,
     track: AudioTrack?,
-    lyrics: String?,
+    lyrics: Lyrics,
     currentPosition: Long,
     isLarge: Boolean,
     minLineHeight: Dp,
     targetHeight: Dp,
     onDoubleTapAlbumArt: () -> Unit = {},
     onDoubleTapLyrics: () -> Unit = {},
+    onSeek: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var totalDragX by remember { mutableFloatStateOf(0f) }
@@ -281,7 +283,8 @@ internal fun CoverScreenMediaCycleViewport(
                             activeFontSize = if (isLarge) 22.sp else 20.sp,
                             inactiveFontSize = if (isLarge) 18.sp else 16.sp,
                             plainLyricsFontSize = if (isLarge) 20.sp else 18.sp,
-                            lineVerticalPadding = if (isLarge) 10.dp else 8.dp
+                            lineVerticalPadding = if (isLarge) 10.dp else 8.dp,
+                            onLineClick = onSeek
                         )
                     }
                 }
@@ -294,7 +297,7 @@ internal fun CoverScreenMediaCycleViewport(
 internal fun TrackInfoText(
     track: AudioTrack?,
     subtitle: String,
-    lyrics: String?,
+    lyrics: Lyrics,
     currentPosition: Long,
     isLarge: Boolean,
     statsVisible: Boolean,
@@ -304,6 +307,7 @@ internal fun TrackInfoText(
     onOpenQueue: () -> Unit = {},
     onOpenLibrary: () -> Unit = {},
     onMediaCyclePositioned: (Rect) -> Unit = {},
+    onSeek: ((Long) -> Unit)? = null,
     screenHeightDp: Dp = LocalConfiguration.current.screenHeightDp.dp
 ) {
     val isTight = screenHeightDp > 0.dp && screenHeightDp <= 360.dp
@@ -467,6 +471,7 @@ internal fun TrackInfoText(
                 targetHeight = targetLyricsHeight,
                 onDoubleTapAlbumArt = onDoubleTapAlbumArt,
                 onDoubleTapLyrics = onToggleVortexImmersive,
+                onSeek = onSeek,
                 modifier = Modifier.onGloballyPositioned {
                     onMediaCyclePositioned(it.boundsInRoot())
                 }

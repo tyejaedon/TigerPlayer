@@ -468,7 +468,12 @@ private fun PlayerMainContent(
                     lyrics = uiState.currentLyrics,
                     currentPosition = uiState.currentPosition,
                     textColor = dynamicTextColor,
-                    activeColor = dynamicAccentColor
+                    activeColor = dynamicAccentColor,
+                    manualOffsetMs = uiState.lyricsManualOffsetMs,
+                    showOffsetControls = true,
+                    onLineClick = { timeMs -> viewModel.seekTo(timeMs) },
+                    onOffsetAdjust = { delta -> viewModel.adjustLyricsOffset(delta) },
+                    onOffsetReset = { viewModel.resetLyricsOffset() }
                 )
             }
             MainViewState.ARTWORK -> {

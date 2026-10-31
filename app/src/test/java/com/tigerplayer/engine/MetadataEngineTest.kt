@@ -6,6 +6,7 @@ import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.local.dao.TigerDao
 import com.tigerplayer.data.local.entity.CachedTrackEntity
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.data.repository.LyricsRepository
@@ -27,11 +28,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * Regression coverage for issue #116 and issue #64.
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class MetadataEngineTest {
 
     private val mediaDataRepository = mockk<MediaDataRepository>(relaxed = true)
@@ -206,5 +209,43 @@ class MetadataEngineTest {
         assertEquals(highResUrl, result?.toString())
         coVerify(exactly = 1) { audioRepository.updateTrackArtworkUri("track-5", highResUrl) }
         coVerify(exactly = 0) { audioRepository.recordArtworkLookupFailure(any(), any(), any()) }
+    }
+
+    @Test
+    fun `crawlMissingLyricsBatch downloads lyrics and respects batch limits`() = runTest {
+        val testEntity = CachedTrackEntity(
+            id = "pending-1",
+            title = "Pending Song",
+            artist = "Pending Artist",
+            album = "Pending Album",
+            uriString = "content://audio/1",
+            artworkUriString = "content://art/1",
+            durationMs = 180_000L,
+            mimeType = "audio/mp3",
+            bitrate = 320,
+            sampleRate = 44100,
+            trackNumber = 1,
+            isLiked = false,
+            path = "/storage/music/pending.mp3"
+        )
+        every { tigerDao.getAllArtistCache() } returns flowOf(emptyList())
+        every { lyricsRepository.getLyrics(any()) } returns flowOf(com.tigerplayer.data.model.Lyrics.None)
+        coEvery { tigerDao.getTracksWithoutLyricsCache(20) } returns listOf(testEntity)
+        every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
+
+        val engine = MetadataEngine(
+            mediaDataRepository = mediaDataRepository,
+            lyricsRepository = lyricsRepository,
+            tigerDao = tigerDao,
+            audioRepository = audioRepository,
+            settingsDataStore = settingsDataStore
+        )
+
+        val processedCount = engine.crawlMissingLyricsBatch(20)
+
+        assertEquals(1, processedCount)
+        coVerify(exactly = 1) {
+            lyricsRepository.getLyrics(match { it.id == "pending-1" && it.title == "Pending Song" })
+        }
     }
 }

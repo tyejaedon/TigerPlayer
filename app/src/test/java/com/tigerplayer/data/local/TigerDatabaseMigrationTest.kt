@@ -36,7 +36,8 @@ import org.robolectric.RobolectricTestRunner
  * - 11 -> 12: ReplayGain columns on CachedTrackEntity (issue #56)
  * - 12 -> 13: dateModified fingerprint column on CachedTrackEntity (issue #49)
  * - 13 -> 14: new music_folders table for custom directories (issue #50)
- * - 14 -> 15: artwork lookup negative cache columns on CachedTrackEntity (issue #64)
+ * - 14 -> 15: new audio_devices and device_presets tables (issue #300)
+ * - 15 -> 16: artwork lookup negative cache columns on CachedTrackEntity (issue #64)
  */
 @RunWith(RobolectricTestRunner::class)
 class TigerDatabaseMigrationTest {
@@ -234,9 +235,68 @@ class TigerDatabaseMigrationTest {
     }
 
     @Test
-    fun migrate14To15_preservesCachedTrackRows_andAddsArtworkNegativeCacheColumns() {
-        // Arrange: create the DB at version 14 and insert a representative row.
+    fun migrate14To15_preservesMusicFoldersAndTracks_andCreatesAudioDevicesAndPresetsTables() {
+        // Arrange: create the DB at version 14 and insert representative rows.
         var connection: SQLiteConnection = helper.createDatabase(14)
+        connection.execSQL(
+            """
+            INSERT INTO music_folders (uriString, displayName, path, isExcluded, addedAt)
+            VALUES ('content://tree/primary:Audio', 'Audio', '/storage/emulated/0/Audio', 0, 1719374400)
+            """.trimIndent()
+        )
+        connection.close()
+
+        // Act: run the real 14 -> 15 migration path.
+        connection = helper.runMigrationsAndValidate(15)
+
+        // Assert: pre-existing folder survives untouched.
+        connection.prepare("SELECT * FROM music_folders WHERE uriString = 'content://tree/primary:Audio'").use { stmt ->
+            assertTrue("music_folders must survive migration to 15", stmt.step())
+            assertEquals("Audio", stmt.getText(stmt.columnIndex("displayName")))
+        }
+
+        // Assert: audio_devices table is created and operational.
+        connection.execSQL(
+            """
+            INSERT INTO audio_devices (deviceId, displayName, deviceType, lastConnectedEpochMs, firstSeenEpochMs,
+                assignedPresetId, matchedAutoEqModel, matchedAutoEqSource, targetCurve, formFactor,
+                lastKnownCodec, lastKnownBatteryLevel, totalListeningTimeMs)
+            VALUES ('AA:BB:CC:DD:EE:FF', 'Sony WH-1000XM4', 'BLUETOOTH', 1720000000, 1710000000,
+                'preset_xm4', 'Sony WH-1000XM4', 'oratory1990', 'Harman Over-Ear 2018', 'Over-Ear',
+                'LDAC', 85, 3600000)
+            """.trimIndent()
+        )
+        connection.prepare("SELECT * FROM audio_devices WHERE deviceId = 'AA:BB:CC:DD:EE:FF'").use { stmt ->
+            assertTrue("audio_devices row must be readable post-migration", stmt.step())
+            assertEquals("Sony WH-1000XM4", stmt.getText(stmt.columnIndex("displayName")))
+            assertEquals("LDAC", stmt.getText(stmt.columnIndex("lastKnownCodec")))
+            assertEquals(85, stmt.getInt(stmt.columnIndex("lastKnownBatteryLevel")))
+            assertEquals("Harman Over-Ear 2018", stmt.getText(stmt.columnIndex("targetCurve")))
+            assertEquals("Over-Ear", stmt.getText(stmt.columnIndex("formFactor")))
+        }
+
+        // Assert: device_presets table is created and operational.
+        connection.execSQL(
+            """
+            INSERT INTO device_presets (presetId, name, deviceId, preampDb, bandsJson, isAutoEq,
+                autoEqModel, autoEqSource, targetCurve, formFactor, createdAtEpochMs, updatedAtEpochMs)
+            VALUES ('preset_xm4', 'XM4 Harman Curve', 'AA:BB:CC:DD:EE:FF', -4.5, '[]', 1,
+                'Sony WH-1000XM4', 'oratory1990', 'Harman Over-Ear 2018', 'Over-Ear', 1710000000, 1720000000)
+            """.trimIndent()
+        )
+        connection.prepare("SELECT * FROM device_presets WHERE presetId = 'preset_xm4'").use { stmt ->
+            assertTrue("device_presets row must be readable post-migration", stmt.step())
+            assertEquals("XM4 Harman Curve", stmt.getText(stmt.columnIndex("name")))
+            assertEquals(-4.5, stmt.getDouble(stmt.columnIndex("preampDb")), 0.001)
+            assertEquals(1, stmt.getInt(stmt.columnIndex("isAutoEq")))
+        }
+        connection.close()
+    }
+
+    @Test
+    fun migrate15To16_preservesCachedTrackRows_andAddsArtworkNegativeCacheColumns() {
+        // Arrange: create the DB at version 15 and insert a representative row.
+        var connection: SQLiteConnection = helper.createDatabase(15)
         connection.execSQL(
             """
             INSERT INTO cached_tracks
@@ -254,8 +314,8 @@ class TigerDatabaseMigrationTest {
         )
         connection.close()
 
-        // Act: run the real 14 -> 15 migration path.
-        connection = helper.runMigrationsAndValidate(15)
+        // Act: run the real 15 -> 16 migration path.
+        connection = helper.runMigrationsAndValidate(16)
 
         // Assert: the pre-existing cached track survives with default values for new columns.
         connection.prepare("SELECT * FROM cached_tracks WHERE id = 'local_track_004'").use { stmt ->

@@ -795,6 +795,16 @@ abstract class TigerDao {
     )
     abstract suspend fun enforceLyricsCacheLimit(): Int
 
+    @Query(
+        """
+        SELECT * FROM cached_tracks
+        WHERE id NOT IN (SELECT trackId FROM lyrics_cache)
+        ORDER BY dateAdded DESC
+        LIMIT :limit
+        """
+    )
+    abstract suspend fun getTracksWithoutLyricsCache(limit: Int): List<CachedTrackEntity>
+
     @Query("DELETE FROM lyrics_cache")
     abstract suspend fun clearAllLyrics(): Int
 

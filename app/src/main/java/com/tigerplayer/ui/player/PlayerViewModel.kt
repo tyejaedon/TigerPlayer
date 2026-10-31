@@ -13,6 +13,10 @@ import com.tigerplayer.data.local.MediaSource
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
+import com.tigerplayer.data.model.M3uExportResult
+import com.tigerplayer.data.model.M3uImportResult
+import com.tigerplayer.data.model.M3uPathMode
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.remote.api.YouTubeRepository
 import com.tigerplayer.data.repository.AudioRepository
@@ -70,7 +74,8 @@ data class PlayerUiState(
     val isPlaying: Boolean = false,
     val currentPosition: Long = 0L,
     val currentTrack: AudioTrack? = null,
-    val currentLyrics: String? = null,
+    val currentLyrics: Lyrics = Lyrics.None,
+    val lyricsManualOffsetMs: Long = 0L,
     val artistImageUrl: String? = null,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
@@ -254,6 +259,7 @@ class PlayerViewModel @Inject constructor(
                         currentPosition = pb.currentPosition,
                         currentTrack = pb.currentTrack,
                         currentLyrics = pb.currentLyrics,
+                        lyricsManualOffsetMs = if (pb.currentTrack?.id != it.currentTrack?.id) 0L else it.lyricsManualOffsetMs,
                         artistImageUrl = pb.artistImageUrl,
                         isShuffleEnabled = pb.isShuffleEnabled,
                         repeatMode = pb.repeatMode,
@@ -365,6 +371,14 @@ class PlayerViewModel @Inject constructor(
 
     fun seekTo(positionMs: Long) {
         playbackStateManager.seekTo(positionMs)
+    }
+
+    fun adjustLyricsOffset(deltaMs: Long) {
+        _uiState.update { it.copy(lyricsManualOffsetMs = it.lyricsManualOffsetMs + deltaMs) }
+    }
+
+    fun resetLyricsOffset() {
+        _uiState.update { it.copy(lyricsManualOffsetMs = 0L) }
     }
 
     fun toggleShuffle() {
@@ -495,6 +509,23 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             libraryEngine.updatePlaylistArtwork(context, playlistId, uri)
         }
+    }
+
+    // --- M3U / M3U8 IMPORT & EXPORT (issue #58) ---
+
+    suspend fun importM3uPlaylist(
+        fileUri: Uri,
+        customPlaylistName: String? = null
+    ): Result<M3uImportResult> {
+        return libraryEngine.importM3uPlaylist(fileUri, customPlaylistName)
+    }
+
+    suspend fun exportM3uPlaylist(
+        playlistId: Long,
+        destinationUri: Uri,
+        pathMode: M3uPathMode = M3uPathMode.ABSOLUTE
+    ): Result<M3uExportResult> {
+        return libraryEngine.exportM3uPlaylist(playlistId, destinationUri, pathMode)
     }
 
     // ==========================================

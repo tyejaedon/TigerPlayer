@@ -20,7 +20,8 @@ import org.junit.runner.RunWith
  * - 11 -> 12: ReplayGain columns on CachedTrackEntity (issue #56)
  * - 12 -> 13: dateModified fingerprint column on CachedTrackEntity (issue #49)
  * - 13 -> 14: new music_folders table for custom directories (issue #50)
- * - 14 -> 15: artwork lookup negative cache columns on CachedTrackEntity (issue #64)
+ * - 14 -> 15: new audio_devices and device_presets tables (issue #300)
+ * - 15 -> 16: artwork lookup negative cache columns on CachedTrackEntity (issue #64)
  */
 @RunWith(AndroidJUnit4::class)
 class TigerDatabaseMigrationTest {
@@ -199,9 +200,66 @@ class TigerDatabaseMigrationTest {
     }
 
     @Test
-    fun migrate14To15_preservesCachedTrackRows_andAddsArtworkNegativeCacheColumns() {
+    fun migrate14To15_preservesMusicFoldersAndTracks_andCreatesAudioDevicesAndPresetsTables() {
         // Arrange: create the DB at version 14 and insert a representative row.
         var db: SupportSQLiteDatabase = helper.createDatabase(testDbName, 14)
+        db.execSQL(
+            "INSERT INTO music_folders (uriString, displayName, path, isExcluded, addedAt) " +
+                "VALUES ('content://tree/primary:Audio', 'Audio', '/storage/emulated/0/Audio', 0, 1719374400)"
+        )
+        db.close()
+
+        // Act: run the real 14 -> 15 migration path.
+        db = helper.runMigrationsAndValidate(testDbName, 15, true)
+
+        // Assert: pre-existing folder survives untouched.
+        val folderCursor = db.query("SELECT * FROM music_folders WHERE uriString = 'content://tree/primary:Audio'")
+        assertTrue("music_folders must survive migration to 15", folderCursor.moveToFirst())
+        assertEquals("Audio", folderCursor.getString(folderCursor.getColumnIndexOrThrow("displayName")))
+        folderCursor.close()
+
+        // Assert: audio_devices table is created and operational.
+        db.execSQL(
+            """
+            INSERT INTO audio_devices (deviceId, displayName, deviceType, lastConnectedEpochMs, firstSeenEpochMs,
+                assignedPresetId, matchedAutoEqModel, matchedAutoEqSource, targetCurve, formFactor,
+                lastKnownCodec, lastKnownBatteryLevel, totalListeningTimeMs)
+            VALUES ('AA:BB:CC:DD:EE:FF', 'Sony WH-1000XM4', 'BLUETOOTH', 1720000000, 1710000000,
+                'preset_xm4', 'Sony WH-1000XM4', 'oratory1990', 'Harman Over-Ear 2018', 'Over-Ear',
+                'LDAC', 85, 3600000)
+            """.trimIndent()
+        )
+        val deviceCursor = db.query("SELECT * FROM audio_devices WHERE deviceId = 'AA:BB:CC:DD:EE:FF'")
+        assertTrue("audio_devices row must be readable post-migration", deviceCursor.moveToFirst())
+        assertEquals("Sony WH-1000XM4", deviceCursor.getString(deviceCursor.getColumnIndexOrThrow("displayName")))
+        assertEquals("LDAC", deviceCursor.getString(deviceCursor.getColumnIndexOrThrow("lastKnownCodec")))
+        assertEquals(85, deviceCursor.getInt(deviceCursor.getColumnIndexOrThrow("lastKnownBatteryLevel")))
+        assertEquals("Harman Over-Ear 2018", deviceCursor.getString(deviceCursor.getColumnIndexOrThrow("targetCurve")))
+        assertEquals("Over-Ear", deviceCursor.getString(deviceCursor.getColumnIndexOrThrow("formFactor")))
+        deviceCursor.close()
+
+        // Assert: device_presets table is created and operational.
+        db.execSQL(
+            """
+            INSERT INTO device_presets (presetId, name, deviceId, preampDb, bandsJson, isAutoEq,
+                autoEqModel, autoEqSource, targetCurve, formFactor, createdAtEpochMs, updatedAtEpochMs)
+            VALUES ('preset_xm4', 'XM4 Harman Curve', 'AA:BB:CC:DD:EE:FF', -4.5, '[]', 1,
+                'Sony WH-1000XM4', 'oratory1990', 'Harman Over-Ear 2018', 'Over-Ear', 1710000000, 1720000000)
+            """.trimIndent()
+        )
+        val presetCursor = db.query("SELECT * FROM device_presets WHERE presetId = 'preset_xm4'")
+        assertTrue("device_presets row must be readable post-migration", presetCursor.moveToFirst())
+        assertEquals("XM4 Harman Curve", presetCursor.getString(presetCursor.getColumnIndexOrThrow("name")))
+        assertEquals(-4.5, presetCursor.getDouble(presetCursor.getColumnIndexOrThrow("preampDb")), 0.001)
+        assertEquals(1, presetCursor.getInt(presetCursor.getColumnIndexOrThrow("isAutoEq")))
+        presetCursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate15To16_preservesCachedTrackRows_andAddsArtworkNegativeCacheColumns() {
+        // Arrange: create the DB at version 15 and insert a representative row.
+        var db: SupportSQLiteDatabase = helper.createDatabase(testDbName, 15)
         db.execSQL(
             """
             INSERT INTO cached_tracks
@@ -219,8 +277,8 @@ class TigerDatabaseMigrationTest {
         )
         db.close()
 
-        // Act: run the real 14 -> 15 migration path.
-        db = helper.runMigrationsAndValidate(testDbName, 15, true)
+        // Act: run the real 15 -> 16 migration path.
+        db = helper.runMigrationsAndValidate(testDbName, 16, true)
 
         // Assert: the pre-existing cached track survives with default values for new columns.
         val cursor = db.query("SELECT * FROM cached_tracks WHERE id = 'local_track_004'")

@@ -10,14 +10,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.ui.player.LyricsDisplay
 import com.tigerplayer.ui.theme.TigerNeonOrange
 
 @Composable
 fun CoverScreenLyricsView(
-    lyrics: String?,
+    lyrics: Lyrics,
     currentPosition: Long,
     onDoubleTap: () -> Unit,
+    onSeek: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -36,7 +38,8 @@ fun CoverScreenLyricsView(
             lyrics = lyrics,
             currentPosition = currentPosition,
             textColor = Color.White,
-            activeColor = TigerNeonOrange
+            activeColor = TigerNeonOrange,
+            onLineClick = onSeek
         )
     }
 }

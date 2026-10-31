@@ -6,10 +6,14 @@ import android.net.Uri
 import android.util.Log
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.M3uExportResult
+import com.tigerplayer.data.model.M3uImportResult
+import com.tigerplayer.data.model.M3uPathMode
 import com.tigerplayer.data.model.MusicFolder
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.data.repository.HistoryRepository
+import com.tigerplayer.data.repository.M3uRepository
 import com.tigerplayer.data.repository.MediaDataRepository
 import com.tigerplayer.data.repository.MusicFolderRepository
 import com.tigerplayer.ui.home.HomeUiState
@@ -33,7 +37,8 @@ class LibraryEngine @Inject constructor(
     private val historyRepository: HistoryRepository,
     private val audioRepository: AudioRepository,
     private val mediaDataRepository: MediaDataRepository,
-    private val musicFolderRepository: MusicFolderRepository
+    private val musicFolderRepository: MusicFolderRepository,
+    private val m3uRepository: M3uRepository
 ) {
 
     /** Supported sorting criteria for tracks and albums in the library. */
@@ -337,5 +342,26 @@ class LibraryEngine @Inject constructor(
     /** Ensures the synthetic "Liked Songs" playlist exists in storage and merges legacy duplicates. */
     suspend fun ensureLikedPlaylistExists() {
         audioRepository.ensureSingletonLikedPlaylist()
+    }
+
+    /**
+     * Imports an M3U/M3U8 playlist from SAF Uri (issue #58).
+     */
+    suspend fun importM3uPlaylist(
+        fileUri: Uri,
+        customPlaylistName: String? = null
+    ): Result<M3uImportResult> {
+        return m3uRepository.importPlaylist(fileUri, customPlaylistName)
+    }
+
+    /**
+     * Exports a playlist to .m3u8 format via SAF Uri (issue #58).
+     */
+    suspend fun exportM3uPlaylist(
+        playlistId: Long,
+        destinationUri: Uri,
+        pathMode: M3uPathMode = M3uPathMode.ABSOLUTE
+    ): Result<M3uExportResult> {
+        return m3uRepository.exportPlaylist(playlistId, destinationUri, pathMode)
     }
 }
