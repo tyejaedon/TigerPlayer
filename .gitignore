@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # TigerPlayer .gitignore
 #
 # Pattern-based by design. Do NOT let tooling append individual
@@ -12,6 +12,8 @@ captures/
 # ---------- Android build output ----------
 app/build/
 app/release/
+app/foss/
+app/full/
 */build/
 *.apk
 *.aab

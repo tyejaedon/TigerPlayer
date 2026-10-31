@@ -480,6 +480,21 @@ fun SettingsScreen(
 
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
+                ListItem(
+                    headlineContent = { Text("AUTO-DOWNLOAD LYRICS", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Silently fetch missing synchronized lyrics in background") },
+                    leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.autoDownloadLyrics,
+                            onCheckedChange = viewModel::setAutoDownloadLyrics
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("SKIP SHORT AUDIO", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
                     Spacer(modifier = Modifier.height(12.dp))
