@@ -52,6 +52,7 @@ class BackupManagerTest {
             PackageInfo().apply { versionName = "2.0.0" }
 
         every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
+        coEvery { playlistDao.ensureSingletonLikedPlaylist(any(), any()) } returns emptyList()
 
         backupManager = BackupManager(context, playlistDao, tigerDao, settingsDataStore)
     }
