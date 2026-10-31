@@ -12,8 +12,11 @@ import com.tigerplayer.data.local.SkipShortAudio
 import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
 import com.tigerplayer.data.local.TigerSettingsState
+import com.tigerplayer.data.local.dao.AudioDeviceDao
 import com.tigerplayer.data.local.dao.PlaylistDao
 import com.tigerplayer.data.local.dao.TigerDao
+import com.tigerplayer.data.local.entity.AudioDeviceEntity
+import com.tigerplayer.data.local.entity.DevicePresetEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
@@ -41,7 +44,8 @@ class BackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val playlistDao: PlaylistDao,
     private val tigerDao: TigerDao,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val audioDeviceDao: AudioDeviceDao
 ) {
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -57,7 +61,9 @@ class BackupManager @Inject constructor(
                 BackupSummary(
                     playlistCount = manifest.playlists.size,
                     trackRefCount = manifest.playlists.sumOf { it.tracks.size },
-                    historyCount = manifest.history.size
+                    historyCount = manifest.history.size,
+                    audioDeviceCount = manifest.audioDevices.size,
+                    devicePresetCount = manifest.devicePresets.size
                 )
             )
         } catch (e: Exception) {
@@ -92,12 +98,16 @@ class BackupManager @Inject constructor(
             restoreSettings(manifest.settings)
             val trackRefCount = restorePlaylists(manifest.playlists, strategy)
             restoreHistory(manifest.history, strategy)
+            val restoredDevices = restoreAudioDevices(manifest.audioDevices, strategy)
+            val restoredPresets = restorePresets(manifest.devicePresets, strategy)
 
             Result.success(
                 BackupSummary(
                     playlistCount = manifest.playlists.size,
                     trackRefCount = trackRefCount,
-                    historyCount = manifest.history.size
+                    historyCount = manifest.history.size,
+                    audioDeviceCount = restoredDevices,
+                    devicePresetCount = restoredPresets
                 )
             )
         } catch (e: Exception) {
@@ -139,12 +149,41 @@ class BackupManager @Inject constructor(
                 source = entry.source.name
             )
         }
+        val audioDevices = audioDeviceDao.getAllDevicesSync().map { device ->
+            AudioDeviceBackup(
+                deviceId = device.deviceId,
+                displayName = device.displayName,
+                deviceType = device.deviceType,
+                lastConnectedEpochMs = device.lastConnectedEpochMs,
+                assignedPresetId = device.assignedPresetId,
+                matchedAutoEqModel = device.matchedAutoEqModel,
+                matchedAutoEqSource = device.matchedAutoEqSource,
+                targetCurve = device.targetCurve,
+                formFactor = device.formFactor
+            )
+        }
+        val presets = audioDeviceDao.getAllPresetsSync().map { preset ->
+            DevicePresetBackup(
+                presetId = preset.presetId,
+                name = preset.name,
+                deviceId = preset.deviceId,
+                preampDb = preset.preampDb,
+                bandsJson = preset.bandsJson,
+                isAutoEq = preset.isAutoEq,
+                autoEqModel = preset.autoEqModel,
+                autoEqSource = preset.autoEqSource,
+                targetCurve = preset.targetCurve,
+                formFactor = preset.formFactor
+            )
+        }
         return BackupManifest(
             appVersionName = currentAppVersionName(),
             createdAtEpochMs = System.currentTimeMillis(),
             settings = settings.toBackup(),
             playlists = playlists,
-            history = history
+            history = history,
+            audioDevices = audioDevices,
+            devicePresets = presets
         )
     }
 
@@ -250,6 +289,46 @@ class BackupManager @Inject constructor(
             )
         }
         tigerDao.insertHistoryBatch(entities)
+    }
+
+    private suspend fun restoreAudioDevices(devices: List<AudioDeviceBackup>, strategy: RestoreStrategy): Int {
+        if (devices.isEmpty()) return 0
+        devices.forEach { backup ->
+            val entity = AudioDeviceEntity(
+                deviceId = backup.deviceId,
+                displayName = backup.displayName,
+                deviceType = backup.deviceType,
+                lastConnectedEpochMs = backup.lastConnectedEpochMs,
+                firstSeenEpochMs = backup.lastConnectedEpochMs,
+                assignedPresetId = backup.assignedPresetId,
+                matchedAutoEqModel = backup.matchedAutoEqModel,
+                matchedAutoEqSource = backup.matchedAutoEqSource,
+                targetCurve = backup.targetCurve,
+                formFactor = backup.formFactor
+            )
+            audioDeviceDao.upsertDevice(entity)
+        }
+        return devices.size
+    }
+
+    private suspend fun restorePresets(presets: List<DevicePresetBackup>, strategy: RestoreStrategy): Int {
+        if (presets.isEmpty()) return 0
+        presets.forEach { backup ->
+            val entity = DevicePresetEntity(
+                presetId = backup.presetId,
+                name = backup.name,
+                deviceId = backup.deviceId,
+                preampDb = backup.preampDb,
+                bandsJson = backup.bandsJson,
+                isAutoEq = backup.isAutoEq,
+                autoEqModel = backup.autoEqModel,
+                autoEqSource = backup.autoEqSource,
+                targetCurve = backup.targetCurve,
+                formFactor = backup.formFactor
+            )
+            audioDeviceDao.upsertPreset(entity)
+        }
+        return presets.size
     }
 
     private fun currentAppVersionName(): String = runCatching {
