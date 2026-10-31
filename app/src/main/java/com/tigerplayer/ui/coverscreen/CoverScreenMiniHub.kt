@@ -329,6 +329,12 @@ fun CoverScreenMiniHub(
                             view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                             isVortexImmersive = !isVortexImmersive
                         },
+                        onDoubleTapAlbumArt = {
+                            track?.let { currentTrack ->
+                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                playerViewModel.likeTrack(currentTrack)
+                            }
+                        },
                         onOpenQueue = {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             queueVisible = true
@@ -386,6 +392,12 @@ fun CoverScreenMiniHub(
                     onToggleVortexImmersive = {
                         view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                         isVortexImmersive = !isVortexImmersive
+                    },
+                    onDoubleTapAlbumArt = {
+                        track?.let { currentTrack ->
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            playerViewModel.likeTrack(currentTrack)
+                        }
                     },
                     onOpenQueue = {
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)

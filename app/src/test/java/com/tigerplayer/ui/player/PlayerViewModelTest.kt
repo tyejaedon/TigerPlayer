@@ -277,4 +277,26 @@ class PlayerViewModelTest {
         assertEquals("", viewModel.rawSearchQuery.value)
         assertEquals("", viewModel.uiState.value.searchQuery)
     }
+
+    @Test
+    fun `likeTrack delegates to libraryEngine and updates currentTrack like state`() = runTest(dispatcher) {
+        val track = mockk<AudioTrack>(relaxed = true) {
+            every { id } returns "track_like_1"
+            every { isLiked } returns false
+            every { copy(isLiked = true) } returns mockk {
+                every { id } returns "track_like_1"
+                every { isLiked } returns true
+            }
+        }
+        coEvery { libraryEngine.likeTrack(track) } returns true
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.likeTrack(track)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { libraryEngine.likeTrack(track) }
+        verify(atLeast = 1) { playbackStateManager.updateCurrentTrack(any()) }
+    }
 }
