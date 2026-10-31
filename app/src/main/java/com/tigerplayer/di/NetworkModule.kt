@@ -25,6 +25,7 @@ import javax.inject.Singleton
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class WikipediaRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class ITunesRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class LrclibRetrofit
+@Qualifier @Retention(AnnotationRetention.BINARY) annotation class KugouRetrofit
 
 @Singleton
 class SubsonicHostManager @Inject constructor() {
@@ -58,6 +59,7 @@ object NetworkModule {
     private const val WIKI_BASE_URL = "https://en.wikipedia.org/"
     private const val ITUNES_BASE_URL = "https://itunes.apple.com/"
     private const val LRCLIB_BASE_URL = "https://lrclib.net/"
+    private const val KUGOU_BASE_URL = "https://krcs.kugou.com/"
 
     @Provides
     @Singleton
@@ -169,6 +171,16 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
+    @Provides
+    @Singleton
+    @KugouRetrofit
+    fun provideKugouRetrofit(client: OkHttpClient): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(KUGOU_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
     // --- API Service Implementations ---
 
     @Provides
@@ -200,6 +212,11 @@ object NetworkModule {
     @Singleton
     fun provideITunesApi(@ITunesRetrofit retrofit: Retrofit): ITunesApi =
         retrofit.create(ITunesApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideKugouApi(@KugouRetrofit retrofit: Retrofit): KugouApi =
+        retrofit.create(KugouApi::class.java)
 
     // --- LAST.FM INJECTIONS ---
 

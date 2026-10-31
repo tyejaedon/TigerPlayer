@@ -346,6 +346,7 @@ fun CoverScreenMiniHub(
                             libraryVisible = true
                         },
                         onMediaCyclePositioned = { mediaCycleTouchBounds = it },
+                        onSeek = { playerViewModel.seekTo(it) },
                         screenHeightDp = windowState.heightDp.dp
                     )
                     if (shouldShowCoverControls(isVortexImmersive)) {
@@ -410,6 +411,7 @@ fun CoverScreenMiniHub(
                         libraryVisible = true
                     },
                     onMediaCyclePositioned = { mediaCycleTouchBounds = it },
+                    onSeek = { playerViewModel.seekTo(it) },
                     screenHeightDp = windowState.heightDp.dp
                 )
                 if (shouldShowCoverControls(isVortexImmersive)) {

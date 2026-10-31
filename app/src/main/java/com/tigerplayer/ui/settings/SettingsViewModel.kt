@@ -244,6 +244,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setCoverScreenPreviewMode(enabled) }
     }
 
+    fun setAutoDownloadLyrics(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setAutoDownloadLyrics(enabled) }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             settingsDataStore.resetToDefaults()
