@@ -840,6 +840,10 @@ class AudioPlayerService : MediaSessionService() {
 
     private fun updateReplayGainForMediaItem(mediaItem: MediaItem?) {
         val extras = mediaItem?.mediaMetadata?.extras
+        val mimeType = extras?.getString(MediaControllerManager.META_MIME_TYPE).orEmpty()
+        val isLossless = isLosslessMimeType(mimeType)
+        adaptiveDspEngine.setIsLosslessStream(isLossless)
+
         val trackDb = if (extras?.containsKey(MediaControllerManager.META_REPLAYGAIN_TRACK_DB) == true) {
             extras.getDouble(MediaControllerManager.META_REPLAYGAIN_TRACK_DB)
         } else null
@@ -866,6 +870,11 @@ class AudioPlayerService : MediaSessionService() {
             albumPeak = albumPeak,
             isSequentialAlbumPlay = isSequential
         )
+    }
+
+    private fun isLosslessMimeType(mimeType: String): Boolean {
+        val lower = mimeType.lowercase()
+        return lower.contains("flac") || lower.contains("wav") || lower.contains("alac") || lower.contains("aiff")
     }
 
     private fun isPlayingAlbumSequentially(): Boolean {

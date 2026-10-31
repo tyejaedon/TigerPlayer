@@ -48,13 +48,15 @@ Think of the **DSP Engine** (*Digital Signal Processing Engine*) as a master rec
   - 2 series All-Pass Filters (`delay = 225` and `556` samples) to diffuse sound reflections smoothly across stereo channels.
   - Stereophonic decorrelation via small right-channel delay offsets.
 
-### Compartment D: Look-Ahead Peak Limiter & Automatic Gain Control (AGC)
+### Compartment D: Look-Ahead True-Peak Limiter & AGC Protection
 * **Location:** `AdaptiveDspEngine.kt`
 * **Configuration:**
   - `LOOK_AHEAD_BUFFER_SIZE = 1024` samples (fixed allocation to prevent GC churn).
-  - `lookAheadDelaySamples = 240` samples (approx. `5.4 ms` at `44.1 kHz`).
-  - `LIMITER_THRESHOLD = 0.82f` (allows headroom for inter-sample overs).
-* **Operation:** Audio frames enter a circular delay line. The detector inspects upcoming signal peaks $5\text{ ms}$ ahead. If an upcoming peak exceeds the threshold, the gain reduction curve begins attenuating *before* the peak hits the speaker output, completely eliminating harsh clipping with zero transient smearing.
+  - `lookAheadDelaySamples = 240` samples (approx. `4.5 - 5.4 ms` sample-rate aware).
+  - `TRUE_PEAK_THRESHOLD = 1.0f` ($0.0\text{ dBFS}$ transparent ceiling).
+  - `LIMITER_ATTACK_SEC = 0.0008f` ($0.8\text{ ms}$ look-ahead settling attack).
+  - `LIMITER_RELEASE_SEC = 0.050f` ($50\text{ ms}$ rapid recovery release, zero pumping).
+* **Operation:** Audio frames enter a circular delay line. The detector inspects upcoming signal peaks ahead of output generation. On lossless streams (`audio/flac`, `audio/wav`, `audio/alac`, `audio/aiff`, and 24-bit/Float PCM), AGC gain reduction is completely bypassed when EQ bands have zero or negative boost, guaranteeing $0\text{ dB}$ gain reduction up to $0\text{ dBFS}$. When digital overs are imminent (positive EQ boosts, Schroeder reverb summing), the look-ahead curve engages smoothly to catch peaks at $1.0f$ without hard digital clipping or dynamic pumping.
 
 ### Compartment E: ReplayGain Dynamic Scaling
 * **Location:** `ReplayGainCalculator.kt` & `ReplayGainTagParser.kt`

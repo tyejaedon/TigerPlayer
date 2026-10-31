@@ -33,6 +33,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+- **Lossless dynamic compression & true-peak limiting**: removed hardcoded 0.82f (-1.72 dBFS) limiter threshold in `AdaptiveDspEngine`; bypassed AGC gain reduction completely on lossless streams (`audio/flac`, `audio/wav`, `audio/alac`, `audio/aiff`, and 24-bit/Float PCM) when EQ is flat (0 dB boost or negative cuts); tuned look-ahead limiter to transparent 1.0f (0.0 dBFS) true-peak protection with 0.8ms attack and 50ms release, preventing dynamic range squashing, transient dulling, and volume pumping. (#288)
+
 ## [2.1.6-beta.1] - 2026-10-27
 
 ### Added
