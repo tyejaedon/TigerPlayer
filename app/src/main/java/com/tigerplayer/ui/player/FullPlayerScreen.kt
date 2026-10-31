@@ -74,6 +74,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -93,6 +94,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -102,6 +104,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.engine.FluidVortexView
 import com.tigerplayer.engine.SleepTimerMode
 import com.tigerplayer.ui.coverscreen.rememberCoverScreenWindowState
 import com.tigerplayer.ui.library.SongOptionsSheet
@@ -205,14 +208,74 @@ fun FullPlayerScreen(
     val shouldUseUnifiedLyricsLayout =
         windowState.hasSeparatingHinge && uiState.mainViewState == MainViewState.LYRICS && useUnifiedFlexLyrics
     val effectiveVisualMode = when {
-        useCoverOptimizedUi && uiState.visualMode == PlayerVisualMode.VORTEX -> PlayerVisualMode.WAVEFORM
         useCoverOptimizedUi && uiState.visualMode == PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
         else -> uiState.visualMode
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isLifecycleActive by remember { mutableStateOf(true) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            isLifecycleActive = event.targetState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val hasModalOverlay = showSleepTimerSheet || showOptionsSheet || uiState.mainViewState != MainViewState.ARTWORK
+    val isRenderingActive = isLifecycleActive && !hasModalOverlay
+
+    LaunchedEffect(uiState.audioReactiveFrame, isRenderingActive, uiState.isPlaying) {
+        if (isRenderingActive) {
+            val bands = if (uiState.isPlaying) {
+                uiState.audioReactiveFrame.spectralBands.ifEmpty {
+                    listOf(
+                        uiState.audioReactiveFrame.bass,
+                        uiState.audioReactiveFrame.bass,
+                        uiState.audioReactiveFrame.mid,
+                        uiState.audioReactiveFrame.mid,
+                        uiState.audioReactiveFrame.treble,
+                        uiState.audioReactiveFrame.treble
+                    )
+                }
+            } else {
+                emptyList()
+            }
+            viewModel.fluidRenderer.updateEnergyField(bands)
+        }
+    }
+
+    val isVisualizerActive = effectiveVisualMode == PlayerVisualMode.VORTEX && !albumClarityMode
+    val visualizerAlpha by animateFloatAsState(
+        targetValue = if (isVisualizerActive && isRenderingActive) 1f else 0f,
+        animationSpec = tween(durationMillis = 400),
+        label = "BackgroundVisualizerFade"
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
         // --- 1. CINEMATIC BACKGROUND (Banding Correction) ---
-       CinematicZoomImage(model = imageRequest, animated = !useCoverOptimizedUi)
+        CinematicZoomImage(model = imageRequest, animated = !useCoverOptimizedUi)
+
+        // --- 2. BACKGROUND FLUID VISUALIZER (Smooth Crossfade with Artist Image) ---
+        if (visualizerAlpha > 0.001f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(alpha = visualizerAlpha)
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        FluidVortexView(ctx).apply {
+                            setFluidRenderer(viewModel.fluidRenderer)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(8.dp)
+                )
+            }
+        }
 
         // --- BACKGROUND SCRIM (Visual Anchor) ---
         Box(
@@ -579,40 +642,13 @@ private fun PlayerMainContent(
                                 detectTapGestures(onTap = { viewModel.toggleVisualMode(isCoverOptimized = isCoverOptimized) })
                             }
                     ) {
-                        // Base Art
+                        // Base Art (clean artwork presentation; visualizer active in cinematic background)
                         AsyncImage(
                             model = currentTrack.artworkUri,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
-
-                        // Overlays
-                        AnimatedVisibility(visible = !isAlbumClarityMode && visualMode == PlayerVisualMode.VORTEX) {
-                            FluidVortexRenderer(
-                                isPlaying = uiState.isPlaying,
-                                amplitudes = uiState.currentWaveform,
-                                audioReactive = uiState.audioReactiveFrame,
-                                trackId = currentTrack.id,
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(32.dp))
-                            )
-                        }
-
-                        AnimatedVisibility(visible = !isAlbumClarityMode && visualMode == PlayerVisualMode.WAVEFORM) {
-                            Box(
-                                modifier = Modifier.fillMaxSize().background(if (isLightTheme) Color.Black.copy(0.42f) else Color.Black.copy(0.6f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                SmoothWaveform(
-                                    amplitudes = uiState.currentWaveform,
-                                    progress = (uiState.currentPosition.toFloat() / currentTrack.durationMs.coerceAtLeast(1L)),
-                                    isPlaying = uiState.isPlaying,
-                                    audioReactive = uiState.audioReactiveFrame,
-                                    color = dynamicTextColor
-                                )
-                            }
-                        }
-
                     }
                 }
             }
@@ -668,7 +704,15 @@ private fun PlayerControlsContent(
         }
         Spacer(modifier = Modifier.height(20.dp))
         Box(modifier = Modifier.padding(horizontal = 24.dp)) {
-            FieryWavySeeker(uiState, currentTrack, viewModel::seekTo, dynamicTextColor)
+            FieryWavySeeker(
+                uiState = uiState,
+                track = currentTrack,
+                onSeek = viewModel::seekTo,
+                textColor = dynamicTextColor,
+                artworkUri = currentTrack.artworkUri,
+                energy = uiState.audioReactiveFrame.energy,
+                bass = uiState.audioReactiveFrame.bass
+            )
         }
         Spacer(modifier = Modifier.height(16.dp))
         PlaybackControls(

@@ -502,10 +502,9 @@ class PlaybackStateManager(
 
     fun toggleVisualMode(isCoverOptimized: Boolean = false) {
         val nextMode = when (_playbackState.value.visualMode) {
-            PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
-            PlayerVisualMode.WAVEFORM -> if (isCoverOptimized) PlayerVisualMode.ARTWORK else PlayerVisualMode.VORTEX
+            PlayerVisualMode.ARTWORK -> PlayerVisualMode.VORTEX
             PlayerVisualMode.VORTEX -> PlayerVisualMode.ARTWORK
-            PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
+            else -> PlayerVisualMode.ARTWORK
         }
         _playbackState.update { it.copy(visualMode = nextMode) }
     }
