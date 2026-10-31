@@ -5,6 +5,9 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.M3uExportResult
+import com.tigerplayer.data.model.M3uImportResult
+import com.tigerplayer.data.model.M3uPathMode
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.AudioRepository
@@ -306,5 +309,22 @@ class LibraryViewModel @Inject constructor(
 
     fun addNextToQueue(track: AudioTrack) {
         playbackStateManager.addNextToQueue(track)
+    }
+
+    // --- M3U / M3U8 IMPORT & EXPORT (issue #58) ---
+
+    suspend fun importM3uPlaylist(
+        fileUri: Uri,
+        customPlaylistName: String? = null
+    ): Result<M3uImportResult> {
+        return libraryEngine.importM3uPlaylist(fileUri, customPlaylistName)
+    }
+
+    suspend fun exportM3uPlaylist(
+        playlistId: Long,
+        destinationUri: Uri,
+        pathMode: M3uPathMode = M3uPathMode.ABSOLUTE
+    ): Result<M3uExportResult> {
+        return libraryEngine.exportM3uPlaylist(playlistId, destinationUri, pathMode)
     }
 }
