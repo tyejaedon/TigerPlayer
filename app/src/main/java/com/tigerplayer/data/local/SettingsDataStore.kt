@@ -90,7 +90,8 @@ data class TigerSettingsState(
     val replayGainPreventClipping: Boolean = true,
     val coverScreenVolume: Float = 1f,
     val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
-    val coverScreenPreviewMode: Boolean = false
+    val coverScreenPreviewMode: Boolean = false,
+    val autoDownloadLyrics: Boolean = false
 )
 
 @Singleton
@@ -132,7 +133,8 @@ class SettingsDataStore @Inject constructor(
                 prefs[COVER_SCREEN_EQ_PRESET],
                 CoverScreenEqPreset.NEURAL_ADAPTIVE
             ),
-            coverScreenPreviewMode = prefs[COVER_SCREEN_PREVIEW_MODE] ?: false
+            coverScreenPreviewMode = prefs[COVER_SCREEN_PREVIEW_MODE] ?: false,
+            autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false
         )
     }
 
@@ -232,6 +234,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[COVER_SCREEN_PREVIEW_MODE] = enabled }
     }
 
+    suspend fun setAutoDownloadLyrics(enabled: Boolean) {
+        dataStore.edit { it[AUTO_DOWNLOAD_LYRICS] = enabled }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -266,5 +272,6 @@ class SettingsDataStore @Inject constructor(
         val COVER_SCREEN_VOLUME = floatPreferencesKey("cover_screen_volume")
         val COVER_SCREEN_EQ_PRESET = stringPreferencesKey("cover_screen_eq_preset")
         val COVER_SCREEN_PREVIEW_MODE = booleanPreferencesKey("cover_screen_preview_mode")
+        val AUTO_DOWNLOAD_LYRICS = booleanPreferencesKey("auto_download_lyrics")
     }
 }
