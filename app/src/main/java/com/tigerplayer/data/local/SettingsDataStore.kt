@@ -93,7 +93,7 @@ data class TigerSettingsState(
     val coverScreenPreviewMode: Boolean = false,
     val autoApplyDeviceEq: Boolean = true,
     val autoDetectAutoEq: Boolean = true,
-    val preferredTargetCurve: String = "Harman Over-Ear 2018"
+    val preferredTargetCurve: String = "Harman Over-Ear 2018",
     val autoDownloadLyrics: Boolean = false
 )
 
@@ -139,7 +139,7 @@ class SettingsDataStore @Inject constructor(
             coverScreenPreviewMode = prefs[COVER_SCREEN_PREVIEW_MODE] ?: false,
             autoApplyDeviceEq = prefs[AUTO_APPLY_DEVICE_EQ] ?: true,
             autoDetectAutoEq = prefs[AUTO_DETECT_AUTOEQ] ?: true,
-            preferredTargetCurve = prefs[PREFERRED_TARGET_CURVE] ?: "Harman Over-Ear 2018"
+            preferredTargetCurve = prefs[PREFERRED_TARGET_CURVE] ?: "Harman Over-Ear 2018",
             autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false
         )
     }
@@ -250,6 +250,8 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setPreferredTargetCurve(curve: String) {
         dataStore.edit { it[PREFERRED_TARGET_CURVE] = curve }
+    }
+
     suspend fun setAutoDownloadLyrics(enabled: Boolean) {
         dataStore.edit { it[AUTO_DOWNLOAD_LYRICS] = enabled }
     }
