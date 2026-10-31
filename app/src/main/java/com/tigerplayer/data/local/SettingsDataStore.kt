@@ -91,6 +91,7 @@ data class TigerSettingsState(
     val coverScreenVolume: Float = 1f,
     val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
     val coverScreenPreviewMode: Boolean = false,
+    val fetchOnlineArtwork: Boolean = true,
     val autoApplyDeviceEq: Boolean = true,
     val autoDetectAutoEq: Boolean = true,
     val preferredTargetCurve: String = "Harman Over-Ear 2018",
@@ -137,6 +138,7 @@ class SettingsDataStore @Inject constructor(
                 CoverScreenEqPreset.NEURAL_ADAPTIVE
             ),
             coverScreenPreviewMode = prefs[COVER_SCREEN_PREVIEW_MODE] ?: false,
+            fetchOnlineArtwork = prefs[FETCH_ONLINE_ARTWORK] ?: true,
             autoApplyDeviceEq = prefs[AUTO_APPLY_DEVICE_EQ] ?: true,
             autoDetectAutoEq = prefs[AUTO_DETECT_AUTOEQ] ?: true,
             preferredTargetCurve = prefs[PREFERRED_TARGET_CURVE] ?: "Harman Over-Ear 2018",
@@ -240,6 +242,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[COVER_SCREEN_PREVIEW_MODE] = enabled }
     }
 
+    suspend fun setFetchOnlineArtwork(enabled: Boolean) {
+        dataStore.edit { it[FETCH_ONLINE_ARTWORK] = enabled }
+    }
+
     suspend fun setAutoApplyDeviceEq(enabled: Boolean) {
         dataStore.edit { it[AUTO_APPLY_DEVICE_EQ] = enabled }
     }
@@ -290,6 +296,7 @@ class SettingsDataStore @Inject constructor(
         val COVER_SCREEN_VOLUME = floatPreferencesKey("cover_screen_volume")
         val COVER_SCREEN_EQ_PRESET = stringPreferencesKey("cover_screen_eq_preset")
         val COVER_SCREEN_PREVIEW_MODE = booleanPreferencesKey("cover_screen_preview_mode")
+        val FETCH_ONLINE_ARTWORK = booleanPreferencesKey("fetch_online_artwork")
         val AUTO_APPLY_DEVICE_EQ = booleanPreferencesKey("auto_apply_device_eq")
         val AUTO_DETECT_AUTOEQ = booleanPreferencesKey("auto_detect_autoeq")
         val PREFERRED_TARGET_CURVE = stringPreferencesKey("preferred_target_curve")

@@ -2,9 +2,11 @@ package com.tigerplayer.engine
 
 import android.net.Uri
 import android.util.Log
+import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.data.repository.ArtistDetails
+import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.data.repository.LyricsRepository
 import com.tigerplayer.data.repository.MediaDataRepository
 import com.tigerplayer.utils.ArtistUtils
@@ -12,11 +14,11 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import androidx.core.net.toUri
-import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.dao.TigerDao
 import com.tigerplayer.data.local.entity.toAudioTrack
 import com.tigerplayer.di.IoDispatcher
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.times
@@ -40,6 +42,7 @@ class MetadataEngine @Inject constructor(
     private val mediaDataRepository: MediaDataRepository,
     private val lyricsRepository: LyricsRepository,
     private val tigerDao: TigerDao,
+    private val audioRepository: AudioRepository,
     private val settingsDataStore: SettingsDataStore,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -228,6 +231,56 @@ class MetadataEngine @Inject constructor(
         }
     }
 
+    /**
+     * Resolves artwork for a track by checking:
+     * 1. Embedded artwork in the file (preferred over a network round-trip)
+     * 2. User setting (fetch high-resolution artwork online)
+     * 3. Negative cache: queried at most once per N days with exponential backoff on repeated misses
+     *
+     * If all preconditions pass, queries Spotify for high-resolution artwork and updates Room cache on hit,
+     * or records the negative cache failure on miss.
+     */
+    suspend fun resolveTrackArtwork(track: AudioTrack): Uri? {
+        if (!track.isLocal) return null
+        val artworkUriStr = track.artworkUri.toString()
+        if (artworkUriStr.startsWith("http://") || artworkUriStr.startsWith("https://")) {
+            return null
+        }
+
+        // 1. Embedded art preferred over a network round-trip
+        if (audioRepository.hasEmbeddedArtwork(track)) {
+            return null
+        }
+
+        // 2. Setting to disable online artwork fetching entirely
+        val isOnlineArtworkEnabled = settingsDataStore.settingsFlow.first().fetchOnlineArtwork
+        if (!isOnlineArtworkEnabled) {
+            return null
+        }
+
+        // 3. Negative cache: queried at most once per N days with backoff on repeated failures
+        val cachedTrack = audioRepository.getCachedTrack(track.id)
+        val failedAt = cachedTrack?.artworkLookupFailedAt ?: track.artworkLookupFailedAt
+        val attempts = cachedTrack?.artworkLookupAttempts ?: track.artworkLookupAttempts
+        if (!shouldRetryArtworkLookup(failedAt, attempts)) {
+            return null
+        }
+
+        // Attempt Spotify high-resolution lookup
+        val highResUri = fetchSpotifyHighResArt(track.title, track.artist, track.album)
+        if (highResUri != null) {
+            audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
+            return highResUri
+        } else {
+            audioRepository.recordArtworkLookupFailure(
+                trackId = track.id,
+                failedAt = System.currentTimeMillis(),
+                attempts = attempts + 1
+            )
+            return null
+        }
+    }
+
     /** Fetches high-resolution Spotify album artwork URI for a track. */
     suspend fun fetchSpotifyHighResArt(title: String, artist: String, album: String): Uri? {
         var highResUrl: String? = null
@@ -239,6 +292,29 @@ class MetadataEngine @Inject constructor(
             Log.e("MetadataEngine", "Artwork fetch failed: ${e.message}")
         }
         return highResUrl?.toUri()
+    }
+
+    companion object {
+        val DEFAULT_RETRY_INTERVAL_MS = 7.days.inWholeMilliseconds
+        val MAX_RETRY_INTERVAL_MS = 30.days.inWholeMilliseconds
+
+        /**
+         * Evaluates whether an artwork lookup should be retried based on failure timestamp and attempt count.
+         * Enforces a base N-day cool-off with exponential backoff on repeated misses.
+         */
+        fun shouldRetryArtworkLookup(
+            failedAt: Long,
+            attempts: Int,
+            currentTimeMs: Long = System.currentTimeMillis(),
+            baseIntervalMs: Long = DEFAULT_RETRY_INTERVAL_MS,
+            maxIntervalMs: Long = MAX_RETRY_INTERVAL_MS
+        ): Boolean {
+            if (failedAt <= 0L) return true
+            val shift = (attempts - 1).coerceIn(0, 10)
+            val backoffMultiplier = 1L shl shift
+            val backoffInterval = (baseIntervalMs * backoffMultiplier).coerceAtMost(maxIntervalMs)
+            return (currentTimeMs - failedAt) >= backoffInterval
+        }
     }
 
     /** Pre-seeds the artist cache in parallel with concurrency limiting for a list of tracks. */

@@ -431,8 +431,17 @@ abstract class TigerDao {
     @Query("UPDATE cached_tracks SET isLiked = :isLiked WHERE id = :trackId")
     abstract suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean): Int
 
-    @Query("UPDATE cached_tracks SET artworkUriString = :newUri WHERE id = :trackId")
+    @Query("UPDATE cached_tracks SET artworkUriString = :newUri, artworkLookupFailedAt = 0, artworkLookupAttempts = 0 WHERE id = :trackId")
     abstract suspend fun updateTrackArtworkUri(trackId: String, newUri: String): Int
+
+    @Query("UPDATE cached_tracks SET artworkLookupFailedAt = :failedAt, artworkLookupAttempts = :attempts WHERE id = :trackId")
+    abstract suspend fun updateArtworkLookupFailed(trackId: String, failedAt: Long, attempts: Int): Int
+
+    @Query("UPDATE cached_tracks SET hasEmbeddedArtwork = :hasEmbedded WHERE id = :trackId")
+    abstract suspend fun updateHasEmbeddedArtwork(trackId: String, hasEmbedded: Boolean): Int
+
+    @Query("SELECT * FROM cached_tracks WHERE id = :id LIMIT 1")
+    abstract suspend fun getCachedTrackById(id: String): CachedTrackEntity?
 
     @Query(
         """
@@ -576,6 +585,9 @@ abstract class TigerDao {
                 c.replayGainTrackPeak,
                 c.replayGainAlbumPeak,
                 c.dateModified,
+                c.artworkLookupFailedAt,
+                c.artworkLookupAttempts,
+                c.hasEmbeddedArtwork,
                 CASE
                     WHEN LOWER(TRIM(c.artist)) IN (SELECT artistName FROM top_artists) THEN 0
                     ELSE 1
@@ -603,7 +615,10 @@ abstract class TigerDao {
             replayGainAlbumDb,
             replayGainTrackPeak,
             replayGainAlbumPeak,
-            dateModified
+            dateModified,
+            artworkLookupFailedAt,
+            artworkLookupAttempts,
+            hasEmbeddedArtwork
         FROM never_played
         ORDER BY priority ASC, dateAdded DESC
         LIMIT :limit

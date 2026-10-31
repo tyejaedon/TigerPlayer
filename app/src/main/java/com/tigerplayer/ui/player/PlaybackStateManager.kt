@@ -352,11 +352,10 @@ class PlaybackStateManager(
                     }
                     statsEngine.onTrackChanged(track, _playbackState.value.isPlaying)
 
-                    if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
+                    if (track.isLocal && !track.artworkUri.toString().startsWith("http")) {
                         scope.launch(Dispatchers.IO) {
-                            val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist, track.album)
+                            val highResUri = metadataEngine.resolveTrackArtwork(track)
                             if (highResUri != null) {
-                                audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
                                 _playbackState.update { state ->
                                     if (state.currentTrack?.id == track.id) {
                                         state.copy(currentTrack = track.copy(artworkUri = highResUri))
