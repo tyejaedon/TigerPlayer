@@ -26,7 +26,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Changed
 
-- **Android Gradle Plugin**: updated AGP from 9.4.1 to 9.5.0 and refreshed dependency verification metadata. (#296)
+- **Android Gradle Plugin**: pinned AGP to 9.4.0 for Android Studio compatibility and refreshed dependency verification metadata.
 
 ### Fixed
 
