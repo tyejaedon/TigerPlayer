@@ -74,6 +74,7 @@ internal fun CoverScreenModalOverlays(
     onOpenPrism: () -> Unit,
     onOpenNexus: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenHome: () -> Unit = {},
     prismVisible: Boolean,
     onDismissPrism: () -> Unit,
     nexusVisible: Boolean,
@@ -83,7 +84,9 @@ internal fun CoverScreenModalOverlays(
     discoveryDetailVisible: Boolean,
     onDismissDiscoveryDetail: () -> Unit,
     daylistDetailVisible: Boolean,
-    onDismissDaylistDetail: () -> Unit
+    onDismissDaylistDetail: () -> Unit,
+    homeVisible: Boolean = false,
+    onDismissHome: () -> Unit = {},
 ) {
     // 1. FULL-BLEED LYRICS MODE
     AnimatedVisibility(
@@ -95,7 +98,8 @@ internal fun CoverScreenModalOverlays(
         CoverScreenLyricsView(
             lyrics = uiState.currentLyrics,
             currentPosition = uiState.currentPosition,
-            onDoubleTap = onDismissFullBleedLyrics
+            onDoubleTap = onDismissFullBleedLyrics,
+            onSeek = { timeMs -> playerViewModel.seekTo(timeMs) }
         )
     }
 
@@ -210,6 +214,7 @@ internal fun CoverScreenModalOverlays(
             onOpenPrism = onOpenPrism,
             onOpenNexus = onOpenNexus,
             onOpenSettings = onOpenSettings,
+            onOpenHome = onOpenHome,
             onClose = onDismissPlaybackSettings
         )
     }
@@ -330,6 +335,20 @@ internal fun CoverScreenModalOverlays(
             },
             onRefresh = dashboardViewModel::refreshForYou,
             onClose = onDismissDaylistDetail
+        )
+    }
+
+    // 10. HOME VIEW
+    AnimatedVisibility(
+        visible = homeVisible,
+        enter = slideInVertically { it } + fadeIn(),
+        exit = slideOutVertically { it } + fadeOut(),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        CoverScreenHomeView(
+            playerViewModel = playerViewModel,
+            dashboardViewModel = dashboardViewModel,
+            onClose = onDismissHome
         )
     }
 }

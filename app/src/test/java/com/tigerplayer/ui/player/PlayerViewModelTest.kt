@@ -5,6 +5,7 @@ import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.data.remote.api.YouTubeRepository
 import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.AudioRepository
@@ -83,7 +84,7 @@ class PlayerViewModelTest {
         every { mediaControllerManager.pitch } returns MutableStateFlow(1f)
 
         every { metadataEngine.artistDetails } returns MutableStateFlow<Map<String, ArtistDetails>>(emptyMap())
-        every { metadataEngine.currentLyrics } returns MutableStateFlow(null)
+        every { metadataEngine.currentLyrics } returns MutableStateFlow(Lyrics.None)
         every { metadataEngine.currentArtistImageUrl } returns MutableStateFlow(null)
 
         every { libraryEngine.getHomeUiStateFlow(any()) } returns flowOf(HomeUiState())
@@ -276,5 +277,47 @@ class PlayerViewModelTest {
         runCurrent()
         assertEquals("", viewModel.rawSearchQuery.value)
         assertEquals("", viewModel.uiState.value.searchQuery)
+    }
+
+    @Test
+    fun `likeTrack delegates to libraryEngine and updates currentTrack like state`() = runTest(dispatcher) {
+        val track = mockk<AudioTrack>(relaxed = true) {
+            every { id } returns "track_like_1"
+            every { isLiked } returns false
+            every { copy(isLiked = true) } returns mockk {
+                every { id } returns "track_like_1"
+                every { isLiked } returns true
+            }
+        }
+        coEvery { libraryEngine.likeTrack(track) } returns true
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.likeTrack(track)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { libraryEngine.likeTrack(track) }
+        verify(atLeast = 1) { playbackStateManager.updateCurrentTrack(any()) }
+    }
+
+    @Test
+    fun `adjustLyricsOffset and resetLyricsOffset update manual offset state`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        assertEquals(0L, viewModel.uiState.value.lyricsManualOffsetMs)
+
+        viewModel.adjustLyricsOffset(500L)
+        assertEquals(500L, viewModel.uiState.value.lyricsManualOffsetMs)
+
+        viewModel.adjustLyricsOffset(500L)
+        assertEquals(1000L, viewModel.uiState.value.lyricsManualOffsetMs)
+
+        viewModel.adjustLyricsOffset(-500L)
+        assertEquals(500L, viewModel.uiState.value.lyricsManualOffsetMs)
+
+        viewModel.resetLyricsOffset()
+        assertEquals(0L, viewModel.uiState.value.lyricsManualOffsetMs)
     }
 }

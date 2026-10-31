@@ -31,6 +31,9 @@
     <string name="coverscreen_action_remove_from_queue">Quitar de la cola</string>
     <string name="coverscreen_action_remove">Quitar</string>
 
+    <string name="coverscreen_action_like">Marcar como me gusta</string>
+    <string name="coverscreen_action_edit_playlist_photo">Cambiar foto de la lista</string>
+
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">EN REPRODUCCIÓN</string>
     <string name="coverscreen_status_paused">EN PAUSA</string>

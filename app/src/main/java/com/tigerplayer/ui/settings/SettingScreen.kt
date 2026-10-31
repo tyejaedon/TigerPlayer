@@ -103,6 +103,7 @@ import com.tigerplayer.ui.theme.PremiumGlassCard
 import com.tigerplayer.ui.theme.SpotifyGreen
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerNeonRed
 import com.tigerplayer.ui.theme.TigerSpectralViolet
 import com.tigerplayer.ui.theme.TigerToxicLime
 import com.tigerplayer.ui.theme.bounceClick
@@ -477,6 +478,34 @@ fun SettingsScreen(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
 
+                ListItem(
+                    headlineContent = { Text("ONLINE ARTWORK LOOKUP", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Fetch high-resolution artwork online") },
+                    leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.fetchOnlineArtwork,
+                            onCheckedChange = viewModel::setFetchOnlineArtwork
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                ListItem(
+                    headlineContent = { Text("AUTO-DOWNLOAD LYRICS", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Silently fetch missing synchronized lyrics in background") },
+                    leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.autoDownloadLyrics,
+                            onCheckedChange = viewModel::setAutoDownloadLyrics
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -840,6 +869,7 @@ private fun MatrixSection(
 @Composable
 private fun accentColor(accentStyle: TigerAccentStyle): Color {
     return when (accentStyle) {
+        TigerAccentStyle.NEON_RED -> TigerNeonRed
         TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
         TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
         TigerAccentStyle.TOXIC_LIME -> TigerToxicLime

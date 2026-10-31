@@ -40,15 +40,13 @@ import androidx.compose.ui.util.lerp
 @Composable
 fun BluetoothNexusCard(
     deviceInfo: BluetoothDeviceInfo,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onManageDevices: () -> Unit = {}
 ) {
     if (!deviceInfo.isConnected) return
 
     val codecLabel = deviceInfo.codec.ifBlank { "N/A" }
     val profileLabel = deviceInfo.profile.ifBlank { "A2DP" }
-    val transportLabel = deviceInfo.transport.ifBlank { "Unknown" }
-    val classLabel = deviceInfo.deviceClass.ifBlank { "Audio Device" }
-    val addressLabel = deviceInfo.maskedAddress.ifBlank { "Hidden" }
     val batteryText = if (deviceInfo.batteryLevel >= 0) "${deviceInfo.batteryLevel}%" else "Unknown"
     val batteryColor = when {
         deviceInfo.batteryLevel < 0 -> Color.White.copy(alpha = 0.7f)
@@ -174,35 +172,15 @@ fun BluetoothNexusCard(
                 ) {
                     NexusMetricTile(
                         modifier = Modifier.weight(1f),
-                        title = "TRANSPORT",
-                        value = transportLabel,
-                        valueColor = MaterialTheme.colorScheme.onSurface
-                    )
-                    NexusMetricTile(
-                        modifier = Modifier.weight(1f),
-                        title = "CLASS",
-                        value = classLabel,
-                        valueColor = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    NexusMetricTile(
-                        modifier = Modifier.weight(1f),
-                        title = "TOTAL ASCENSION",
+                        title = "LISTENING TIME",
                         value = formatListeningTime(deviceInfo.listeningTimeMs),
                         valueColor = MaterialTheme.colorScheme.onSurface
                     )
                     NexusMetricTile(
                         modifier = Modifier.weight(1f),
-                        title = "ADDRESS",
-                        value = addressLabel,
-                        valueColor = MaterialTheme.colorScheme.onSurface
+                        title = "AUTOEQ PRESETS",
+                        value = "Tuned Profiles",
+                        valueColor = TigerCyberCyan
                     )
                 }
 
@@ -210,7 +188,24 @@ fun BluetoothNexusCard(
             }
         }
 
-        BluetoothStatusChip(label = if (isExpanded) "NEXUS CONNECTED" else "CONNECTED · TAP TO EXPAND")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BluetoothStatusChip(label = if (isExpanded) "CONNECTED" else "CONNECTED · TAP TO EXPAND")
+            TextButton(
+                onClick = onManageDevices,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "AUDIO DEVICES →",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TigerCyberCyan
+                )
+            }
+        }
     }
 }
 

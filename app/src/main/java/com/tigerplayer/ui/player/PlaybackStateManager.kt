@@ -9,6 +9,7 @@ import com.tigerplayer.data.local.MediaSource
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.AudioReactiveFrame
@@ -41,7 +42,7 @@ data class PlaybackState(
     val isPlaying: Boolean = false,
     val currentPosition: Long = 0L,
     val currentTrack: AudioTrack? = null,
-    val currentLyrics: String? = null,
+    val currentLyrics: Lyrics = Lyrics.None,
     val artistImageUrl: String? = null,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
@@ -172,7 +173,7 @@ class PlaybackStateManager(
                                 isPlaying = false,
                                 currentPosition = 0L,
                                 isShuffleEnabled = mediaControllerManager.shuffleModeEnabled.value,
-                                currentLyrics = null,
+                                currentLyrics = Lyrics.None,
                                 artistImageUrl = null,
                                 currentWaveform = emptyList()
                             )
@@ -199,7 +200,7 @@ class PlaybackStateManager(
                         isPlaying = spotifyState.isPlaying,
                         currentPosition = spotifyState.positionMs,
                         isShuffleEnabled = spotifyState.isShuffleEnabled,
-                        currentLyrics = if (isNewSpotifyTrack) null else state.currentLyrics,
+                        currentLyrics = if (isNewSpotifyTrack) Lyrics.None else state.currentLyrics,
                         artistImageUrl = if (isNewSpotifyTrack) null else state.artistImageUrl,
                         currentWaveform = if (isNewSpotifyTrack) emptyList() else state.currentWaveform
                     )
@@ -338,7 +339,7 @@ class PlaybackStateManager(
                     _playbackState.update {
                         it.copy(
                             currentTrack = track,
-                            currentLyrics = null,
+                            currentLyrics = Lyrics.None,
                             artistImageUrl = null,
                             currentWaveform = emptyList()
                         )
@@ -351,11 +352,10 @@ class PlaybackStateManager(
                     }
                     statsEngine.onTrackChanged(track, _playbackState.value.isPlaying)
 
-                    if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
+                    if (track.isLocal && !track.artworkUri.toString().startsWith("http")) {
                         scope.launch(Dispatchers.IO) {
-                            val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist, track.album)
+                            val highResUri = metadataEngine.resolveTrackArtwork(track)
                             if (highResUri != null) {
-                                audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
                                 _playbackState.update { state ->
                                     if (state.currentTrack?.id == track.id) {
                                         state.copy(currentTrack = track.copy(artworkUri = highResUri))
@@ -501,10 +501,9 @@ class PlaybackStateManager(
 
     fun toggleVisualMode(isCoverOptimized: Boolean = false) {
         val nextMode = when (_playbackState.value.visualMode) {
-            PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
-            PlayerVisualMode.WAVEFORM -> if (isCoverOptimized) PlayerVisualMode.ARTWORK else PlayerVisualMode.VORTEX
+            PlayerVisualMode.ARTWORK -> PlayerVisualMode.VORTEX
             PlayerVisualMode.VORTEX -> PlayerVisualMode.ARTWORK
-            PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
+            else -> PlayerVisualMode.ARTWORK
         }
         _playbackState.update { it.copy(visualMode = nextMode) }
     }

@@ -38,9 +38,22 @@ object SafPathResolver {
         val documentId = try {
             DocumentsContract.getTreeDocumentId(treeUri)
         } catch (e: Exception) {
-            null
+            try {
+                DocumentsContract.getDocumentId(treeUri)
+            } catch (e2: Exception) {
+                null
+            }
         } ?: return null
 
         return resolveFromDocumentId(documentId)
+    }
+
+    /**
+     * Resolves the parent directory path of a SAF document [Uri] if possible.
+     */
+    fun resolveParentPath(uri: Uri): String? {
+        val path = resolvePath(uri) ?: return null
+        val lastSlash = path.lastIndexOf('/')
+        return if (lastSlash > 0) path.substring(0, lastSlash) else null
     }
 }

@@ -1,8 +1,11 @@
 package com.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Upload
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -757,8 +761,36 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
     val likedPlaylist = remember(playlists) { playlists.find { it.id == LIKED_SONGS_ID } }
     val userPlaylists = remember(playlists) { playlists.filterNot { it.id == LIKED_SONGS_ID } }
 
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+
+    val importM3uLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val result = viewModel.importM3uPlaylist(uri)
+                if (result.isSuccess) {
+                    val import = result.getOrNull()
+                    val message = if ((import?.unmatchedCount ?: 0) > 0) {
+                        "Imported '${import?.playlistName}': ${import?.importedCount} tracks mapped, ${import?.unmatchedCount} unmatched"
+                    } else {
+                        "Imported '${import?.playlistName}': ${import?.importedCount} tracks"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        "M3U import failed: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
 
     if (showCreateDialog) {
         val focusRequester = remember { FocusRequester() }
@@ -855,6 +887,23 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     icon = WitcherIcons.Add,
                     title = "Forge New Playlist",
                     onClick = { showCreateDialog = true }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                PremiumActionRow(
+                    icon = Icons.Rounded.Upload,
+                    title = "Import M3U / M3U8 Playlist",
+                    onClick = {
+                        importM3uLauncher.launch(
+                            arrayOf(
+                                "audio/x-mpegurl",
+                                "audio/mpegurl",
+                                "application/vnd.apple.mpegurl",
+                                "application/x-mpegurl",
+                                "text/plain",
+                                "*/*"
+                            )
+                        )
+                    }
                 )
                 Spacer(modifier = Modifier.height(32.dp))
             }

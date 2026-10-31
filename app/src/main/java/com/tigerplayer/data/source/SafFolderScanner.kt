@@ -94,6 +94,7 @@ class SafFolderScanner @Inject constructor(
         var durationMs = 0L
         var bitrate = 0
         var year: String? = null
+        var hasEmbeddedArt = false
 
         val retriever = MediaMetadataRetriever()
         try {
@@ -106,6 +107,8 @@ class SafFolderScanner @Inject constructor(
             bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
                 ?.toIntOrNull() ?: 0
             year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
+            val picture = retriever.embeddedPicture
+            hasEmbeddedArt = picture != null && picture.isNotEmpty()
         } catch (e: Exception) {
             // Corrupt/unsupported files must not take the whole scan down with them.
             Log.w(TAG, "Failed to read tags for $uri: ${e.message}")
@@ -137,7 +140,8 @@ class SafFolderScanner @Inject constructor(
             path = resolvedPath,
             year = year,
             dateAdded = lastModifiedSec,
-            dateModified = lastModifiedSec
+            dateModified = lastModifiedSec,
+            hasEmbeddedArtwork = hasEmbeddedArt
         )
     }
 }

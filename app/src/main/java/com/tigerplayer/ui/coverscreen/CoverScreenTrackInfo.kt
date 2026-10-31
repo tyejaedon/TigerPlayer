@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,8 +39,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import com.tigerplayer.ui.theme.TigerNeonRed
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +70,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.engine.FluidRenderer
 import com.tigerplayer.engine.FluidVortexView
 import com.tigerplayer.ui.player.LyricsDisplay
@@ -136,12 +144,14 @@ internal fun CoverScreenMediaCycleViewport(
     currentViewIndex: Int,
     onViewIndexChanged: (Int) -> Unit,
     track: AudioTrack?,
-    lyrics: String?,
+    lyrics: Lyrics,
     currentPosition: Long,
     isLarge: Boolean,
     minLineHeight: Dp,
     targetHeight: Dp,
     onDoubleTapAlbumArt: () -> Unit = {},
+    onDoubleTapLyrics: () -> Unit = {},
+    onSeek: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var totalDragX by remember { mutableFloatStateOf(0f) }
@@ -187,10 +197,40 @@ internal fun CoverScreenMediaCycleViewport(
             when (page) {
                 // Dot 1: Album Artwork
                 0 -> {
+                    var showLikedHeart by remember { mutableStateOf(false) }
+                    val heartScale = remember { androidx.compose.animation.core.Animatable(0.4f) }
+                    val heartAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                    val coroutineScope = rememberCoroutineScope()
+
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapAlbumArt() }) },
+                            .pointerInput(track?.id) {
+                                detectTapGestures(
+                                    onDoubleTap = {
+                                        onDoubleTapAlbumArt()
+                                        coroutineScope.launch {
+                                            showLikedHeart = true
+                                            heartScale.snapTo(0.4f)
+                                            heartAlpha.snapTo(1f)
+                                            launch {
+                                                heartScale.animateTo(
+                                                    1.3f,
+                                                    androidx.compose.animation.core.spring(dampingRatio = 0.5f)
+                                                )
+                                            }
+                                            heartAlpha.animateTo(
+                                                0f,
+                                                androidx.compose.animation.core.tween(
+                                                    durationMillis = 650,
+                                                    delayMillis = 150
+                                                )
+                                            )
+                                            showLikedHeart = false
+                                        }
+                                    }
+                                )
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(
@@ -204,6 +244,27 @@ internal fun CoverScreenMediaCycleViewport(
                                 .clip(RoundedCornerShape(12.dp))
                                 .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
                         )
+
+                        if (showLikedHeart) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight(0.92f)
+                                    .aspectRatio(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black.copy(alpha = 0.35f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Favorite,
+                                    contentDescription = stringResource(R.string.coverscreen_action_like),
+                                    tint = TigerNeonRed,
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .scale(heartScale.value)
+                                        .alpha(heartAlpha.value)
+                                )
+                            }
+                        }
                     }
                 }
                 // Dot 2: Lyrics View
@@ -211,7 +272,7 @@ internal fun CoverScreenMediaCycleViewport(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapAlbumArt() }) },
+                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapLyrics() }) },
                         contentAlignment = Alignment.Center
                     ) {
                         LyricsDisplay(
@@ -222,7 +283,8 @@ internal fun CoverScreenMediaCycleViewport(
                             activeFontSize = if (isLarge) 22.sp else 20.sp,
                             inactiveFontSize = if (isLarge) 18.sp else 16.sp,
                             plainLyricsFontSize = if (isLarge) 20.sp else 18.sp,
-                            lineVerticalPadding = if (isLarge) 10.dp else 8.dp
+                            lineVerticalPadding = if (isLarge) 10.dp else 8.dp,
+                            onLineClick = onSeek
                         )
                     }
                 }
@@ -235,15 +297,17 @@ internal fun CoverScreenMediaCycleViewport(
 internal fun TrackInfoText(
     track: AudioTrack?,
     subtitle: String,
-    lyrics: String?,
+    lyrics: Lyrics,
     currentPosition: Long,
     isLarge: Boolean,
     statsVisible: Boolean,
     isVortexImmersive: Boolean = false,
     onToggleVortexImmersive: () -> Unit = {},
+    onDoubleTapAlbumArt: () -> Unit = {},
     onOpenQueue: () -> Unit = {},
     onOpenLibrary: () -> Unit = {},
     onMediaCyclePositioned: (Rect) -> Unit = {},
+    onSeek: ((Long) -> Unit)? = null,
     screenHeightDp: Dp = LocalConfiguration.current.screenHeightDp.dp
 ) {
     val isTight = screenHeightDp > 0.dp && screenHeightDp <= 360.dp
@@ -405,7 +469,9 @@ internal fun TrackInfoText(
                 isLarge = isLarge,
                 minLineHeight = minLineHeight,
                 targetHeight = targetLyricsHeight,
-                onDoubleTapAlbumArt = onToggleVortexImmersive,
+                onDoubleTapAlbumArt = onDoubleTapAlbumArt,
+                onDoubleTapLyrics = onToggleVortexImmersive,
+                onSeek = onSeek,
                 modifier = Modifier.onGloballyPositioned {
                     onMediaCyclePositioned(it.boundsInRoot())
                 }

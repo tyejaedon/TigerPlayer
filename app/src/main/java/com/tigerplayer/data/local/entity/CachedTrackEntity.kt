@@ -1,8 +1,10 @@
 package com.tigerplayer.data.local.entity
 
+import androidx.core.net.toUri
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.tigerplayer.data.model.AudioTrack
 
 /**
  * THE VAULT RECORD
@@ -42,5 +44,39 @@ data class CachedTrackEntity(
     // MediaStore.Audio.Media.DATE_MODIFIED, in seconds since epoch. The cheap identity fingerprint
     // used to diff the scanned library against the cache without a deep field comparison.
     @ColumnInfo(defaultValue = "0")
-    val dateModified: Long = 0L
+    val dateModified: Long = 0L,
+
+    // --- Artwork Negative Cache & Embedded Detection (issue #64) ---
+    @ColumnInfo(defaultValue = "0")
+    val artworkLookupFailedAt: Long = 0L,
+    @ColumnInfo(defaultValue = "0")
+    val artworkLookupAttempts: Int = 0,
+    val hasEmbeddedArtwork: Boolean? = null
+)
+
+fun CachedTrackEntity.toAudioTrack(): AudioTrack = AudioTrack(
+    id = id,
+    title = title,
+    artist = artist,
+    album = album,
+    uri = uriString.toUri(),
+    artworkUri = artworkUriString.toUri(),
+    durationMs = durationMs,
+    mimeType = mimeType,
+    isLocal = true,
+    bitrate = bitrate,
+    sampleRate = sampleRate,
+    trackNumber = trackNumber,
+    path = path,
+    year = year,
+    dateAdded = dateAdded,
+    isLiked = isLiked,
+    replayGainTrackDb = replayGainTrackDb,
+    replayGainAlbumDb = replayGainAlbumDb,
+    replayGainTrackPeak = replayGainTrackPeak,
+    replayGainAlbumPeak = replayGainAlbumPeak,
+    dateModified = dateModified,
+    artworkLookupFailedAt = artworkLookupFailedAt,
+    artworkLookupAttempts = artworkLookupAttempts,
+    hasEmbeddedArtwork = hasEmbeddedArtwork
 )

@@ -4,11 +4,14 @@ import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.tigerplayer.data.local.dao.AudioDeviceDao
 import com.tigerplayer.data.local.dao.MusicFolderDao
 import com.tigerplayer.data.local.dao.PlaylistDao
 import com.tigerplayer.data.local.dao.TigerDao
 import com.tigerplayer.data.local.entity.ArtistCacheEntity
+import com.tigerplayer.data.local.entity.AudioDeviceEntity
 import com.tigerplayer.data.local.entity.CachedTrackEntity // NEW
+import com.tigerplayer.data.local.entity.DevicePresetEntity
 import com.tigerplayer.data.local.entity.MusicFolderEntity
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
@@ -25,14 +28,18 @@ import com.tigerplayer.data.local.entity.WaveformCacheEntity
         WaveformCacheEntity::class,
         CachedTrackEntity::class, // <-- Added
         LyricsCacheEntity::class, // 2. Add it to the array
-        MusicFolderEntity::class // <-- Added for custom music folders (issue #50)
+        MusicFolderEntity::class, // <-- Added for custom music folders (issue #50)
+        AudioDeviceEntity::class, // <-- Added for audio devices & history (issue #300)
+        DevicePresetEntity::class // <-- Added for per-device EQ presets (issue #300)
     ],
-    version = 14, // <-- Bumped to 14 for MusicFolderEntity (issue #50)
+    version = 16, // <-- Bumped to 16 for artwork negative cache & embedded detection (issue #64)
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 11, to = 12),
         AutoMigration(from = 12, to = 13),
-        AutoMigration(from = 13, to = 14)
+        AutoMigration(from = 13, to = 14),
+        AutoMigration(from = 14, to = 15),
+        AutoMigration(from = 15, to = 16)
     ]
 )
 @TypeConverters(Converters::class)
@@ -40,4 +47,5 @@ abstract class TigerDatabase : RoomDatabase() {
     abstract fun tigerDao(): TigerDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun musicFolderDao(): MusicFolderDao
+    abstract fun audioDeviceDao(): AudioDeviceDao
 }

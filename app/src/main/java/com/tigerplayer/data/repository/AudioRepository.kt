@@ -2,12 +2,14 @@ package com.tigerplayer.data.repository
 
 import android.content.Context
 import android.database.ContentObserver
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
+import java.io.File
 import com.tigerplayer.data.local.dao.PlaylistDao
 import com.tigerplayer.data.local.dao.TigerDao
 import com.tigerplayer.data.local.dao.TrackStats
@@ -31,6 +33,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
@@ -309,22 +312,43 @@ class AudioRepository @Inject constructor(
     // --- Playlist Persistence & Reordering Operations ---
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
-        return playlistDao.getPlaylistsWithCount()
+        return flow {
+            ensureSingletonLikedPlaylist()
+            emitAll(playlistDao.getPlaylistsWithCount())
+        }.flowOn(ioDispatcher)
             .onEach { list ->
                 if (com.tigerplayer.BuildConfig.DEBUG) {
                     Log.d(TAG, "Playlists loaded: ${list.size}")
                 }
             }
     }
+
     suspend fun createPlaylist(name: String, id: Long? = null) {
-        playlistDao.insertPlaylist(
-            PlaylistEntity(
-                playlistId = id ?: 0L,
-                name = name,
-                artworkUri = null,
-                createdAt = System.currentTimeMillis()
+        withContext(ioDispatcher) {
+            val trimmed = name.trim()
+            if (trimmed.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)) {
+                ensureSingletonLikedPlaylist()
+                return@withContext
+            }
+            playlistDao.insertPlaylist(
+                PlaylistEntity(
+                    playlistId = id ?: 0L,
+                    name = name,
+                    artworkUri = null,
+                    createdAt = System.currentTimeMillis()
+                )
             )
-        )
+        }
+    }
+
+    suspend fun ensureSingletonLikedPlaylist(): Long {
+        return withContext(ioDispatcher) {
+            val trackIds = playlistDao.ensureSingletonLikedPlaylist()
+            trackIds.forEach { trackId ->
+                tigerDao.updateTrackLikeStatus(trackId, true)
+            }
+            PlaylistEntity.LIKED_SONGS_PLAYLIST_ID
+        }
     }
 
     suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean) {
@@ -332,11 +356,63 @@ class AudioRepository @Inject constructor(
     }
 
     /**
-     * Persists updated high-resolution artwork URI in Room.
+     * Persists updated high-resolution artwork URI in Room and resets negative cache tracking.
      * Called when artwork is asynchronously fetched by MetadataEngine.
      */
     suspend fun updateTrackArtworkUri(trackId: String, newUri: String) {
         tigerDao.updateTrackArtworkUri(trackId, newUri)
+    }
+
+    suspend fun getCachedTrack(trackId: String): CachedTrackEntity? {
+        return tigerDao.getCachedTrackById(trackId)
+    }
+
+    suspend fun recordArtworkLookupFailure(
+        trackId: String,
+        failedAt: Long = System.currentTimeMillis(),
+        attempts: Int
+    ) {
+        tigerDao.updateArtworkLookupFailed(trackId, failedAt, attempts)
+    }
+
+    suspend fun updateHasEmbeddedArtwork(trackId: String, hasEmbedded: Boolean) {
+        tigerDao.updateHasEmbeddedArtwork(trackId, hasEmbedded)
+    }
+
+    /**
+     * Inspects whether the local track has embedded artwork in the underlying audio file.
+     * Results are cached in Room so expensive MediaMetadataRetriever checks occur at most once.
+     */
+    suspend fun hasEmbeddedArtwork(track: AudioTrack): Boolean = withContext(ioDispatcher) {
+        if (track.hasEmbeddedArtwork != null) {
+            return@withContext track.hasEmbeddedArtwork
+        }
+        val cached = tigerDao.getCachedTrackById(track.id)
+        if (cached?.hasEmbeddedArtwork != null) {
+            return@withContext cached.hasEmbeddedArtwork
+        }
+        val detected = checkEmbeddedArtwork(track)
+        tigerDao.updateHasEmbeddedArtwork(track.id, detected)
+        detected
+    }
+
+    private fun checkEmbeddedArtwork(track: AudioTrack): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            if (!track.path.isNullOrBlank() && File(track.path).exists()) {
+                retriever.setDataSource(track.path)
+            } else {
+                retriever.setDataSource(context, track.uri)
+            }
+            val picture = retriever.embeddedPicture
+            picture != null && picture.isNotEmpty()
+        } catch (e: Exception) {
+            false
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {}
+        }
     }
 
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
@@ -429,7 +505,10 @@ class AudioRepository @Inject constructor(
         replayGainAlbumDb = replayGainAlbumDb,
         replayGainTrackPeak = replayGainTrackPeak,
         replayGainAlbumPeak = replayGainAlbumPeak,
-        dateModified = dateModified
+        dateModified = dateModified,
+        artworkLookupFailedAt = artworkLookupFailedAt,
+        artworkLookupAttempts = artworkLookupAttempts,
+        hasEmbeddedArtwork = hasEmbeddedArtwork
     )
 
     private fun AudioTrack.toEntity() = CachedTrackEntity(
@@ -452,6 +531,9 @@ class AudioRepository @Inject constructor(
         replayGainAlbumDb = replayGainAlbumDb,
         replayGainTrackPeak = replayGainTrackPeak,
         replayGainAlbumPeak = replayGainAlbumPeak,
-        dateModified = dateModified
+        dateModified = dateModified,
+        artworkLookupFailedAt = artworkLookupFailedAt,
+        artworkLookupAttempts = artworkLookupAttempts,
+        hasEmbeddedArtwork = hasEmbeddedArtwork
     )
 }

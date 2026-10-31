@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -41,21 +42,30 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.tigerplayer.ui.theme.CoverNeonPalette
+import com.tigerplayer.ui.theme.DefaultCoverNeonPalette
 import com.tigerplayer.ui.theme.DominantColorExtractor
-import com.tigerplayer.ui.theme.TigerElectricAmber
+import com.tigerplayer.ui.theme.LocalCoverNeonPalette
 import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerNeonRed
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import java.util.concurrent.TimeUnit
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.sin
 
 /**
  * High-performance cover-screen playback scrubber and audio-reactive waveform entity,
@@ -75,23 +85,26 @@ fun CoverMicroWaveform(
     currentPosition: Long = 0L,
     onSeek: (Long) -> Unit = {},
     artworkUri: Any? = null,
+    baseWaveAmplitude: Dp = 6.5.dp,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isInspection = LocalInspectionMode.current
+    val defaultPalette = LocalCoverNeonPalette.current
     val safeDuration = duration.coerceAtLeast(1L)
     val shouldAnimate = CoverScreenPerformanceManager.shouldAnimate(isPlaying, isRenderingActive)
 
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
 
-    // Dynamic album art palette extraction snapped to high-contrast neon tokens
-    var neonPalette by remember {
-        mutableStateOf(CoverNeonPalette(primary = TigerNeonOrange, secondary = TigerElectricAmber))
+    // Dynamic album art palette extraction snapped to high-contrast neon tokens (defaulting to vibrant red neon palette)
+    var neonPalette by remember(defaultPalette) {
+        mutableStateOf(defaultPalette)
     }
 
-    LaunchedEffect(artworkUri) {
-        if (artworkUri == null) {
-            neonPalette = CoverNeonPalette(primary = TigerNeonOrange, secondary = TigerElectricAmber)
+    LaunchedEffect(artworkUri, defaultPalette) {
+        if (isInspection || artworkUri == null) {
+            neonPalette = defaultPalette
             return@LaunchedEffect
         }
         try {
@@ -103,10 +116,10 @@ fun CoverMicroWaveform(
             val result = context.imageLoader.execute(request)
             val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
             if (bitmap != null) {
-                neonPalette = DominantColorExtractor.extractCoverNeonPalette(bitmap)
+                neonPalette = DominantColorExtractor.extractCoverNeonPalette(bitmap, defaultPalette)
             }
         } catch (_: Exception) {
-            neonPalette = CoverNeonPalette(primary = TigerNeonOrange, secondary = TigerElectricAmber)
+            neonPalette = defaultPalette
         }
     }
 
@@ -132,9 +145,13 @@ fun CoverMicroWaveform(
         CoverScreenPerformanceManager.calculateWaveformPoints(amplitudes, 32)
     }
 
-    // Reusable paths for zero heap allocation across 60/120 FPS render loops
-    val wavePath = remember { Path() }
-    val fillPath = remember { Path() }
+    // Reusable paths for zero heap allocation across 60/120 FPS render loops (3 distinct harmonic waves)
+    val wavePath1 = remember { Path() }
+    val fillPath1 = remember { Path() }
+    val wavePath2 = remember { Path() }
+    val fillPath2 = remember { Path() }
+    val wavePath3 = remember { Path() }
+    val fillPath3 = remember { Path() }
 
     val rawProgress = (currentPosition.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
     val activeProgress = if (isDragging) dragProgress else rawProgress
@@ -207,85 +224,248 @@ fun CoverMicroWaveform(
                 }
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val centerY = size.height / 2f
                 val progressX = (size.width * activeProgress).coerceIn(0f, size.width)
                 val trackHeight = 4.dp.toPx()
                 val trackRadius = trackHeight / 2f
+                val bottomPadding = 3.dp.toPx()
+                val trackCenterY = size.height - bottomPadding - trackRadius
+                val trackTop = trackCenterY - trackRadius
+                val overlapPx = 1.5.dp.toPx()
+                val effectiveBaselineY = trackTop + overlapPx
+                // Unconfined relative wave amplitude hierarchy: Wave 2 is 4x Wave 1, Wave 3 is 3x Wave 2 (12x Wave 1)
+                val wave1Amplitude = baseWaveAmplitude.toPx()
+                val wave2Amplitude = wave1Amplitude * 4f
+                val wave3Amplitude = wave2Amplitude * 3f
+                val piOver4 = (Math.PI / 4.0).toFloat() // PI / 4 radians (45 degree phase shift)
+                val piOver2 = (Math.PI / 2.0).toFloat() // PI / 2 radians (90 degree phase shift)
 
                 // Base subtle track background
                 drawRoundRect(
                     color = Color.White.copy(alpha = 0.14f),
-                    topLeft = Offset(0f, centerY - trackRadius),
+                    topLeft = Offset(0f, trackTop),
                     size = Size(size.width, trackHeight),
                     cornerRadius = CornerRadius(trackRadius, trackRadius)
                 )
 
-                // Populate waveform geometry
-                CoverScreenPerformanceManager.populateWaveformPath(
-                    path = wavePath,
+                // 1. Populate Wave 3: 3x larger than Wave 2 (12x Wave 1) - unconfined towering apex tier
+                populatePositiveWaveformPath(
+                    path = wavePath3,
+                    fillPath = fillPath3,
                     points = points,
                     width = size.width,
-                    height = size.height,
+                    maxHeight = wave3Amplitude,
+                    baselineY = trackTop,
+                    overlapPx = overlapPx,
                     phase = phase,
+                    phaseOffset = 0f,
+                    isCosine = true,
+                    frequencyMultiplier = 1.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy
                 )
 
-                // Populate inside fill geometry (closing wave to baseline)
-                fillPath.reset()
-                fillPath.addPath(wavePath)
-                fillPath.lineTo(size.width, centerY + (trackHeight * 1.5f))
-                fillPath.lineTo(0f, centerY + (trackHeight * 1.5f))
-                fillPath.close()
+                // 2. Populate Wave 2: 4x larger than Wave 1 - unconfined intermediate middle tier (PI / 4 phase lead)
+                populatePositiveWaveformPath(
+                    path = wavePath2,
+                    fillPath = fillPath2,
+                    points = points,
+                    width = size.width,
+                    maxHeight = wave2Amplitude,
+                    baselineY = trackTop,
+                    overlapPx = overlapPx,
+                    phase = phase,
+                    phaseOffset = piOver4,
+                    isCosine = false,
+                    frequencyMultiplier = 1.0f,
+                    bass = if (shouldAnimate) bass else 0f,
+                    energy = animatedEnergy
+                )
 
-                // Active Played Zone (0 to progressX)
-                clipRect(left = 0f, top = 0f, right = progressX, bottom = size.height) {
+                // 3. Populate Wave 1: Base amplitude - foundational red foreground tier
+                populatePositiveWaveformPath(
+                    path = wavePath1,
+                    fillPath = fillPath1,
+                    points = points,
+                    width = size.width,
+                    maxHeight = wave1Amplitude,
+                    baselineY = trackTop,
+                    overlapPx = overlapPx,
+                    phase = phase,
+                    phaseOffset = 0f,
+                    isCosine = false,
+                    frequencyMultiplier = 1.0f,
+                    bass = if (shouldAnimate) bass else 0f,
+                    energy = animatedEnergy
+                )
+
+                // Active Played Zone (0 to progressX horizontally, unconfined vertically by parent bounds)
+                clipRect(left = 0f, top = -10_000f, right = progressX, bottom = size.height + 1_000f) {
                     // Played track background bar
                     drawRoundRect(
                         color = neonPalette.primary.copy(alpha = 0.35f),
-                        topLeft = Offset(0f, centerY - trackRadius),
+                        topLeft = Offset(0f, trackTop),
                         size = Size(progressX, trackHeight),
                         cornerRadius = CornerRadius(trackRadius, trackRadius)
                     )
 
-                    // Inside Waveform Fill (Vertical Neon Gradient)
+                    // Unified fill and stroke alpha values across all 3 waves for balanced visual presence
+                    val activeFillAlphaTop = 0.55f
+                    val activeFillAlphaBottom = 0.15f
+                    val activeGlowAlpha = 0.30f
+                    val activeStrokeAlpha = 0.95f
+
+                    // Wave 3 (Cosine Wave): Tertiary Neon Color (3x Wave 2, 12x Wave 1 - crowning cyan peaks)
                     drawPath(
-                        path = fillPath,
+                        path = fillPath3,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                neonPalette.primary.copy(alpha = 0.40f),
-                                neonPalette.secondary.copy(alpha = 0.08f)
+                                neonPalette.tertiary.copy(alpha = activeFillAlphaTop),
+                                neonPalette.tertiary.copy(alpha = activeFillAlphaBottom)
                             ),
-                            startY = 0f,
-                            endY = size.height
+                            startY = effectiveBaselineY - wave3Amplitude,
+                            endY = effectiveBaselineY
                         )
                     )
-
-                    // Active Waveform Outline Glow
+                    // Wave 3 subtle neon glow halo
                     drawPath(
-                        path = wavePath,
-                        color = neonPalette.secondary.copy(alpha = 0.32f),
-                        style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round)
+                        path = wavePath3,
+                        color = neonPalette.tertiary.copy(alpha = activeGlowAlpha),
+                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = wavePath3,
+                        color = neonPalette.tertiary.copy(alpha = activeStrokeAlpha),
+                        style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
                     )
 
-                    // Active Waveform Outline (Crisp Neon Primary)
+                    // Wave 2 (Sine Wave at PI / 4 rad): Secondary Neon Color (4x Wave 1 - vibrant orange crests)
                     drawPath(
-                        path = wavePath,
-                        color = neonPalette.primary,
+                        path = fillPath2,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                neonPalette.secondary.copy(alpha = activeFillAlphaTop),
+                                neonPalette.secondary.copy(alpha = activeFillAlphaBottom)
+                            ),
+                            startY = effectiveBaselineY - wave2Amplitude,
+                            endY = effectiveBaselineY
+                        )
+                    )
+                    // Wave 2 subtle neon glow halo
+                    drawPath(
+                        path = wavePath2,
+                        color = neonPalette.secondary.copy(alpha = activeGlowAlpha),
+                        style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = wavePath2,
+                        color = neonPalette.secondary.copy(alpha = activeStrokeAlpha),
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                    )
+
+                    // Wave 1 (Sine Wave): Primary Neon Color (Base amplitude - vibrant red foundation glow & solid)
+                    drawPath(
+                        path = fillPath1,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                neonPalette.primary.copy(alpha = activeFillAlphaTop),
+                                neonPalette.primary.copy(alpha = activeFillAlphaBottom)
+                            ),
+                            startY = effectiveBaselineY - wave1Amplitude,
+                            endY = effectiveBaselineY
+                        )
+                    )
+                    // Wave 1 subtle neon glow halo
+                    drawPath(
+                        path = wavePath1,
+                        color = neonPalette.primary.copy(alpha = activeGlowAlpha),
+                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = wavePath1,
+                        color = neonPalette.primary.copy(alpha = activeStrokeAlpha),
                         style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
 
-                // Inactive Unplayed Zone (progressX to width)
-                clipRect(left = progressX, top = 0f, right = size.width, bottom = size.height) {
+                // Inactive Unplayed Zone (progressX to width horizontally, unconfined vertically by parent bounds)
+                clipRect(left = progressX, top = -10_000f, right = size.width, bottom = size.height + 1_000f) {
+                    // Preserved code: unplayed waveform is hidden for now using alpha = 0f
+                    val unplayedFillAlphaTop = 0f
+                    val unplayedFillAlphaBottom = 0f
+                    val unplayedGlowAlpha = 0f
+                    val unplayedStrokeAlpha = 0f
+
+                    // Wave 3 (Cosine Wave): Tertiary Neon Color (Cyan)
                     drawPath(
-                        path = wavePath,
-                        color = Color.White.copy(alpha = 0.18f),
+                        path = fillPath3,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                neonPalette.tertiary.copy(alpha = unplayedFillAlphaTop),
+                                neonPalette.tertiary.copy(alpha = unplayedFillAlphaBottom)
+                            ),
+                            startY = effectiveBaselineY - wave3Amplitude,
+                            endY = effectiveBaselineY
+                        )
+                    )
+                    drawPath(
+                        path = wavePath3,
+                        color = neonPalette.tertiary.copy(alpha = unplayedGlowAlpha),
+                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = wavePath3,
+                        color = neonPalette.tertiary.copy(alpha = unplayedStrokeAlpha),
+                        style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round)
+                    )
+
+                    // Wave 2 (Sine Wave at PI / 4 rad): Secondary Neon Color (Orange)
+                    drawPath(
+                        path = fillPath2,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                neonPalette.secondary.copy(alpha = unplayedFillAlphaTop),
+                                neonPalette.secondary.copy(alpha = unplayedFillAlphaBottom)
+                            ),
+                            startY = effectiveBaselineY - wave2Amplitude,
+                            endY = effectiveBaselineY
+                        )
+                    )
+                    drawPath(
+                        path = wavePath2,
+                        color = neonPalette.secondary.copy(alpha = unplayedGlowAlpha),
+                        style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = wavePath2,
+                        color = neonPalette.secondary.copy(alpha = unplayedStrokeAlpha),
+                        style = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round)
+                    )
+
+                    // Wave 1 (Sine Wave): Primary Neon Color (Red)
+                    drawPath(
+                        path = fillPath1,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                neonPalette.primary.copy(alpha = unplayedFillAlphaTop),
+                                neonPalette.primary.copy(alpha = unplayedFillAlphaBottom)
+                            ),
+                            startY = effectiveBaselineY - wave1Amplitude,
+                            endY = effectiveBaselineY
+                        )
+                    )
+                    drawPath(
+                        path = wavePath1,
+                        color = neonPalette.primary.copy(alpha = unplayedGlowAlpha),
+                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = wavePath1,
+                        color = neonPalette.primary.copy(alpha = unplayedStrokeAlpha),
                         style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
 
-                // Scrubber Dot / Thumb
+                // Scrubber Dot / Thumb (held directly on the drawRoundRect track)
                 val thumbRadius = if (isDragging) 6.dp.toPx() else 4.dp.toPx()
                 val glowRadius = if (isDragging) 10.dp.toPx() else 7.dp.toPx()
 
@@ -293,14 +473,14 @@ fun CoverMicroWaveform(
                 drawCircle(
                     color = neonPalette.primary.copy(alpha = if (isDragging) 0.65f else 0.40f),
                     radius = glowRadius,
-                    center = Offset(progressX, centerY)
+                    center = Offset(progressX, trackCenterY)
                 )
 
                 // Core dot
                 drawCircle(
                     color = Color.White,
                     radius = thumbRadius,
-                    center = Offset(progressX, centerY)
+                    center = Offset(progressX, trackCenterY)
                 )
             }
         }
@@ -328,4 +508,132 @@ fun formatCoverDuration(ms: Long): String {
     val minutes = TimeUnit.MILLISECONDS.toMinutes(safeMs)
     val seconds = TimeUnit.MILLISECONDS.toSeconds(safeMs) % 60
     return String.format("%02d:%02d", minutes, seconds)
+}
+
+/**
+ * Modular waveform generator that creates smooth, continuous curved paths containing exclusively
+ * positive amplitudes resting directly on top of the slider track with slight overlap for seamless
+ * visual continuity.
+ *
+ * Mathematical details:
+ * - Continuous raised sinusoidal wave: 0.5 * (1 + trig(theta)), oscillating smoothly between 0 and maxHeight.
+ * - At troughs (trig = -1), the wave gently touches the baseline with a zero horizontal derivative (no flat clipping).
+ * - At crests (trig = 1), the wave reaches its apex peak height smoothly.
+ * - When [isCosine] is false and [phaseOffset] is 0, generates a standard sine wave.
+ * - When [isCosine] is false and [phaseOffset] is PI / 4 radians, generates a phase-shifted wave (45-degree offset).
+ * - When [isCosine] is true, generates a cosine wave (equivalent to 90-degree offset).
+ * - All waves develop proper continuous curves in all scenarios (including zero audio energy, silence, or paused playback)
+ *   without flattening or collapsing into straight lines.
+ *
+ * @param path Pre-allocated Path for the wave stroke outline.
+ * @param fillPath Optional pre-allocated Path for the closed gradient fill geometry.
+ * @param points Smoothed amplitude data points along the horizontal axis.
+ * @param width Full horizontal drawing width in pixels.
+ * @param maxHeight Maximum upward peak height in pixels above the baseline.
+ * @param baselineY Baseline Y coordinate (top edge of the slider track).
+ * @param overlapPx Overlap distance in pixels into the slider rect for seamless visual continuity.
+ * @param phase Dynamic animated phase angle in radians.
+ * @param phaseOffset Fixed phase offset in radians (e.g. PI / 4 for the second wave).
+ * @param isCosine Whether this wave uses cosine (true) or sine (false).
+ * @param frequencyMultiplier Harmonic frequency scaling factor.
+ * @param bass Real-time low frequency energy (0..1).
+ * @param energy Audio energy scaling factor (0.2..1.2).
+ */
+fun populatePositiveWaveformPath(
+    path: Path,
+    fillPath: Path? = null,
+    points: FloatArray,
+    width: Float,
+    maxHeight: Float,
+    baselineY: Float,
+    overlapPx: Float,
+    phase: Float,
+    phaseOffset: Float = 0f,
+    isCosine: Boolean = false,
+    frequencyMultiplier: Float = 1f,
+    bass: Float = 0f,
+    energy: Float = 1f
+): Path {
+    path.reset()
+    fillPath?.reset()
+    if (width <= 0f || maxHeight <= 0f) {
+        return path
+    }
+
+    val effectiveBaselineY = baselineY + overlapPx
+    val safePhase = if (phase.isFinite()) phase else 0f
+    val safeBass = if (bass.isFinite()) bass.coerceIn(0f, 1f) else 0f
+    val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
+
+    // Subtle audio energy breathing factor (0.90..1.00) ensuring waves ALWAYS develop at least 90%
+    // of full height even during silence, paused playback, or empty amplitudes
+    val energyModulation = 0.90f + 0.10f * (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
+    val effectiveHeight = maxHeight * energyModulation
+
+    // Exactly 2 complete wave cycles across the entire slider width for consistent wavelength
+    val waveCycles = 2.0f
+    val twoPi = (Math.PI * 2.0).toFloat()
+    val sampleCount = max(64, points.size)
+    val step = width / sampleCount
+
+    // Helper to compute wave Y coordinate at any horizontal pixel position x
+    fun computeWaveY(x: Float): Float {
+        val normalizedX = (x / width).coerceIn(0f, 1f)
+        val angle = (safePhase * frequencyMultiplier) + phaseOffset + (normalizedX * waveCycles * twoPi * frequencyMultiplier)
+        val rawTrig = if (isCosine) cos(angle.toDouble()).toFloat() else sin(angle.toDouble()).toFloat()
+        // Raised sinusoid: continuous smooth wave in [0, 1] without flat-line clipping
+        val smoothOscillation = 0.5f * (1f + rawTrig)
+        val peakHeight = smoothOscillation * effectiveHeight
+        return effectiveBaselineY - peakHeight
+    }
+
+    val y0 = computeWaveY(0f)
+    path.moveTo(0f, y0)
+    fillPath?.let { fill ->
+        fill.moveTo(0f, effectiveBaselineY)
+        fill.lineTo(0f, y0)
+    }
+
+    for (i in 1..sampleCount) {
+        val x = if (i == sampleCount) width else i * step
+        val y = computeWaveY(x)
+        path.lineTo(x, y)
+        fillPath?.lineTo(x, y)
+    }
+
+    fillPath?.let { fill ->
+        fill.lineTo(width, effectiveBaselineY)
+        fill.lineTo(0f, effectiveBaselineY)
+        fill.close()
+    }
+
+    return path
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0E0C0A)
+@Composable
+fun CoverMicroWaveformPreview() {
+    TigerPlayerTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF0E0C0A))
+                .padding(vertical = 12.dp, horizontal = 8.dp)
+        ) {
+            CoverMicroWaveform(
+                amplitudes = listOf(
+                    0.15f, 0.35f, 0.70f, 0.95f, 0.60f, 0.40f, 0.85f,
+                    0.50f, 0.30f, 0.90f, 0.75f, 0.45f, 0.20f, 0.65f,
+                    0.80f, 0.55f, 0.30f, 0.85f, 0.60f, 0.40f, 0.25f
+                ),
+                bass = 0.65f,
+                energy = 0.80f,
+                isPlaying = true,
+                isRenderingActive = true,
+                duration = 215_000L,
+                currentPosition = 65_000L,
+                onSeek = {}
+            )
+        }
+    }
 }

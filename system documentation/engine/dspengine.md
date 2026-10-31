@@ -145,8 +145,9 @@ For each audio block received in `queueInput(ByteBuffer)`, PCM samples are decod
 - **State Variable Filters (SVF)**: Implements Cytomic SVF topology (Andrew Simper) via [`StateVariableFilter`](class://com.tigerplayer.engine.StateVariableFilter):
   - Supported filter types: `LOW_SHELF`, `PEAKING`, `HIGH_SHELF`.
   - Zero zipper noise / clicks during parameter updates through parameter interpolation.
-- **Auto-Makeup Gain & ReplayGain Integration**:
-  - Automatically calculates input attenuation based on active EQ gain boosts to prevent filter overflow.
+- **Auto-Makeup Headroom & ReplayGain Integration**:
+  - Automatically calculates true maximum peak composite gain across the audible spectrum (20 Hz - 20 kHz) via `BiquadDesigner.calculateCompositePeakGainDb(nodes, sampleRate)` rather than naively summing band gains algebraically.
+  - Applies input headroom attenuation strictly equal to the true composite peak boost (`autoMakeupGain = 10^(-compositePeakDb / 20)` when `compositePeakDb > 0 dB`, otherwise `1.0f`), preventing Fletcher-Munson loudness drops on non-overlapping bands while accurately accounting for compounding on overlapping bands.
   - Multiplies input by linear ReplayGain factor calculated by [`ReplayGainCalculator`](class://com.tigerplayer.engine.ReplayGainCalculator).
 
 ### Stage 3: Acoustic Environments (`AcousticEnvironmentMode`)
@@ -175,11 +176,13 @@ For each audio block received in `queueInput(ByteBuffer)`, PCM samples are decod
   ```
   and soft polynomial saturation to maintain balanced output gain when isolating individual stems.
 
-### Stage 5: Look-Ahead Peak Limiter & Automatic Gain Control (AGC)
+### Stage 5: Look-Ahead True-Peak Limiter & AGC Protection
 - **Look-Ahead Buffer**: 1024-sample ring buffer holding delayed Left/Right signals (delay `~4.5 ms` sample-rate aware).
 - **Peak Sensing**: Inspects incoming signal peaks ahead of output generation.
-- **Envelope Follower**: Smooth attack (`~5 ms`) and release (`~250 ms`) envelope detection.
-- **Limiter Clamping**: Applies smooth gain reduction when peak signal exceeds `LIMITER_THRESHOLD` (`0.82f`), preventing hard digital clipping.
+- **Envelope Follower**: Fast transient attack (`~0.8 ms`) and transparent release (`~50 ms`) envelope detection preventing audible pumping.
+- **Dynamic Bypass & True-Peak Protection**:
+  - Automatically bypasses AGC gain reduction (`0 dB` reduction) on lossless streams (`audio/flac`, `audio/wav`, `audio/alac`, `audio/aiff`, and 24-bit/Float PCM) when EQ bands have zero or negative boost.
+  - Engages true-peak limiting at `TRUE_PEAK_THRESHOLD` (`1.0f` / `0.0 dBFS`) when digital overs are imminent (positive EQ boosts or reverb summing), preventing hard digital clipping while preserving dynamic range.
 
 ### Stage 6: Real-Time Spectral Analysis & StateFlow Emission
 - Operates in two modes (`SpectralAnalysisMode`):

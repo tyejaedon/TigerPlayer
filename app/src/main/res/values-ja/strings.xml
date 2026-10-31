@@ -31,6 +31,9 @@
     <string name="coverscreen_action_remove_from_queue">キューから削除</string>
     <string name="coverscreen_action_remove">削除</string>
 
+    <string name="coverscreen_action_like">お気に入りに追加</string>
+    <string name="coverscreen_action_edit_playlist_photo">プレイリストの画像を変更</string>
+
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">再生中</string>
     <string name="coverscreen_status_paused">一時停止中</string>

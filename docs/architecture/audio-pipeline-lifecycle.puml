@@ -43,7 +43,7 @@ DspEngine -> DspEngine: Schroeder Hall Reverb (4 comb + 2 all-pass)
 DspEngine -> Limiter: Pass processed audio frames
 activate Limiter
 Limiter -> Limiter: Inspect 5ms ahead in circular buffer
-Limiter -> Limiter: Apply soft-knee attenuation if peak > 0.82f
+Limiter -> Limiter: Apply transparent true-peak limiting if peak > 1.0f (bypass on flat lossless)
 Limiter --> DspEngine: Safe clipped-free PCM frames
 deactivate Limiter
 

@@ -17,13 +17,17 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -34,6 +38,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -44,7 +51,11 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import com.tigerplayer.ui.theme.glassEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -72,8 +83,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -102,6 +115,7 @@ import androidx.compose.ui.unit.dp
 import com.tigerplayer.R
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.remote.model.SpotifyPlaylist
@@ -112,10 +126,12 @@ import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 
 enum class CoverScreenLibraryTab(val label: String) {
     HISTORY("Stats"),
-    CONSTELLATION("Constellation"),
     ARTISTS("Artists"),
     ALBUMS("Albums"),
     SONGS("Songs"),
@@ -137,7 +153,6 @@ fun CoverScreenLibraryTabRow(
         CoverScreenLibraryTab.entries.forEach { tab ->
             val tabTitle = when (tab) {
                 CoverScreenLibraryTab.HISTORY -> "Stats"
-                CoverScreenLibraryTab.CONSTELLATION -> "Constellation"
                 CoverScreenLibraryTab.ARTISTS -> stringResource(R.string.coverscreen_tab_artists)
                 CoverScreenLibraryTab.ALBUMS -> stringResource(R.string.coverscreen_tab_albums)
                 CoverScreenLibraryTab.SONGS -> stringResource(R.string.coverscreen_tab_songs)
@@ -181,6 +196,19 @@ fun CoverScreenLibraryMenu(
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
+    var playlistToEdit by remember { mutableStateOf<Playlist?>(null) }
+    val playlistImagePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        val target = playlistToEdit
+        if (uri != null && target != null) {
+            playerViewModel.updatePlaylistImage(context, target.id, uri)
+            if (selectedPlaylist?.id == target.id) {
+                selectedPlaylist = selectedPlaylist?.copy(artworkUri = uri.toString())
+            }
+        }
+        playlistToEdit = null
+    }
     var searchActive by remember { mutableStateOf(showSearchInitially) }
     var searchQuery by remember { mutableStateOf("") }
     var debouncedSearchQuery by remember { mutableStateOf("") }
@@ -229,32 +257,10 @@ fun CoverScreenLibraryMenu(
     }
 
     val localAlbums = remember(playerState.allTracks) {
-        playerState.allTracks
-            .filter { it.album.isNotBlank() }
-            .groupBy { track ->
-                "${ArtistUtils.getBaseArtist(track.artist).lowercase()}|${track.album.lowercase()}"
-            }
-            .map { (id, tracks) ->
-                val first = tracks.first()
-                CoverScreenAlbum(
-                    id = id,
-                    artistId = ArtistUtils.getBaseArtist(first.artist).lowercase(),
-                    name = first.album,
-                    trackCount = tracks.size,
-                    artworkUrl = first.artworkUri.toString().takeUnless { it.isBlank() }
-                )
-            }
-            .sortedBy { it.name.lowercase() }
+        buildCoverScreenAlbums(playerState.allTracks)
     }
     val filteredLocalAlbums = remember(localAlbums, debouncedSearchQuery, playerState.allTracks) {
-        if (debouncedSearchQuery.isBlank()) localAlbums else localAlbums.filter { album ->
-            album.name.contains(debouncedSearchQuery, ignoreCase = true) ||
-                playerState.allTracks.any { track ->
-                    track.album == album.name &&
-                        (track.artist.contains(debouncedSearchQuery, ignoreCase = true) ||
-                            track.title.contains(debouncedSearchQuery, ignoreCase = true))
-                }
-        }
+        filterCoverScreenAlbums(localAlbums, playerState.allTracks, debouncedSearchQuery)
     }
     val filteredPlaylists = remember(playlists, debouncedSearchQuery) {
         if (debouncedSearchQuery.isBlank()) playlists else playlists.filter {
@@ -322,29 +328,25 @@ fun CoverScreenLibraryMenu(
             } else if (selectedAlbum != null || selectedPlaylist != null) {
                 val album = selectedAlbum
                 val playlist = selectedPlaylist
-                val albumTracks = if (album == null) {
-                    emptyList()
-                } else {
-                    playerState.allTracks.filter { track ->
-                        track.album == album.name &&
-                            ArtistUtils.getBaseArtist(track.artist).equals(
-                                album.artistId,
-                                ignoreCase = true
-                            ) &&
-                            (debouncedSearchQuery.isBlank() ||
-                                track.title.contains(debouncedSearchQuery, ignoreCase = true) ||
-                                track.artist.contains(debouncedSearchQuery, ignoreCase = true))
-                    }.sortedBy { it.trackNumber }
+                val albumTracks = remember(album, playerState.allTracks) {
+                    getCoverScreenAlbumTracks(album, playerState.allTracks)
+                }
+                val displayAlbum = remember(album, albumTracks.size, playlist, selectedPlaylistTracks.size) {
+                    when {
+                        album != null -> album.copy(trackCount = albumTracks.size)
+                        playlist != null -> CoverScreenAlbum(
+                            id = playlist.id.toString(),
+                            artistId = "playlist",
+                            name = playlist.name,
+                            trackCount = selectedPlaylistTracks.size,
+                            artworkUrl = playlist.artworkUri
+                        )
+                        else -> CoverScreenAlbum("", "", "", 0)
+                    }
                 }
                 CoverScreenAlbumsView(
-                    album = album ?: CoverScreenAlbum(
-                        id = playlist!!.id.toString(),
-                        artistId = "playlist",
-                        name = playlist.name,
-                        trackCount = selectedPlaylistTracks.size,
-                        artworkUrl = playlist.artworkUri
-                    ),
-                    artistName = if (playlist != null) "Playlist" else albumTracks.firstOrNull()?.artist.orEmpty(),
+                    album = displayAlbum,
+                    artistName = if (playlist != null) "Playlist" else album?.artistId.takeUnless { it.isNullOrBlank() } ?: albumTracks.firstOrNull()?.artist.orEmpty(),
                     tracks = when {
                         playlist != null -> selectedPlaylistTracks
                         album != null -> albumTracks
@@ -565,14 +567,6 @@ fun CoverScreenLibraryMenu(
                                     libraryViewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
                                 }
                             )
-                            CoverScreenLibraryTab.CONSTELLATION -> CoverScreenConstellationView(
-                                viewModel = hiltViewModel(),
-                                onArtistSelected = { artistName ->
-                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    playerViewModel.onSearchQueryChanged(artistName)
-                                    libraryViewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
-                                }
-                            )
                             CoverScreenLibraryTab.ARTISTS -> CoverScreenArtistsGrid(
                                 artists = artists,
                                 albums = filteredLocalAlbums,
@@ -607,7 +601,11 @@ fun CoverScreenLibraryMenu(
 
                             CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(
                                 playlists = filteredPlaylists,
-                                onPlaylistSelected = { selectedPlaylist = it }
+                                onPlaylistSelected = { selectedPlaylist = it },
+                                onEditPhoto = { playlist ->
+                                    playlistToEdit = playlist
+                                    playlistImagePickerLauncher.launch("image/*")
+                                }
                             )
 
                             CoverScreenLibraryTab.SPOTIFY_PLAYLISTS -> SpotifyPlaylistPicker(
@@ -769,24 +767,375 @@ private fun CoverScreenAlbumCard(
 @Composable
 private fun LocalPlaylistPicker(
     playlists: List<Playlist>,
-    onPlaylistSelected: (Playlist) -> Unit
+    onPlaylistSelected: (Playlist) -> Unit,
+    onEditPhoto: (Playlist) -> Unit
 ) {
     if (playlists.isEmpty()) {
         EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_playlists))
-    } else {
-        LazyColumn(contentPadding = PaddingValues(12.dp)) {
-            items(playlists.size, key = { playlists[it].id }) { index ->
-                val playlist = playlists[index]
-                LibraryTile(
-                    title = playlist.name,
-                    subtitle = "${playlist.trackCount} tracks",
-                    description = "Playlist ${playlist.name}",
-                    imageUrl = playlist.artworkUri,
-                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
-                    modifier = Modifier.testTag(CoverScreenTestTags.localPlaylist(playlist.id)),
-                    onClick = { onPlaylistSelected(playlist) }
+        return
+    }
+
+    // Sort alphabetically, with Liked Songs ALWAYS first
+    val sortedPlaylists = remember(playlists) {
+        sortCoverScreenPlaylists(playlists)
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(CoverScreenTestTags.PLAYLIST_CAROUSEL)
+    ) {
+        val totalWidth = maxWidth
+        val cardWidth = 154.dp
+        val horizontalPadding = ((totalWidth - cardWidth) / 2).coerceAtLeast(20.dp)
+
+        val pagerState = rememberPagerState(
+            initialPage = 0,
+            pageCount = { sortedPlaylists.size }
+        )
+        val coroutineScope = rememberCoroutineScope()
+
+        // 3D Horizontal Wheel Carousel
+        HorizontalPager(
+            state = pagerState,
+            contentPadding = PaddingValues(horizontal = horizontalPadding),
+            pageSpacing = 12.dp,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            val playlist = sortedPlaylists[page]
+            val isLiked = playlist.id == PlaylistEntity.LIKED_SONGS_PLAYLIST_ID ||
+                    playlist.name.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)
+
+            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+            val absOffset = pageOffset.absoluteValue.coerceIn(0f, 2f)
+
+            Box(
+                modifier = Modifier
+                    .width(cardWidth)
+                    .graphicsLayer {
+                        cameraDistance = 12f * density
+                        // Cylindrical wheel rotation around Y axis
+                        rotationY = (pageOffset * -36f).coerceIn(-65f, 65f)
+                        // Scale contraction along cylindrical wheel
+                        val scale = (1f - (absOffset * 0.16f)).coerceIn(0.68f, 1f)
+                        scaleX = scale
+                        scaleY = scale
+                        // Depth alpha fade
+                        alpha = (1f - (absOffset * 0.40f)).coerceIn(0.25f, 1f)
+                        // Perspective translation
+                        translationX = pageOffset * 6f
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                CoverScreenPlaylistCard(
+                    playlist = playlist,
+                    isLiked = isLiked,
+                    onSelect = { onPlaylistSelected(playlist) },
+                    onEditPhoto = { onEditPhoto(playlist) },
+                    modifier = Modifier.testTag(CoverScreenTestTags.localPlaylist(playlist.id))
                 )
             }
+        }
+
+        // Fast-scroll Slider on the Side (Right Edge)
+        if (sortedPlaylists.size > 1) {
+            PlaylistSideScrubber(
+                totalCount = sortedPlaylists.size,
+                currentPage = pagerState.currentPage,
+                pageOffsetFraction = pagerState.currentPageOffsetFraction,
+                onScrubTo = { targetIndex ->
+                    coroutineScope.launch {
+                        pagerState.scrollToPage(targetIndex)
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CoverScreenPlaylistCard(
+    playlist: Playlist,
+    isLiked: Boolean,
+    onSelect: () -> Unit,
+    onEditPhoto: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val editPhotoLabel = stringResource(R.string.coverscreen_action_edit_playlist_photo)
+    val likedHeartColor = Color(0xFFE91E63)
+
+    Column(
+        modifier = modifier
+            .width(154.dp)
+            .bounceClick { onSelect() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(154.dp)
+                .shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(22.dp),
+                    spotColor = if (isLiked) likedHeartColor.copy(alpha = 0.35f) else MaterialTheme.aardBlue.copy(alpha = 0.25f),
+                    ambientColor = Color.Black
+                )
+                .clip(RoundedCornerShape(22.dp))
+                .glassEffect(RoundedCornerShape(22.dp))
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.30f),
+                            Color.White.copy(alpha = 0.08f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            // Artwork or stylized fallback
+            if (!playlist.artworkUri.isNullOrBlank()) {
+                AsyncImage(
+                    model = playlist.artworkUri,
+                    contentDescription = playlist.name,
+                    contentScale = ContentScale.Crop,
+                    fallback = painterResource(R.drawable.ic_tiger_logo),
+                    error = painterResource(R.drawable.ic_tiger_logo),
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (isLiked) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    likedHeartColor.copy(alpha = 0.45f),
+                                    Color.Black.copy(alpha = 0.85f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Favorite,
+                        contentDescription = null,
+                        tint = likedHeartColor,
+                        modifier = Modifier.size(54.dp)
+                    )
+                }
+            } else {
+                AsyncImage(
+                    model = null,
+                    contentDescription = playlist.name,
+                    contentScale = ContentScale.Crop,
+                    fallback = painterResource(R.drawable.ic_tiger_logo),
+                    error = painterResource(R.drawable.ic_tiger_logo),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Bottom gradient overlay for badge readability
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f)),
+                            startY = 140f
+                        )
+                    )
+            )
+
+            // Track count pill badge (bottom start)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .glassEffect(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.60f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "${playlist.trackCount} CHANTS",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 8.5.sp,
+                    letterSpacing = 0.8.sp
+                )
+            }
+
+            // Liked badge (bottom end) if liked
+            if (isLiked) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(likedHeartColor.copy(alpha = 0.85f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Favorite,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(9.dp)
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = "LIKED",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 8.sp,
+                            letterSpacing = 0.8.sp
+                        )
+                    }
+                }
+            }
+
+            // Edit photo action button (top end)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .glassEffect(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.60f))
+                    .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = editPhotoLabel
+                    ) {
+                        onEditPhoto()
+                    }
+                    .testTag(CoverScreenTestTags.editPlaylistPhoto(playlist.id)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Edit,
+                    contentDescription = editPhotoLabel,
+                    tint = Color.White,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Title
+        Text(
+            text = playlist.name,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        // Subtitle
+        Text(
+            text = if (isLiked) "FAVORITES" else "${playlist.trackCount} TRACKS",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isLiked) likedHeartColor else MaterialTheme.aardBlue,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            letterSpacing = 0.5.sp
+        )
+    }
+}
+
+@Composable
+private fun PlaylistSideScrubber(
+    totalCount: Int,
+    currentPage: Int,
+    pageOffsetFraction: Float,
+    onScrubTo: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isDragging by remember { mutableStateOf(false) }
+    var scrubberHeightPx by remember { mutableFloatStateOf(1f) }
+
+    Box(
+        modifier = modifier
+            .height(130.dp)
+            .width(28.dp)
+            .onSizeChanged { scrubberHeightPx = it.height.toFloat() }
+            .pointerInput(totalCount) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        isDragging = true
+                        val fraction = (offset.y / scrubberHeightPx).coerceIn(0f, 1f)
+                        val targetIndex = (fraction * (totalCount - 1)).roundToInt()
+                        onScrubTo(targetIndex)
+                    },
+                    onDragEnd = { isDragging = false },
+                    onDragCancel = { isDragging = false },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val fraction = (change.position.y / scrubberHeightPx).coerceIn(0f, 1f)
+                        val targetIndex = (fraction * (totalCount - 1)).roundToInt()
+                        onScrubTo(targetIndex)
+                    }
+                )
+            }
+            .pointerInput(totalCount) {
+                detectTapGestures { offset ->
+                    val fraction = (offset.y / scrubberHeightPx).coerceIn(0f, 1f)
+                    val targetIndex = (fraction * (totalCount - 1)).roundToInt()
+                    onScrubTo(targetIndex)
+                }
+            }
+            .testTag(CoverScreenTestTags.PLAYLIST_SLIDER),
+        contentAlignment = Alignment.Center
+    ) {
+        // Track
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color.White.copy(alpha = 0.16f))
+        )
+
+        // Thumb indicator
+        val progressFraction = ((currentPage + pageOffsetFraction) / (totalCount - 1).coerceAtLeast(1))
+            .coerceIn(0f, 1f)
+
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(28.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        val thumbHeightPx = 22.dp.toPx()
+                        val travelRangePx = (scrubberHeightPx - thumbHeightPx).coerceAtLeast(0f)
+                        translationY = progressFraction * travelRangePx
+                        if (isDragging) {
+                            scaleX = 1.25f
+                            scaleY = 1.15f
+                        }
+                    }
+                    .width(if (isDragging) 9.dp else 6.dp)
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.aardBlue)
+                    .border(
+                        1.dp,
+                        Color.White.copy(alpha = 0.5f),
+                        RoundedCornerShape(3.dp)
+                    )
+            )
         }
     }
 }
@@ -1184,4 +1533,99 @@ internal fun filterAndSortTracks(
         }
     }
     return filtered.sortedBy { it.title.lowercase() }
+}
+
+/**
+ * Sorts playlists alphabetically by name (case-insensitive), ensuring the
+ * singleton Liked Songs playlist is always placed first.
+ */
+internal fun sortCoverScreenPlaylists(playlists: List<Playlist>): List<Playlist> {
+    return playlists.sortedWith { a, b ->
+        val aIsLiked = a.id == PlaylistEntity.LIKED_SONGS_PLAYLIST_ID ||
+                a.name.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)
+        val bIsLiked = b.id == PlaylistEntity.LIKED_SONGS_PLAYLIST_ID ||
+                b.name.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)
+        when {
+            aIsLiked && bIsLiked -> 0
+            aIsLiked -> -1
+            bIsLiked -> 1
+            else -> a.name.compareTo(b.name, ignoreCase = true)
+        }
+    }
+}
+
+/**
+ * Builds unique aggregated cover screen albums from all library tracks, borrowing the aggregation
+ * mechanism from [com.tigerplayer.engine.LibraryEngine] and ui/library to ensure exact track counts
+ * and preventing duplicate or fragmented album entries across tracks with featured artists.
+ */
+internal fun buildCoverScreenAlbums(tracks: List<AudioTrack>): List<CoverScreenAlbum> {
+    return tracks
+        .distinctBy { it.id }
+        .filter { it.album.isNotBlank() }
+        .groupBy { it.album.trim().lowercase() }
+        .map { (key, albumTracks) ->
+            val first = albumTracks.first()
+            val dominantArtist = albumTracks
+                .map { ArtistUtils.getBaseArtist(it.artist).trim() }
+                .filter { it.isNotBlank() }
+                .groupingBy { it }
+                .eachCount()
+                .maxByOrNull { it.value }?.key
+                ?.takeIf { it.isNotBlank() }
+                ?: first.artist.trim().ifBlank { "Unknown Artist" }
+
+            CoverScreenAlbum(
+                id = "album_${key.hashCode()}",
+                artistId = dominantArtist,
+                name = first.album.trim(),
+                trackCount = albumTracks.size,
+                artworkUrl = albumTracks.firstNotNullOfOrNull { it.artworkUri }?.toString()?.takeUnless { it.isBlank() }
+            )
+        }
+        .sortedBy { it.name.lowercase() }
+}
+
+/**
+ * Filters albums by search query borrowing from [com.tigerplayer.engine.LibraryEngine], matching
+ * album name, album artist, or any track title/artist on the album.
+ */
+internal fun filterCoverScreenAlbums(
+    albums: List<CoverScreenAlbum>,
+    tracks: List<AudioTrack>,
+    query: String
+): List<CoverScreenAlbum> {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) return albums
+
+    return albums.filter { album ->
+        album.name.contains(trimmed, ignoreCase = true) ||
+            album.artistId.contains(trimmed, ignoreCase = true) ||
+            tracks.any { track ->
+                track.album.trim().equals(album.name.trim(), ignoreCase = true) &&
+                    (track.title.contains(trimmed, ignoreCase = true) ||
+                        track.artist.contains(trimmed, ignoreCase = true))
+            }
+    }
+}
+
+/**
+ * Retrieves all tracks belonging to an album sorted by disc, track number, and title, borrowing
+ * the picking mechanism from [com.tigerplayer.ui.library.AlbumDetailsScreen].
+ * Importantly, this never filters out songs by active search queries or featured artists so all
+ * songs belonging to the album are reliably presented.
+ */
+internal fun getCoverScreenAlbumTracks(
+    album: CoverScreenAlbum?,
+    tracks: List<AudioTrack>
+): List<AudioTrack> {
+    if (album == null) return emptyList()
+    val targetAlbum = album.name.trim()
+    return tracks
+        .distinctBy { it.id }
+        .filter { it.album.trim().equals(targetAlbum, ignoreCase = true) }
+        .sortedWith(
+            compareBy<AudioTrack> { it.trackNumber.takeIf { t -> t > 0 } ?: Int.MAX_VALUE }
+                .thenBy { it.title.lowercase() }
+        )
 }

@@ -6,6 +6,7 @@ import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.AudioReactiveFrame
@@ -69,7 +70,7 @@ class PlaybackStateManagerTest {
         every { mediaControllerManager.playbackSpeed } returns MutableStateFlow(1f)
         every { mediaControllerManager.pitch } returns MutableStateFlow(1f)
 
-        every { metadataEngine.currentLyrics } returns MutableStateFlow(null)
+        every { metadataEngine.currentLyrics } returns MutableStateFlow(Lyrics.None)
         every { metadataEngine.currentArtistImageUrl } returns MutableStateFlow(null)
 
         every { adaptiveDspEngine.audioReactiveFrame } returns MutableStateFlow(AudioReactiveFrame())
