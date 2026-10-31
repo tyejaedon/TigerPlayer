@@ -8,6 +8,7 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.ReplayGainMode
+import com.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -65,6 +66,7 @@ class AdaptiveDspEngine @Inject constructor(
     @Volatile private var isBitPerfect = false
     @Volatile private var isLosslessStream = false
     @Volatile private var hasPositiveEqBoost = false
+    @Volatile private var compositePeakDb = 0.0f
 
     private var buffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var outputBuffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
@@ -294,8 +296,20 @@ class AdaptiveDspEngine @Inject constructor(
     /** Returns whether bit-perfect DSP bypass is active. */
     fun isBitPerfect(): Boolean = isBitPerfect
 
+    /** Returns the current auto-makeup headroom gain multiplier [0.0, 1.0]. */
+    fun getAutoMakeupGain(): Float = autoMakeupGain
+
+    /** Returns the maximum composite peak boost in dB calculated across active EQ bands. */
+    fun getCompositePeakDb(): Float = compositePeakDb
+
     /**
      * Updates active parametric Equalizer bands and recalculates auto-makeup gain attenuation.
+     *
+     * Calculates the true maximum positive peak of the composite filter response curve across
+     * the audible spectrum (20 Hz - 20 kHz) using [BiquadDesigner.calculateCompositePeakGainDb]
+     * rather than naively summing band gains algebraically. This prevents drastic loudness drops
+     * on non-overlapping bands (Fletcher-Munson illusion) while accurately accounting for compounding
+     * on overlapping bands.
      *
      * @param nodes List of [AcousticNode] defining filter type, frequency, gain, and Q factor per band.
      */
@@ -303,11 +317,12 @@ class AdaptiveDspEngine @Inject constructor(
         pendingNodes = nodes
         val sampleRate = getSampleRate()
 
-        // FIX: Calculate total positive gain and attenuate the input by that amount
-        val maxBoostDb = nodes.filter { it.gainDb > 0f }.sumOf { it.gainDb.toDouble() }.toFloat()
-        hasPositiveEqBoost = maxBoostDb > 0.001f
-        autoMakeupGain = if (maxBoostDb > 0f) {
-            10f.pow(-maxBoostDb / 20f)
+        // Calculate true peak composite gain across spectrum rather than linear algebraic sum
+        val peakDb = BiquadDesigner.calculateCompositePeakGainDb(nodes, sampleRate.toFloat())
+        compositePeakDb = peakDb
+        hasPositiveEqBoost = peakDb > 0.001f
+        autoMakeupGain = if (peakDb > 0.001f) {
+            10f.pow(-peakDb / 20f)
         } else {
             1.0f
         }

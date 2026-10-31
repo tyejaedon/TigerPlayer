@@ -235,4 +235,63 @@ class AdaptiveDspEngineTest {
         // Within 80ms (3840 frames @ 48kHz), gain should recover cleanly back to near 0.50f (no 250ms pumping)
         assertTrue("Limiter must rapidly release within 80ms without lingering ducking (peak=$recoveredPeak)", recoveredPeak >= 0.47f)
     }
+
+    @Test
+    fun autoHeadroom_withNonOverlappingBoosts_usesCompositePeakNotAlgebraicSum() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val sampleRate = 48_000
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+
+        // Non-overlapping +5 dB at 60 Hz and +4 dB at 12 kHz
+        val subBoost = AcousticNode("sub", "Sub Bass", FilterType.PEAKING, 60f, 5.0f, 1.0f)
+        val airBoost = AcousticNode("air", "Air", FilterType.PEAKING, 12000f, 4.0f, 1.0f)
+        engine.updateAcousticNodes(listOf(subBoost, airBoost))
+
+        val compositePeakDb = engine.getCompositePeakDb()
+        val autoMakeupGain = engine.getAutoMakeupGain()
+
+        // Peak should be ~5.0 dB (not 5 + 4 = 9.0 dB)
+        assertTrue("Composite peak should be close to 5.0 dB (actual=$compositePeakDb)", compositePeakDb in 4.95f..5.10f)
+        // Attenuation: 10^(-5.0/20) = ~0.562f (NOT 10^(-9/20) = ~0.355f)
+        assertTrue("Auto makeup gain should be ~0.562f (actual=$autoMakeupGain)", autoMakeupGain in 0.55f..0.58f)
+    }
+
+    @Test
+    fun autoHeadroom_withOverlappingBoosts_compoundsAccurately() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val sampleRate = 48_000
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+
+        // Overlapping +4 dB at 1000 Hz and +4 dB at 1200 Hz
+        val mid1 = AcousticNode("mid1", "Mid 1", FilterType.PEAKING, 1000f, 4.0f, 1.0f)
+        val mid2 = AcousticNode("mid2", "Mid 2", FilterType.PEAKING, 1200f, 4.0f, 1.0f)
+        engine.updateAcousticNodes(listOf(mid1, mid2))
+
+        val compositePeakDb = engine.getCompositePeakDb()
+        val autoMakeupGain = engine.getAutoMakeupGain()
+
+        assertTrue("Compounded peak must be greater than individual 4 dB (actual=$compositePeakDb)", compositePeakDb > 6.5f)
+        assertTrue("Compounded peak must not exceed theoretical 8 dB (actual=$compositePeakDb)", compositePeakDb < 8.0f)
+        assertEquals(7.73f, compositePeakDb, 0.1f)
+        // Auto makeup gain: 10^(-7.73/20) ~ 0.411f
+        assertTrue("Auto makeup gain must scale to compound peak (actual=$autoMakeupGain)", autoMakeupGain in 0.39f..0.43f)
+    }
+
+    @Test
+    fun autoHeadroom_withBoostAndCancelingCut_yieldsZeroHeadroomAttenuation() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val sampleRate = 48_000
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+
+        // +6 dB boost and -6 dB cut at same frequency
+        val boost = AcousticNode("boost", "Boost", FilterType.PEAKING, 1000f, 6.0f, 1.0f)
+        val cut = AcousticNode("cut", "Cut", FilterType.PEAKING, 1000f, -6.0f, 1.0f)
+        engine.updateAcousticNodes(listOf(boost, cut))
+
+        val compositePeakDb = engine.getCompositePeakDb()
+        val autoMakeupGain = engine.getAutoMakeupGain()
+
+        assertEquals(0.0f, compositePeakDb, 0.05f)
+        assertEquals(1.0f, autoMakeupGain, 0.01f)
+    }
 }
