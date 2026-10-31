@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -48,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.data.model.AudioTrack
@@ -56,6 +59,7 @@ import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.home.HomeUiState
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import com.tigerplayer.ui.theme.TigerSurfaceCharcoal
 import com.tigerplayer.ui.theme.bounceClick
 
@@ -72,7 +76,8 @@ fun CoverScreenHomeView(
     dashboardViewModel: DashboardViewModel = hiltViewModel(),
     onClose: (() -> Unit)? = null,
     onOpenDaylistDetail: (() -> Unit)? = null,
-    onOpenDiscoveryDetail: (() -> Unit)? = null
+    onOpenDiscoveryDetail: (() -> Unit)? = null,
+    onOpenConstellationDetail: (() -> Unit)? = null
 ) {
     val homeState by playerViewModel.homeUiState.collectAsStateWithLifecycle()
     val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
@@ -82,6 +87,7 @@ fun CoverScreenHomeView(
 
     var internalDaylistOpen by remember { mutableStateOf(false) }
     var internalDiscoveryOpen by remember { mutableStateOf(false) }
+    var internalConstellationOpen by remember { mutableStateOf(false) }
 
     val handleOpenDaylist = {
         if (onOpenDaylistDetail != null) {
@@ -99,6 +105,14 @@ fun CoverScreenHomeView(
         }
     }
 
+    val handleOpenConstellation = {
+        if (onOpenConstellationDetail != null) {
+            onOpenConstellationDetail()
+        } else {
+            internalConstellationOpen = true
+        }
+    }
+
     CoverScreenHomeContent(
         homeState = homeState,
         daylistTracks = daylistTracks,
@@ -107,6 +121,7 @@ fun CoverScreenHomeView(
         discoveryMeta = discoveryMeta,
         onDaylistClick = handleOpenDaylist,
         onDiscoveryClick = handleOpenDiscovery,
+        onConstellationClick = handleOpenConstellation,
         modifier = modifier,
         onClose = onClose
     )
@@ -188,6 +203,36 @@ fun CoverScreenHomeView(
             )
         }
     }
+
+    if (internalConstellationOpen) {
+        Dialog(
+            onDismissRequest = { internalConstellationOpen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                CoverScreenConstellationView(
+                    viewModel = hiltViewModel(),
+                    onArtistSelected = { artistName ->
+                        playerViewModel.onSearchQueryChanged(artistName)
+                        internalConstellationOpen = false
+                    }
+                )
+                IconButton(
+                    onClick = { internalConstellationOpen = false },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close Constellation",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -202,6 +247,7 @@ fun CoverScreenHomeContent(
     discoveryMeta: CurationFeedMeta,
     onDaylistClick: () -> Unit,
     onDiscoveryClick: () -> Unit,
+    onConstellationClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null
 ) {
@@ -233,6 +279,15 @@ fun CoverScreenHomeContent(
                     discoveryMeta = discoveryMeta,
                     onDaylistClick = onDaylistClick,
                     onDiscoveryClick = onDiscoveryClick
+                )
+            }
+
+            // Second Section: Constellation Galaxy Card
+            item {
+                CoverConstellationCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    nodeCount = homeState.statistics.topArtists.size,
+                    onClick = onConstellationClick
                 )
             }
 
@@ -323,7 +378,8 @@ fun CoverScreenCurationSection(
     modifier: Modifier = Modifier
 ) {
     val dayPhase = rememberCoverDayPhase()
-    val view = LocalView.current
+    val isInspection = LocalInspectionMode.current
+    val view = if (!isInspection) LocalView.current else null
 
     val daylistSubtitle = when {
         daylistMeta.isLoading -> "Refreshing feed..."
@@ -373,7 +429,11 @@ fun CoverScreenCurationSection(
                 trackCount = daylistTracks.size,
                 emptyLabel = "CURATE",
                 onClick = {
-                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    if (!isInspection) {
+                        try {
+                            view?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        } catch (_: Exception) {}
+                    }
                     onDaylistClick()
                 }
             )
@@ -392,7 +452,11 @@ fun CoverScreenCurationSection(
                 trackCount = discoveryWeeklyTracks.size,
                 emptyLabel = "EXPLORE",
                 onClick = {
-                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    if (!isInspection) {
+                        try {
+                            view?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        } catch (_: Exception) {}
+                    }
                     onDiscoveryClick()
                 }
             )
@@ -522,3 +586,59 @@ private fun CoverCurationCard(
         }
     }
 }
+
+@Preview(showBackground = true, backgroundColor = 0xFF090B14)
+@Composable
+fun CoverScreenHomeViewPreview() {
+    TigerPlayerTheme {
+        CoverScreenHomeContent(
+            homeState = HomeUiState(),
+            daylistTracks = emptyList(),
+            discoveryWeeklyTracks = emptyList(),
+            daylistMeta = CurationFeedMeta(),
+            discoveryMeta = CurationFeedMeta(),
+            onDaylistClick = {},
+            onDiscoveryClick = {},
+            onConstellationClick = {},
+            onClose = {}
+        )
+    }
+}
+/**
+ * Interactive card highlighting the Constellation neural music map for external cover displays.
+ */
+@Composable
+fun CoverConstellationCard(
+    modifier: Modifier = Modifier,
+    title: String = "Constellation",
+    subtitle: String = "Cosmic starfield",
+    category: String = "NEURAL MAP",
+    nodeCount: Int = 0,
+    onClick: () -> Unit = {}
+) {
+    val isInspection = LocalInspectionMode.current
+    val view = if (!isInspection) LocalView.current else null
+    val accentColor = Color(0xFFB388FF) // Neural Purple / Cosmic Violet
+
+    CoverCurationCard(
+        modifier = modifier.testTag(CoverScreenTestTags.HOME_CONSTELLATION_CARD),
+        accentColor = accentColor,
+        backgroundColor = Color(0xFF10091D).copy(alpha = 0.90f),
+        icon = Icons.Rounded.AutoAwesome,
+        category = category,
+        title = title,
+        subtitle = subtitle,
+        trackCount = nodeCount,
+        emptyLabel = "GALAXY",
+        onClick = {
+            if (!isInspection) {
+                try {
+                    view?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                } catch (_: Exception) {}
+            }
+            onClick()
+        }
+    )
+}
+
+

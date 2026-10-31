@@ -17,6 +17,7 @@ class CoverScreenHomeViewTest {
         assertEquals("cover_screen_home_header", CoverScreenTestTags.HOME_HEADER)
         assertEquals("cover_screen_home_daylist_card", CoverScreenTestTags.HOME_DAYLIST_CARD)
         assertEquals("cover_screen_home_discovery_card", CoverScreenTestTags.HOME_DISCOVERY_CARD)
+        assertEquals("cover_screen_home_constellation_card", CoverScreenTestTags.HOME_CONSTELLATION_CARD)
         assertEquals("cover_screen_home_close_button", CoverScreenTestTags.HOME_CLOSE_BUTTON)
     }
 

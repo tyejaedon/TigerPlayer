@@ -98,6 +98,7 @@ import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.ui.theme.SpotifyGreen
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerNeonRed
 import com.tigerplayer.ui.theme.TigerSpectralViolet
 import com.tigerplayer.ui.theme.TigerToxicLime
 import com.tigerplayer.ui.theme.WitcherIcons
@@ -960,6 +961,7 @@ private fun CoverSettingsSwitchRow(
 
 private fun accentColor(accentStyle: TigerAccentStyle): Color {
     return when (accentStyle) {
+        TigerAccentStyle.NEON_RED -> TigerNeonRed
         TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
         TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
         TigerAccentStyle.TOXIC_LIME -> TigerToxicLime

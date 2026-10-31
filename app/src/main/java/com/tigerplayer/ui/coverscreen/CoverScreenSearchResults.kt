@@ -62,7 +62,8 @@ fun CoverScreenSearchResults(
     val matchingAlbums = remember(albums, artists, matchingTracks, normalizedQuery) {
         albums.filter { album ->
             album.name.contains(normalizedQuery, ignoreCase = true) ||
-                matchingTracks.any { it.album == album.name } ||
+                album.artistId.contains(normalizedQuery, ignoreCase = true) ||
+                matchingTracks.any { it.album.trim().equals(album.name.trim(), ignoreCase = true) } ||
                 artists.any { artist ->
                     artist.id.equals(album.artistId, ignoreCase = true) &&
                         artist.name.contains(normalizedQuery, ignoreCase = true)
