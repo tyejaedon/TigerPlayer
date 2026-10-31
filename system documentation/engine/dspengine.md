@@ -145,8 +145,9 @@ For each audio block received in `queueInput(ByteBuffer)`, PCM samples are decod
 - **State Variable Filters (SVF)**: Implements Cytomic SVF topology (Andrew Simper) via [`StateVariableFilter`](class://com.tigerplayer.engine.StateVariableFilter):
   - Supported filter types: `LOW_SHELF`, `PEAKING`, `HIGH_SHELF`.
   - Zero zipper noise / clicks during parameter updates through parameter interpolation.
-- **Auto-Makeup Gain & ReplayGain Integration**:
-  - Automatically calculates input attenuation based on active EQ gain boosts to prevent filter overflow.
+- **Auto-Makeup Headroom & ReplayGain Integration**:
+  - Automatically calculates true maximum peak composite gain across the audible spectrum (20 Hz - 20 kHz) via `BiquadDesigner.calculateCompositePeakGainDb(nodes, sampleRate)` rather than naively summing band gains algebraically.
+  - Applies input headroom attenuation strictly equal to the true composite peak boost (`autoMakeupGain = 10^(-compositePeakDb / 20)` when `compositePeakDb > 0 dB`, otherwise `1.0f`), preventing Fletcher-Munson loudness drops on non-overlapping bands while accurately accounting for compounding on overlapping bands.
   - Multiplies input by linear ReplayGain factor calculated by [`ReplayGainCalculator`](class://com.tigerplayer.engine.ReplayGainCalculator).
 
 ### Stage 3: Acoustic Environments (`AcousticEnvironmentMode`)

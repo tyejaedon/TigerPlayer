@@ -21,9 +21,13 @@ Think of the **DSP Engine** (*Digital Signal Processing Engine*) as a master rec
 
 ## 2. Core Processing Compartments & Algorithms
 
-### Compartment A: Parametric Equalizer (Cytotoxic State Variable Filters)
-* **Location:** `StateVariableFilter.kt` and `AdaptiveDspEngine.kt`
+### Compartment A: Parametric Equalizer (Cytotoxic State Variable Filters & Auto-Headroom)
+* **Location:** `StateVariableFilter.kt`, `BiquadDesigner.kt`, and `AdaptiveDspEngine.kt`
 * **Algorithm:** Topology-Preserving Transform (TPT) State Variable Filter (SVF).
+* **Composite Peak Auto-Headroom:**
+  Instead of summing positive gains algebraically (e.g. $5\text{ dB} + 4\text{ dB} = 9\text{ dB}$ attenuation), `BiquadDesigner.calculateCompositePeakGainDb()` evaluates the true peak composite filter response curve across the audible spectrum ($20\text{ Hz} - 20\text{ kHz}$) using the cascaded transfer functions. Headroom attenuation is set strictly to:
+  $$\text{AutoMakeupGain} = 10^{-\frac{\max(0, \text{CompositePeak}_{\text{dB}})}{20}}$$
+  This eliminates Fletcher-Munson loudness drops on non-overlapping bands while accurately accounting for compounded peaks on overlapping bands.
 * **Why SVF over Biquad Direct Form:** Standard Direct Form I/II biquad filters can become numerically unstable or pop when coefficient parameters (frequency, Q, gain) are modulated in real time. Cytotoxic SVF guarantees stability and maintains constant phase and energy during real-time slider manipulation.
 * **Equations (Sample Processing):**
   $$g = \tan\left(\frac{\pi \cdot f_c}{f_s}\right)$$
