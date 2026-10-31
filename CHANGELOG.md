@@ -13,6 +13,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+- **Cover screen 3D playlist wheel carousel & photo editor**: redesigned cover screen playlist browsing (`CoverScreenLibraryMenu.kt`) with a horizontal 3D cylindrical wheel carousel styled after `CarouselComponents.kt`, a fast-scroll slider on the side, inline photo editing directly on each playlist card, and alphabetical playlist sorting with Liked Songs pinned first. (#298)
+- **Cover screen double-tap to like**: double-tapping album artwork in the cover screen viewport (`CoverScreenMiniHub` / `CoverScreenTrackInfo`) immediately likes the active song and animates a popping neon heart. (#298)
+- **Singleton Liked Songs playlist convergence**: consolidated all Liked Songs references to a dedicated singleton playlist (`playlistId = -1L`) in `PlaylistEntity` and `PlaylistDao`; automatically migrates and deduplicates tracks from legacy "Liked Songs" playlists on database queries or backup restore while preventing duplicate creations. (#298)
 - **Graphics & Rendering Engine framework**: added `graphics-rendering-engine` workspace skill, `graphics-rendering-specialist` subagent, and engineering reference manuals covering OpenGL ES 3.0/3.2, Vulkan compute migration, and mobile GPU microarchitectures (Qualcomm Adreno GMEM, ARM Mali TBDR, PowerVR). (#293)
 - **Graphics architecture & guardrails**: updated `AGENTS.md` with strict zero-allocation render loop invariants, mandatory shader compile/link assertions, and 16-bit half-float texture bandwidth optimizations. (#293)
 - **Sandbox to Beta Promotion Pipeline**: Staging and promotion workflow (`promote-to-beta.yml`) linking `sandbox/experimentation` to the `beta` branch. (#283)
