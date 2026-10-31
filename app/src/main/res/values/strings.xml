@@ -32,6 +32,8 @@
     <string name="coverscreen_action_remove">Remove</string>
 
     <!-- Cover Screen Status Subtitles -->
+    <string name="coverscreen_action_like">Like song</string>
+    <string name="coverscreen_action_edit_playlist_photo">Change playlist photo</string>
     <string name="coverscreen_status_now_playing">NOW PLAYING</string>
     <string name="coverscreen_status_paused">PAUSED</string>
     <string name="coverscreen_status_flex_mode_active">FLEX MODE ACTIVE</string>
