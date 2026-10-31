@@ -20,6 +20,7 @@ import org.junit.runner.RunWith
  * - 11 -> 12: ReplayGain columns on CachedTrackEntity (issue #56)
  * - 12 -> 13: dateModified fingerprint column on CachedTrackEntity (issue #49)
  * - 13 -> 14: new music_folders table for custom directories (issue #50)
+ * - 14 -> 15: artwork lookup negative cache columns on CachedTrackEntity (issue #64)
  */
 @RunWith(AndroidJUnit4::class)
 class TigerDatabaseMigrationTest {
@@ -194,6 +195,42 @@ class TigerDatabaseMigrationTest {
         assertEquals("Music", folderCursor.getString(folderCursor.getColumnIndexOrThrow("displayName")))
         assertEquals(0, folderCursor.getInt(folderCursor.getColumnIndexOrThrow("isExcluded")))
         folderCursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate14To15_preservesCachedTrackRows_andAddsArtworkNegativeCacheColumns() {
+        // Arrange: create the DB at version 14 and insert a representative row.
+        var db: SupportSQLiteDatabase = helper.createDatabase(testDbName, 14)
+        db.execSQL(
+            """
+            INSERT INTO cached_tracks
+                (id, title, artist, album, uriString, artworkUriString, durationMs, mimeType,
+                 bitrate, sampleRate, trackNumber, year, dateAdded, isLiked, path,
+                 replayGainTrackDb, replayGainAlbumDb, replayGainTrackPeak, replayGainAlbumPeak,
+                 dateModified)
+            VALUES
+                ('local_track_004', 'Negative Cache Test', 'Tiger Unit', 'Midnight Circuit',
+                 'content://media/external/audio/media/45', 'content://media/external/audio/albumart/10',
+                 180000, 'audio/flac', 960000, 48000, 7, '2026', 1719374400, 1,
+                 '/storage/emulated/0/Music/Tiger/Negative Cache Test.flac', -3.0, -2.0, 0.9, 0.95,
+                 1719374400)
+            """.trimIndent()
+        )
+        db.close()
+
+        // Act: run the real 14 -> 15 migration path.
+        db = helper.runMigrationsAndValidate(testDbName, 15, true)
+
+        // Assert: the pre-existing cached track survives with default values for new columns.
+        val cursor = db.query("SELECT * FROM cached_tracks WHERE id = 'local_track_004'")
+        assertTrue("expected the pre-migration row to still exist", cursor.moveToFirst())
+        assertEquals("Negative Cache Test", cursor.getString(cursor.getColumnIndexOrThrow("title")))
+        assertEquals(0L, cursor.getLong(cursor.getColumnIndexOrThrow("artworkLookupFailedAt")))
+        assertEquals(0, cursor.getInt(cursor.getColumnIndexOrThrow("artworkLookupAttempts")))
+        val embeddedIndex = cursor.getColumnIndexOrThrow("hasEmbeddedArtwork")
+        assertTrue("hasEmbeddedArtwork column should default to NULL", cursor.isNull(embeddedIndex))
+        cursor.close()
         db.close()
     }
 }

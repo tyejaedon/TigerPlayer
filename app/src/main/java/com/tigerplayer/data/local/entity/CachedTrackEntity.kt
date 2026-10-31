@@ -42,5 +42,12 @@ data class CachedTrackEntity(
     // MediaStore.Audio.Media.DATE_MODIFIED, in seconds since epoch. The cheap identity fingerprint
     // used to diff the scanned library against the cache without a deep field comparison.
     @ColumnInfo(defaultValue = "0")
-    val dateModified: Long = 0L
+    val dateModified: Long = 0L,
+
+    // --- Artwork Negative Cache & Embedded Detection (issue #64) ---
+    @ColumnInfo(defaultValue = "0")
+    val artworkLookupFailedAt: Long = 0L,
+    @ColumnInfo(defaultValue = "0")
+    val artworkLookupAttempts: Int = 0,
+    val hasEmbeddedArtwork: Boolean? = null
 )

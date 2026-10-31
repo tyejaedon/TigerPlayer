@@ -36,6 +36,7 @@ import org.robolectric.RobolectricTestRunner
  * - 11 -> 12: ReplayGain columns on CachedTrackEntity (issue #56)
  * - 12 -> 13: dateModified fingerprint column on CachedTrackEntity (issue #49)
  * - 13 -> 14: new music_folders table for custom directories (issue #50)
+ * - 14 -> 15: artwork lookup negative cache columns on CachedTrackEntity (issue #64)
  */
 @RunWith(RobolectricTestRunner::class)
 class TigerDatabaseMigrationTest {
@@ -228,6 +229,44 @@ class TigerDatabaseMigrationTest {
             assertTrue("music_folders table must exist and accept a row post-migration", stmt.step())
             assertEquals("Music", stmt.getText(stmt.columnIndex("displayName")))
             assertEquals(0, stmt.getInt(stmt.columnIndex("isExcluded")))
+        }
+        connection.close()
+    }
+
+    @Test
+    fun migrate14To15_preservesCachedTrackRows_andAddsArtworkNegativeCacheColumns() {
+        // Arrange: create the DB at version 14 and insert a representative row.
+        var connection: SQLiteConnection = helper.createDatabase(14)
+        connection.execSQL(
+            """
+            INSERT INTO cached_tracks
+                (id, title, artist, album, uriString, artworkUriString, durationMs, mimeType,
+                 bitrate, sampleRate, trackNumber, year, dateAdded, isLiked, path,
+                 replayGainTrackDb, replayGainAlbumDb, replayGainTrackPeak, replayGainAlbumPeak,
+                 dateModified)
+            VALUES
+                ('local_track_004', 'Negative Cache Test', 'Tiger Unit', 'Midnight Circuit',
+                 'content://media/external/audio/media/45', 'content://media/external/audio/albumart/10',
+                 180000, 'audio/flac', 960000, 48000, 7, '2026', 1719374400, 1,
+                 '/storage/emulated/0/Music/Tiger/Negative Cache Test.flac', -3.0, -2.0, 0.9, 0.95,
+                 1719374400)
+            """.trimIndent()
+        )
+        connection.close()
+
+        // Act: run the real 14 -> 15 migration path.
+        connection = helper.runMigrationsAndValidate(15)
+
+        // Assert: the pre-existing cached track survives with default values for new columns.
+        connection.prepare("SELECT * FROM cached_tracks WHERE id = 'local_track_004'").use { stmt ->
+            assertTrue("expected the pre-migration row to still exist", stmt.step())
+            assertEquals("Negative Cache Test", stmt.getText(stmt.columnIndex("title")))
+            assertEquals(0L, stmt.getLong(stmt.columnIndex("artworkLookupFailedAt")))
+            assertEquals(0, stmt.getInt(stmt.columnIndex("artworkLookupAttempts")))
+            assertTrue(
+                "hasEmbeddedArtwork column should default to NULL",
+                stmt.isNull(stmt.columnIndex("hasEmbeddedArtwork"))
+            )
         }
         connection.close()
     }

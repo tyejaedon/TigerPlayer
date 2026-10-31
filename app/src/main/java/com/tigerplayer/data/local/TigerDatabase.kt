@@ -27,12 +27,13 @@ import com.tigerplayer.data.local.entity.WaveformCacheEntity
         LyricsCacheEntity::class, // 2. Add it to the array
         MusicFolderEntity::class // <-- Added for custom music folders (issue #50)
     ],
-    version = 14, // <-- Bumped to 14 for MusicFolderEntity (issue #50)
+    version = 15, // <-- Bumped to 15 for artwork negative cache & embedded detection (issue #64)
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 11, to = 12),
         AutoMigration(from = 12, to = 13),
-        AutoMigration(from = 13, to = 14)
+        AutoMigration(from = 13, to = 14),
+        AutoMigration(from = 14, to = 15)
     ]
 )
 @TypeConverters(Converters::class)

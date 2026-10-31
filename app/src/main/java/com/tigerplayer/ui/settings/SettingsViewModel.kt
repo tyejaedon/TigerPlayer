@@ -244,6 +244,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setCoverScreenPreviewMode(enabled) }
     }
 
+    fun setFetchOnlineArtwork(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setFetchOnlineArtwork(enabled) }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             settingsDataStore.resetToDefaults()

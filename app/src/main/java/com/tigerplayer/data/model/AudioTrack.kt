@@ -34,7 +34,12 @@ data class AudioTrack(
     // --- Incremental indexing (issue #49) ---
     // MediaStore.Audio.Media.DATE_MODIFIED, in seconds since epoch. Used as the cheap identity
     // fingerprint for library-cache diffing instead of a deep field-by-field comparison.
-    val dateModified: Long = 0L
+    val dateModified: Long = 0L,
+
+    // --- Artwork Negative Cache & Embedded Detection (issue #64) ---
+    val artworkLookupFailedAt: Long = 0L,
+    val artworkLookupAttempts: Int = 0,
+    val hasEmbeddedArtwork: Boolean? = null
 )
 
 /**

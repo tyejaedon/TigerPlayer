@@ -30,6 +30,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+- **Spotify artwork negative cache & backoff**: prevented perpetual repeated Spotify artwork network requests for unmatched local tracks by recording misses with timestamps and attempt counts in Room (`TigerDatabase` version 15 migration), implementing a 7-day base cool-off with exponential backoff on repeated failures, preferring embedded artwork over network round-trips, and adding a user-visible "ONLINE ARTWORK LOOKUP" setting to disable online artwork fetching entirely. (#64)
+
 ## [2.1.6-beta.1] - 2026-10-27
 
 ### Added
