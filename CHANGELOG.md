@@ -34,6 +34,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ### Fixed
 
 - **Spotify artwork negative cache & backoff**: prevented perpetual repeated Spotify artwork network requests for unmatched local tracks by recording misses with timestamps and attempt counts in Room (`TigerDatabase` version 16 migration), implementing a 7-day base cool-off with exponential backoff on repeated failures, preferring embedded artwork over network round-trips, and adding a user-visible "ONLINE ARTWORK LOOKUP" setting to disable online artwork fetching entirely. (#64)
+- **Auto-headroom composite peak calculation**: replaced naive algebraic summation of positive EQ band gains in `AdaptiveDspEngine` with true composite filter response peak detection via `BiquadDesigner.calculateCompositePeakGainDb()`; avoids drastic Fletcher-Munson loudness drops on non-overlapping frequency bands while accurately calculating cumulative compounding on overlapping filters and cancellation on opposing boost/cut nodes. (#289)
 - **Lossless dynamic compression & true-peak limiting**: removed hardcoded 0.82f (-1.72 dBFS) limiter threshold in `AdaptiveDspEngine`; bypassed AGC gain reduction completely on lossless streams (`audio/flac`, `audio/wav`, `audio/alac`, `audio/aiff`, and 24-bit/Float PCM) when EQ is flat (0 dB boost or negative cuts); tuned look-ahead limiter to transparent 1.0f (0.0 dBFS) true-peak protection with 0.8ms attack and 50ms release, preventing dynamic range squashing, transient dulling, and volume pumping. (#288)
 
 ## [2.1.6-beta.1] - 2026-10-27
