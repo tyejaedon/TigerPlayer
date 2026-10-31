@@ -1,5 +1,6 @@
 package com.tigerplayer.di
 
+import com.google.gson.Gson
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.remote.api.*
 import dagger.Module
@@ -25,6 +26,7 @@ import javax.inject.Singleton
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class WikipediaRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class ITunesRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class LrclibRetrofit
+@Qualifier @Retention(AnnotationRetention.BINARY) annotation class AutoEqRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class KugouRetrofit
 
 @Singleton
@@ -60,6 +62,10 @@ object NetworkModule {
     private const val ITUNES_BASE_URL = "https://itunes.apple.com/"
     private const val LRCLIB_BASE_URL = "https://lrclib.net/"
     private const val KUGOU_BASE_URL = "https://krcs.kugou.com/"
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
 
     @Provides
     @Singleton
@@ -235,6 +241,24 @@ object NetworkModule {
     @Singleton
     fun provideLastFmApi(@Named("LastFmRetrofit") retrofit: Retrofit): LastFmApi {
         return retrofit.create(LastFmApi::class.java)
+    }
+
+    // --- AUTOEQ INJECTIONS ---
+
+    @Provides
+    @Singleton
+    @AutoEqRetrofit
+    fun provideAutoEqRetrofit(client: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/")
+            .client(client)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAutoEqApi(@AutoEqRetrofit retrofit: Retrofit): AutoEqApi {
+        return retrofit.create(AutoEqApi::class.java)
     }
 }
 
