@@ -11,47 +11,55 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.min
 
+val DefaultCoverNeonPalette = CoverNeonPalette(
+    primary = TigerNeonRed,
+    secondary = TigerNeonOrange,
+    tertiary = TigerCyberCyan
+)
+
 data class CoverNeonPalette(
     val primary: Color,
     val secondary: Color,
+    val tertiary: Color = TigerCyberCyan,
     val trackBackground: Color = Color.White.copy(alpha = 0.12f)
 )
 
 object DominantColorExtractor {
 
     private val neonTokens: List<Color> = listOf(
-        TigerCyberCyan,
-        TigerToxicLime,
-        TigerHotPink,
-        TigerElectricAmber,
+        TigerNeonRed,
         TigerNeonOrange,
-        TigerSpectralViolet
+        TigerHotPink,
+        TigerCyberCyan,
+        TigerSpectralViolet,
+        TigerToxicLime,
+        TigerElectricAmber
     )
 
     suspend fun extractSnappedNeon(
         drawable: Drawable?,
-        fallback: Color = TigerNeonOrange
+        fallback: Color = TigerNeonRed
     ): Color = withContext(Dispatchers.Default) {
         extractSnappedNeonInternal(drawable?.toBitmapSafely(), fallback)
     }
 
     suspend fun extractSnappedNeon(
         bitmap: Bitmap?,
-        fallback: Color = TigerNeonOrange
+        fallback: Color = TigerNeonRed
     ): Color = withContext(Dispatchers.Default) {
         extractSnappedNeonInternal(bitmap, fallback)
     }
 
     suspend fun extractCoverNeonPalette(
         drawable: Drawable?,
-        fallback: CoverNeonPalette = CoverNeonPalette(TigerNeonOrange, TigerElectricAmber)
+        fallback: CoverNeonPalette = DefaultCoverNeonPalette
     ): CoverNeonPalette = withContext(Dispatchers.Default) {
         extractCoverNeonPaletteInternal(drawable?.toBitmapSafely(), fallback)
     }
 
     suspend fun extractCoverNeonPalette(
         bitmap: Bitmap?,
-        fallback: CoverNeonPalette = CoverNeonPalette(TigerNeonOrange, TigerElectricAmber)
+        fallback: CoverNeonPalette = DefaultCoverNeonPalette
     ): CoverNeonPalette = withContext(Dispatchers.Default) {
         extractCoverNeonPaletteInternal(bitmap, fallback)
     }
@@ -59,7 +67,7 @@ object DominantColorExtractor {
     fun snapToNearestNeon(extracted: Color): Color {
         return neonTokens.minByOrNull { candidate ->
             neonDistance(extracted, candidate)
-        } ?: TigerNeonOrange
+        } ?: TigerNeonRed
     }
 
     private fun extractSnappedNeonInternal(bitmap: Bitmap?, fallback: Color): Color {
@@ -110,13 +118,15 @@ object DominantColorExtractor {
             getHarmonizingNeon(primaryNeon)
         }
 
-        return CoverNeonPalette(primary = primaryNeon, secondary = secondaryNeon)
+        val tertiaryNeon = neonTokens.firstOrNull { it != primaryNeon && it != secondaryNeon } ?: TigerCyberCyan
+
+        return CoverNeonPalette(primary = primaryNeon, secondary = secondaryNeon, tertiary = tertiaryNeon)
     }
 
     fun getHarmonizingNeon(primary: Color): Color {
         val idx = neonTokens.indexOf(primary)
-        if (idx == -1) return TigerElectricAmber
-        return neonTokens[(idx + 2) % neonTokens.size]
+        if (idx == -1) return TigerNeonOrange
+        return neonTokens[(idx + 1) % neonTokens.size]
     }
 
     private fun neonDistance(a: Color, b: Color): Float {

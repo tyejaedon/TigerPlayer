@@ -14,18 +14,18 @@ import com.tigerplayer.data.local.TigerAccentStyle
 // DARK / LIGHT SYSTEM SCHEMES
 // ------------------------------
 private val DarkColorScheme = darkColorScheme(
-    primary = TigerNeonOrange,
-    secondary = TigerElectricAmber,
-    tertiary = AardBlueDark,
+    primary = TigerNeonRed,
+    secondary = TigerNeonOrange,
+    tertiary = TigerCyberCyan,
 
     background = TigerBlack,
     surface = TigerDeepGrey,
     surfaceVariant = TigerSurfaceCharcoal,
-    primaryContainer = Color(0xFF4A2410),
-    secondaryContainer = Color(0xFF4D3318),
-    onPrimary = Color(0xFF2A1307),
-    onSecondary = Color(0xFF2A1605),
-    onPrimaryContainer = Color(0xFFFFDFC5),
+    primaryContainer = Color(0xFF4D1218),
+    secondaryContainer = Color(0xFF4A2410),
+    onPrimary = Color(0xFF2B0007),
+    onSecondary = Color(0xFF2A1307),
+    onPrimaryContainer = Color(0xFFFFD9DC),
 
     onBackground = TigerTextHigh,
     onSurface = TigerTextHigh,
@@ -39,28 +39,28 @@ val MaterialTheme.elevatedSurface: Color
     get() = if (this.colorScheme.background.luminance() < 0.5f) TigerSurfaceCharcoal else Color(0xFFEFF3FA)
 
 private val LightColorScheme = lightColorScheme(
-    primary = TigerNeonOrange,
-    secondary = TigerElectricAmber,
-    tertiary = AardBlueLight,
+    primary = TigerNeonRed,
+    secondary = TigerNeonOrange,
+    tertiary = TigerCyberCyan,
 
     background = TigerIvory,
     surface = TigerPaper,
     surfaceVariant = TigerMutedSilk,
-    primaryContainer = Color(0xFFFFE3CC),
-    secondaryContainer = Color(0xFFFFEFD8),
-    tertiaryContainer = Color(0xFFFFDCCD),
+    primaryContainer = Color(0xFFFFDADA),
+    secondaryContainer = Color(0xFFFFE3CC),
+    tertiaryContainer = Color(0xFFCCEFFF),
     onPrimary = Color(0xFFFFFFFF),
     onSecondary = Color(0xFF2F1809),
-    onPrimaryContainer = Color(0xFF3A1B0A),
-    onTertiary = Color(0xFFFFFFFF),
-    onTertiaryContainer = Color(0xFF3A1A0C),
+    onPrimaryContainer = Color(0xFF3A080E),
+    onTertiary = Color(0xFF00363D),
+    onTertiaryContainer = Color(0xFF004F58),
 
     onBackground = TigerTextInverse,
     onSurface = TigerTextInverse,
     onSurfaceVariant = Color(0xFF4B5563),
     outline = Color(0xFF8E98A7),
     outlineVariant = Color(0xFFC8D0DC),
-    surfaceTint = TigerNeonOrange,
+    surfaceTint = TigerNeonRed,
     error = IgniRedLight,
     onError = Color.White
 )
@@ -72,10 +72,11 @@ private val LightColorScheme = lightColorScheme(
 fun TigerPlayerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     pureAmoledBlack: Boolean = false,
-    accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_ORANGE,
+    accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_RED,
     content: @Composable () -> Unit
 ) {
     val accent = when (accentStyle) {
+        TigerAccentStyle.NEON_RED -> TigerNeonRed
         TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
         TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
         TigerAccentStyle.TOXIC_LIME -> TigerToxicLime
@@ -85,13 +86,19 @@ fun TigerPlayerTheme(
     val scheme = if (darkTheme) {
         DarkColorScheme.copy(
             primary = accent,
-            secondary = accent.copy(alpha = 0.82f),
+            secondary = when (accentStyle) {
+                TigerAccentStyle.NEON_RED -> TigerNeonOrange
+                else -> accent.copy(alpha = 0.82f)
+            },
             background = if (pureAmoledBlack) Color.Black else TigerBlack
         )
     } else {
         LightColorScheme.copy(
             primary = accent,
-            secondary = accent.copy(alpha = 0.82f)
+            secondary = when (accentStyle) {
+                TigerAccentStyle.NEON_RED -> TigerNeonOrange
+                else -> accent.copy(alpha = 0.82f)
+            }
         )
     }
     val view = LocalView.current
@@ -105,12 +112,17 @@ fun TigerPlayerTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = scheme,
-        typography = Typography,
-        shapes = ModernShapes,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalCoverNeonPalette provides DefaultCoverNeonPalette,
+        LocalTigerDynamicAccent provides accent
+    ) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = Typography,
+            shapes = ModernShapes,
+            content = content
+        )
+    }
 }
 
 // ------------------------------

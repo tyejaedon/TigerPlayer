@@ -535,6 +535,18 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun likeTrack(track: AudioTrack) {
+        viewModelScope.launch {
+            val isLiked = libraryEngine.likeTrack(track)
+            val updatedTrack = track.copy(isLiked = isLiked)
+
+            if (_uiState.value.currentTrack?.id == track.id) {
+                _uiState.update { it.copy(currentTrack = updatedTrack) }
+            }
+            playbackStateManager.updateCurrentTrack(updatedTrack)
+        }
+    }
+
     fun toggleTrackLikeStatus(track: AudioTrack) {
         viewModelScope.launch {
             val isLiked = libraryEngine.toggleTrackLikeStatus(track)

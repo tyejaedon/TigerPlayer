@@ -20,7 +20,12 @@ data class PlaylistEntity(
 
     val createdAt: Long = System.currentTimeMillis(),
     val position: Int = 0
-)
+) {
+    companion object {
+        const val LIKED_SONGS_PLAYLIST_ID = -1L
+        const val LIKED_SONGS_PLAYLIST_NAME = "Liked Songs"
+    }
+}
 
 @Entity(
     tableName = "playlist_track_cross_ref",

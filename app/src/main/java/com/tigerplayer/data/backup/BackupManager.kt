@@ -175,7 +175,7 @@ class BackupManager @Inject constructor(
         settingsDataStore.setThemeMode(enumOrDefault(backup.themeMode, ThemeMode.SYSTEM))
         settingsDataStore.setPureAmoledBlack(backup.pureAmoledBlack)
         settingsDataStore.setDisablePip(backup.disablePip)
-        settingsDataStore.setAccentStyle(enumOrDefault(backup.accentStyle, TigerAccentStyle.NEON_ORANGE))
+        settingsDataStore.setAccentStyle(enumOrDefault(backup.accentStyle, TigerAccentStyle.NEON_RED))
         settingsDataStore.setDefaultPlayerView(
             enumOrDefault(backup.defaultPlayerView, DefaultPlayerView.ARTWORK_3D)
         )
@@ -227,6 +227,7 @@ class BackupManager @Inject constructor(
                 trackRefCount += crossRefs.size
             }
         }
+        playlistDao.ensureSingletonLikedPlaylist()
         return trackRefCount
     }
 

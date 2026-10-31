@@ -31,6 +31,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
@@ -309,22 +310,43 @@ class AudioRepository @Inject constructor(
     // --- Playlist Persistence & Reordering Operations ---
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
-        return playlistDao.getPlaylistsWithCount()
+        return flow {
+            ensureSingletonLikedPlaylist()
+            emitAll(playlistDao.getPlaylistsWithCount())
+        }.flowOn(ioDispatcher)
             .onEach { list ->
                 if (com.tigerplayer.BuildConfig.DEBUG) {
                     Log.d(TAG, "Playlists loaded: ${list.size}")
                 }
             }
     }
+
     suspend fun createPlaylist(name: String, id: Long? = null) {
-        playlistDao.insertPlaylist(
-            PlaylistEntity(
-                playlistId = id ?: 0L,
-                name = name,
-                artworkUri = null,
-                createdAt = System.currentTimeMillis()
+        withContext(ioDispatcher) {
+            val trimmed = name.trim()
+            if (trimmed.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)) {
+                ensureSingletonLikedPlaylist()
+                return@withContext
+            }
+            playlistDao.insertPlaylist(
+                PlaylistEntity(
+                    playlistId = id ?: 0L,
+                    name = name,
+                    artworkUri = null,
+                    createdAt = System.currentTimeMillis()
+                )
             )
-        )
+        }
+    }
+
+    suspend fun ensureSingletonLikedPlaylist(): Long {
+        return withContext(ioDispatcher) {
+            val trackIds = playlistDao.ensureSingletonLikedPlaylist()
+            trackIds.forEach { trackId ->
+                tigerDao.updateTrackLikeStatus(trackId, true)
+            }
+            PlaylistEntity.LIKED_SONGS_PLAYLIST_ID
+        }
     }
 
     suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean) {

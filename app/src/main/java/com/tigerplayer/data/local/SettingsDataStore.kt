@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.map
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
 enum class TigerAccentStyle {
+    NEON_RED,
     NEON_ORANGE,
     CYBER_CYAN,
     TOXIC_LIME,
@@ -69,7 +70,7 @@ data class TigerSettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pureAmoledBlack: Boolean = false,
     val disablePip: Boolean = false,
-    val accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_ORANGE,
+    val accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_RED,
     val defaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D,
     val crossfadeDurationSec: Int = 0,
     val gaplessPlayback: Boolean = true,
@@ -102,7 +103,7 @@ class SettingsDataStore @Inject constructor(
             themeMode = enumOrDefault(prefs[THEME_MODE], ThemeMode.SYSTEM),
             pureAmoledBlack = prefs[PURE_AMOLED_BLACK] ?: false,
             disablePip = prefs[DISABLE_PIP] ?: false,
-            accentStyle = enumOrDefault(prefs[ACCENT_STYLE], TigerAccentStyle.NEON_ORANGE),
+            accentStyle = enumOrDefault(prefs[ACCENT_STYLE], TigerAccentStyle.NEON_RED),
             defaultPlayerView = enumOrDefault(prefs[DEFAULT_PLAYER_VIEW], DefaultPlayerView.ARTWORK_3D),
             crossfadeDurationSec = (prefs[CROSSFADE_DURATION_SEC] ?: 0).coerceIn(0, 12),
             gaplessPlayback = prefs[GAPLESS_PLAYBACK] ?: true,

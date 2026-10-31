@@ -191,7 +191,9 @@ Do not treat existing code in these areas as a pattern to copy. Each has an open
   `// FileName.kt line 194` markers — several existing ones are already wrong.
 - **Logging:** use a stable `TAG` constant per class. Match the tag to the class it lives in.
 - **Compose:** stable/immutable parameters, hoisted state, `Modifier` as the first optional
-  parameter, `@Preview` for non-trivial components.
+  parameter. Previews must be a single `@Preview` per screen/view file that encapsulates the whole
+  view (i.e. the full parent view content rather than fragmented previews for individual child
+  composables under a scope).
 - **Test tags:** UI elements needing instrumentation coverage get a `testTag`; centralize them like
   the existing `PrismTestTags`.
 - **Commits:** Conventional Commits, per AIRP Phase 4.

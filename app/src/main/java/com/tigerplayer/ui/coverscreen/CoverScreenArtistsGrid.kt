@@ -150,10 +150,15 @@ fun CoverScreenArtistsGrid(
                 ArtistUtils.getBaseArtist(track.artist).equals(baseName, ignoreCase = true)
             }
         }
-        val artistAlbums = remember(albums, currentArtist.id, baseName) {
+        val artistAlbums = remember(albums, currentArtist.id, baseName, tracks) {
             albums.filter { album ->
                 album.artistId.equals(currentArtist.id, ignoreCase = true) ||
-                    album.artistId.equals(baseName.lowercase(), ignoreCase = true)
+                    album.artistId.equals(baseName, ignoreCase = true) ||
+                    ArtistUtils.getBaseArtist(album.artistId).equals(baseName, ignoreCase = true) ||
+                    tracks.any { track ->
+                        track.album.trim().equals(album.name.trim(), ignoreCase = true) &&
+                            ArtistUtils.getBaseArtist(track.artist).equals(baseName, ignoreCase = true)
+                    }
             }
         }
 

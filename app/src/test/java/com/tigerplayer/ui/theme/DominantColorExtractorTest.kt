@@ -8,6 +8,7 @@ import org.junit.Test
 class DominantColorExtractorTest {
 
     private val neonSet = setOf(
+        TigerNeonRed,
         TigerCyberCyan,
         TigerToxicLime,
         TigerHotPink,
@@ -15,6 +16,12 @@ class DominantColorExtractorTest {
         TigerNeonOrange,
         TigerSpectralViolet
     )
+
+    @Test
+    fun snaps_red_family_to_neon_red() {
+        val snapped = DominantColorExtractor.snapToNearestNeon(Color(0xFFFF1A35))
+        assertEquals(TigerNeonRed, snapped)
+    }
 
     @Test
     fun snaps_cyan_family_to_cyber_cyan() {

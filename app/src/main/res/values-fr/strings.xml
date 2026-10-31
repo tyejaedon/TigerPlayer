@@ -31,6 +31,9 @@
     <string name="coverscreen_action_remove_from_queue">Retirer de la file d\'attente</string>
     <string name="coverscreen_action_remove">Retirer</string>
 
+    <string name="coverscreen_action_like">Ajouter aux coups de cœur</string>
+    <string name="coverscreen_action_edit_playlist_photo">Modifier la photo de la playlist</string>
+
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">EN LECTURE</string>
     <string name="coverscreen_status_paused">EN PAUSE</string>

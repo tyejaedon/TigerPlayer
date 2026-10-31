@@ -32,6 +32,8 @@
     <string name="coverscreen_action_remove">Entfernen</string>
 
     <!-- Cover Screen Status Subtitles -->
+    <string name="coverscreen_action_like">Titel zu Lieblingssongs hinzufügen</string>
+    <string name="coverscreen_action_edit_playlist_photo">Playlist-Foto ändern</string>
     <string name="coverscreen_status_now_playing">WIEDERGABE</string>
     <string name="coverscreen_status_paused">ANGEHALTEN</string>
     <string name="coverscreen_status_flex_mode_active">FLEX-MODUS AKTIV</string>

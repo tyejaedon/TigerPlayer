@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Orchestrates local and remote music library data, aggregation, sorting, searching,
@@ -171,7 +172,7 @@ class LibraryEngine @Inject constructor(
         val recommendationTicker = flow {
             while (true) {
                 emit(System.currentTimeMillis() / (2 * 60 * 60 * 1000))
-                delay(30 * 60 * 1000)
+                delay((30 * 60 * 1000).milliseconds)
             }
         }.distinctUntilChanged()
 
@@ -287,6 +288,17 @@ class LibraryEngine @Inject constructor(
         }
     }
 
+    /**
+     * Puts the track as a liked song in the singleton liked songs playlist (-1L)
+     * and marks it as liked in persistent storage.
+     */
+    suspend fun likeTrack(track: AudioTrack): Boolean {
+        ensureLikedPlaylistExists()
+        audioRepository.addTrackToPlaylist(LIKED_SONGS_ID, track.id)
+        audioRepository.updateTrackLikeStatus(track.id, true)
+        return true
+    }
+
     /** Toggles the liked status of an audio track, updating the liked songs playlist. */
     suspend fun toggleTrackLikeStatus(track: AudioTrack): Boolean {
         val newState = !track.isLiked
@@ -322,12 +334,8 @@ class LibraryEngine @Inject constructor(
     fun buildFolderIndex(tracks: List<AudioTrack>): Map<String, FolderTreeBuilder.FolderContents> =
         FolderTreeBuilder.index(tracks)
 
-    /** Ensures the synthetic "Liked Songs" playlist exists in storage. */
-    private suspend fun ensureLikedPlaylistExists() {
-        val playlists = audioRepository.getCustomPlaylists().first()
-        if (playlists.none { it.id == LIKED_SONGS_ID }) {
-            audioRepository.createPlaylist("Liked Songs", id = LIKED_SONGS_ID)
-            audioRepository.getCustomPlaylists().first { list -> list.any { it.id == LIKED_SONGS_ID } }
-        }
+    /** Ensures the synthetic "Liked Songs" playlist exists in storage and merges legacy duplicates. */
+    suspend fun ensureLikedPlaylistExists() {
+        audioRepository.ensureSingletonLikedPlaylist()
     }
 }
