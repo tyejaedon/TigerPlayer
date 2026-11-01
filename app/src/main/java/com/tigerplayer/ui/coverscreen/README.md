@@ -46,12 +46,16 @@ The coverscreen package is organized into 5 focused subdirectories:
   - `CoverScreenQueueView.kt`: Queue modal sheet for reordering and inspecting the active playback queue.
 
 - **`library/`** (Collection browsing, categorization, and search)
-  - `CoverScreenLibraryMenu.kt`: Tabbed library container (Home, Stats, Artists, Albums, Songs, Playlists, Spotify Playlists).
-  - `CoverScreenLibraryViewModel.kt`: Tab state, pagination, and artist/collection flows.
-  - `CoverScreenArtistsGrid.kt`: Grid layout for local and remote artists.
-  - `CoverScreenAlbumsView.kt`: Album tracklist and playback header.
+  - `CoverScreenLibraryMenu.kt`: Tabbed library coordinator and navigation host (Home, Stats, Artists, Albums, Songs, Playlists, Spotify Playlists).
+  - `CoverScreenAlbumPicker.kt`: Grid layout, album card, and collection aggregation utilities (`buildCoverScreenAlbums`, `filterCoverScreenAlbums`).
+  - `CoverScreenAlbumsView.kt`: Focused album details, tracklist, and header.
+  - `CoverScreenPlaylistPicker.kt`: 3D horizontal wheel carousel for local playlists, Spotify cloud playlist picker, fast scrubber, and sorting.
+  - `CoverScreenSongPicker.kt`: Tracks list, individual song rows with swipe-to-queue actions, and search filtering.
+  - `CoverScreenLibraryComponents.kt`: Shared reusable library tiles and empty-state placeholders.
+  - `CoverScreenArtistsGrid.kt`: Grid layout and models for local and remote artists.
   - `CoverScreenSearchBar.kt`: Voice and text search input bar.
   - `CoverScreenSearchResults.kt`: Grouped search results across tracks, artists, and albums.
+  - `CoverScreenLibraryViewModel.kt`: Tab state, pagination, and artist/collection flows.
 
 - **`home/`** (Home dashboard and recommendation feeds)
   - `CoverScreenHomeView.kt`: Cover screen adaptation of the home dashboard.
