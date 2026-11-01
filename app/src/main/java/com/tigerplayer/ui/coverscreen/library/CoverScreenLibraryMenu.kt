@@ -302,36 +302,62 @@ fun CoverScreenLibraryMenu(
                     viewModel = settingsViewModel,
                     onClose = { showSettings = false }
                 )
-            } else if (selectedAlbum != null || selectedPlaylist != null) {
-                val album = selectedAlbum
-                val playlist = selectedPlaylist
+            } else if (selectedPlaylist != null) {
+                val playlist = selectedPlaylist!!
+                val isLiked = playlist.id == com.tigerplayer.data.local.entity.PlaylistEntity.LIKED_SONGS_PLAYLIST_ID ||
+                        playlist.name.equals(com.tigerplayer.data.local.entity.PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)
+                CoverScreenPlaylistDetailView(
+                    playlist = playlist,
+                    tracks = selectedPlaylistTracks,
+                    isLikedPlaylist = isLiked,
+                    currentTrackId = playerState.currentTrack?.id,
+                    isPlaying = playerState.isPlaying,
+                    onBack = { selectedPlaylist = null },
+                    onPlayTrack = playerViewModel::playTrack,
+                    onAddToQueue = playerViewModel::addToQueue,
+                    onPlayAll = playerViewModel::playAll,
+                    onShufflePlay = { tracksToPlay ->
+                        if (tracksToPlay.isNotEmpty()) {
+                            val shuffled = tracksToPlay.shuffled()
+                            playerViewModel.playTrack(shuffled.first())
+                            shuffled.drop(1).forEach(playerViewModel::addToQueue)
+                        }
+                    },
+                    onRenamePlaylist = { newName ->
+                        playerViewModel.renamePlaylist(playlist.id, newName)
+                        selectedPlaylist = playlist.copy(name = newName)
+                    },
+                    onDeletePlaylist = {
+                        playerViewModel.deletePlaylist(playlist.id)
+                        selectedPlaylist = null
+                    },
+                    onSaveOrder = { reorderedTracks ->
+                        playerViewModel.savePlaylistOrder(playlist.id, reorderedTracks)
+                        selectedPlaylistTracks = reorderedTracks
+                    },
+                    onRemoveTrack = { track ->
+                        playerViewModel.removeTrackFromPlaylist(playlist.id, track)
+                        selectedPlaylistTracks = selectedPlaylistTracks.filter { it.id != track.id }
+                    },
+                    onChangeCoverPhoto = {
+                        playlistToEdit = playlist
+                        playlistImagePickerLauncher.launch("image/*")
+                    }
+                )
+            } else if (selectedAlbum != null) {
+                val album = selectedAlbum!!
                 val albumTracks = remember(album, playerState.allTracks) {
                     getCoverScreenAlbumTracks(album, playerState.allTracks)
                 }
-                val displayAlbum = remember(album, albumTracks.size, playlist, selectedPlaylistTracks.size) {
-                    when {
-                        album != null -> album.copy(trackCount = albumTracks.size)
-                        playlist != null -> CoverScreenAlbum(
-                            id = playlist.id.toString(),
-                            artistId = "playlist",
-                            name = playlist.name,
-                            trackCount = selectedPlaylistTracks.size,
-                            artworkUrl = playlist.artworkUri
-                        )
-                        else -> CoverScreenAlbum("", "", "", 0)
-                    }
+                val displayAlbum = remember(album, albumTracks.size) {
+                    album.copy(trackCount = albumTracks.size)
                 }
                 CoverScreenAlbumsView(
                     album = displayAlbum,
-                    artistName = if (playlist != null) "Playlist" else album?.artistId.takeUnless { it.isNullOrBlank() } ?: albumTracks.firstOrNull()?.artist.orEmpty(),
-                    tracks = when {
-                        playlist != null -> selectedPlaylistTracks
-                        album != null -> albumTracks
-                        else -> emptyList()
-                    },
+                    artistName = album.artistId.takeUnless { it.isNullOrBlank() } ?: albumTracks.firstOrNull()?.artist.orEmpty(),
+                    tracks = albumTracks,
                     onBack = {
                         selectedAlbum = null
-                        selectedPlaylist = null
                     },
                     onPlayTrack = playerViewModel::playTrack,
                     onAddToQueue = playerViewModel::addToQueue,
@@ -599,6 +625,9 @@ fun CoverScreenLibraryMenu(
                                             "*/*"
                                         )
                                     )
+                                },
+                                onCreatePlaylist = { name ->
+                                    playerViewModel.createPlaylist(name)
                                 }
                             )
 
