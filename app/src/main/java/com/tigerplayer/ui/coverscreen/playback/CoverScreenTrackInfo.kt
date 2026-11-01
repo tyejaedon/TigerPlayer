@@ -477,7 +477,7 @@ internal fun TrackInfoText(
                 }
             )
 
-            Spacer(modifier = Modifier.height(spacerHeight))
+            Spacer(modifier = Modifier.height(if (isTight) 2.dp else 4.dp))
 
             Text(
                 text = subtitle,
