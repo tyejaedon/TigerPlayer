@@ -40,6 +40,7 @@
     <string name="coverscreen_status_no_lyrics_found">KEIN SONGTEXT GEFUNDEN</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Start</string>
     <string name="coverscreen_tab_artists">Künstler</string>
     <string name="coverscreen_tab_albums">Alben</string>
     <string name="coverscreen_tab_songs">Titel</string>

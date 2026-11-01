@@ -168,7 +168,6 @@ fun CoverScreenMiniHub(
             .fillMaxSize()
             .testTag(CoverScreenTestTags.MINI_HUB_ROOT)
             .onGloballyPositioned { coverScreenCoordinates = it }
-            .background(TigerSurfaceCharcoal)
             .semantics {
                 contentDescription = gestureInstructions
                 stateDescription = if (uiState.isPlaying) nowPlayingStatus else pausedStatus

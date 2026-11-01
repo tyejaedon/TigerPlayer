@@ -120,6 +120,7 @@ import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.remote.model.SpotifyPlaylist
 import com.tigerplayer.ui.cloud.CloudViewModel
+import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.utils.ArtistUtils
@@ -131,6 +132,7 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 enum class CoverScreenLibraryTab(val label: String) {
+    HOME("Home"),
     HISTORY("Stats"),
     ARTISTS("Artists"),
     ALBUMS("Albums"),
@@ -152,6 +154,7 @@ fun CoverScreenLibraryTabRow(
     ) {
         CoverScreenLibraryTab.entries.forEach { tab ->
             val tabTitle = when (tab) {
+                CoverScreenLibraryTab.HOME -> stringResource(R.string.coverscreen_tab_home)
                 CoverScreenLibraryTab.HISTORY -> "Stats"
                 CoverScreenLibraryTab.ARTISTS -> stringResource(R.string.coverscreen_tab_artists)
                 CoverScreenLibraryTab.ALBUMS -> stringResource(R.string.coverscreen_tab_albums)
@@ -179,7 +182,8 @@ fun CoverScreenLibraryMenu(
     showSearchInitially: Boolean = false,
     libraryViewModel: CoverScreenLibraryViewModel = hiltViewModel(),
     cloudViewModel: CloudViewModel = hiltViewModel(),
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    dashboardViewModel: DashboardViewModel = hiltViewModel()
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -555,6 +559,11 @@ fun CoverScreenLibraryMenu(
                         label = "Cover screen library tab"
                     ) { tab ->
                         when (tab) {
+                            CoverScreenLibraryTab.HOME -> CoverScreenHomeView(
+                                playerViewModel = playerViewModel,
+                                dashboardViewModel = dashboardViewModel,
+                                modifier = Modifier.fillMaxSize()
+                            )
                             CoverScreenLibraryTab.HISTORY -> CoverScreenStatsView(
                                 viewModel = playerViewModel,
                                 onPlayTrack = { track ->

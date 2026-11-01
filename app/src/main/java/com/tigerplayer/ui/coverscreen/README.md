@@ -25,27 +25,45 @@ Motorola external-display support is advertised via manifest meta-data
 (`com.motorola.android.externaldisplay.*`) but is unverified on physical hardware - see
 `docs/CoverScreen-Motorola-Verification.md`.
 
-## Components
+## Components & Directory Structure
 
-- `CoverScreenMiniHub.kt`
-  - `rememberCoverScreenWindowState()` combines a `WindowInfoTracker`-driven hinge/viewport
-    heuristic with a `displayId`/`DisplayManager` identity check, and registers a
-    `DisplayManager.DisplayListener` to react to displays attaching/detaching at runtime.
-  - `CoverScreenMiniHub(...)` swaps the normal app shell with a compact gesture UI. It is mounted
-    by `MainScreen` whenever `CoverScreenWindowState.isCoverScreen` is true.
-  - The cover-screen stats and Day List / Discover Weekly suggestions reuse the `PlayerViewModel`
-    and `DashboardViewModel` state consumed by Home. The suggestion row lazily loads artwork,
-    supports play and queue actions, and keeps horizontal browsing separate from player gestures.
-  - `isCoverScreenHeuristic(...)`, `isSecondaryDisplayIdentity(...)`, and `resolveIsCoverScreen(...)`
-    keep each detection signal - and how they combine - independently testable.
-- `CoverScreenLibraryMenu.kt`
-  - Modal library navigation sheet presenting tabbed categories (Artists, Albums, Songs, Playlists, Spotify Playlists)
-    and integrated search with voice search capabilities.
-- `CoverScreenAlbumsView.kt`
-  - Focused album details and track list view with one-tap play-all and queue manipulation.
-- `CoverScreenPerformanceManager.kt`
-  - Frame rate limiter (60 FPS cap), animation throttling, lifecycle-aware rendering state management,
-    and zero-allocation path generation for canvas drawing.
+The coverscreen package is organized into 5 focused subdirectories:
+
+- **`core/`** (Root orchestration, window states, gesture dispatchers, performance, and test tags)
+  - `CoverScreenMiniHub.kt`: Entrypoint mounting compact flip/fold UI with dual-display / flex-mode support.
+  - `CoverScreenModalOverlays.kt`: Lifecycle and performance-aware overlay coordinator for all modal sheets.
+  - `CoverScreenWindowState.kt`: Window metrics, hinge/fold heuristics, and display identity resolution.
+  - `CoverScreenGestures.kt`: Centralized touch, swipe, and drag gesture handlers.
+  - `CoverScreenPerformanceManager.kt`: Rendering suspension, modal overlay checks, and animation power gating.
+  - `CoverScreenTestTags.kt`: Centralized semantics and instrumentation test tags.
+
+- **`playback/`** (Primary player controls and visual telemetry)
+  - `CoverAccessibleControls.kt`: Playback transport controls (play, pause, skip, shuffle, repeat).
+  - `CoverMicroWaveform.kt`: 3-tier harmonic wave seeker with smoothstep boundary tapering and ambient unplayed wave.
+  - `CoverScreenTrackInfo.kt`: Track details, album art, and horizontal swipe cycle pager.
+  - `CoverScreenLyricsView.kt`: Full-bleed synchronized lyrics display.
+  - `CoverScreenPlaybackSettings.kt`: Playback speed, pitch, sleep timer, and equalizer presets.
+  - `CoverScreenQueueView.kt`: Queue modal sheet for reordering and inspecting the active playback queue.
+
+- **`library/`** (Collection browsing, categorization, and search)
+  - `CoverScreenLibraryMenu.kt`: Tabbed library container (Home, Stats, Artists, Albums, Songs, Playlists, Spotify Playlists).
+  - `CoverScreenLibraryViewModel.kt`: Tab state, pagination, and artist/collection flows.
+  - `CoverScreenArtistsGrid.kt`: Grid layout for local and remote artists.
+  - `CoverScreenAlbumsView.kt`: Album tracklist and playback header.
+  - `CoverScreenSearchBar.kt`: Voice and text search input bar.
+  - `CoverScreenSearchResults.kt`: Grouped search results across tracks, artists, and albums.
+
+- **`home/`** (Home dashboard and recommendation feeds)
+  - `CoverScreenHomeView.kt`: Cover screen adaptation of the home dashboard.
+  - `CoverScreenDiscoveryView.kt`: Daylist and Discovery Weekly detail view modals.
+  - `CoverScreenConstellationView.kt`: Neural constellation audio map card.
+
+- **`features/`** (Specialized auxiliary views and modal tools)
+  - `CoverScreenStatsView.kt`: Listening stats, top tracks, and history analytics.
+  - `CoverScreenStatsWidget.kt`: Compact telemetry widget.
+  - `CoverScreenPrismView.kt`: Prism visualizer settings and preview.
+  - `CoverScreenNexusView.kt`: Aural Nexus audio routing and processing view.
+  - `CoverScreenSettingsView.kt`: Cover screen specific settings and preferences.
 
 ## Gesture Map
 

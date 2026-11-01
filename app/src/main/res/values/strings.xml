@@ -40,6 +40,7 @@
     <string name="coverscreen_status_no_lyrics_found">NO LYRICS FOUND</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Home</string>
     <string name="coverscreen_tab_artists">Artists</string>
     <string name="coverscreen_tab_albums">Albums</string>
     <string name="coverscreen_tab_songs">Songs</string>
