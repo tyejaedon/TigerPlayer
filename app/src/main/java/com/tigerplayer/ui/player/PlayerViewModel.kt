@@ -7,11 +7,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import com.tigerplayer.data.local.CoverScreenEqPreset
 import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.MediaSource
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Lyrics
+import com.tigerplayer.data.model.M3uExportResult
+import com.tigerplayer.data.model.M3uImportResult
+import com.tigerplayer.data.model.M3uPathMode
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.remote.api.YouTubeRepository
 import com.tigerplayer.data.repository.AudioRepository
@@ -25,6 +30,7 @@ import com.tigerplayer.utils.BluetoothDeviceManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -68,10 +74,13 @@ data class PlayerUiState(
     val isPlaying: Boolean = false,
     val currentPosition: Long = 0L,
     val currentTrack: AudioTrack? = null,
-    val currentLyrics: String? = null,
+    val currentLyrics: Lyrics = Lyrics.None,
+    val lyricsManualOffsetMs: Long = 0L,
     val artistImageUrl: String? = null,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val coverScreenVolume: Float = 1f,
+    val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
     val playbackSpeed: Float = 1f,
     val pitch: Float = 1f,
     val allTracks: List<AudioTrack> = emptyList(),
@@ -95,9 +104,28 @@ data class PlayerUiState(
     val spotifyReauthRequired: Boolean = false
 )
 
+/**
+ * High-level coordinator ViewModel.
+ *
+ * Formerly an 814-line god object, this class has been split (issue #72):
+ * - Playback state & session lifecycle: [PlaybackStateManager] (@Singleton) and [PlaybackViewModel]
+ * - Library, scanning, and sorting: [com.tigerplayer.ui.library.LibraryViewModel]
+ * - Listening statistics & analytics: [com.tigerplayer.ui.home.StatsViewModel]
+ *
+ * This coordinator facade maintains 100% backward compatibility for existing callers while
+ * delegating core responsibilities to focused, testable, and independently scoped components.
+ */
 @androidx.annotation.OptIn(UnstableApi::class)
+/**
+ * Central coordinator ViewModel acting as a backward-compatible facade.
+ *
+ * Coordinates scoped ViewModels ([PlaybackViewModel], [LibraryViewModel], [StatsViewModel])
+ * and the application-scoped [PlaybackStateManager]. Delegates operations directly to their
+ * respective domains while providing a unified contract for legacy navigation routes and tests.
+ */
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
+    val playbackStateManager: PlaybackStateManager,
     private val playbackEngine: PlaybackEngine,
     val mediaControllerManager: MediaControllerManager,
     private val metadataEngine: MetadataEngine,
@@ -110,32 +138,68 @@ class PlayerViewModel @Inject constructor(
     private val playbackPrefs: PlaybackPrefs,
     private val audioRepository: AudioRepository,
     val youtubeRepository: YouTubeRepository,
-    private val bluetoothDeviceManager: BluetoothDeviceManager
+    private val bluetoothDeviceManager: BluetoothDeviceManager,
+    val fluidRenderer: FluidRenderer
 ) : ViewModel() {
+
+    // Backward-compatible constructor for existing tests and non-Hilt callers
+    constructor(
+        playbackEngine: PlaybackEngine,
+        mediaControllerManager: MediaControllerManager,
+        metadataEngine: MetadataEngine,
+        statsEngine: StatsEngine,
+        libraryEngine: LibraryEngine,
+        networkEngine: NetworkEngine,
+        waveformEngine: WaveformEngine,
+        adaptiveDspEngine: AdaptiveDspEngine,
+        settingsDataStore: SettingsDataStore,
+        playbackPrefs: PlaybackPrefs,
+        audioRepository: AudioRepository,
+        youtubeRepository: YouTubeRepository,
+        bluetoothDeviceManager: BluetoothDeviceManager,
+        fluidRenderer: FluidRenderer
+    ) : this(
+        playbackStateManager = PlaybackStateManager(
+            playbackEngine = playbackEngine,
+            mediaControllerManager = mediaControllerManager,
+            metadataEngine = metadataEngine,
+            statsEngine = statsEngine,
+            waveformEngine = waveformEngine,
+            adaptiveDspEngine = adaptiveDspEngine,
+            settingsDataStore = settingsDataStore,
+            playbackPrefs = playbackPrefs,
+            audioRepository = audioRepository,
+            bluetoothDeviceManager = bluetoothDeviceManager
+        ),
+        playbackEngine = playbackEngine,
+        mediaControllerManager = mediaControllerManager,
+        metadataEngine = metadataEngine,
+        statsEngine = statsEngine,
+        libraryEngine = libraryEngine,
+        networkEngine = networkEngine,
+        waveformEngine = waveformEngine,
+        adaptiveDspEngine = adaptiveDspEngine,
+        settingsDataStore = settingsDataStore,
+        playbackPrefs = playbackPrefs,
+        audioRepository = audioRepository,
+        youtubeRepository = youtubeRepository,
+        bluetoothDeviceManager = bluetoothDeviceManager,
+        fluidRenderer = fluidRenderer
+    )
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    private val _rawSearchQuery = MutableStateFlow("")
+    val rawSearchQuery: StateFlow<String> = _rawSearchQuery.asStateFlow()
+
     private val _sonicFootprintOpenRequest = MutableStateFlow(false)
     val sonicFootprintOpenRequest: StateFlow<Boolean> = _sonicFootprintOpenRequest.asStateFlow()
 
-    private val _trackColor = MutableStateFlow(Color(0xFF4FC3F7))
-    val trackColor: StateFlow<Color> = _trackColor.asStateFlow()
+    val trackColor: StateFlow<Color> = playbackStateManager.trackColor
 
     private var scanJob: Job? = null
-    private var metadataJob: Job? = null
-    private var lastHandledSpotifyTrackId: String? = null
-
-    /**
-     * Authoritative source of truth for which transport currently drives [uiState], set
-     * explicitly at every playback-initiating call rather than inferred by sniffing
-     * `currentTrack?.id` for a "spotify:" prefix. That inference used to race with
-     * [SpotifyRepository.pause] re-emitting stale Spotify state as a side effect of starting local
-     * playback, which could permanently block the UI from ever switching back to a local track.
-     */
-    private val activeSource = MutableStateFlow(MediaSource.LOCAL)
     private val libraryRefreshTrigger = MutableStateFlow(0)
-    private var preferredDefaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D
 
     private val _trackSortOrder = MutableStateFlow(LibraryEngine.SortOrder.TITLE)
     private val _albumSortOrder = MutableStateFlow(LibraryEngine.SortOrder.TITLE)
@@ -162,6 +226,14 @@ class PlayerViewModel @Inject constructor(
             CoverScreenStatsSnapshot()
         )
 
+    val recentTracks: StateFlow<List<AudioTrack>> = libraryEngine.getHomeUiStateFlow(unifiedTracksFlow)
+        .map { it.recentlyPlayedTracks }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyList()
+        )
+
     val customPlaylists: StateFlow<List<Playlist>> = combine(
         libraryEngine.getCustomPlaylists(),
         _playlistSortOrder
@@ -175,144 +247,36 @@ class PlayerViewModel @Inject constructor(
 
     val artistDetails = metadataEngine.artistDetails
 
+    val sleepTimerState: StateFlow<SleepTimerState> = playbackStateManager.sleepTimerState
+
     init {
-        // --- 1. MEDIA CONTROLLER STATE BINDINGS ---
+        // --- 1. PLAYBACK STATE SYNCHRONIZATION ---
         viewModelScope.launch {
-            mediaControllerManager.isPlaying.collect { isPlaying ->
-                if (activeSource.value == MediaSource.SPOTIFY) return@collect
-                _uiState.update { it.copy(isPlaying = isPlaying) }
-            }
-        }
-
-        viewModelScope.launch {
-            mediaControllerManager.currentPosition.collect { pos ->
-                if (activeSource.value == MediaSource.SPOTIFY) return@collect
-                _uiState.update { it.copy(currentPosition = pos) }
-            }
-        }
-
-        viewModelScope.launch {
-            playbackEngine.spotifyPlaybackState.collectLatest { spotifyState ->
-                val spotifyTrack = spotifyState?.track
-
-                if (spotifyTrack == null) {
-                    if (activeSource.value == MediaSource.SPOTIFY) {
-                        _uiState.update {
-                            it.copy(
-                                currentTrack = null,
-                                isPlaying = false,
-                                currentPosition = 0L,
-                                isShuffleEnabled = mediaControllerManager.shuffleModeEnabled.value,
-                                currentLyrics = null,
-                                artistImageUrl = null,
-                                currentWaveform = emptyList()
-                            )
-                        }
-                        activeSource.value = MediaSource.LOCAL
-                    }
-                    lastHandledSpotifyTrackId = null
-                    return@collectLatest
-                }
-
-                // lastHandledSpotifyTrackId is only ever advanced from inside this collector, so
-                // it is immune to whatever the queue-transition collector below concurrently does
-                // to uiState.currentTrack - unlike comparing against currentTrack directly, this
-                // can't race.
-                val isNewSpotifyTrack = lastHandledSpotifyTrackId != spotifyTrack.id
-                val isGenuineSpotifyEvent =
-                    activeSource.value == MediaSource.SPOTIFY || isNewSpotifyTrack || spotifyState.isPlaying
-
-                if (!isGenuineSpotifyEvent) {
-                    // Stale echo: SpotifyRepository.pause() was called as a side effect of the
-                    // user starting local playback (see PlaybackEngine.playTrack). Local is
-                    // already the active source, so this must not resurrect the old Spotify track.
-                    return@collectLatest
-                }
-
-                activeSource.value = MediaSource.SPOTIFY
-
-                _uiState.update { state ->
-                    state.copy(
-                        currentTrack = spotifyTrack,
-                        isPlaying = spotifyState.isPlaying,
-                        currentPosition = spotifyState.positionMs,
-                        isShuffleEnabled = spotifyState.isShuffleEnabled,
-                        currentLyrics = if (isNewSpotifyTrack) null else state.currentLyrics,
-                        artistImageUrl = if (isNewSpotifyTrack) null else state.artistImageUrl,
-                        currentWaveform = if (isNewSpotifyTrack) emptyList() else state.currentWaveform
+            playbackStateManager.playbackState.collect { pb ->
+                _uiState.update {
+                    it.copy(
+                        isPlaying = pb.isPlaying,
+                        currentPosition = pb.currentPosition,
+                        currentTrack = pb.currentTrack,
+                        currentLyrics = pb.currentLyrics,
+                        lyricsManualOffsetMs = if (pb.currentTrack?.id != it.currentTrack?.id) 0L else it.lyricsManualOffsetMs,
+                        artistImageUrl = pb.artistImageUrl,
+                        isShuffleEnabled = pb.isShuffleEnabled,
+                        repeatMode = pb.repeatMode,
+                        coverScreenVolume = pb.coverScreenVolume,
+                        coverScreenEqPreset = pb.coverScreenEqPreset,
+                        playbackSpeed = pb.playbackSpeed,
+                        pitch = pb.pitch,
+                        queue = pb.queue,
+                        currentQueueIndex = pb.currentQueueIndex,
+                        visualMode = pb.visualMode,
+                        currentWaveform = pb.currentWaveform,
+                        audioReactiveFrame = pb.audioReactiveFrame,
+                        mainViewState = pb.mainViewState,
+                        connectedBluetoothDevice = pb.connectedBluetoothDevice,
+                        spotifyReauthRequired = pb.spotifyReauthRequired
                     )
                 }
-
-                if (isNewSpotifyTrack) {
-                    lastHandledSpotifyTrackId = spotifyTrack.id
-                    metadataEngine.clearTrackMetadata()
-                    metadataJob?.cancel()
-                    metadataJob = viewModelScope.launch(Dispatchers.IO) {
-                        metadataEngine.fetchTrackMetadata(spotifyTrack)
-                    }
-                    statsEngine.onTrackChanged(spotifyTrack, spotifyState.isPlaying)
-                }
-            }
-        }
-
-        viewModelScope.launch {
-            playbackEngine.spotifyReauthRequired.collect { reauthRequired ->
-                _uiState.update { it.copy(spotifyReauthRequired = reauthRequired) }
-            }
-        }
-
-        viewModelScope.launch {
-            settingsDataStore.settingsFlow.collect { settings ->
-                preferredDefaultPlayerView = settings.defaultPlayerView
-            }
-        }
-
-        viewModelScope.launch {
-            mediaControllerManager.shuffleModeEnabled.collect { shuffle ->
-                if (activeSource.value == MediaSource.SPOTIFY) return@collect
-                _uiState.update { it.copy(isShuffleEnabled = shuffle) }
-            }
-        }
-
-        viewModelScope.launch {
-            mediaControllerManager.repeatMode.collect { repeat ->
-                _uiState.update { it.copy(repeatMode = repeat) }
-            }
-        }
-
-        viewModelScope.launch {
-            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
-                _uiState.update { it.copy(audioReactiveFrame = frame) }
-            }
-        }
-
-        viewModelScope.launch {
-            bluetoothDeviceManager.connectedDevice.collect { device ->
-                _uiState.update { it.copy(connectedBluetoothDevice = device) }
-            }
-        }
-
-        // --- 1b. LISTENED-DURATION ACCOUNTING (issue #42) ---
-        // Driven from the unified UI state rather than a single transport, so local and Spotify
-        // playback both accumulate correctly. StatsEngine is a @Singleton, so an in-flight play
-        // survives this ViewModel being recreated.
-        viewModelScope.launch {
-            _uiState
-                .map { it.isPlaying }
-                .distinctUntilChanged()
-                .collect { isPlaying -> statsEngine.onPlayingChanged(isPlaying) }
-        }
-
-        // --- PLAYBACK PARAMETERS (speed & pitch) ---
-        viewModelScope.launch {
-            mediaControllerManager.playbackSpeed.collect { speed ->
-                _uiState.update { it.copy(playbackSpeed = speed) }
-            }
-        }
-
-        viewModelScope.launch {
-            mediaControllerManager.pitch.collect { pitch ->
-                _uiState.update { it.copy(pitch = pitch) }
             }
         }
 
@@ -340,7 +304,14 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
-        // --- 2b. SORT ORDER SYNC ---
+        // --- 2b. CUSTOM PLAYLISTS SYNC ---
+        viewModelScope.launch {
+            customPlaylists.collect { playlists ->
+                _uiState.update { it.copy(customPlaylists = playlists) }
+            }
+        }
+
+        // --- 2c. SORT ORDER SYNC ---
         viewModelScope.launch {
             _trackSortOrder.collect { order -> _uiState.update { it.copy(trackSortOrder = order) } }
         }
@@ -351,88 +322,22 @@ class PlayerViewModel @Inject constructor(
             _playlistSortOrder.collect { order -> _uiState.update { it.copy(playlistSortOrder = order) } }
         }
 
-        // --- 3. QUEUE SYNCHRONIZATION ---
+        // --- 2d. SEARCH QUERY DEBOUNCE (issue #262) ---
+        @OptIn(FlowPreview::class)
         viewModelScope.launch {
-            playbackEngine.getQueueSnapshotFlow().collect { snapshot ->
-                _uiState.update {
-                    it.copy(
-                        queue = snapshot.tracks,
-                        currentQueueIndex = snapshot.currentIndex
-                    )
+            _rawSearchQuery
+                .drop(1)
+                .debounce(250L)
+                .distinctUntilChanged()
+                .collect { debouncedQuery ->
+                    _uiState.update { it.copy(searchQuery = debouncedQuery) }
+                    libraryEngine.updateSearchQuery(debouncedQuery)
                 }
-            }
-        }
-
-        // --- 4. METADATA BINDINGS ---
-        viewModelScope.launch {
-            metadataEngine.currentLyrics.collect { lyrics ->
-                _uiState.update { it.copy(currentLyrics = lyrics) }
-            }
-        }
-
-        viewModelScope.launch {
-            metadataEngine.currentArtistImageUrl.collect { url ->
-                _uiState.update { it.copy(artistImageUrl = url) }
-            }
-        }
-
-        // --- 5. THE TRACK TRANSITION RITUAL ---
-        viewModelScope.launch {
-            combine(
-                _uiState.map { it.queue }.distinctUntilChanged(),
-                _uiState.map { it.currentQueueIndex }.distinctUntilChanged()
-            ) { queue, queueIndex ->
-                queueIndex to queue.getOrNull(queueIndex)
-            }.filter { (_, track) -> track != null }
-             .distinctUntilChanged { old, new ->
-                 old.first == new.first && old.second?.id == new.second?.id
-             }
-             .collectLatest { (_, resolvedTrack) ->
-                if (activeSource.value == MediaSource.SPOTIFY) {
-                    return@collectLatest
-                }
-
-                val track = resolvedTrack ?: return@collectLatest
-                _uiState.update {
-                    it.copy(
-                        currentTrack = track,
-                        currentLyrics = null,
-                        artistImageUrl = null,
-                        currentWaveform = emptyList()
-                    )
-                }
-
-                metadataEngine.clearTrackMetadata()
-                metadataJob?.cancel()
-                metadataJob = viewModelScope.launch(Dispatchers.IO) {
-                    metadataEngine.fetchTrackMetadata(track)
-                }
-                statsEngine.onTrackChanged(track, _uiState.value.isPlaying)
-
-                if (track.isLocal && track.artworkUri.toString().startsWith("content://")) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        val highResUri = metadataEngine.fetchSpotifyHighResArt(track.title, track.artist, track.album)
-                        if (highResUri != null) {
-                            audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
-                            _uiState.update { state ->
-                                if (state.currentTrack?.id == track.id) {
-                                    state.copy(currentTrack = track.copy(artworkUri = highResUri))
-                                } else state
-                            }
-                        }
-                    }
-                }
-
-                viewModelScope.launch(Dispatchers.IO) {
-                    val realWaveform = waveformEngine.getWaveform(track)
-                    _uiState.update { it.copy(currentWaveform = realWaveform) }
-                }
-            }
         }
     }
 
     fun updateTrackColor(color: Color) {
-        _trackColor.value = color
+        playbackStateManager.updateTrackColor(color)
     }
 
     // ==========================================
@@ -440,68 +345,88 @@ class PlayerViewModel @Inject constructor(
     // ==========================================
 
     fun togglePlayPause() {
-        playbackEngine.togglePlayPause(_uiState.value.currentTrack, _uiState.value.isPlaying)
+        playbackStateManager.togglePlayPause()
     }
 
     fun playTrack(track: AudioTrack) {
-        if (!track.id.startsWith("spotify:")) activeSource.value = MediaSource.LOCAL
-        playbackEngine.playTrack(track, _uiState.value.tracks)
+        playbackStateManager.playTrack(track, _uiState.value.tracks)
     }
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int) {
-        activeSource.value = MediaSource.LOCAL
-        playbackEngine.setPlaylistAndPlay(tracks, startIndex)
+        playbackStateManager.setPlaylistAndPlay(tracks, startIndex)
+    }
+
+    fun playAll(tracks: List<AudioTrack>) {
+        if (tracks.isEmpty()) return
+        playbackStateManager.playAll(tracks)
     }
 
     fun skipToNext() {
-        playbackEngine.skipToNext(_uiState.value.currentTrack)
+        playbackStateManager.skipToNext()
     }
 
     fun skipToPrevious() {
-        playbackEngine.skipToPrevious(_uiState.value.currentTrack)
+        playbackStateManager.skipToPrevious()
     }
 
     fun seekTo(positionMs: Long) {
-        playbackEngine.seekTo(positionMs, _uiState.value.currentTrack)
+        playbackStateManager.seekTo(positionMs)
+    }
+
+    fun adjustLyricsOffset(deltaMs: Long) {
+        _uiState.update { it.copy(lyricsManualOffsetMs = it.lyricsManualOffsetMs + deltaMs) }
+    }
+
+    fun resetLyricsOffset() {
+        _uiState.update { it.copy(lyricsManualOffsetMs = 0L) }
     }
 
     fun toggleShuffle() {
-        playbackEngine.toggleShuffle(_uiState.value.currentTrack)
+        playbackStateManager.toggleShuffle()
     }
 
     fun toggleRepeat() {
-        playbackEngine.toggleRepeat(_uiState.value.currentTrack)
+        playbackStateManager.toggleRepeat()
+    }
+
+    fun setCoverScreenVolume(volume: Float) {
+        val normalizedVolume = volume.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 1f
+        _uiState.update { it.copy(coverScreenVolume = normalizedVolume) }
+        playbackStateManager.setCoverScreenVolume(volume)
+    }
+
+    fun adjustCoverScreenVolume(delta: Float) {
+        playbackStateManager.adjustCoverScreenVolume(delta)
+    }
+
+    fun setCoverScreenEqPreset(preset: CoverScreenEqPreset) {
+        _uiState.update { it.copy(coverScreenEqPreset = preset) }
+        playbackStateManager.setCoverScreenEqPreset(preset)
     }
 
     // --- PLAYBACK SPEED & PITCH CONTROLS (issue #52) ---
     fun setPlaybackSpeed(speed: Float) {
-        val normalized = PlaybackRatePolicy.normalize(speed)
-        viewModelScope.launch { mediaControllerManager.setPlaybackParameters(normalized, _uiState.value.pitch) }
+        playbackStateManager.setPlaybackSpeed(speed)
     }
 
     fun increasePlaybackSpeed() {
-        val next = PlaybackRatePolicy.adjust(_uiState.value.playbackSpeed, PlaybackRatePolicy.STEP)
-        setPlaybackSpeed(next)
+        playbackStateManager.increasePlaybackSpeed()
     }
 
     fun decreasePlaybackSpeed() {
-        val next = PlaybackRatePolicy.adjust(_uiState.value.playbackSpeed, -PlaybackRatePolicy.STEP)
-        setPlaybackSpeed(next)
+        playbackStateManager.decreasePlaybackSpeed()
     }
 
     fun setPitch(pitch: Float) {
-        val normalized = PlaybackRatePolicy.normalize(pitch)
-        viewModelScope.launch { mediaControllerManager.setPlaybackParameters(_uiState.value.playbackSpeed, normalized) }
+        playbackStateManager.setPitch(pitch)
     }
 
     fun increasePitch() {
-        val next = PlaybackRatePolicy.adjust(_uiState.value.pitch, PlaybackRatePolicy.STEP)
-        setPitch(next)
+        playbackStateManager.increasePitch()
     }
 
     fun decreasePitch() {
-        val next = PlaybackRatePolicy.adjust(_uiState.value.pitch, -PlaybackRatePolicy.STEP)
-        setPitch(next)
+        playbackStateManager.decreasePitch()
     }
 
     // ==========================================
@@ -509,32 +434,31 @@ class PlayerViewModel @Inject constructor(
     // ==========================================
 
     fun addToQueue(track: AudioTrack) {
-        playbackEngine.addToQueue(track)
+        playbackStateManager.addToQueue(track)
     }
 
     fun addNextToQueue(track: AudioTrack) {
-        playbackEngine.playNext(track)
+        playbackStateManager.addNextToQueue(track)
     }
 
     fun removeFromQueue(index: Int) {
-        playbackEngine.removeFromQueue(index)
+        playbackStateManager.removeFromQueue(index)
     }
 
     fun clearQueue() {
-        playbackEngine.clearQueue()
+        playbackStateManager.clearQueue()
     }
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
-        playbackEngine.moveQueueItem(fromIndex, toIndex)
+        playbackStateManager.moveQueueItem(fromIndex, toIndex)
     }
 
     fun playQueueItem(index: Int) {
-        activeSource.value = MediaSource.LOCAL
-        playbackEngine.playQueueItem(index)
+        playbackStateManager.playQueueItem(index)
     }
 
     fun setMainViewState(state: MainViewState) {
-        _uiState.update { it.copy(mainViewState = state) }
+        playbackStateManager.setMainViewState(state)
     }
 
     fun requestSonicFootprintOpen() {
@@ -563,6 +487,12 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun saveCuratedPlaylist(name: String, tracks: List<AudioTrack>) {
+        viewModelScope.launch {
+            libraryEngine.saveCuratedPlaylist(name, tracks)
+        }
+    }
+
     fun addTrackToPlaylist(playlistId: Long, track: AudioTrack) {
         viewModelScope.launch {
             libraryEngine.addTrackToPlaylist(playlistId, track.id)
@@ -585,6 +515,23 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             libraryEngine.updatePlaylistArtwork(context, playlistId, uri)
         }
+    }
+
+    // --- M3U / M3U8 IMPORT & EXPORT (issue #58) ---
+
+    suspend fun importM3uPlaylist(
+        fileUri: Uri,
+        customPlaylistName: String? = null
+    ): Result<M3uImportResult> {
+        return libraryEngine.importM3uPlaylist(fileUri, customPlaylistName)
+    }
+
+    suspend fun exportM3uPlaylist(
+        playlistId: Long,
+        destinationUri: Uri,
+        pathMode: M3uPathMode = M3uPathMode.ABSOLUTE
+    ): Result<M3uExportResult> {
+        return libraryEngine.exportM3uPlaylist(playlistId, destinationUri, pathMode)
     }
 
     // ==========================================
@@ -625,6 +572,18 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun likeTrack(track: AudioTrack) {
+        viewModelScope.launch {
+            val isLiked = libraryEngine.likeTrack(track)
+            val updatedTrack = track.copy(isLiked = isLiked)
+
+            if (_uiState.value.currentTrack?.id == track.id) {
+                _uiState.update { it.copy(currentTrack = updatedTrack) }
+            }
+            playbackStateManager.updateCurrentTrack(updatedTrack)
+        }
+    }
+
     fun toggleTrackLikeStatus(track: AudioTrack) {
         viewModelScope.launch {
             val isLiked = libraryEngine.toggleTrackLikeStatus(track)
@@ -633,47 +592,28 @@ class PlayerViewModel @Inject constructor(
             if (_uiState.value.currentTrack?.id == track.id) {
                 _uiState.update { it.copy(currentTrack = updatedTrack) }
             }
+            playbackStateManager.updateCurrentTrack(updatedTrack)
         }
     }
 
-    // FullPlayer visual cycling excludes Sonic Prism; Prism is controlled from Home.
-    // On cover screens we skip VORTEX to reduce GPU/battery load.
     fun toggleVisualMode(isCoverOptimized: Boolean = false) {
-        val nextMode = when (_uiState.value.visualMode) {
-            PlayerVisualMode.ARTWORK -> PlayerVisualMode.WAVEFORM
-            PlayerVisualMode.WAVEFORM -> if (isCoverOptimized) PlayerVisualMode.ARTWORK else PlayerVisualMode.VORTEX
-            PlayerVisualMode.VORTEX -> PlayerVisualMode.ARTWORK
-            PlayerVisualMode.SONIC_PRISM -> PlayerVisualMode.ARTWORK
-        }
-        _uiState.update { it.copy(visualMode = nextMode) }
+        playbackStateManager.toggleVisualMode(isCoverOptimized)
     }
 
     fun onFullPlayerOpened(isCoverOptimized: Boolean = false) {
-        val preferredMode = when (preferredDefaultPlayerView) {
-            DefaultPlayerView.ARTWORK_3D -> PlayerVisualMode.ARTWORK
-            DefaultPlayerView.FLUID_VORTEX -> PlayerVisualMode.VORTEX
-            DefaultPlayerView.SONIC_PRISM -> PlayerVisualMode.ARTWORK
-        }
-        val targetMode = if (isCoverOptimized && preferredMode == PlayerVisualMode.VORTEX) {
-            PlayerVisualMode.WAVEFORM
-        } else {
-            preferredMode
-        }
-        _uiState.update { it.copy(visualMode = targetMode) }
+        playbackStateManager.onFullPlayerOpened(isCoverOptimized)
     }
 
     fun setFullPlayerActive(active: Boolean) {
-        viewModelScope.launch {
-            playbackPrefs.saveFullPlayerActive(active)
-        }
+        playbackStateManager.setFullPlayerActive(active)
     }
 
     fun onSearchQueryChanged(query: String) {
-        _uiState.update { it.copy(searchQuery = query) }
-        libraryEngine.updateSearchQuery(query)
+        _rawSearchQuery.value = query
     }
 
     fun clearSearch() {
+        _rawSearchQuery.value = ""
         _uiState.update { it.copy(searchQuery = "") }
         libraryEngine.clearSearch()
     }
@@ -695,16 +635,13 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ==========================================
-    // --- SLEEPTIMER  SECTION ---
+    // --- SLEEPTIMER SECTION ---
     // ==========================================
-    val sleepTimerState: StateFlow<SleepTimerState> = playbackEngine.sleepTimerState
-        .stateIn(viewModelScope, SharingStarted.Lazily, SleepTimerState())
 
-    fun setSleepTimerDuration(minutes: Int) = playbackEngine.setSleepTimerDuration(minutes)
-    fun setSleepTimerEndOfTrack() = playbackEngine.setSleepTimerEndOfTrack()
-    fun setSleepTimerEndOfQueue() = playbackEngine.setSleepTimerEndOfQueue()
-    fun cancelSleepTimer() = playbackEngine.cancelSleepTimer()
-
+    fun setSleepTimerDuration(minutes: Int) = playbackStateManager.setSleepTimerDuration(minutes)
+    fun setSleepTimerEndOfTrack() = playbackStateManager.setSleepTimerEndOfTrack()
+    fun setSleepTimerEndOfQueue() = playbackStateManager.setSleepTimerEndOfQueue()
+    fun cancelSleepTimer() = playbackStateManager.cancelSleepTimer()
 
     // ==========================================
     // --- METADATA FETCHING ---
@@ -726,12 +663,10 @@ class PlayerViewModel @Inject constructor(
 
     fun onAuthSuccess(token: String) {
         networkEngine.onAuthSuccess(token)
-        // App Remote authorization is a separate Spotify-app handshake and must be opened lazily
-        // from an explicit playback action, not eagerly during the browser/custom-tab return path.
     }
 
     fun refreshBluetoothRouteState() {
-        bluetoothDeviceManager.refreshConnectedDevice()
+        playbackStateManager.refreshBluetoothRouteState()
     }
 
     suspend fun connectToNavidrome(

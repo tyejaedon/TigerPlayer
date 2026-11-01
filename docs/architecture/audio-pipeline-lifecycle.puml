@@ -1,0 +1,91 @@
+@startuml audio-pipeline-lifecycle
+!theme plain
+skinparam componentStyle uml2
+skinparam sequenceMessageAlign center
+skinparam shadowing false
+skinparam defaultFontName sans-serif
+
+title TigerPlayer - Media3 AudioProcessor Pipeline & Transition Lifecycle
+
+box "Audio Sourcing & Decoders" #E8F0FE
+participant "ResolvingDataSource\n(NavidromeUrlSigner)" as Source
+participant "ExoPlayer Decoders\n(MediaCodec / FLAC / Opus)" as Decoder
+end box
+
+box "AudioProcessor Pipeline (DefaultAudioSink)" #FEF7E0
+participant "AdaptiveDspEngine\n(PEQ / SVF / Reverb / Prism)" as DspEngine
+participant "Look-Ahead Limiter\n(1024-sample circular buffer)" as Limiter
+participant "FftProcessor\n(6-Band Spectral Engine)" as FftProc
+participant "WaveformCaptureProcessor\n(RMS & Waveform Buffer)" as WaveProc
+end box
+
+box "Hardware Audio Subsystem" #FCE8E6
+participant "Android AudioTrack\n(Audio HAL / Offload Sink)" as HAL
+end box
+
+box "Telemetry & Physical Senses" #E6F4EA
+participant "AudioReactiveFrame\n(StateFlow)" as StateFlow
+participant "UI Visualizers\n(Compose Canvas / Shaders)" as Visualizers
+participant "VibratorManager\n(Haptic Motor Cooldown)" as Haptics
+end box
+
+== 1. Audio Processing & Telemetry Flow ==
+
+Source -> Decoder: Stream uncompressed/compressed chunks
+Decoder -> DspEngine: Raw PCM Audio Frames (Float / 16-bit PCM)
+activate DspEngine
+
+DspEngine -> DspEngine: Apply ReplayGain Normalization
+DspEngine -> DspEngine: Process StateVariableFilters (Cytotoxic PEQ)
+DspEngine -> DspEngine: Linkwitz-Riley 4th-order Stem Separation (Prism)
+DspEngine -> DspEngine: Schroeder Hall Reverb (4 comb + 2 all-pass)
+
+DspEngine -> Limiter: Pass processed audio frames
+activate Limiter
+Limiter -> Limiter: Inspect 5ms ahead in circular buffer
+Limiter -> Limiter: Apply transparent true-peak limiting if peak > 1.0f (bypass on flat lossless)
+Limiter --> DspEngine: Safe clipped-free PCM frames
+deactivate Limiter
+
+DspEngine -> FftProc: Forward safe PCM stream
+deactivate DspEngine
+activate FftProc
+
+FftProc -> FftProc: 512/1024-pt Fast Fourier Transform
+FftProc -> StateFlow: Emit 6-Band Spectral Energy & Flux
+StateFlow -> Visualizers: Render 60/120 FPS Canvas & AGSL Shaders
+StateFlow -> Haptics: Trigger Bass Beat Pulse (90ms refractory cooldown)
+
+FftProc -> WaveProc: Forward PCM stream
+deactivate FftProc
+activate WaveProc
+
+WaveProc -> WaveProc: Calculate RMS Amplitude & Downsample Waveform
+WaveProc -> HAL: Deliver processed PCM frames to AudioTrack
+deactivate WaveProc
+
+== 2. Hardware Offload Transition Lifecycle (Mutex Guarded) ==
+
+note over DspEngine, HAL
+User toggles DSP / Offload mode:
+Avoids loud clicks, pops, and driver faults during sink reconfiguration.
+end note
+
+[o-> DspEngine: Toggle Offload / System DSP
+activate DspEngine #DarkSalmon
+DspEngine -> DspEngine: Acquire offloadTransitionMutex
+loop 8 Steps (20ms each)
+    DspEngine -> HAL: Linear Volume Ramp Down (1.0 -> 0.0)
+end
+
+DspEngine -> DspEngine: Delay 350ms (Drain A2DP & HAL hardware buffers)
+
+DspEngine -> HAL: Reconfigure AudioSink & TrackSelection (Offload Mode)
+
+loop 8 Steps (40ms each)
+    DspEngine -> HAL: Linear Volume Ramp Up (0.0 -> 1.0)
+end
+DspEngine -> DspEngine: Release offloadTransitionMutex
+deactivate DspEngine
+
+@enduml

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,13 +43,17 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
+import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -98,6 +103,7 @@ import com.tigerplayer.ui.theme.PremiumGlassCard
 import com.tigerplayer.ui.theme.SpotifyGreen
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerNeonRed
 import com.tigerplayer.ui.theme.TigerSpectralViolet
 import com.tigerplayer.ui.theme.TigerToxicLime
 import com.tigerplayer.ui.theme.bounceClick
@@ -115,9 +121,22 @@ fun SettingsScreen(
     val rescan by viewModel.libraryRescanState.collectAsStateWithLifecycle()
     val hapticsDebug by viewModel.hapticsDebugState.collectAsStateWithLifecycle()
     val backupEvent by viewModel.backupEvent.collectAsStateWithLifecycle()
+    val spotifyAuthError by viewModel.spotifyAuthError.collectAsStateWithLifecycle()
     val accent = accentColor(settings.accentStyle)
 
     val context = LocalContext.current
+
+    if (spotifyAuthError != null) {
+        SpotifyAuthErrorDialog(
+            error = spotifyAuthError!!,
+            onDismiss = viewModel::dismissSpotifyAuthError,
+            onRetry = {
+                viewModel.dismissSpotifyAuthError()
+                viewModel.loginSpotify(context)
+            },
+            isCoverScreen = false
+        )
+    }
     LaunchedEffect(backupEvent) {
         val event = backupEvent ?: return@LaunchedEffect
         val message = when (event) {
@@ -258,6 +277,22 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            // --- COVER SCREEN & OUTER DISPLAY ---
+            MatrixSection(title = "Cover Screen & Foldables", icon = Icons.Rounded.ScreenRotation, accent = accent) {
+                ListItem(
+                    headlineContent = { Text("COVER SCREEN PREVIEW", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Force compact cover screen UI on standard displays") },
+                    leadingContent = { Icon(Icons.Rounded.PhoneAndroid, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.coverScreenPreviewMode,
+                            onCheckedChange = viewModel::setCoverScreenPreviewMode
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
             }
 
             // --- AUDIO ENGINE SECTION ---
@@ -443,6 +478,34 @@ fun SettingsScreen(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
 
+                ListItem(
+                    headlineContent = { Text("ONLINE ARTWORK LOOKUP", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Fetch high-resolution artwork online") },
+                    leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.fetchOnlineArtwork,
+                            onCheckedChange = viewModel::setFetchOnlineArtwork
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                ListItem(
+                    headlineContent = { Text("AUTO-DOWNLOAD LYRICS", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Silently fetch missing synchronized lyrics in background") },
+                    leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = accent) },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.autoDownloadLyrics,
+                            onCheckedChange = viewModel::setAutoDownloadLyrics
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -573,9 +636,22 @@ private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color
             supportingContent = { Text(if (accounts.isSpotifyConnected) "Connected" else "Not connected") },
             leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = if (accounts.isSpotifyConnected) SpotifyGreen else accent.copy(alpha = 0.4f)) },
             trailingContent = {
+                val itemContext = LocalContext.current
                 if (accounts.isSpotifyConnected) {
                     TextButton(onClick = { pendingLogout = "Spotify" }) {
                         Text("LOG OUT")
+                    }
+                } else {
+                    Button(
+                        onClick = { viewModel.loginSpotify(itemContext) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SpotifyGreen,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text("CONNECT", fontWeight = FontWeight.Black, fontSize = 12.sp)
                     }
                 }
             },
@@ -793,6 +869,7 @@ private fun MatrixSection(
 @Composable
 private fun accentColor(accentStyle: TigerAccentStyle): Color {
     return when (accentStyle) {
+        TigerAccentStyle.NEON_RED -> TigerNeonRed
         TigerAccentStyle.NEON_ORANGE -> TigerNeonOrange
         TigerAccentStyle.CYBER_CYAN -> TigerCyberCyan
         TigerAccentStyle.TOXIC_LIME -> TigerToxicLime

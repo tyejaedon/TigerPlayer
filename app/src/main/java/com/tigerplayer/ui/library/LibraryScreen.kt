@@ -1,8 +1,11 @@
 package com.tigerplayer.ui.library
 
 import android.annotation.SuppressLint
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -24,11 +27,14 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Upload
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -47,9 +55,15 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import com.tigerplayer.ui.KeyboardTestTags
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,32 +108,46 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
 
     var isSearchActive by remember { mutableStateOf(false) }
-    val query = uiState.searchQuery
+    val rawSearchQuery by viewModel.rawSearchQuery.collectAsState()
+    val debouncedQuery = uiState.searchQuery
 
-    val matchedArtists = remember(query, uiState.artists) {
-        if (query.isBlank()) emptyList()
-        else uiState.artists.filter { it.name.contains(query, ignoreCase = true) }
+    val matchedArtists = remember(debouncedQuery, uiState.artists) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.artists.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
     }
 
-    val matchedAlbums = remember(query, uiState.tracks) {
-        if (query.isBlank()) emptyList()
+    val matchedAlbums = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
         else uiState.tracks
-            .filter { it.album.contains(query, ignoreCase = true) }
+            .filter { it.album.contains(debouncedQuery, ignoreCase = true) }
             .distinctBy { it.album.lowercase().trim() }
     }
+
+    val matchedTracks = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.tracks.filter { it.title.contains(debouncedQuery, ignoreCase = true) }
+    }
+
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
+            .imePadding()
     ) {
         AnimatedLibraryHeader(
-            query = query,
+            query = rawSearchQuery,
             isSearchActive = isSearchActive,
             onSearchToggle = {
                 isSearchActive = !isSearchActive
-                if (!isSearchActive) viewModel.clearSearch()
+                if (!isSearchActive) {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    viewModel.clearSearch()
+                }
             },
             onQueryChange = { viewModel.onSearchQueryChanged(it) }
         )
@@ -131,7 +159,7 @@ fun LibraryScreen(
         )
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (query.isNotEmpty()) {
+            if (rawSearchQuery.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 120.dp)
@@ -142,9 +170,22 @@ fun LibraryScreen(
                         viewModel = viewModel,
                         matchedArtists = matchedArtists,
                         matchedAlbums = matchedAlbums,
-                        onNavigateToAlbum = onNavigateToAlbum,
-                        onNavigatetoArtist = onNavigateToArtist,
-                        artistDetails = artistDetails
+                        matchedTracks = matchedTracks,
+                        onNavigateToAlbum = { album ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onNavigateToAlbum(album)
+                        },
+                        onNavigatetoArtist = { artist ->
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onNavigateToArtist(artist)
+                        },
+                        artistDetails = artistDetails,
+                        onTrackSelected = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                        }
                     )
                 }
             } else {
@@ -177,6 +218,15 @@ fun AnimatedLibraryHeader(
     onQueryChange: (String) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) {
+            focusRequester.requestFocus()
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -210,6 +260,7 @@ fun AnimatedLibraryHeader(
             }, label = "SearchBarAnimation"
         ) { searchActive ->
             if (searchActive) {
+                @Suppress("DEPRECATION")
                 OutlinedTextField(
                     value = query,
                     onValueChange = onQueryChange,
@@ -217,9 +268,19 @@ fun AnimatedLibraryHeader(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
+                        .focusRequester(focusRequester)
+                        .testTag(KeyboardTestTags.LIBRARY_SEARCH_FIELD)
                         .glassEffect(CircleShape),
                     shape = CircleShape,
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Search,
+                        keyboardType = KeyboardType.Text,
+                        autoCorrect = false
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { keyboardController?.hide() }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.aardBlue,
                         unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
@@ -228,7 +289,12 @@ fun AnimatedLibraryHeader(
                     ),
                     leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.aardBlue) },
                     trailingIcon = {
-                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSearchToggle() }) {
+                        IconButton(onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onSearchToggle()
+                        }) {
                             Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
                         }
                     }
@@ -695,12 +761,50 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
     val likedPlaylist = remember(playlists) { playlists.find { it.id == LIKED_SONGS_ID } }
     val userPlaylists = remember(playlists) { playlists.filterNot { it.id == LIKED_SONGS_ID } }
 
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
 
+    val importM3uLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val result = viewModel.importM3uPlaylist(uri)
+                if (result.isSuccess) {
+                    val import = result.getOrNull()
+                    val message = if ((import?.unmatchedCount ?: 0) > 0) {
+                        "Imported '${import?.playlistName}': ${import?.importedCount} tracks mapped, ${import?.unmatchedCount} unmatched"
+                    } else {
+                        "Imported '${import?.playlistName}': ${import?.importedCount} tracks"
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        "M3U import failed: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
     if (showCreateDialog) {
+        val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
+
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+
         AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
+            onDismissRequest = {
+                showCreateDialog = false
+                keyboardController?.hide()
+            },
             title = { Text("NEW PLAYLIST", fontWeight = FontWeight.Black) },
             text = {
                 OutlinedTextField(
@@ -708,7 +812,21 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     onValueChange = { newPlaylistName = it },
                     label = { Text("Playlist Name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .testTag(KeyboardTestTags.PLAYLIST_CREATE_NAME_FIELD),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (newPlaylistName.isNotBlank()) {
+                                viewModel.createPlaylist(newPlaylistName)
+                                newPlaylistName = ""
+                                showCreateDialog = false
+                                keyboardController?.hide()
+                            }
+                        }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.aardBlue,
                         cursorColor = MaterialTheme.aardBlue
@@ -722,6 +840,7 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                             viewModel.createPlaylist(newPlaylistName)
                             newPlaylistName = ""
                             showCreateDialog = false
+                            keyboardController?.hide()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.aardBlue)
@@ -730,7 +849,10 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) {
+                TextButton(onClick = {
+                    showCreateDialog = false
+                    keyboardController?.hide()
+                }) {
                     Text("CANCEL", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
             },
@@ -765,6 +887,23 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     icon = WitcherIcons.Add,
                     title = "Forge New Playlist",
                     onClick = { showCreateDialog = true }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                PremiumActionRow(
+                    icon = Icons.Rounded.Upload,
+                    title = "Import M3U / M3U8 Playlist",
+                    onClick = {
+                        importM3uLauncher.launch(
+                            arrayOf(
+                                "audio/x-mpegurl",
+                                "audio/mpegurl",
+                                "application/vnd.apple.mpegurl",
+                                "application/x-mpegurl",
+                                "text/plain",
+                                "*/*"
+                            )
+                        )
+                    }
                 )
                 Spacer(modifier = Modifier.height(32.dp))
             }
@@ -1298,9 +1437,11 @@ fun LazyListScope.renderSearchResults(
     viewModel: PlayerViewModel,
     matchedArtists: List<LibraryArtist>,
     matchedAlbums: List<AudioTrack>,
+    matchedTracks: List<AudioTrack>,
     onNavigateToAlbum: (String) -> Unit,
     onNavigatetoArtist: (String) -> Unit,
-    artistDetails: Map<String, ArtistDetails>
+    artistDetails: Map<String, ArtistDetails>,
+    onTrackSelected: (() -> Unit)? = null
 ) {
     if (matchedArtists.isNotEmpty()) {
         item {
@@ -1313,6 +1454,8 @@ fun LazyListScope.renderSearchResults(
             )
         }
         items(matchedArtists, key = { "artist_${it.name}" }) { artist ->
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
 
             // 🔥 THE FIX: Extract HD images using the identical Lore logic
             val normalizedKey = remember(artist.name) {
@@ -1337,7 +1480,11 @@ fun LazyListScope.renderSearchResults(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .bounceClick { onNavigatetoArtist(artist.name) }
+                    .bounceClick {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onNavigatetoArtist(artist.name)
+                    }
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1371,11 +1518,17 @@ fun LazyListScope.renderSearchResults(
             )
         }
         items(matchedAlbums, key = { "album_${it.album}" }) { album ->
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .bounceClick { onNavigateToAlbum(album.album) }
+                    .bounceClick {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onNavigateToAlbum(album.album)
+                    }
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1392,7 +1545,6 @@ fun LazyListScope.renderSearchResults(
         }
     }
 
-    val matchedTracks = uiState.tracks.filter { it.title.contains(uiState.searchQuery, ignoreCase = true) }
     if (matchedTracks.isNotEmpty()) {
         item {
             Text(
@@ -1404,10 +1556,17 @@ fun LazyListScope.renderSearchResults(
             )
         }
         items(matchedTracks, key = { "track_${it.id}" }) { track ->
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
             SongItem(
                 track = track,
                 isActive = uiState.currentTrack?.id == track.id,
-                onClick = { viewModel.playTrack(track) }
+                onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    onTrackSelected?.invoke()
+                    viewModel.playTrack(track)
+                }
             )
         }
     }

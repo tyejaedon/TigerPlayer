@@ -1,0 +1,223 @@
+name: Sign and publish release APKs
+
+on:
+  workflow_run:
+    workflows: ["Release candidate"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sign (e.g., v2.1.3)'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  sign-release:
+    name: Sign and publish release APKs
+    runs-on: ubuntu-latest
+    environment: release-candidate
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Android build tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools build-tools;36.0.0"
+
+      - name: Resolve release candidate
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+            SOURCE_RUN_ID=$(gh run list \
+              --workflow release.yml \
+              --branch "$TAG" \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // empty')
+          else
+            SOURCE_RUN_ID="${{ github.event.workflow_run.id }}"
+            TAG=$(gh run view "$SOURCE_RUN_ID" --json headBranch --jq '.headBranch')
+          fi
+
+          if [[ -z "$TAG" || -z "$SOURCE_RUN_ID" ]]; then
+            echo "::error::Could not resolve the tag and successful release-candidate run."
+            exit 1
+          fi
+
+          RUN_METADATA=$(gh run view "$SOURCE_RUN_ID" --json conclusion,headBranch)
+          if [[ "$(jq -r '.conclusion' <<< "$RUN_METADATA")" != "success" ||
+                "$(jq -r '.headBranch' <<< "$RUN_METADATA")" != "$TAG" ]]; then
+            echo "::error::Run $SOURCE_RUN_ID is not a successful release candidate for $TAG."
+            exit 1
+          fi
+
+          ARTIFACT_NAME=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.name | startswith("unsigned-release-")) | .name] | if length == 1 then .[0] else empty end')
+          if [[ -z "$ARTIFACT_NAME" ]]; then
+            echo "::error::Expected exactly one unsigned release artifact for run $SOURCE_RUN_ID."
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "source_run_id=${SOURCE_RUN_ID}" >> $GITHUB_OUTPUT
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "Using release candidate run ${SOURCE_RUN_ID} for ${TAG}."
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download unsigned APK artifact
+        run: |
+          gh run download "${{ steps.tag.outputs.source_run_id }}" \
+            --name "${{ steps.tag.outputs.artifact_name }}" \
+            --dir unsigned-release
+          mkdir -p unsigned-apks
+          cp unsigned-release/app/build/outputs/apk/full/release/app-full-release-unsigned.apk \
+            unsigned-apks/app-full-release-unsigned.apk
+          cp unsigned-release/app/build/outputs/apk/foss/release/app-foss-release-unsigned.apk \
+            unsigned-apks/app-foss-release-unsigned.apk
+          ls -lh unsigned-apks/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Prepare keystore
+        id: keystore
+        run: |
+          set -euo pipefail
+          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > release.keystore
+          test -s release.keystore
+          EXPECTED_FINGERPRINT="0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b"
+          KEYSTORE_ENTRIES=$(keytool -list -v \
+            -keystore release.keystore \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" 2>/dev/null) || {
+              echo "::error::Could not read the release keystore."
+              exit 1
+            }
+          SIGNING_ALIAS=$(awk -v expected="$EXPECTED_FINGERPRINT" '
+            /^Alias name: / {
+              alias = substr($0, index($0, ": ") + 2)
+              private_key = 0
+            }
+            /^Entry type: PrivateKeyEntry$/ { private_key = 1 }
+            /^[[:space:]]*SHA256:/ {
+              fingerprint = $0
+              sub(/^[[:space:]]*SHA256:[[:space:]]*/, "", fingerprint)
+              gsub(":", "", fingerprint)
+              if (private_key && tolower(fingerprint) == expected) {
+                print alias
+              }
+              private_key = 0
+            }
+          ' <<< "$KEYSTORE_ENTRIES")
+          if [[ -z "$SIGNING_ALIAS" || "$SIGNING_ALIAS" == *$'\n'* ]]; then
+            echo "::error::No unique private-key entry matches the documented release certificate."
+            exit 1
+          fi
+          echo "release_key_alias=${SIGNING_ALIAS}" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+
+      - name: Sign APKs
+        run: |
+          set -euo pipefail
+          mkdir -p signed-apks
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+
+          "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
+            --ks release.keystore \
+            --ks-key-alias "$RELEASE_KEY_ALIAS" \
+            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out signed-apks/app-full-release-signed.apk \
+            unsigned-apks/app-full-release-unsigned.apk
+
+          "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
+            --ks release.keystore \
+            --ks-key-alias "$RELEASE_KEY_ALIAS" \
+            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out signed-apks/app-foss-release-signed.apk \
+            unsigned-apks/app-foss-release-unsigned.apk
+
+          (
+            cd signed-apks
+            sha256sum *.apk > SHA256SUMS-signed.txt
+          )
+
+          ls -lh signed-apks/
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ steps.keystore.outputs.release_key_alias }}
+
+      - name: Verify signed APKs
+        run: |
+          set -euo pipefail
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          EXPECTED_FINGERPRINT="0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b"
+
+          for apk in signed-apks/app-full-release-signed.apk signed-apks/app-foss-release-signed.apk; do
+            VERIFICATION=$("$APKSIGNER" verify --verbose --print-certs "$apk")
+            if ! grep -Fq "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFICATION"; then
+              echo "::error::APK does not have a valid v2 signature: $apk"
+              exit 1
+            fi
+            if ! grep -Fq "Signer #1 certificate SHA-256 digest: ${EXPECTED_FINGERPRINT}" <<< "$VERIFICATION"; then
+              echo "::error::APK signer does not match the release certificate: $apk"
+              exit 1
+            fi
+          done
+
+      - name: Upload signed APKs to release
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          echo "Uploading signed APKs to release ${TAG}..."
+
+          gh release upload "${TAG}" \
+            signed-apks/app-full-release-signed.apk \
+            signed-apks/app-foss-release-signed.apk \
+            signed-apks/SHA256SUMS-signed.txt \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+          echo "Successfully uploaded signed APKs!"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Clean up secrets
+        if: always()
+        run: |
+          rm -f release.keystore
+          echo "Keystore cleaned up"

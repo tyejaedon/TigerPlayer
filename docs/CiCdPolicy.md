@@ -1,4 +1,4 @@
-﻿# CI/CD and Repository Policy
+# CI/CD and Repository Policy
 Configure GitHub protection before a production release.
 ## Required pull-request checks
 Protect `master`, require pull requests, stale-approval dismissal, conversation resolution, and block force-pushes and branch deletion. Require:
@@ -15,6 +15,12 @@ Protect `master`, require pull requests, stale-approval dismissal, conversation 
 - Pull requests pass lint, JVM tests, R8, an unsigned release bundle, and deterministic Room/app-context instrumentation smoke tests.
 - Gradle checksum verification is mandatory in CI using `--dependency-verification=strict`; update `gradle/verification-metadata.xml` only with an intentional reviewed dependency change.
 - Pull-request workflows must not receive release-signing keys or production credentials.
+## Beta staging and release process
+- The `beta` branch acts as the pre-production staging environment. Code is promoted from `sandbox/experimentation` to `beta` via `.github/workflows/promote-to-beta.yml` or pull requests.
+- All pushes and PRs to `beta` must pass `Android CI` (lint, unit tests, R8 shrinker, Room schema validation) and `Supply-chain security` (secret scans and dependency review).
+- The `Beta Production Release` workflow (`.github/workflows/beta-release.yml`) builds, signs (v2 scheme with the release key), audits, and exports sideloadable `foss` and `full` APKs as GitHub Pre-Releases under `v*-beta*` tags.
+- Beta `versionCode` follows the monotonic SemVer multiplier scheme to ensure smooth tester upgrades over earlier betas and baseline builds.
+
 ## Release process
 `Release candidate` runs only for a `v*` tag or manual dispatch. It produces unsigned evidence: a `full`-flavor release APK and AAB, a `foss`-flavor release APK, R8 mapping files for both flavors, a SHA-256 manifest, and an SPDX JSON SBOM.
 Create a protected `release-candidate` Environment with a release-manager reviewer. Add a `v*` tag ruleset restricting create/update/delete permissions to release managers and blocking force-updates. Tags must point to commits that passed required PR checks.

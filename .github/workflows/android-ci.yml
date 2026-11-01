@@ -5,9 +5,9 @@ name: Android CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, beta]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, beta]
   workflow_dispatch:
 
 # A new push to the same PR cancels the previous run.

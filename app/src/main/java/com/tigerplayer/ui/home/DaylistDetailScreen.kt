@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
@@ -104,6 +105,28 @@ fun DaylistDetailScreen(
         label = "DaylistHeroAlpha"
     )
 
+    var showSaveDialog by remember { mutableStateOf(false) }
+
+    val formattedDate = remember {
+        java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+    }
+    val defaultPlaylistName = remember(descriptor.label, formattedDate) {
+        "Daylist - ${descriptor.label} ($formattedDate)"
+    }
+
+    if (showSaveDialog) {
+        SaveCuratedPlaylistDialog(
+            initialName = defaultPlaylistName,
+            trackCount = tracks.size,
+            accentColor = descriptor.accent,
+            onDismiss = { showSaveDialog = false },
+            onConfirm = { name ->
+                showSaveDialog = false
+                viewModel.saveCuratedPlaylist(name, tracks)
+            }
+        )
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -130,6 +153,18 @@ fun DaylistDetailScreen(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { showSaveDialog = true },
+                        enabled = tracks.isNotEmpty()
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                            contentDescription = "Add as Playlist",
+                            tint = if (tracks.isNotEmpty()) descriptor.accent else Color.White.copy(alpha = 0.38f)
                         )
                     }
                 },
@@ -207,6 +242,21 @@ fun DaylistDetailScreen(
                             Icon(Icons.Rounded.Shuffle, contentDescription = null, tint = descriptor.accent)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Shuffle Tide", color = Color.White)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (tracks.isNotEmpty()) {
+                                    showSaveDialog = true
+                                }
+                            },
+                            enabled = tracks.isNotEmpty(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, descriptor.accent.copy(alpha = 0.7f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = descriptor.accent)
+                        ) {
+                            Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null, tint = descriptor.accent)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add", color = Color.White)
                         }
                     }
                 }

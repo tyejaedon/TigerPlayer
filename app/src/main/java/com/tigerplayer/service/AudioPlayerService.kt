@@ -70,6 +70,18 @@ import kotlin.time.Duration.Companion.milliseconds
 data class PeqBand(val type: String, val frequency: Float, val gain: Float, val q: Float)
 data class PeqProfile(val name: String, val preamp: Float, val bands: List<PeqBand>, val rawText: String = "")
 
+/**
+ * Foreground media session service managing the ExoPlayer playback engine.
+ *
+ * Responsibilities:
+ * - Manages MediaSession lifecycle and foreground notification with MediaStyle.
+ * - Configures ExoPlayer DefaultAudioSink with custom AudioProcessor chain:
+ *   [AdaptiveDspEngine] -> [FftProcessor] -> [WaveformCaptureProcessor].
+ * - Handles OEM-specific hardware quirks (e.g. disabling float output on Samsung to avoid HAL buffer crashes).
+ * - Manages hardware offload state transitions with volume ramp fading ([offloadTransitionMutex]).
+ * - Resolves dynamic Navidrome streaming credentials at request time via [ResolvingDataSource].
+ * - Dispatches audio-reactive haptic feedback pulses based on real-time FFT bass and flux.
+ */
 @Suppress("DEPRECATION")
 @UnstableApi
 @AndroidEntryPoint
@@ -828,6 +840,10 @@ class AudioPlayerService : MediaSessionService() {
 
     private fun updateReplayGainForMediaItem(mediaItem: MediaItem?) {
         val extras = mediaItem?.mediaMetadata?.extras
+        val mimeType = extras?.getString(MediaControllerManager.META_MIME_TYPE).orEmpty()
+        val isLossless = isLosslessMimeType(mimeType)
+        adaptiveDspEngine.setIsLosslessStream(isLossless)
+
         val trackDb = if (extras?.containsKey(MediaControllerManager.META_REPLAYGAIN_TRACK_DB) == true) {
             extras.getDouble(MediaControllerManager.META_REPLAYGAIN_TRACK_DB)
         } else null
@@ -854,6 +870,11 @@ class AudioPlayerService : MediaSessionService() {
             albumPeak = albumPeak,
             isSequentialAlbumPlay = isSequential
         )
+    }
+
+    private fun isLosslessMimeType(mimeType: String): Boolean {
+        val lower = mimeType.lowercase()
+        return lower.contains("flac") || lower.contains("wav") || lower.contains("alac") || lower.contains("aiff")
     }
 
     private fun isPlayingAlbumSequentially(): Boolean {

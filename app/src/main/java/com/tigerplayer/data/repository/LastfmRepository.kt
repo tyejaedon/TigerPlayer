@@ -56,7 +56,6 @@ class LastFmRepository @Inject constructor(
                         name = artistData.name,
                         bio = cleanBio,
                         genres = genres, // Now perfectly matches List<String>
-                        popularity = listeners,
                         imageUrl = bestImageUrl
                     )
                 }

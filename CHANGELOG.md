@@ -13,6 +13,69 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Added
 
+- **Save Daylist & Discover Weekly as Standalone Playlists**: added an "Add as Playlist" action button in both `DaylistDetailScreen` and `DiscoverWeeklyDetailScreen` allowing users to snapshot their dynamically generated curation feeds as standalone, unique playlists; presents a customizable confirmation dialog pre-filled with the default contextual descriptor and date (e.g., `Daylist - Morning Wave (Nov 1, 2026)` or `Discover Weekly (Nov 1, 2026)`) with automatic name deduplication on repeated saves. (#316)
+- **README & v2.2 Beta showcase**: updated project README with prominent v2.2 Beta candidate release details (`v2.2.0-beta.13`), direct download links for Full and FOSS signed APKs, and highlighted feature showcases for synchronized lyrics, AutoEq device integration, harmonized waveform seeker, true-peak limiting, and cover screen enhancements. (#310)
+- **Harmonized waveform seeker & cinematic background fluid visualizer**: ported the 3-tier harmonic wave hierarchy and unconfined apex amplitude styling from `CoverMicroWaveform` into the main player seekbar (`FieryWavySeeker`), with dynamic neon palette extraction (`DominantColorExtractor`), zero-allocation path reuse across 60/120 FPS render loops, continuous non-destructive drag seeking, and tabular monospace timestamps; detached card-level overlays from the album art card in `FullPlayerScreen` so it cleanly displays album art; made card taps toggle between Background Fluid Visualizer mode (`FluidVortexView` + `fluidRenderer`) and clean Artist Image mode with a smooth 400ms crossfade; implemented lifecycle-aware and modal-aware GPU rendering suspension (`isRenderingActive`) when obscured or backgrounded. (#306)
+- **M3U / M3U8 playlist import and export**: added lossless M3U and M3U8 import/export engine via Storage Access Framework (SAF); supports `#EXTM3U` and `#EXTINF` metadata directives, UTF-8 character encoding (with BOM handling and non-ASCII character preservation), and Windows/Unix directory separators; resolves both absolute filesystem paths and relative paths against the local audio library; provides detailed import reports for matched and unmatched entries; adds export options for relative and absolute paths while preserving explicit track order; adds UI entry points in the Library screen playlists tab and Playlist Details screen. (#58)
+- **Audio Devices module, AutoEq querying, preset persistence & UI hub**: added unified Audio Devices data models and Room database persistence (schema v15 with migration and tests) for tracking Phone Speaker, Wired Headphones, and Bluetooth endpoints; streamlined Bluetooth card with listening time, codec badge, and AutoEq status; added Audio Devices Hub bottom sheet with device history, wired profile creation, and AutoEq headphone model search; integrated AutoEq headphone measurement database indexing with offline fallback and parametric curve parsing; added per-device preset persistence; integrated audio devices and EQ presets into backup manifest export/restore. (#300)
+- **Synchronized lyrics engine & interactive display**: introduced typed `Lyrics` domain model (`Synced`, `Plain`, `None`), background `LrcParser` with multi-timestamp tag support, comma decimal parsing, and chronologically sorted lines; added interactive tap-a-line-to-seek, smooth centered auto-scrolling with pre-song intro guard, manual offset tuning (+/- 0.5s), local companion `.lrc` sidecar file support, and embedded ID3 `USLT`/`SYLT` and FLAC Vorbis comments lyrics extraction taking precedence over remote lookups; added secondary free lyrics provider (`KugouApi` & `LrclibApi` search fallback), silent background lyrics crawler obeying rate-limiting (1 request/sec) with negative cache suppression, and a Settings toggle for auto-downloading lyrics. (#57)
+- **Cover screen 3D playlist wheel carousel & photo editor**: redesigned cover screen playlist browsing (`CoverScreenLibraryMenu.kt`) with a horizontal 3D cylindrical wheel carousel styled after `CarouselComponents.kt`, a fast-scroll slider on the side, inline photo editing directly on each playlist card, and alphabetical playlist sorting with Liked Songs pinned first. (#298)
+- **Cover screen double-tap to like**: double-tapping album artwork in the cover screen viewport (`CoverScreenMiniHub` / `CoverScreenTrackInfo`) immediately likes the active song and animates a popping neon heart. (#298)
+- **Singleton Liked Songs playlist convergence**: consolidated all Liked Songs references to a dedicated singleton playlist (`playlistId = -1L`) in `PlaylistEntity` and `PlaylistDao`; automatically migrates and deduplicates tracks from legacy "Liked Songs" playlists on database queries or backup restore while preventing duplicate creations. (#298)
+- **Graphics & Rendering Engine framework**: added `graphics-rendering-engine` workspace skill, `graphics-rendering-specialist` subagent, and engineering reference manuals covering OpenGL ES 3.0/3.2, Vulkan compute migration, and mobile GPU microarchitectures (Qualcomm Adreno GMEM, ARM Mali TBDR, PowerVR). (#293)
+- **Graphics architecture & guardrails**: updated `AGENTS.md` with strict zero-allocation render loop invariants, mandatory shader compile/link assertions, and 16-bit half-float texture bandwidth optimizations. (#293)
+- **Sandbox to Beta Promotion Pipeline**: Staging and promotion workflow (`promote-to-beta.yml`) linking `sandbox/experimentation` to the `beta` branch. (#283)
+- **Beta Production Release Pipeline**: Automated build, sign (v2 scheme with release keystore), audit, and export of FOSS/Full release APKs and AAB as GitHub Pre-Releases (`beta-release.yml`). (#283)
+- **Dynamic SemVer Version Coding**: Dynamic `versionCode` and `versionName` injection via Gradle properties with monotonic SemVer formula for beta releases. (#283)
+- **System architecture & compartment documentation**: added comprehensive per-module `README.md` specifications across `engine/`, `service/`, `data/`, and `ui/` compartments using the `audio-pipeline-explainer` framework (plain-English mental models, class breakdowns, thread safety boundaries, active limitations, and tabulated jargon glossaries). (#286)
+- **PlantUML architecture specifications**: added dedicated architectural diagrams for system compartment wiring (`system-compartments.puml`), Media3 `AudioProcessor` pipeline and mutex-guarded offload transition lifecycle (`audio-pipeline-lifecycle.puml`), and multi-source data convergence and dual-transport routing (`data-convergence-architecture.puml`). (#286)
+
+### Changed
+
+- **Android Gradle Plugin**: pinned AGP to 9.4.0 for Android Studio compatibility and refreshed dependency verification metadata.
+
+### Fixed
+
+- **Spotify artwork negative cache & backoff**: prevented perpetual repeated Spotify artwork network requests for unmatched local tracks by recording misses with timestamps and attempt counts in Room (`TigerDatabase` version 16 migration), implementing a 7-day base cool-off with exponential backoff on repeated failures, preferring embedded artwork over network round-trips, and adding a user-visible "ONLINE ARTWORK LOOKUP" setting to disable online artwork fetching entirely. (#64)
+- **Auto-headroom composite peak calculation**: replaced naive algebraic summation of positive EQ band gains in `AdaptiveDspEngine` with true composite filter response peak detection via `BiquadDesigner.calculateCompositePeakGainDb()`; avoids drastic Fletcher-Munson loudness drops on non-overlapping frequency bands while accurately calculating cumulative compounding on overlapping filters and cancellation on opposing boost/cut nodes. (#289)
+- **Lossless dynamic compression & true-peak limiting**: removed hardcoded 0.82f (-1.72 dBFS) limiter threshold in `AdaptiveDspEngine`; bypassed AGC gain reduction completely on lossless streams (`audio/flac`, `audio/wav`, `audio/alac`, `audio/aiff`, and 24-bit/Float PCM) when EQ is flat (0 dB boost or negative cuts); tuned look-ahead limiter to transparent 1.0f (0.0 dBFS) true-peak protection with 0.8ms attack and 50ms release, preventing dynamic range squashing, transient dulling, and volume pumping. (#288)
+
+## [2.1.6-beta.1] - 2026-10-27
+
+### Added
+
+- **Spotify diagnostics & setup dialog**: added `SpotifyAuthError` model and `SpotifyAuthErrorDialog`, converting cryptic OAuth callbacks and configuration omissions into actionable developer and setup guidance (missing `secrets.properties` keys, redirect URI whitelisting, account permissions, and offline state) with accessible 48dp dismiss and retry actions.
+- **Cover screen settings**: added full `CoverScreenSettingsView` mirroring all primary app preferences, including Spotify authentication controls, AMOLED black toggles, neon accent swatches, PiP controls, and playback parameters.
+- **Cover screen navigation**: wired interactive settings launcher button in `CoverScreenLibraryMenu` with haptic feedback and back-gesture handling.
+- **Context extensions**: added `Context.findActivity()` utility for safe unnesting across wrapped UI contexts.
+
+### Changed
+
+- **Spotify authentication workflow**: replaced fleeting transient toasts with persistent, user-friendly Arcane Glass diagnostics dialogs across both normal and cover screen modes. Added explicit CONNECT buttons when disconnected and confirmation-guarded DISCONNECT buttons when authenticated.
+- **Cover screen visual overhaul**: refreshed Album and Song tabs, artist detailed grids, and playback views to Arcane Glass visual standards.
+
+### Fixed
+
+- **Compose observable locale**: replaced non-observable `Locale.getDefault()` invocations with `Locale.ROOT` in `CoverScreenStatsView`, resolving Android Lint compiler errors.
+- **Cover screen UI layout bindings**: resolved Button and ButtonDefaults import references, and aligned `rememberTigerAmbientGradient` parameter conventions.
+
+## [2.1.5] - 2026-10-25
+
+### Added
+
+- **Cover screen preview**: added `coverScreenPreviewMode` preference in settings and an exit button in cover screen settings, enabling cover screen UI preview and testing on standard phone displays. (#275)
+
+### Fixed
+
+- **Cover screen detection**: resolved foldable outer display detection failure caused by `computeMaximumWindowMetrics` inflating window bounds to unfolded screen dimensions (1080x2640 px / 411x1005 dp) on Samsung Galaxy Z Flip and resize-model foldables. Reconstructed true un-insetted height directly from `configurationHeightDp` and `imeBottomDp`. (#275)
+- **Cover screen display identity**: hardened secondary display resolution across `LocalView.current.display`, `LocalContext.current.display`, and `Activity.display` with `Display.INVALID_DISPLAY` guarding, ensuring Motorola Razr and external displays are detected reliably before and after window attachment. (#275)
+- **Cover screen heuristics**: expanded short edge (180..440 dp), long edge (<= 480 dp), and aspect ratio (<= 1.55f) bounds to support edge-to-edge clamshell outer panels. (#275)
+
+## [2.1.4] - 2026-10-24
+
+### Added
+
+- **Architecture & Documentation**: Added comprehensive PlantUML architectural design guide (docs/architecture/architecture-design.md) and essential inline code comments across core modules (service/, engine/, data/, ui/), documenting threading models, domain invariants, and Media3 audio pipelines while removing stale line-number comments and decorative emoji banners. (#268)
 - **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
   album counts, artist album lists, and swipe-back navigation. (#220)
 - **Cover screen**: added album track browsing with play, add-to-queue, remove-from-queue swipe,
@@ -27,14 +90,38 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   swipe removal, and a confirmed persistent clear-queue action. (#225)
 - **Cover screen**: added a cached listening-stats widget with today's listening time and play
   count, top artists, a seven-day history chart, and a shortcut to Sonic Footprint. (#226)
+- **Cover screen**: surfaced Day List and Discover Weekly suggestions with artwork, play/queue
+  actions, horizontal browsing, and refreshable empty-feed feedback. (#227)
+- **Cover screen**: added Songs tab and Play All button to the cover screen library. (#253)
+- **Cover screen**: integrated Spotify playlists with a 15-minute TTL cache on the cover screen. (#230)
+- **Cover screen & UI**: accessibility semantics, TalkBack announcements, and localization support. (#231)
+- **UI / Input**: keyboard options, IME actions, auto-focus, and insets padding across input fields. (#261)
+- **Cover screen parity**: Arcane Glass UI, spatial 3D EQ nexus, constellation library view, and cover screen settings. (#269)
+
+### Changed
+
+- **Architecture**: Decomposed the monolithic `PlayerViewModel` god object into scoped ViewModels (`PlaybackViewModel`, `LibraryViewModel`, `StatsViewModel`) backed by an application-scoped `PlaybackStateManager` singleton, eliminating redundant recompositions and coroutine collector overhead. (#72)
+- **Performance**: Decoupled raw search query input from global `PlayerUiState` to eliminate typing latency. (#262)
+- **Cover screen performance**: Optimized rendering frame pacing and battery consumption on outer displays. (#232)
 
 ### Fixed
 
-- **Spotify**: completing Spotify web login no longer immediately retries an App Remote bind during the browser return transition, which had been misclassifying local Spotify-app authorization failures as a stale web token and sending users into a disconnect/re-auth loop. The app now declares package visibility for `com.spotify.music`, keeps the Web token intact, and points App Remote failures to Spotify app readiness, Premium, and dashboard SHA-1/package registration instead. (#202)
+- **Cover screen**: Prevent lyrics display clipping on small foldable displays. (#252)
+- **Cover screen**: Prevent playback controls overflow on compact screens. (#251)
+- **Cover screen**: Prevent unmounting and viewport clipping during IME keyboard resize events. (#260)
 
-- **Lyrics**: LRCLIB lookups now identify the app with a descriptive user agent, stop retrying
-  query variants after server errors, and negatively cache missing lyrics to avoid repeated failed
-  requests. (#200)
+## [2.1.3] - 2026-10-12
+
+### Fixed
+
+- **Spotify**: Surface actionable UI element for Spotify App Remote reauthorization in Cloud Archives
+  and Full Player screens. Added a persistent reauth banner with one-tap "Re-authorize Spotify" button
+  and clear status feedback on successful reauthorization. (#201)
+
+### Added
+
+- **F-Droid**: Reproducible builds support with binary verification metadata and allowed signing keys
+  documentation. (#246)
 
 ## [2.1.2] - 2026-09-23
 

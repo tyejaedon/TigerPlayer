@@ -121,10 +121,18 @@ gh pr create \
 - Tied to the issue milestone for release tracking.
 
 Closes #42" \
-  --base master
+  --base master \
+  --head fix/issue-42-null-auth-token \
+  --milestone "v2.1.0" \
+  --label "area:security,bug,P1-high" \
+  --assignee "@me"
 ```
 
-**Critical:** The PR title MUST include `(closes #<ID>)` and the body must include `Closes #<ID>`. This triggers GitHub's auto-close on merge.
+**Critical PR Metadata Invariants:**
+1. **Auto-Close Linkage:** The PR title MUST include `(closes #<ID>)` and the body MUST include `Closes #<ID>` on its own line. This enables GitHub to automatically link and close the issue upon merge.
+2. **Milestone:** ALWAYS pass `--milestone "<milestone>"` matching the issue milestone. Never leave milestones blank.
+3. **Labels:** ALWAYS pass `--label "<labels>"` propagating all issue labels (e.g. `area:*`, `bug`, `feature`, `tech-debt`, `documentation`, `P*`).
+4. **Assignee:** ALWAYS pass `--assignee "@me"` (or the working contributor's login).
 
 ### Step 6: Verify Automatic Issue Closure
 
@@ -132,6 +140,23 @@ After the PR is merged to `master`:
 - GitHub automatically closes issue `#<ID>`.
 - The milestone is updated (issue count decreases).
 - The branch can be deleted.
+
+### Step 7: Calendar Task Sync (AIRP Phase 5 Completion)
+
+After the issue is closed on GitHub, record the completion on Google Calendar via the `gcalendar` integration:
+
+```powershell
+.\scripts\calendar-sync.ps1 -IssueId <ID>
+```
+
+- Pivots the event into a completed task/checklist with `✅ [CLOSED] #<ID> <Title>`.
+- Colors the event Basil/Green (`--color 10`).
+- Sets `--transparency transparent` so completed tasks do not block calendar availability.
+- Updates the event description with a verified task completion checklist.
+- If all issues for a milestone are completed, run:
+  ```powershell
+  .\scripts\calendar-sync.ps1 -MilestoneTitle "<Milestone Name>"
+  ```
 
 ---
 

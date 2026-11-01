@@ -1,0 +1,330 @@
+name: Beta Production Release
+
+on:
+  push:
+    branches:
+      - beta
+    tags:
+      - "v*-beta*"
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Custom version name (e.g. 2.2.0-beta.1). Leave blank to auto-calculate.'
+        required: false
+        type: string
+      version_code:
+        description: 'Custom version code (e.g. 2020001). Leave blank to auto-calculate.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  beta-release:
+    name: Build, sign, and publish Beta release
+    runs-on: ubuntu-latest
+    environment: release-candidate
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android build tools
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-read-only: "false"
+
+      - name: Configure secrets.properties placeholder
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          cat > secrets.properties <<'EOF'
+          SPOTIFY_CLIENT_ID=MISSING_ID
+          LASTFM_API_KEY=MISSING_API_KEY
+          YOUTUBE_API_KEY=MISSING_YOUTUBE_KEY
+          EOF
+
+      - name: Resolve Beta Versioning
+        id: versioning
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_NAME="${{ inputs.version_name }}"
+          INPUT_CODE="${{ inputs.version_code }}"
+          REF="${GITHUB_REF}"
+
+          if [[ -n "$INPUT_NAME" && -n "$INPUT_CODE" ]]; then
+            VERSION_NAME="$INPUT_NAME"
+            VERSION_CODE="$INPUT_CODE"
+          elif [[ "$REF" == refs/tags/v* ]]; then
+            TAG="${REF#refs/tags/}"
+            # Strip leading 'v'
+            VERSION_NAME="${TAG#v}"
+            # Extract Major, Minor, Patch, Beta from semantic tag e.g. 2.2.0-beta.1 or 2.1.6-beta1
+            if [[ "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.?([0-9]+))? ]]; then
+              MAJOR="${BASH_REMATCH[1]}"
+              MINOR="${BASH_REMATCH[2]}"
+              PATCH="${BASH_REMATCH[3]}"
+              BETA_NUM="${BASH_REMATCH[5]:-1}"
+              VERSION_CODE=$(( MAJOR * 1000000 + MINOR * 10000 + PATCH * 100 + BETA_NUM ))
+            else
+              echo "::error::Tag $TAG does not match standard SemVer format (e.g. v2.2.0-beta.1)"
+              exit 1
+            fi
+          else
+            # Push to beta branch without tag: construct from base version + github.run_number
+            BASE_VERSION=$(sed -nE 's/.*versionName = .*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' app/build.gradle.kts | head -n1)
+            BASE_VERSION="${BASE_VERSION:-2.2.0}"
+            RUN_NUM="${{ github.run_number }}"
+            VERSION_NAME="${BASE_VERSION}-beta.${RUN_NUM}"
+            if [[ "$BASE_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+              MAJOR="${BASH_REMATCH[1]}"
+              MINOR="${BASH_REMATCH[2]}"
+              PATCH="${BASH_REMATCH[3]}"
+              VERSION_CODE=$(( MAJOR * 1000000 + MINOR * 10000 + PATCH * 100 + RUN_NUM ))
+            else
+              VERSION_CODE=$(( 2000000 + RUN_NUM ))
+            fi
+          fi
+
+          # Ensure tag starts with v
+          RELEASE_TAG="v${VERSION_NAME#v}"
+
+          echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "version_code=${VERSION_CODE}" >> $GITHUB_OUTPUT
+          echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+
+          echo "=============================================="
+          echo "BETA RELEASE VERSION SPECIFICATION:"
+          echo "  versionName : ${VERSION_NAME}"
+          echo "  versionCode : ${VERSION_CODE}"
+          echo "  releaseTag  : ${RELEASE_TAG}"
+          echo "=============================================="
+
+      - name: Verify Gradle dependency verification
+        run: ./gradlew --dependency-verification=strict help --stacktrace
+
+      - name: Run Quality Gate Checks (Lint & Tests)
+        run: |
+          ./gradlew :app:lintFossDebug :app:lintFullDebug --stacktrace
+          ./gradlew :app:testFossDebugUnitTest :app:testFullDebugUnitTest --stacktrace
+
+      - name: Assemble Release APKs and AAB
+        env:
+          V_CODE: ${{ steps.versioning.outputs.version_code }}
+          V_NAME: ${{ steps.versioning.outputs.version_name }}
+        run: |
+          ./gradlew :app:assembleFullRelease :app:assembleFossRelease :app:bundleFullRelease \
+            -PVERSION_CODE="$V_CODE" \
+            -PVERSION_NAME="$V_NAME" \
+            --stacktrace
+
+      - name: Prepare Signing Keystore
+        id: keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > release.keystore
+          test -s release.keystore
+
+          EXPECTED_FINGERPRINT="0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b"
+          KEYSTORE_ENTRIES=$(keytool -list -v \
+            -keystore release.keystore \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" 2>/dev/null) || {
+              echo "::error::Could not read the release keystore."
+              exit 1
+            }
+
+          SIGNING_ALIAS=$(awk -v expected="$EXPECTED_FINGERPRINT" '
+            /^Alias name: / {
+              alias = substr($0, index($0, ": ") + 2)
+              private_key = 0
+            }
+            /^Entry type: PrivateKeyEntry$/ { private_key = 1 }
+            /^[[:space:]]*SHA256:/ {
+              fingerprint = $0
+              sub(/^[[:space:]]*SHA256:[[:space:]]*/, "", fingerprint)
+              gsub(":", "", fingerprint)
+              if (private_key && tolower(fingerprint) == expected) {
+                print alias
+              }
+              private_key = 0
+            }
+          ' <<< "$KEYSTORE_ENTRIES")
+
+          if [[ -z "$SIGNING_ALIAS" || "$SIGNING_ALIAS" == *$'\n'* ]]; then
+            echo "::error::No unique private-key entry matches the documented release certificate."
+            exit 1
+          fi
+
+          echo "release_key_alias=${SIGNING_ALIAS}" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+
+      - name: Sign Beta APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p beta-artifacts
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          ALIAS="${{ steps.keystore.outputs.release_key_alias }}"
+          V_NAME="${{ steps.versioning.outputs.version_name }}"
+
+          # Locate assembled release APKs
+          FULL_UNSIGNED=$(find app/build/outputs/apk/full/release -name "*.apk" | head -n1)
+          FOSS_UNSIGNED=$(find app/build/outputs/apk/foss/release -name "*.apk" | head -n1)
+
+          if [[ ! -f "$FULL_UNSIGNED" || ! -f "$FOSS_UNSIGNED" ]]; then
+            echo "::error::Could not find compiled release APKs."
+            exit 1
+          fi
+
+          TARGET_FULL="beta-artifacts/TigerPlayer-${V_NAME}-full-signed.apk"
+          TARGET_FOSS="beta-artifacts/TigerPlayer-${V_NAME}-foss-signed.apk"
+
+          echo "Signing $FULL_UNSIGNED -> $TARGET_FULL..."
+          "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
+            --ks release.keystore \
+            --ks-key-alias "$ALIAS" \
+            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out "$TARGET_FULL" \
+            "$FULL_UNSIGNED"
+
+          echo "Signing $FOSS_UNSIGNED -> $TARGET_FOSS..."
+          "$APKSIGNER" sign \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --v4-signing-enabled false \
+            --ks release.keystore \
+            --ks-key-alias "$ALIAS" \
+            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out "$TARGET_FOSS" \
+            "$FOSS_UNSIGNED"
+
+          # Copy bundle and mapping files if present
+          find app/build/outputs/bundle -name "*.aab" -exec cp {} "beta-artifacts/TigerPlayer-${V_NAME}-full.aab" \; || true
+          if [[ -f app/build/outputs/mapping/fullRelease/mapping.txt ]]; then
+            cp app/build/outputs/mapping/fullRelease/mapping.txt beta-artifacts/mapping-full.txt
+          fi
+          if [[ -f app/build/outputs/mapping/fossRelease/mapping.txt ]]; then
+            cp app/build/outputs/mapping/fossRelease/mapping.txt beta-artifacts/mapping-foss.txt
+          fi
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+      - name: Verify Signed APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          EXPECTED_FINGERPRINT="0aabbc79e9db6666f1f814487d5607865f2fc643ca940217ff941947c0fb0c9b"
+
+          for apk in beta-artifacts/*.apk; do
+            echo "Verifying signature of $apk..."
+            VERIFICATION=$("$APKSIGNER" verify --verbose --print-certs "$apk")
+            if ! grep -Fq "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFICATION"; then
+              echo "::error::APK does not have a valid v2 signature: $apk"
+              exit 1
+            fi
+            if ! grep -Fq "Signer #1 certificate SHA-256 digest: ${EXPECTED_FINGERPRINT}" <<< "$VERIFICATION"; then
+              echo "::error::APK signer does not match official release certificate: $apk"
+              exit 1
+            fi
+            echo "Signature verified successfully for $apk."
+          done
+
+      - name: Generate Checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd beta-artifacts
+          sha256sum *.* > SHA256SUMS-beta-signed.txt
+          cat SHA256SUMS-beta-signed.txt
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: .
+          format: spdx-json
+          output-file: beta-artifacts/tigerplayer-beta-sbom.spdx.json
+          upload-artifact: "false"
+          upload-release-assets: "false"
+
+      - name: Publish GitHub Pre-Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.versioning.outputs.release_tag }}"
+          V_NAME="${{ steps.versioning.outputs.version_name }}"
+          V_CODE="${{ steps.versioning.outputs.version_code }}"
+
+          RELEASE_TITLE="TigerPlayer v${V_NAME} (Beta)"
+          RELEASE_NOTES=$(printf '%s\n' \
+            "## TigerPlayer Beta Release: v${V_NAME}" \
+            "" \
+            "This is a pre-production beta build intended for testing upcoming features and exploratory changes." \
+            "" \
+            "### Release Information" \
+            "- **Version Name:** \`${V_NAME}\`" \
+            "- **Version Code:** \`${V_CODE}\`" \
+            "- **Branch:** \`${GITHUB_REF#refs/heads/}\`" \
+            "- **Commit:** \`${GITHUB_SHA}\`" \
+            "- **Signing Scheme:** APK Signature Scheme v2 (Official Release Keystore)" \
+            "" \
+            "### Included Assets" \
+            "- **Full Flavor (\`TigerPlayer-${V_NAME}-full-signed.apk\`):** Full feature set including Spotify App Remote." \
+            "- **FOSS Flavor (\`TigerPlayer-${V_NAME}-foss-signed.apk\`):** Fully open-source build with zero proprietary binaries." \
+            "- **App Bundle (\`TigerPlayer-${V_NAME}-full.aab\`):** Play Store distributable bundle." \
+            "- **Checksums (\`SHA256SUMS-beta-signed.txt\`):** Cryptographic SHA-256 digests." \
+            "- **SBOM (\`tigerplayer-beta-sbom.spdx.json\`):** SPDX Software Bill of Materials.")
+
+          echo "Checking if release $TAG already exists..."
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG exists. Updating release assets..."
+            gh release upload "$TAG" beta-artifacts/* --clobber
+          else
+            echo "Creating new Pre-Release $TAG..."
+            gh release create "$TAG" beta-artifacts/* \
+              --title "$RELEASE_TITLE" \
+              --notes "$RELEASE_NOTES" \
+              --prerelease
+          fi
+          echo "Successfully published Beta release $TAG!"
+
+      - name: Clean up Keystore
+        if: always()
+        shell: bash
+        run: |
+          rm -f release.keystore
+          echo "Release keystore cleaned up safely."

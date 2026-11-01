@@ -7,7 +7,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.ui.theme.TigerPlayerTheme
+import com.tigerplayer.utils.LrcParser
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -27,7 +31,7 @@ class PlayerLyricsTest {
         composeRule.setContent {
             TigerPlayerTheme {
                 LyricsDisplay(
-                    lyrics = null,
+                    lyrics = Lyrics.None,
                     currentPosition = 0L,
                     textColor = Color.White
                 )
@@ -46,7 +50,7 @@ class PlayerLyricsTest {
         composeRule.setContent {
             TigerPlayerTheme {
                 LyricsDisplay(
-                    lyrics = plainLyrics,
+                    lyrics = Lyrics.Plain(plainLyrics),
                     currentPosition = 5_000L,
                     textColor = Color.White
                 )
@@ -66,7 +70,7 @@ class PlayerLyricsTest {
         composeRule.setContent {
             TigerPlayerTheme {
                 LyricsDisplay(
-                    lyrics = syncedLyrics,
+                    lyrics = LrcParser.parse(syncedLyrics),
                     currentPosition = 0L,
                     textColor = Color.White
                 )
@@ -76,6 +80,53 @@ class PlayerLyricsTest {
         composeRule.onNodeWithTag(LyricsTestTags.SYNCED_LYRICS_LIST).assertIsDisplayed()
         composeRule.onNodeWithText("First synced line").assertIsDisplayed()
         composeRule.onAllNodesWithTag(LyricsTestTags.PLAIN_LYRICS_TEXT).assertCountEquals(0)
+    }
+
+    @Test
+    fun syncedLyrics_tapLine_triggersSeekCallback() {
+        val syncedLyrics = "[00:01.00]First synced line\n[00:05.00]Second synced line"
+        var soughtPosition: Long? = null
+
+        composeRule.setContent {
+            TigerPlayerTheme {
+                LyricsDisplay(
+                    lyrics = LrcParser.parse(syncedLyrics),
+                    currentPosition = 0L,
+                    textColor = Color.White,
+                    onLineClick = { soughtPosition = it }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("${LyricsTestTags.LYRIC_LINE_PREFIX}1").performClick()
+        assertEquals(5000L, soughtPosition)
+    }
+
+    @Test
+    fun syncedLyrics_offsetControls_adjustsOffset() {
+        val syncedLyrics = "[00:01.00]First synced line"
+        var currentOffset = 0L
+
+        composeRule.setContent {
+            TigerPlayerTheme {
+                LyricsDisplay(
+                    lyrics = LrcParser.parse(syncedLyrics),
+                    currentPosition = 0L,
+                    textColor = Color.White,
+                    manualOffsetMs = currentOffset,
+                    showOffsetControls = true,
+                    onOffsetAdjust = { currentOffset += it },
+                    onOffsetReset = { currentOffset = 0L }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(LyricsTestTags.OFFSET_CONTROLS).assertIsDisplayed()
+        composeRule.onNodeWithTag(LyricsTestTags.OFFSET_INCREASE).performClick()
+        assertEquals(500L, currentOffset)
+
+        composeRule.onNodeWithTag(LyricsTestTags.OFFSET_DECREASE).performClick()
+        assertEquals(0L, currentOffset)
     }
 }
 

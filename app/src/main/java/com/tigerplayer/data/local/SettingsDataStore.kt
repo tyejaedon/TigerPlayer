@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.map
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
 enum class TigerAccentStyle {
+    NEON_RED,
     NEON_ORANGE,
     CYBER_CYAN,
     TOXIC_LIME,
@@ -58,11 +59,18 @@ enum class ReplayGainMode {
     SMART
 }
 
+enum class CoverScreenEqPreset(val displayName: String) {
+    NEURAL_ADAPTIVE("Neural Adaptive"),
+    NIGHT_DRIVE("Night Drive"),
+    PURE_VOCAL("Pure Vocal"),
+    STUDIO_FLAT("Studio Flat")
+}
+
 data class TigerSettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pureAmoledBlack: Boolean = false,
     val disablePip: Boolean = false,
-    val accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_ORANGE,
+    val accentStyle: TigerAccentStyle = TigerAccentStyle.NEON_RED,
     val defaultPlayerView: DefaultPlayerView = DefaultPlayerView.ARTWORK_3D,
     val crossfadeDurationSec: Int = 0,
     val gaplessPlayback: Boolean = true,
@@ -79,7 +87,15 @@ data class TigerSettingsState(
     val prismSpectralAnalysis: PrismSpectralAnalysis = PrismSpectralAnalysis.FFT,
     val replayGainMode: ReplayGainMode = ReplayGainMode.SMART,
     val replayGainPreampDb: Float = 0f,
-    val replayGainPreventClipping: Boolean = true
+    val replayGainPreventClipping: Boolean = true,
+    val coverScreenVolume: Float = 1f,
+    val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
+    val coverScreenPreviewMode: Boolean = false,
+    val fetchOnlineArtwork: Boolean = true,
+    val autoApplyDeviceEq: Boolean = true,
+    val autoDetectAutoEq: Boolean = true,
+    val preferredTargetCurve: String = "Harman Over-Ear 2018",
+    val autoDownloadLyrics: Boolean = false
 )
 
 @Singleton
@@ -92,7 +108,7 @@ class SettingsDataStore @Inject constructor(
             themeMode = enumOrDefault(prefs[THEME_MODE], ThemeMode.SYSTEM),
             pureAmoledBlack = prefs[PURE_AMOLED_BLACK] ?: false,
             disablePip = prefs[DISABLE_PIP] ?: false,
-            accentStyle = enumOrDefault(prefs[ACCENT_STYLE], TigerAccentStyle.NEON_ORANGE),
+            accentStyle = enumOrDefault(prefs[ACCENT_STYLE], TigerAccentStyle.NEON_RED),
             defaultPlayerView = enumOrDefault(prefs[DEFAULT_PLAYER_VIEW], DefaultPlayerView.ARTWORK_3D),
             crossfadeDurationSec = (prefs[CROSSFADE_DURATION_SEC] ?: 0).coerceIn(0, 12),
             gaplessPlayback = prefs[GAPLESS_PLAYBACK] ?: true,
@@ -112,7 +128,21 @@ class SettingsDataStore @Inject constructor(
             prismSpectralAnalysis = enumOrDefault(prefs[PRISM_SPECTRAL_ANALYSIS], PrismSpectralAnalysis.FFT),
             replayGainMode = enumOrDefault(prefs[REPLAY_GAIN_MODE], ReplayGainMode.SMART),
             replayGainPreampDb = (prefs[REPLAY_GAIN_PREAMP_DB] ?: 0f).coerceIn(-15f, 15f),
-            replayGainPreventClipping = prefs[REPLAY_GAIN_PREVENT_CLIPPING] ?: true
+            replayGainPreventClipping = prefs[REPLAY_GAIN_PREVENT_CLIPPING] ?: true,
+            coverScreenVolume = prefs[COVER_SCREEN_VOLUME]
+                ?.takeIf { it.isFinite() }
+                ?.coerceIn(0f, 1f)
+                ?: 1f,
+            coverScreenEqPreset = enumOrDefault(
+                prefs[COVER_SCREEN_EQ_PRESET],
+                CoverScreenEqPreset.NEURAL_ADAPTIVE
+            ),
+            coverScreenPreviewMode = prefs[COVER_SCREEN_PREVIEW_MODE] ?: false,
+            fetchOnlineArtwork = prefs[FETCH_ONLINE_ARTWORK] ?: true,
+            autoApplyDeviceEq = prefs[AUTO_APPLY_DEVICE_EQ] ?: true,
+            autoDetectAutoEq = prefs[AUTO_DETECT_AUTOEQ] ?: true,
+            preferredTargetCurve = prefs[PREFERRED_TARGET_CURVE] ?: "Harman Over-Ear 2018",
+            autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false
         )
     }
 
@@ -196,6 +226,42 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[REPLAY_GAIN_PREVENT_CLIPPING] = enabled }
     }
 
+    suspend fun setCoverScreenVolume(volume: Float) {
+        dataStore.edit {
+            it[COVER_SCREEN_VOLUME] = volume.takeIf { value -> value.isFinite() }
+                ?.coerceIn(0f, 1f)
+                ?: 1f
+        }
+    }
+
+    suspend fun setCoverScreenEqPreset(preset: CoverScreenEqPreset) {
+        dataStore.edit { it[COVER_SCREEN_EQ_PRESET] = preset.name }
+    }
+
+    suspend fun setCoverScreenPreviewMode(enabled: Boolean) {
+        dataStore.edit { it[COVER_SCREEN_PREVIEW_MODE] = enabled }
+    }
+
+    suspend fun setFetchOnlineArtwork(enabled: Boolean) {
+        dataStore.edit { it[FETCH_ONLINE_ARTWORK] = enabled }
+    }
+
+    suspend fun setAutoApplyDeviceEq(enabled: Boolean) {
+        dataStore.edit { it[AUTO_APPLY_DEVICE_EQ] = enabled }
+    }
+
+    suspend fun setAutoDetectAutoEq(enabled: Boolean) {
+        dataStore.edit { it[AUTO_DETECT_AUTOEQ] = enabled }
+    }
+
+    suspend fun setPreferredTargetCurve(curve: String) {
+        dataStore.edit { it[PREFERRED_TARGET_CURVE] = curve }
+    }
+
+    suspend fun setAutoDownloadLyrics(enabled: Boolean) {
+        dataStore.edit { it[AUTO_DOWNLOAD_LYRICS] = enabled }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -227,6 +293,13 @@ class SettingsDataStore @Inject constructor(
         val REPLAY_GAIN_MODE = stringPreferencesKey("replay_gain_mode")
         val REPLAY_GAIN_PREAMP_DB = floatPreferencesKey("replay_gain_preamp_db")
         val REPLAY_GAIN_PREVENT_CLIPPING = booleanPreferencesKey("replay_gain_prevent_clipping")
+        val COVER_SCREEN_VOLUME = floatPreferencesKey("cover_screen_volume")
+        val COVER_SCREEN_EQ_PRESET = stringPreferencesKey("cover_screen_eq_preset")
+        val COVER_SCREEN_PREVIEW_MODE = booleanPreferencesKey("cover_screen_preview_mode")
+        val FETCH_ONLINE_ARTWORK = booleanPreferencesKey("fetch_online_artwork")
+        val AUTO_APPLY_DEVICE_EQ = booleanPreferencesKey("auto_apply_device_eq")
+        val AUTO_DETECT_AUTOEQ = booleanPreferencesKey("auto_detect_autoeq")
+        val PREFERRED_TARGET_CURVE = stringPreferencesKey("preferred_target_curve")
+        val AUTO_DOWNLOAD_LYRICS = booleanPreferencesKey("auto_download_lyrics")
     }
 }
-

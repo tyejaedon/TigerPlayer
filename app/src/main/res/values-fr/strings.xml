@@ -1,0 +1,73 @@
+<resources>
+    <string name="app_name">TigerPlayer</string>
+    <string name="attr_bluetooth_device_management">Gestion des appareils Bluetooth</string>
+    <string name="attr_weather_location">Météo selon l\'emplacement de l\'appareil</string>
+    <string name="attr_player_motion_sensor">Effets du capteur de mouvement du lecteur</string>
+
+    <!-- Cover Screen Gesture Hints -->
+    <string name="coverscreen_gesture_tap_play_pause">Appuyer pour lire ou mettre en pause</string>
+    <string name="coverscreen_gesture_swipe_next">Balayer pour piste suivante</string>
+    <string name="coverscreen_gesture_swipe_prev">Balayer pour piste précédente</string>
+    <string name="coverscreen_gesture_swipe_up_queue">Balayer vers le haut pour la file d\'attente</string>
+    <string name="coverscreen_gesture_swipe_down_close">Balayer vers le bas pour fermer</string>
+    <string name="coverscreen_gesture_long_press_settings">Appui long pour les paramètres de lecture</string>
+    <string name="coverscreen_gesture_instructions">Mini lecteur d\'écran externe. Appuyez pour lire ou mettre en pause. Balayez vers la gauche pour suivant, à droite pour précédent, haut pour la file et bas pour fermer.</string>
+    <string name="coverscreen_talkback_gesture_instructions">Mini lecteur d\'écran externe. Appuyez pour lire ou mettre en pause. Balayez vers la gauche pour suivant, à droite pour précédent, haut pour la file et bas pour fermer.</string>
+
+    <!-- Cover Screen Playback Controls -->
+    <string name="coverscreen_action_previous">Piste précédente</string>
+    <string name="coverscreen_action_play">Lire</string>
+    <string name="coverscreen_action_pause">Pause</string>
+    <string name="coverscreen_action_next">Piste suivante</string>
+    <string name="coverscreen_action_queue">Ouvrir la file d\'attente</string>
+    <string name="coverscreen_action_library">Ouvrir la bibliothèque</string>
+    <string name="coverscreen_action_play_all">Tout lire</string>
+    <string name="coverscreen_action_close_queue">Fermer la file d\'attente</string>
+    <string name="coverscreen_action_search_library">Rechercher dans la bibliothèque</string>
+    <string name="coverscreen_action_back_to_albums">Retour aux albums</string>
+    <string name="coverscreen_action_back_to_playback">Retour à la lecture</string>
+    <string name="coverscreen_action_add_to_queue">Ajouter à la file d\'attente</string>
+    <string name="coverscreen_action_play_now">Lire maintenant</string>
+    <string name="coverscreen_action_remove_from_queue">Retirer de la file d\'attente</string>
+    <string name="coverscreen_action_remove">Retirer</string>
+
+    <string name="coverscreen_action_like">Ajouter aux coups de cœur</string>
+    <string name="coverscreen_action_edit_playlist_photo">Modifier la photo de la playlist</string>
+
+    <!-- Cover Screen Status Subtitles -->
+    <string name="coverscreen_status_now_playing">EN LECTURE</string>
+    <string name="coverscreen_status_paused">EN PAUSE</string>
+    <string name="coverscreen_status_flex_mode_active">MODE FLEX ACTIF</string>
+    <string name="coverscreen_status_no_lyrics_found">AUCUNE PAROLE TROUVÉE</string>
+
+    <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Accueil</string>
+    <string name="coverscreen_tab_artists">Artistes</string>
+    <string name="coverscreen_tab_albums">Albums</string>
+    <string name="coverscreen_tab_songs">Morceaux</string>
+    <string name="coverscreen_tab_playlists">Playlists</string>
+    <string name="coverscreen_tab_spotify_playlists">Playlists Spotify</string>
+
+    <!-- Cover Screen Empty States -->
+    <string name="coverscreen_empty_artists">Aucun artiste disponible</string>
+    <string name="coverscreen_empty_albums">Aucun album disponible</string>
+    <string name="coverscreen_empty_songs">Aucun morceau disponible</string>
+    <string name="coverscreen_empty_playlists">Aucune playlist disponible</string>
+    <string name="coverscreen_empty_spotify_playlists">Aucune playlist Spotify disponible</string>
+    <string name="coverscreen_auth_required">Connectez-vous à Spotify pour parcourir vos playlists</string>
+
+    <!-- Cover Screen Library & Search -->
+    <string name="coverscreen_source_local">Local</string>
+    <string name="coverscreen_source_spotify">Spotify</string>
+    <string name="coverscreen_title_library">Bibliothèque</string>
+    <string name="coverscreen_description_library">Bibliothèque d\'écran externe</string>
+    <string name="coverscreen_artwork_description">Pochette d\'album pour %1$s par %2$s</string>
+    <string name="coverscreen_artwork_album_description">Pochette de %1$s</string>
+    <string name="coverscreen_default_title">TIGER PLAYER</string>
+    <string name="coverscreen_default_artist">ARCHIVES WITCHER</string>
+    <string name="coverscreen_unknown_title">Titre inconnu</string>
+    <string name="coverscreen_unknown_artist">Artiste inconnu</string>
+    <string name="coverscreen_search_prompt">Recherchez votre musique</string>
+    <string name="coverscreen_voice_search_no_speech">Aucune parole reconnue. Réessayez ou tapez pour rechercher.</string>
+    <string name="coverscreen_voice_search_unavailable">La recherche vocale n\'est pas disponible. Tapez pour rechercher.</string>
+</resources>

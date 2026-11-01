@@ -9,6 +9,12 @@ import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import kotlin.math.abs
 
+/**
+ * Media3 [BaseAudioProcessor] intercepting PCM audio frames to capture real-time peak amplitudes.
+ *
+ * Passes audio through unmodified while exposing live playback waveform levels (64 buckets)
+ * at a 40 ms cadence for dynamic scrubbers and audio-reactive UI animations.
+ */
 @OptIn(UnstableApi::class)
 class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
 

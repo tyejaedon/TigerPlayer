@@ -40,9 +40,7 @@ import com.tigerplayer.ui.settings.SettingsScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
-// ----------------------------------
-// 🔹 Branding
-// ----------------------------------
+// --- Splash & Branding Components ---
 
 @Composable
 fun TigerBranding() {
@@ -56,15 +54,16 @@ fun TigerBranding() {
     )
 }
 
-// ----------------------------------
-// 🔹 Navigation Graph
-// ----------------------------------
+// --- Application Navigation Graph ---
 
+/**
+ * Root navigation host defining top-level destinations, screen transitions, and shared ViewModels.
+ * Screen transitions utilize horizontal slides with FastOutSlowInEasing for consistent navigation motion.
+ */
 @SuppressLint("NewApi")
 @Composable
 fun TigerPlayerNavGraph(
     navController: NavHostController,
-    // 🔥 THE FIX: HomeViewModel is gone! Only the global PlayerViewModel remains.
     playerViewModel: PlayerViewModel
 ) {
     val context = LocalContext.current
@@ -73,7 +72,6 @@ fun TigerPlayerNavGraph(
         navController = navController,
         startDestination = Screen.Splash.route,
 
-        // ✨ Smooth modern motion (Samsung-like)
         enterTransition = {
             slideInHorizontally(
                 initialOffsetX = { it / 2 },

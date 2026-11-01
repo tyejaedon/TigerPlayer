@@ -32,6 +32,8 @@ class CoverScreenHeuristicTest {
     @Test
     fun `default display id is not a secondary display`() {
         assertFalse(isSecondaryDisplayIdentity(Display.DEFAULT_DISPLAY))
+        assertFalse(isSecondaryDisplayIdentity(Display.INVALID_DISPLAY))
+        assertFalse(isSecondaryDisplayIdentity(null))
     }
 
     @Test

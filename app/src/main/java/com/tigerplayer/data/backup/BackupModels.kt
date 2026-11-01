@@ -33,7 +33,11 @@ data class BackupManifest(
     @SerializedName("playlists")
     val playlists: List<PlaylistBackup>,
     @SerializedName("history")
-    val history: List<HistoryBackup>
+    val history: List<HistoryBackup>,
+    @SerializedName("audioDevices")
+    val audioDevices: List<AudioDeviceBackup> = emptyList(),
+    @SerializedName("devicePresets")
+    val devicePresets: List<DevicePresetBackup> = emptyList()
 ) {
     companion object {
         /** Bump whenever the shape below changes in a way older parsers can't ignore. */
@@ -139,6 +143,33 @@ enum class RestoreStrategy {
 data class BackupSummary(
     val playlistCount: Int,
     val trackRefCount: Int,
-    val historyCount: Int
+    val historyCount: Int,
+    val audioDeviceCount: Int = 0,
+    val devicePresetCount: Int = 0
+)
+
+data class AudioDeviceBackup(
+    @SerializedName("deviceId") val deviceId: String,
+    @SerializedName("displayName") val displayName: String,
+    @SerializedName("deviceType") val deviceType: String,
+    @SerializedName("lastConnectedEpochMs") val lastConnectedEpochMs: Long,
+    @SerializedName("assignedPresetId") val assignedPresetId: String? = null,
+    @SerializedName("matchedAutoEqModel") val matchedAutoEqModel: String? = null,
+    @SerializedName("matchedAutoEqSource") val matchedAutoEqSource: String? = null,
+    @SerializedName("targetCurve") val targetCurve: String? = null,
+    @SerializedName("formFactor") val formFactor: String? = null
+)
+
+data class DevicePresetBackup(
+    @SerializedName("presetId") val presetId: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("deviceId") val deviceId: String? = null,
+    @SerializedName("preampDb") val preampDb: Float = 0f,
+    @SerializedName("bandsJson") val bandsJson: String,
+    @SerializedName("isAutoEq") val isAutoEq: Boolean = false,
+    @SerializedName("autoEqModel") val autoEqModel: String? = null,
+    @SerializedName("autoEqSource") val autoEqSource: String? = null,
+    @SerializedName("targetCurve") val targetCurve: String? = null,
+    @SerializedName("formFactor") val formFactor: String? = null
 )
 

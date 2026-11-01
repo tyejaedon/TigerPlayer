@@ -41,6 +41,8 @@ class SpotifyAuthManager @Inject constructor(
     private val _token = MutableStateFlow("")
     val token: StateFlow<String> = _token.asStateFlow()
     private val _grantedScope = MutableStateFlow<String?>(null)
+    private val _authError = MutableStateFlow<SpotifyAuthError?>(null)
+    val authError: StateFlow<SpotifyAuthError?> = _authError.asStateFlow()
     private var tokenTimestamp: Long = 0L
     private var expiresInMs: Long = 3600_000L
     private var refreshToken: String = ""
@@ -171,6 +173,14 @@ class SpotifyAuthManager @Inject constructor(
          return System.currentTimeMillis() - timestamp > (expiresInMs - bufferMs)
      }
 
+     fun setAuthError(error: SpotifyAuthError) {
+         _authError.value = error
+     }
+
+     fun clearAuthError() {
+         _authError.value = null
+     }
+
      /**
       * Synchronous logout used internally during token refresh failures.
       * Clears in-memory state immediately; persistence is async.
@@ -180,6 +190,7 @@ class SpotifyAuthManager @Inject constructor(
          _grantedScope.value = null
          tokenTimestamp = 0L
          refreshToken = ""
+         clearAuthError()
          scope.launch {
              spotifyPrefs.clearToken()
          }
@@ -194,6 +205,7 @@ class SpotifyAuthManager @Inject constructor(
          _grantedScope.value = null
          tokenTimestamp = 0L
          refreshToken = ""
+         clearAuthError()
          spotifyPrefs.clearToken()
      }
 

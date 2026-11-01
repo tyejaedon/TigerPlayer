@@ -18,6 +18,15 @@ import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Snapshot data container for cover screen listening statistics over a 7-day window.
+ *
+ * @property topArtists Top listened artists.
+ * @property listeningTimeTodayMs Total listening time today in milliseconds.
+ * @property tracksPlayedToday Number of tracks played today.
+ * @property dailyPlayCounts Daily play count breakdown across [STATS_DAYS].
+ * @property hasHistory Whether any playback history exists.
+ */
 data class CoverScreenStatsSnapshot(
     val topArtists: List<ArtistStats> = emptyList(),
     val listeningTimeTodayMs: Long = 0L,
@@ -26,21 +35,22 @@ data class CoverScreenStatsSnapshot(
     val hasHistory: Boolean = false
 ) {
     companion object {
+        /** Number of days tracked in cover screen statistics. */
         const val STATS_DAYS = 7
     }
 }
 
+/** Internal time window representation for daily play count queries. */
 internal data class DailyPlayCountWindow(
     val startInclusive: Long,
     val endExclusive: Long
 )
 
 /**
- * Owns listening analytics: the aggregation flows that feed the stats surfaces, and the
- * listened-duration accounting that produces the underlying history rows.
+ * Owns listening analytics: aggregation flows feeding stats surfaces, and listened-duration
+ * accounting producing scrobbling history records (issue #42).
  *
- * `@Singleton` is required for correctness, not just efficiency: an in-flight play is held in
- * memory here, so a second instance would drop or double count it when a ViewModel is recreated.
+ * `@Singleton` ensures in-flight play duration and session state are correctly retained.
  */
 @Singleton
 class StatsEngine @Inject constructor(
@@ -48,11 +58,18 @@ class StatsEngine @Inject constructor(
     private val elapsedTimeSource: ElapsedTimeSource
 ) {
     private val _statsFilter = MutableStateFlow("Today")
+    private val sessionStartedAtMs = System.currentTimeMillis()
+    private val playLock = Any()
+    private var pendingTrack: AudioTrack? = null
+    private var accumulatedMs = 0L
+    private var resumedAtMs: Long? = null
 
+    /** Updates the active statistics filter time window (e.g. "Today", "This Week", "Lifetime"). */
     fun updateStatsFilter(newFilter: String) {
         _statsFilter.value = newFilter
     }
 
+    /** Returns a periodic flow emitting cover screen stats snapshots. */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getCoverScreenStatsSnapshotFlow(): Flow<CoverScreenStatsSnapshot> = flow {
         while (true) {
@@ -88,7 +105,7 @@ class StatsEngine @Inject constructor(
         }
     }
 
-    // The complex derived flow for detailed UI stats
+    /** Returns the detailed statistics flow for the full stats screen. */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getDetailedStatsFlow(
         allTracksFlow: Flow<List<AudioTrack>>,
@@ -106,7 +123,6 @@ class StatsEngine @Inject constructor(
 
             combine(
                 listeningTotals,
-                // 🔥 FIX 1: Increased limit from 5 to 50 to fuel the Constellation Galaxy and Searchable UI
                 historyRepository.getTopArtists(startTime, limit = 50),
                 historyRepository.getTopTracks(startTime, limit = 50),
                 allTracksFlow,
@@ -131,10 +147,7 @@ class StatsEngine @Inject constructor(
                     globalListeningSharePercent = sharePercent,
                     statsEpochMs = statsEpochMs,
                     topArtists = topArtistsDb.map { artist ->
-                        // 🔥 FIX 2: Normalize the key to safely extract the High-Res API image
                         val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
-
-                        // Fallback: If API image is missing, grab the first local album cover for this artist
                         val cachedImg = artistDetailsMap[normalizedKey]?.imageUrl
                             ?: allTracks.firstOrNull { ArtistUtils.getBaseArtist(it.artist).equals(artist.artistName, ignoreCase = true) }?.artworkUri?.toString()
 
@@ -161,30 +174,7 @@ class StatsEngine @Inject constructor(
         }
     }
 
-    // ==========================================
-    // --- LISTENED-DURATION ACCOUNTING (issue #42) ---
-    // ==========================================
-    //
-    // A play is committed when the track is left, not when it starts, and it records the time
-    // actually listened rather than the track's nominal length. Previously every track transition
-    // wrote a full-length row, so skipping through 40 tracks recorded 40 complete plays and every
-    // downstream surface (Heavy Rotation, Sonic Footprint, Day List, Discovery Weekly, listening
-    // share) was inflated.
-
-    private val playLock = Any()
-    private var pendingTrack: AudioTrack? = null
-    private var accumulatedMs = 0L
-
-    /** Elapsed time when playback last started; `null` while paused. */
-    private var resumedAtMs: Long? = null
-
-    private data class PendingPlay(val track: AudioTrack, val listenedMs: Long)
-
-    /**
-     * Call when the current track changes.
-     *
-     * Commits the outgoing track's play if it qualifies, then begins accounting for [track].
-     */
+    /** Called when the active track changes. Commits outgoing play and begins accounting for [track]. */
     suspend fun onTrackChanged(track: AudioTrack, isPlaying: Boolean) {
         commitPendingPlay()
         synchronized(playLock) {
@@ -194,11 +184,7 @@ class StatsEngine @Inject constructor(
         }
     }
 
-    /**
-     * Call whenever playback starts or stops, for any source.
-     *
-     * Idempotent: repeated calls with the same state do not double count.
-     */
+    /** Called when playback playing state changes (play/pause). */
     fun onPlayingChanged(isPlaying: Boolean) {
         synchronized(playLock) {
             if (isPlaying) {
@@ -209,18 +195,19 @@ class StatsEngine @Inject constructor(
         }
     }
 
-    /** Commits any in-flight play. Safe to call when nothing is pending. */
+    /** Flushes any in-flight pending play to history storage. */
     suspend fun flushPendingPlay() {
         commitPendingPlay()
     }
 
-    /** Folds the currently-running interval into [accumulatedMs]. Caller must hold [playLock]. */
+    /** Accumulates elapsed listening time. Caller must hold [playLock]. */
     private fun accumulateLocked() {
         val startedAt = resumedAtMs ?: return
         accumulatedMs += (elapsedTimeSource.elapsedMs() - startedAt).coerceAtLeast(0L)
         resumedAtMs = null
     }
 
+    /** Commits the pending play if it qualifies under scrobble rules. */
     private suspend fun commitPendingPlay() {
         val pending = synchronized(playLock) {
             val track = pendingTrack ?: return@synchronized null
@@ -235,11 +222,9 @@ class StatsEngine @Inject constructor(
         persistPlay(pending.track, pending.listenedMs)
     }
 
+    /** Persists a qualified play to history repository. */
     private suspend fun persistPlay(track: AudioTrack, rawListenedMs: Long) {
         val durationMs = track.durationMs
-
-        // Seeking backwards, or repeat-one, can accumulate more wall-clock time than the track is
-        // long. Cap so a single play can never contribute more than the track's own duration.
         val listenedMs = if (durationMs > 0L) rawListenedMs.coerceAtMost(durationMs) else rawListenedMs
 
         if (!qualifiesAsPlay(listenedMs, durationMs)) return
@@ -255,13 +240,7 @@ class StatsEngine @Inject constructor(
         )
     }
 
-    /**
-     * The standard scrobble rule: a play counts once at least half the track, or four minutes,
-     * has been heard - whichever comes first. Tracks shorter than 30 seconds never qualify.
-     *
-     * When the duration is unknown (0 or negative, common for streams) only the absolute
-     * four-minute rule can qualify the play, since a percentage is meaningless.
-     */
+    /** Evaluates scrobble qualification rules for listened duration and track length. */
     private fun qualifiesAsPlay(listenedMs: Long, durationMs: Long): Boolean {
         if (listenedMs < MIN_LISTENED_MS) return false
         if (durationMs in 1 until MIN_TRACK_DURATION_MS) return false
@@ -270,20 +249,15 @@ class StatsEngine @Inject constructor(
         return listenedMs >= durationMs / 2
     }
 
+    /** Resolves the [MediaSource] for an audio track. */
     private fun resolveSource(track: AudioTrack): MediaSource = when {
         track.id.startsWith("spotify:", ignoreCase = true) -> MediaSource.SPOTIFY
-        // Both separators are accepted: rows written before issue #44 may carry either, and a play
-        // attributed to the wrong source silently corrupts the per-source stats breakdown.
         track.id.startsWith("navidrome_", ignoreCase = true) ||
             track.id.startsWith("navidrome:", ignoreCase = true) -> MediaSource.NAVIDROME
         else -> MediaSource.LOCAL
     }
 
-    /**
-     * 🔥 UPGRADED TEMPORAL ENGINE
-     * Replaces rolling math (e.g. 24 hours ago) with absolute Calendar boundaries.
-     * "Today" now accurately begins at 12:00 AM.
-     */
+    /** Calculates start timestamp for the selected statistics filter. */
     private fun calculateStartTimeForFilter(filter: String): Long {
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
@@ -299,7 +273,6 @@ class StatsEngine @Inject constructor(
                 calendar.timeInMillis
             }
             "Last 7 Days" -> {
-                // Includes today + previous 6 calendar days.
                 calendar.add(Calendar.DAY_OF_YEAR, -6)
                 calendar.timeInMillis
             }
@@ -308,12 +281,10 @@ class StatsEngine @Inject constructor(
                 calendar.timeInMillis
             }
             "Last 30 Days" -> {
-                // Includes today + previous 29 calendar days.
                 calendar.add(Calendar.DAY_OF_YEAR, -29)
                 calendar.timeInMillis
             }
             "Last 90 Days" -> {
-                // Includes today + previous 89 calendar days.
                 calendar.add(Calendar.DAY_OF_YEAR, -89)
                 calendar.timeInMillis
             }
@@ -321,7 +292,7 @@ class StatsEngine @Inject constructor(
                 calendar.set(Calendar.DAY_OF_YEAR, 1)
                 calendar.timeInMillis
             }
-            "Lifetime" -> 0L // Captures everything
+            "Lifetime" -> 0L
             else -> 0L
         }
     }
@@ -349,16 +320,12 @@ class StatsEngine @Inject constructor(
         }
     }
 
+    private data class PendingPlay(val track: AudioTrack, val listenedMs: Long)
+
     private companion object {
         const val COVER_SCREEN_STATS_REFRESH_MS = 5 * 60 * 1000L
-
-        /** A play always qualifies once four minutes have been heard, regardless of length. */
         const val FULL_PLAY_THRESHOLD_MS = 4 * 60 * 1000L
-
-        /** Tracks shorter than this never qualify, matching the standard scrobble rule. */
         const val MIN_TRACK_DURATION_MS = 30_000L
-
-        /** Absolute floor; below this the listener effectively skipped. */
         const val MIN_LISTENED_MS = 5_000L
     }
 }

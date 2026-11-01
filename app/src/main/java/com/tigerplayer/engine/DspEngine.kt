@@ -8,6 +8,7 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.ReplayGainMode
+import com.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -16,21 +17,23 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.jtransforms.fft.FloatFFT_1D
 import kotlin.math.*
 
-data class AudioReactiveFrame(
-    val bass: Float = 0f,
-    val mid: Float = 0f,
-    val treble: Float = 0f,
-    val energy: Float = 0f,
-    val centroid: Float = 0.5f,
-    val flux: Float = 0f,
-    val spectralBands: List<Float> = List(6) { 0f },
-    val analysisMode: SpectralAnalysisMode = SpectralAnalysisMode.FFT,
-    val analysisCostMicros: Float = 0f
-)
 
+
+/**
+ * 🎛️ High-Performance Adaptive DSP Engine
+ *
+ * AndroidX Media3 [AudioProcessor] pipeline executing real-time studio-grade audio processing:
+ * 1. Headphone Mid/Side stereo widening.
+ * 2. Parametric Equalizer via Cytotoxic State Variable Filters (SVF).
+ * 3. Acoustic Environment modeling (Studio Bypass, Vinyl Warmth with Wow/LFO, Concert Hall Schroeder Reverb).
+ * 4. Prism 3-stem isolator (Linkwitz-Riley 4th order crossovers separating Vocals, Beats, and Instruments).
+ * 5. Sample-rate aware look-ahead peak limiter and AGC prevent clipping.
+ * 6. Real-time 6-band bandpass/FFT spectral analysis emitting [AudioReactiveFrame] via StateFlow.
+ *
+ * @param context Application context used for querying hardware audio output routes.
+ */
 @UnstableApi
 @Singleton
 class AdaptiveDspEngine @Inject constructor(
@@ -38,10 +41,14 @@ class AdaptiveDspEngine @Inject constructor(
 ) : AudioProcessor {
 
     companion object {
-        // AUDIOPHILE COMPATIBILITY: Increased buffer size for Samsung HAL stability 
+        // AUDIOPHILE COMPATIBILITY: Increased buffer size for Samsung HAL stability
         // during high-CPU visualizer operations.
         private const val LOOK_AHEAD_BUFFER_SIZE = 1024
-        private const val LIMITER_THRESHOLD = 0.82f
+        private const val TRUE_PEAK_THRESHOLD = 1.0f
+        @Deprecated("Replaced with transparent true-peak ceiling at 1.0f (0.0 dBFS)", ReplaceWith("TRUE_PEAK_THRESHOLD"))
+        private const val LIMITER_THRESHOLD = 1.0f
+        private const val LIMITER_ATTACK_SEC = 0.0008f // ~0.8ms look-ahead settling attack
+        private const val LIMITER_RELEASE_SEC = 0.050f // 50ms fast recovery release (no pumping)
     }
 
     private var isActive = true
@@ -57,6 +64,9 @@ class AdaptiveDspEngine @Inject constructor(
     @Volatile private var replayGainAlbumPeak: Double? = null
     @Volatile private var isSequentialAlbumPlay = false
     @Volatile private var isBitPerfect = false
+    @Volatile private var isLosslessStream = false
+    @Volatile private var hasPositiveEqBoost = false
+    @Volatile private var compositePeakDb = 0.0f
 
     private var buffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var outputBuffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
@@ -90,12 +100,13 @@ class AdaptiveDspEngine @Inject constructor(
     private val prismIsolator = PrismIsolator()
 
     private val _audioReactiveFrame = MutableStateFlow(AudioReactiveFrame())
+    /** StateFlow emitting real-time audio spectral dynamics for visualizer consumption. */
     val audioReactiveFrame: StateFlow<AudioReactiveFrame> = _audioReactiveFrame.asStateFlow()
 
-    private var vinylNoiseSeed = 0x13579BDF.toInt()
+    private var vinylNoiseSeed = 0x13579BDF
     private var vinylNoiseDc = 0f
     private val hallProcessor = SchroederHallProcessor()
-    
+
     // VINYL WOW LFO
     private var vinylWowPhase = 0f
     private val vinylWowFreq = 0.5f // 0.5 Hz Wow
@@ -115,32 +126,55 @@ class AdaptiveDspEngine @Inject constructor(
     private val fftSpectralAnalyzer = FftSpectralAnalyzer(windowSize = 1024)
 
     private var prevEnergy = 0f
+    private val rawBandEnergies = FloatArray(6)
+    private val normalizedBandEnergies = FloatArray(6)
     private var analysisFrameCounter = 0
     private var energyAccumulator = 0f
     private var analysisCostMicrosSmoothed = 0f
 
+    /**
+     * Clamps float value [v] into range [0.0, 1.0].
+     *
+     * @param v Raw float value.
+     * @return Clamped float in [0.0, 1.0].
+     */
     private fun clamp01(v: Float): Float = v.coerceIn(0f, 1f)
 
+    /**
+     * Generates white noise sample using a fast linear congruential pseudo-random generator.
+     *
+     * @return Pseudo-random float sample in range [-1.0, 1.0].
+     */
     private fun nextNoise(): Float {
         vinylNoiseSeed = vinylNoiseSeed * 1664525 + 1013904223
         val normalized = ((vinylNoiseSeed ushr 8) and 0x00FFFFFF) / 16777215f
         return normalized * 2f - 1f
     }
 
+    /**
+     * Applies analog vinyl record characteristics (0.5Hz Pitch Wow LFO, soft polynomial saturation,
+     * low-level vinyl hiss, and RIAA warmth low-shelf filter).
+     *
+     * @param sampleL Left channel input sample.
+     * @param sampleR Right channel input sample.
+     * @param channels Channel count (1 for Mono, 2 for Stereo).
+     * @param sampleRate Current sampling rate in Hz.
+     * @return [StereoFrame] containing processed warm vinyl stereo samples.
+     */
     private fun applyVinylWarmth(sampleL: Float, sampleR: Float, channels: Int, sampleRate: Int): StereoFrame {
         // 1. WOW LFO (Pitch Modulation)
         vinylWowPhase += (2f * PI.toFloat() * vinylWowFreq) / sampleRate.toFloat()
         if (vinylWowPhase > 2f * PI.toFloat()) vinylWowPhase -= 2f * PI.toFloat()
-        
+
         val modulation = sin(vinylWowPhase) * 1.5f + 2.0f // 0.5 to 3.5 samples delay
-        
+
         vinylWowBufferL[vinylWowIndex] = sampleL
         vinylWowBufferR[vinylWowIndex] = sampleR
-        
+
         val readIdx = (vinylWowIndex - modulation.toInt() + 1024) % 1024
         val frac = modulation - modulation.toInt()
         val nextIdx = (readIdx + 1) % 1024
-        
+
         val wowL = vinylWowBufferL[readIdx] * (1f - frac) + vinylWowBufferL[nextIdx] * frac
         val wowR = vinylWowBufferR[readIdx] * (1f - frac) + vinylWowBufferR[nextIdx] * frac
         vinylWowIndex = (vinylWowIndex + 1) % 1024
@@ -171,10 +205,10 @@ class AdaptiveDspEngine @Inject constructor(
         if (vinylShelf == null || vinylShelf?.sampleRate != sampleRate) {
             vinylShelf = StateVariableFilter(FilterType.LOW_SHELF, sampleRate, 350f, 2.5f, 0.5f)
         }
-        
+
         var outL = (wowL * 0.86f + softL * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
         var outR = (wowR * 0.86f + softR * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
-        
+
         outL = vinylShelf!!.process(outL, 0)
         if (channels == 2) outR = vinylShelf!!.process(outR, 1)
 
@@ -185,27 +219,30 @@ class AdaptiveDspEngine @Inject constructor(
         detectAndApplyDeviceProfile()
     }
 
+    /**
+     * Inspects active output audio routes (built-in speaker, Bluetooth A2DP, wired headphones,
+     * USB DACs, and Samsung Galaxy Buds) and dynamically configures device compensation filters.
+     */
     fun detectAndApplyDeviceProfile() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
 
         val isBluetooth = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
         val isBuiltIn = devices.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-        
+
         // AUDIOPHILE COMPATIBILITY: Detect Samsung-specific outputs (Galaxy Buds)
         // to avoid phase-cancellation conflicts with Samsung's native 360 Audio.
-        val isSamsungOutput = devices.any { 
-            it.productName?.contains("Buds", ignoreCase = true) == true || 
-            it.productName?.contains("Samsung", ignoreCase = true) == true 
+        val isSamsungOutput = devices.any {
+            it.productName?.contains("Buds", ignoreCase = true) == true ||
+            it.productName?.contains("Samsung", ignoreCase = true) == true
         }
 
         isHeadphones = devices.any {
             it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || it.type == AudioDeviceInfo.TYPE_USB_HEADSET
         } || (isBluetooth && isSamsungOutput)
 
-        val sampleRate = if (inputAudioFormat.sampleRate != AudioFormat.NOT_SET.sampleRate) inputAudioFormat.sampleRate else 48000
-        agcAttackCoef = 1f - exp(-1f / (sampleRate * 0.005f)) // 5ms attack
-        agcReleaseCoef = 1f - exp(-1f / (sampleRate * 0.250f)) // 250ms release
+        val sampleRate = getSampleRate()
+        updateLimiterCoefficients(sampleRate)
 
         val newDeviceFilters = mutableListOf<StateVariableFilter>()
         if (isBuiltIn) {
@@ -220,14 +257,72 @@ class AdaptiveDspEngine @Inject constructor(
         deviceCompensationFilters = newDeviceFilters
     }
 
+    /**
+     * Recalculates sample-rate aware attack and release coefficients for true-peak look-ahead limiter.
+     */
+    private fun updateLimiterCoefficients(sampleRate: Int) {
+        val rate = sampleRate.coerceAtLeast(8000)
+        agcAttackCoef = 1f - exp(-1f / (rate * LIMITER_ATTACK_SEC))
+        agcReleaseCoef = 1f - exp(-1f / (rate * LIMITER_RELEASE_SEC))
+    }
+
+    /**
+     * Determines whether digital overs exceeding 0 dBFS (1.0f) are physically imminent due to positive
+     * EQ boosts, reverb tail summing, stem boosting, or positive ReplayGain scaling.
+     */
+    private fun isDigitalOverImminent(): Boolean {
+        return hasPositiveEqBoost ||
+            acousticEnvironmentMode == AcousticEnvironmentMode.CONCERT_HALL ||
+            (prismMode == PrismMode.ISOLATION && (prismTargetMix.vocals > 1.0f || prismTargetMix.beats > 1.0f || prismTargetMix.instruments > 1.0f)) ||
+            replayGainLinear > 1.001f
+    }
+
+    /**
+     * Enables or disables lossless stream mode (FLAC, ALAC, WAV, AIFF, and 24-bit/32-bit Float PCM).
+     * When active and EQ bands have zero or negative boost, dynamic AGC gain reduction is completely bypassed.
+     */
+    fun setIsLosslessStream(isLossless: Boolean) {
+        this.isLosslessStream = isLossless
+    }
+
+    /** Returns whether the current stream is flagged as lossless audio. */
+    fun isLosslessStream(): Boolean = isLosslessStream
+
+    /** Updates bit-perfect DSP bypass state. */
+    fun setBitPerfect(enabled: Boolean) {
+        this.isBitPerfect = enabled
+    }
+
+    /** Returns whether bit-perfect DSP bypass is active. */
+    fun isBitPerfect(): Boolean = isBitPerfect
+
+    /** Returns the current auto-makeup headroom gain multiplier [0.0, 1.0]. */
+    fun getAutoMakeupGain(): Float = autoMakeupGain
+
+    /** Returns the maximum composite peak boost in dB calculated across active EQ bands. */
+    fun getCompositePeakDb(): Float = compositePeakDb
+
+    /**
+     * Updates active parametric Equalizer bands and recalculates auto-makeup gain attenuation.
+     *
+     * Calculates the true maximum positive peak of the composite filter response curve across
+     * the audible spectrum (20 Hz - 20 kHz) using [BiquadDesigner.calculateCompositePeakGainDb]
+     * rather than naively summing band gains algebraically. This prevents drastic loudness drops
+     * on non-overlapping bands (Fletcher-Munson illusion) while accurately accounting for compounding
+     * on overlapping bands.
+     *
+     * @param nodes List of [AcousticNode] defining filter type, frequency, gain, and Q factor per band.
+     */
     fun updateAcousticNodes(nodes: List<AcousticNode>) {
         pendingNodes = nodes
-        val sampleRate = if (inputAudioFormat.sampleRate != AudioFormat.NOT_SET.sampleRate) inputAudioFormat.sampleRate else 48000
+        val sampleRate = getSampleRate()
 
-        // FIX: Calculate total positive gain and attenuate the input by that amount
-        val maxBoostDb = nodes.filter { it.gainDb > 0f }.sumOf { it.gainDb.toDouble() }.toFloat()
-        autoMakeupGain = if (maxBoostDb > 0f) {
-            10f.pow(-maxBoostDb / 20f)
+        // Calculate true peak composite gain across spectrum rather than linear algebraic sum
+        val peakDb = BiquadDesigner.calculateCompositePeakGainDb(nodes, sampleRate.toFloat())
+        compositePeakDb = peakDb
+        hasPositiveEqBoost = peakDb > 0.001f
+        autoMakeupGain = if (peakDb > 0.001f) {
+            10f.pow(-peakDb / 20f)
         } else {
             1.0f
         }
@@ -243,18 +338,40 @@ class AdaptiveDspEngine @Inject constructor(
             }
         }
     }
+
+    /**
+     * Sets acoustic environment processing mode.
+     *
+     * @param mode Selected [AcousticEnvironmentMode] (STUDIO, VINYL_WARMTH, or CONCERT_HALL).
+     */
     fun setAcousticEnvironmentMode(mode: AcousticEnvironmentMode) {
         acousticEnvironmentMode = mode
     }
 
-    fun getAcousticEnvironmentMode(): AcousticEnvironmentMode = acousticEnvironmentMode
 
+    /**
+     * Gets current processing sample rate in Hz.
+     *
+     * @return Sample rate in Hz (defaults to 48000 if unset).
+     */
     fun getSampleRate(): Int = if (inputAudioFormat.sampleRate != AudioFormat.NOT_SET.sampleRate) inputAudioFormat.sampleRate else 48000
 
+    /**
+     * Sets Prism stem isolator state.
+     *
+     * @param mode Target [PrismMode] (BYPASS or ISOLATION).
+     */
     fun setPrismMode(mode: PrismMode) {
         prismMode = mode
     }
 
+    /**
+     * Updates target stem mix multipliers for Prism isolation.
+     *
+     * @param vocals Vocal stem level [0.0, 1.0].
+     * @param beats Beat stem level [0.0, 1.0].
+     * @param instruments Instrument stem level [0.0, 1.0].
+     */
     fun updatePrismMix(vocals: Float, beats: Float, instruments: Float) {
         prismTargetMix = PrismMixLevels(
             vocals = vocals.coerceIn(0f, 1f),
@@ -263,6 +380,14 @@ class AdaptiveDspEngine @Inject constructor(
         )
     }
 
+    /**
+     * Updates ReplayGain engine configuration.
+     *
+     * @param mode Active [ReplayGainMode].
+     * @param preampDb Manual preamp offset in dB.
+     * @param preventClipping True to enable automatic peak attenuation preventing overload.
+     * @param isBitPerfect True to bypass ReplayGain scaling for bit-perfect output.
+     */
     fun setReplayGainConfig(
         mode: ReplayGainMode,
         preampDb: Float,
@@ -276,6 +401,15 @@ class AdaptiveDspEngine @Inject constructor(
         recalculateReplayGain()
     }
 
+    /**
+     * Updates track and album ReplayGain metadata for current media item.
+     *
+     * @param trackGainDb Track gain adjustment in dB.
+     * @param albumGainDb Album gain adjustment in dB.
+     * @param trackPeak Track peak amplitude factor.
+     * @param albumPeak Album peak amplitude factor.
+     * @param isSequentialAlbumPlay True if playing sequentially within the same album.
+     */
     fun setReplayGainTrackData(
         trackGainDb: Double?,
         albumGainDb: Double?,
@@ -291,8 +425,9 @@ class AdaptiveDspEngine @Inject constructor(
         recalculateReplayGain()
     }
 
-    fun getEffectiveReplayGainLinear(): Float = replayGainLinear
-
+    /**
+     * Recalculates effective linear gain based on current ReplayGain config and track metadata.
+     */
     private fun recalculateReplayGain() {
         replayGainLinear = ReplayGainCalculator.calculateEffectiveLinearGain(
             mode = replayGainMode,
@@ -307,10 +442,20 @@ class AdaptiveDspEngine @Inject constructor(
         )
     }
 
+    /**
+     * Sets spectral analysis backend mode for real-time audio visualization.
+     *
+     * @param mode Target [SpectralAnalysisMode] (BANDPASS filterbank or FFT).
+     */
     fun setSpectralAnalysisMode(mode: SpectralAnalysisMode) {
         spectralAnalysisMode = mode
     }
 
+    /**
+     * Configures 6-band bandpass biquad filterbank and FFT spectral analyzer for given sample rate.
+     *
+     * @param sampleRate Sampling rate in Hz.
+     */
     private fun configureSpectralAnalyzer(sampleRate: Int) {
         val safeRate = sampleRate.coerceAtLeast(8_000)
         spectralBandFilters.indices.forEach { index ->
@@ -323,6 +468,13 @@ class AdaptiveDspEngine @Inject constructor(
         fftSpectralAnalyzer.configure(sampleRate = safeRate, bandCentersHz = spectralBandCenters)
     }
 
+    /**
+     * Configures audio processor format. Supports 16-bit PCM, 24-bit PCM, and 32-bit Float PCM.
+     * Always configures output format to 16-bit PCM for downstream Media3 processor compatibility.
+     *
+     * @param inputAudioFormat Incoming audio format.
+     * @return Negotiated output [AudioFormat] (16-bit PCM).
+     */
     override fun configure(inputAudioFormat: AudioFormat): AudioFormat {
         // AUDIOPHILE UPGRADE: Support 16-bit, 24-bit (via 32-bit float), and Float PCM
         val isSupported = inputAudioFormat.encoding == C.ENCODING_PCM_16BIT ||
@@ -332,6 +484,12 @@ class AdaptiveDspEngine @Inject constructor(
         if (!isSupported) {
             isActive = false
             return inputAudioFormat
+        }
+
+        if (inputAudioFormat.encoding == C.ENCODING_PCM_24BIT ||
+            inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT
+        ) {
+            isLosslessStream = true
         }
 
         val isNewSampleRate = this.inputAudioFormat.sampleRate != inputAudioFormat.sampleRate
@@ -345,6 +503,7 @@ class AdaptiveDspEngine @Inject constructor(
         )
 
         detectAndApplyDeviceProfile()
+        updateLimiterCoefficients(inputAudioFormat.sampleRate)
         lookAheadDelaySamples = (inputAudioFormat.sampleRate * 0.0045f)
             .roundToInt()
             .coerceIn(24, LOOK_AHEAD_BUFFER_SIZE - 1)
@@ -361,8 +520,19 @@ class AdaptiveDspEngine @Inject constructor(
         return outputAudioFormat
     }
 
+    /**
+     * Indicates whether the processor is configured and active.
+     *
+     * @return True if active; false otherwise.
+     */
     override fun isActive(): Boolean = isActive
 
+    /**
+     * Reallocates or clears internal direct ByteBuffer for output frame storage.
+     *
+     * @param count Capacity requirement in bytes.
+     * @return Prepared [ByteBuffer].
+     */
     private fun replaceOutputBuffer(count: Int): ByteBuffer {
         if (buffer.capacity() < count) {
             buffer = ByteBuffer.allocateDirect(count).order(ByteOrder.nativeOrder())
@@ -373,20 +543,27 @@ class AdaptiveDspEngine @Inject constructor(
         return buffer
     }
 
+    /**
+     * Main real-time audio processing callback. Decodes 16-bit, 24-bit, or Float PCM input frames,
+     * processes stereo widening, SVF EQ, environmental modeling, stem isolation, look-ahead limiting,
+     * and spectral analysis, writing 16-bit PCM frames to the output buffer.
+     *
+     * @param inputBuffer Incoming raw audio PCM sample byte buffer.
+     */
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
 
         val channels = inputAudioFormat.channelCount
         val inputEncoding = inputAudioFormat.encoding
-        
+
         val inputFrameSize = when (inputEncoding) {
             C.ENCODING_PCM_16BIT -> channels * 2
             C.ENCODING_PCM_24BIT -> channels * 3
             C.ENCODING_PCM_FLOAT -> channels * 4
             else -> channels * 2
         }
-        
+
         val framesToProcess = remaining / inputFrameSize
         if (framesToProcess == 0) return
 
@@ -418,7 +595,7 @@ class AdaptiveDspEngine @Inject constructor(
                     val b3 = inputBuffer.get().toInt()
                     val valL = (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
                     sampleL = valL.toFloat() / 2147483648f
-                    
+
                     if (channels == 2) {
                         val rb1 = inputBuffer.get().toInt() and 0xFF
                         val rb2 = inputBuffer.get().toInt() and 0xFF
@@ -432,6 +609,11 @@ class AdaptiveDspEngine @Inject constructor(
                 C.ENCODING_PCM_FLOAT -> {
                     sampleL = inputBuffer.getFloat()
                     sampleR = if (channels == 2) inputBuffer.getFloat() else sampleL
+                }
+
+                else -> {
+                    sampleL = 0f
+                    sampleR = 0f
                 }
             }
 
@@ -496,7 +678,7 @@ class AdaptiveDspEngine @Inject constructor(
                 sampleR = prismFrame.right
             }
 
-            // 5. AGC / LIMITER (sample-rate aware look-ahead + smooth release)
+            // 5. TRUE-PEAK LIMITER & AGC (sample-rate aware look-ahead + smooth release)
             val delayedIndex = (lookAheadIndex - lookAheadDelaySamples + LOOK_AHEAD_BUFFER_SIZE) % LOOK_AHEAD_BUFFER_SIZE
             val delayedL = lookAheadBufferL[delayedIndex]
             val delayedR = lookAheadBufferR[delayedIndex]
@@ -505,15 +687,20 @@ class AdaptiveDspEngine @Inject constructor(
             lookAheadBufferR[lookAheadIndex] = sampleR
             lookAheadIndex = (lookAheadIndex + 1) % LOOK_AHEAD_BUFFER_SIZE
 
-            val currentPeak = max(abs(sampleL), abs(sampleR))
-            if (currentPeak > agcEnvelope) {
-                agcEnvelope += agcAttackCoef * (currentPeak - agcEnvelope)
+            val shouldBypassLimiter = (isLosslessStream && !isDigitalOverImminent()) || isBitPerfect
+
+            val reduction = if (shouldBypassLimiter) {
+                1.0f
             } else {
-                agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
+                val currentPeak = max(abs(sampleL), abs(sampleR))
+                if (currentPeak > agcEnvelope) {
+                    agcEnvelope += agcAttackCoef * (currentPeak - agcEnvelope)
+                } else {
+                    agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
+                }
+                if (agcEnvelope > TRUE_PEAK_THRESHOLD) TRUE_PEAK_THRESHOLD / agcEnvelope else 1.0f
             }
 
-            val reduction = if (agcEnvelope > LIMITER_THRESHOLD) LIMITER_THRESHOLD / agcEnvelope else 1f
-            
             // AUDIOPHILE LIMITER: Use the look-ahead signal and apply gain reduction
             sampleL = (delayedL * reduction).coerceIn(-1.0f, 1.0f)
             sampleR = (delayedR * reduction).coerceIn(-1.0f, 1.0f)
@@ -539,50 +726,51 @@ class AdaptiveDspEngine @Inject constructor(
                 val inv = 1f / analysisFrameCounter.toFloat()
                 val energyAvg = (energyAccumulator * inv * 3.2f)
 
-                val rawBands = FloatArray(spectralBandFilters.size)
                 var rawSum = 0f
                 if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
-                    for (index in rawBands.indices) {
+                    for (index in 0 until 6) {
                         val raw = spectralBandAccumulators[index] * inv
-                        rawBands[index] = raw
+                        rawBandEnergies[index] = raw
                         rawSum += raw
                     }
                 } else {
                     val fftBands = fftSpectralAnalyzer.getLatestBandEnergies()
-                    for (index in rawBands.indices) {
+                    for (index in 0 until 6) {
                         val raw = fftBands[index]
-                        rawBands[index] = raw
+                        rawBandEnergies[index] = raw
                         rawSum += raw
                     }
                 }
 
                 val energyGate = clamp01(energyAvg)
-                val normalizedBands = MutableList(rawBands.size) { 0f }
-                for (index in rawBands.indices) {
-                    val targetNorm = (rawBands[index] * 14f).coerceAtLeast(0f)
+                var bandSum = 0f
+                for (index in 0 until 6) {
+                    val raw = rawBandEnergies[index]
+                    val targetNorm = (raw * 14f).coerceAtLeast(0f)
                     val currentNorm = spectralBandNormalization[index]
                     val coeff = if (targetNorm > currentNorm) 0.16f else 0.04f
                     spectralBandNormalization[index] = currentNorm + (targetNorm - currentNorm) * coeff
 
-                    val ratio = if (rawSum > 1e-6f) rawBands[index] / rawSum else 0f
+                    val ratio = if (rawSum > 1e-6f) raw / rawSum else 0f
                     val normalized = (ratio * 6f * energyGate).coerceIn(0f, 1f)
-                    val adaptive = (rawBands[index] / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
-                    normalizedBands[index] = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
+                    val adaptive = (raw / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
+                    val value = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
+                    normalizedBandEnergies[index] = value
+                    bandSum += value
                 }
 
-                val bassAvg = (normalizedBands[0] * 0.72f + normalizedBands[1] * 0.28f).coerceIn(0f, 1f)
-                val midAvg = (normalizedBands[2] * 0.56f + normalizedBands[3] * 0.44f).coerceIn(0f, 1f)
-                val trebleAvg = (normalizedBands[4] * 0.58f + normalizedBands[5] * 0.42f).coerceIn(0f, 1f)
+                val bassAvg = (normalizedBandEnergies[0] * 0.72f + normalizedBandEnergies[1] * 0.28f).coerceIn(0f, 1f)
+                val midAvg = (normalizedBandEnergies[2] * 0.56f + normalizedBandEnergies[3] * 0.44f).coerceIn(0f, 1f)
+                val trebleAvg = (normalizedBandEnergies[4] * 0.58f + normalizedBandEnergies[5] * 0.42f).coerceIn(0f, 1f)
 
                 val weightedCentroid =
-                    normalizedBands[0] * 0.05f +
-                    normalizedBands[1] * 0.18f +
-                    normalizedBands[2] * 0.38f +
-                    normalizedBands[3] * 0.58f +
-                    normalizedBands[4] * 0.78f +
-                    normalizedBands[5] * 0.95f
-                val centroidDenominator = normalizedBands.sum() + 1e-5f
-                val centroid = weightedCentroid / centroidDenominator
+                    normalizedBandEnergies[0] * 0.05f +
+                    normalizedBandEnergies[1] * 0.18f +
+                    normalizedBandEnergies[2] * 0.38f +
+                    normalizedBandEnergies[3] * 0.58f +
+                    normalizedBandEnergies[4] * 0.78f +
+                    normalizedBandEnergies[5] * 0.95f
+                val centroid = if (bandSum > 1e-5f) weightedCentroid / bandSum else 0.5f
                 val flux = max(0f, energyAvg - prevEnergy) * 2.2f
                 prevEnergy += (energyAvg - prevEnergy) * 0.2f
 
@@ -598,7 +786,7 @@ class AdaptiveDspEngine @Inject constructor(
                     energy = clamp01(energyAvg),
                     centroid = clamp01(centroid),
                     flux = clamp01(flux),
-                    spectralBands = normalizedBands,
+                    spectralBands = normalizedBandEnergies.toList(),
                     analysisMode = localSpectralMode,
                     analysisCostMicros = analysisCostMicrosSmoothed.coerceAtLeast(0f)
                 )
@@ -609,9 +797,9 @@ class AdaptiveDspEngine @Inject constructor(
             }
 
             // 7. OUTPUT STAGE: convert float domain back to PCM_16BIT for sink compatibility.
-            outBuffer.putShort((sampleL.coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort())
+            outBuffer.putShort((sampleL.coerceIn(-1f, 1f) * 32767f).roundToInt().toShort())
             if (channels == 2) {
-                outBuffer.putShort((sampleR.coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort())
+                outBuffer.putShort((sampleR.coerceIn(-1f, 1f) * 32767f).roundToInt().toShort())
             }
         }
 
@@ -623,20 +811,36 @@ class AdaptiveDspEngine @Inject constructor(
         outBuffer.flip()
     }
 
+    /**
+     * Signals end of audio input stream.
+     */
     override fun queueEndOfStream() {
         inputEnded = true
     }
 
+    /**
+     * Retrieves processed audio output buffer.
+     *
+     * @return [ByteBuffer] containing processed PCM_16BIT sample data.
+     */
     override fun getOutput(): ByteBuffer {
         val output = outputBuffer
         outputBuffer = AudioProcessor.EMPTY_BUFFER
         return output
     }
 
+    /**
+     * Checks whether processing has completed for the current stream.
+     *
+     * @return True if input stream ended and output buffer consumed.
+     */
     override fun isEnded(): Boolean {
         return inputEnded && outputBuffer === AudioProcessor.EMPTY_BUFFER
     }
 
+    /**
+     * Flushes internal processor state (filters, look-ahead buffers, reverb, and AGC envelope).
+     */
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun flush() {
         outputBuffer = AudioProcessor.EMPTY_BUFFER
@@ -644,6 +848,9 @@ class AdaptiveDspEngine @Inject constructor(
         activeFilters.forEach { it.reset() }
         deviceCompensationFilters.forEach { it.reset() }
         agcEnvelope = 0f // FIXED: Clear AGC volume reduction upon seeking/re-buffering
+        lookAheadBufferL.fill(0f)
+        lookAheadBufferR.fill(0f)
+        lookAheadIndex = 0
         vinylNoiseSeed = 0x13579BDF.toInt()
         vinylNoiseDc = 0f
         hallProcessor.reset()
@@ -664,649 +871,18 @@ class AdaptiveDspEngine @Inject constructor(
         vinylWowBufferL.fill(0f)
         vinylWowBufferR.fill(0f)
         vinylWowIndex = 0
-        
+
         lookAheadBufferL.fill(0f)
         lookAheadBufferR.fill(0f)
         lookAheadIndex = 0
         _audioReactiveFrame.value = AudioReactiveFrame()
     }
 
+    /**
+     * Resets processor and clears output memory buffer.
+     */
     override fun reset() {
         flush()
         buffer = AudioProcessor.EMPTY_BUFFER
     }
 }
-
-private class SchroederHallProcessor {
-    var outL: Float = 0f
-        private set
-    var outR: Float = 0f
-        private set
-
-    private var combL: Array<FloatArray> = emptyArray()
-    private var combR: Array<FloatArray> = emptyArray()
-    private var combIndexL = IntArray(0)
-    private var combIndexR = IntArray(0)
-    private var combStoreL = FloatArray(0)
-    private var combStoreR = FloatArray(0)
-    
-    // REVERB DAMPING: One-pole LPF states per comb filter
-    private var combDampL = FloatArray(0)
-    private var combDampR = FloatArray(0)
-    private val dampingFactor = 0.45f
-
-    private var allPassL: Array<FloatArray> = emptyArray()
-    private var allPassR: Array<FloatArray> = emptyArray()
-    private var allPassIndexL = IntArray(0)
-    private var allPassIndexR = IntArray(0)
-
-    private var haasL = FloatArray(1)
-    private var haasR = FloatArray(1)
-    private var haasIndexL = 0
-    private var haasIndexR = 0
-
-    private val combMs = floatArrayOf(31.1f, 37.1f, 41.1f, 43.7f)
-    private val allPassMs = floatArrayOf(5.0f, 1.7f)
-
-    fun configure(sampleRate: Int) {
-        combL = Array(combMs.size) { i -> FloatArray(((sampleRate * combMs[i]) / 1000f).toInt().coerceAtLeast(1)) }
-        combR = Array(combMs.size) { i -> FloatArray(((sampleRate * (combMs[i] + 0.8f)) / 1000f).toInt().coerceAtLeast(1)) }
-        combIndexL = IntArray(combMs.size)
-        combIndexR = IntArray(combMs.size)
-        combStoreL = FloatArray(combMs.size)
-        combStoreR = FloatArray(combMs.size)
-        combDampL = FloatArray(combMs.size)
-        combDampR = FloatArray(combMs.size)
-
-        allPassL = Array(allPassMs.size) { i -> FloatArray(((sampleRate * allPassMs[i]) / 1000f).toInt().coerceAtLeast(1)) }
-        allPassR = Array(allPassMs.size) { i -> FloatArray(((sampleRate * (allPassMs[i] + 0.3f)) / 1000f).toInt().coerceAtLeast(1)) }
-        allPassIndexL = IntArray(allPassMs.size)
-        allPassIndexR = IntArray(allPassMs.size)
-
-        haasL = FloatArray((sampleRate * 0.013f).toInt().coerceAtLeast(1))
-        haasR = FloatArray((sampleRate * 0.019f).toInt().coerceAtLeast(1))
-        haasIndexL = 0
-        haasIndexR = 0
-    }
-
-    fun process(inputL: Float, inputR: Float, channels: Int) {
-        if (combL.isEmpty()) {
-            outL = inputL
-            outR = if (channels == 2) inputR else inputL
-            return
-        }
-
-        val stereoR = if (channels == 2) inputR else inputL
-        val earlyL = writeDelay(haasL, inputL + stereoR * 0.18f, true)
-        val earlyR = writeDelay(haasR, stereoR + inputL * 0.18f, false)
-        val diffuseIn = ((inputL + stereoR) * 0.5f + (earlyL + earlyR) * 0.25f) * 0.95f
-
-        val tailL = processTank(
-            diffuseIn,
-            combL,
-            combIndexL,
-            combDampL,
-            allPassL,
-            allPassIndexL
-        )
-        val tailR = processTank(
-            diffuseIn,
-            combR,
-            combIndexR,
-            combDampR,
-            allPassR,
-            allPassIndexR
-        )
-
-        outL = (inputL * 0.70f + earlyL * 0.10f + tailL * 0.20f).coerceIn(-1.0f, 1.0f)
-        outR = (stereoR * 0.70f + earlyR * 0.10f + tailR * 0.20f).coerceIn(-1.0f, 1.0f)
-    }
-
-    fun reset() {
-        combL.forEach { it.fill(0f) }
-        combR.forEach { it.fill(0f) }
-        allPassL.forEach { it.fill(0f) }
-        allPassR.forEach { it.fill(0f) }
-        combIndexL.fill(0)
-        combIndexR.fill(0)
-        combStoreL.fill(0f)
-        combStoreR.fill(0f)
-        combDampL.fill(0f)
-        combDampR.fill(0f)
-        allPassIndexL.fill(0)
-        allPassIndexR.fill(0)
-        haasL.fill(0f)
-        haasR.fill(0f)
-        haasIndexL = 0
-        haasIndexR = 0
-        outL = 0f
-        outR = 0f
-    }
-
-    private fun writeDelay(buffer: FloatArray, input: Float, isLeft: Boolean): Float {
-        val index = if (isLeft) haasIndexL else haasIndexR
-        val delayed = buffer[index]
-        buffer[index] = input
-
-        if (isLeft) {
-            haasIndexL = (index + 1) % buffer.size
-        } else {
-            haasIndexR = (index + 1) % buffer.size
-        }
-
-        return delayed
-    }
-
-    private fun processTank(
-        input: Float,
-        comb: Array<FloatArray>,
-        combIndices: IntArray,
-        combDamp: FloatArray,
-        allPass: Array<FloatArray>,
-        allPassIndices: IntArray
-    ): Float {
-        var sum = 0f
-
-        for (i in comb.indices) {
-            val buffer = comb[i]
-            val idx = combIndices[i]
-            val delayed = buffer[idx]
-
-            // DAMPING RITUAL: Filter the feedback signal
-            combDamp[i] += (delayed - combDamp[i]) * dampingFactor
-
-            // FIX: Apply tanh soft-clipping inside the feedback loop
-            val feedback = combDamp[i] * 0.79f
-            val safeFeedback = tanh(feedback)
-
-            buffer[idx] = input + safeFeedback
-            combIndices[i] = (idx + 1) % buffer.size
-            sum += delayed
-        }
-
-        var output = sum * (1f / comb.size.coerceAtLeast(1))
-
-        for (i in allPass.indices) {
-            val buffer = allPass[i]
-            val idx = allPassIndices[i]
-            val delayed = buffer[idx]
-            buffer[idx] = output + delayed * 0.5f
-            output = delayed - output
-            allPassIndices[i] = (idx + 1) % buffer.size
-        }
-
-        return output
-    }
-}
-
-enum class AcousticEnvironmentMode { STUDIO, VINYL_WARMTH, CONCERT_HALL }
-
-enum class PrismMode { BYPASS, ISOLATION }
-
-enum class SpectralAnalysisMode { BANDPASS, FFT }
-
-data class PrismMixLevels(
-    val vocals: Float = 1f,
-    val beats: Float = 1f,
-    val instruments: Float = 1f
-)
-
-enum class FilterType { LOW_SHELF, PEAKING, HIGH_SHELF }
-
-data class AcousticNode(
-    val id: String, val label: String, val filterType: FilterType,
-    val frequency: Float, val gainDb: Float, val qFactor: Float
-)
-
-/**
- * 🎨 STATE VARIABLE FILTER (SVF)
- * The Gold Standard for real-time studio equipment.
- * Inherently stable, perfectly coherent, and allows smooth parameter sweeps
- * without the "zipper noise" or "pops" of standard Biquads.
- */
-class StateVariableFilter(
-    var type: FilterType,
-    val sampleRate: Int,
-    initialFreq: Float,
-    initialGain: Float,
-    initialQ: Float
-) {
-    // Current parameters for smoothing
-    private var targetG = 0f
-    private var targetK = 0f
-    private var targetA = 0f
-
-    private var g = 0f
-    private var k = 0f
-    private var a = 0f
-
-    // Cached coefficients to avoid per-sample division overhead
-    private var cachedA1 = 0f
-    private var cachedA2 = 0f
-    private var cachedA3 = 0f
-    private var isTransitioning = true
-
-    // Internal state (integrators) per channel
-    private val ic1eq = FloatArray(2)
-    private val ic2eq = FloatArray(2)
-
-    init {
-        updateParameters(initialFreq, initialGain, initialQ, sampleRate)
-        // Instant init
-        g = targetG
-        k = targetK
-        a = targetA
-
-        // Calculate initial coefficients immediately to prevent first-sample artifacts
-        cachedA1 = 1f / (1f + g * (g + k))
-        cachedA2 = g * cachedA1
-        cachedA3 = g * cachedA2
-        isTransitioning = false
-    }
-
-    fun updateParameters(freq: Float, gainDb: Float, q: Float, sampleRate: Int) {
-        val f = freq.coerceIn(20f, (sampleRate / 2f) * 0.9f)
-        val qVal = q.coerceIn(0.1f, 10f)
-        val gain = 10f.pow(gainDb / 40f)
-
-        targetG = tan(PI.toFloat() * f / sampleRate.toFloat())
-        targetK = 1f / qVal
-        targetA = gain
-        isTransitioning = true // Flag the filter to start interpolating math
-    }
-
-    fun process(sample: Float, channel: Int): Float {
-        // Only calculate heavy math (like divisions) if parameters are changing
-        if (isTransitioning) {
-            val smooth = 0.003f
-            g += (targetG - g) * smooth
-            k += (targetK - k) * smooth
-            a += (targetA - a) * smooth
-
-            // Lock parameters when close enough to bypass math overhead completely
-            if (abs(targetG - g) < 0.0001f && abs(targetK - k) < 0.0001f) {
-                g = targetG
-                k = targetK
-                a = targetA
-                isTransitioning = false
-            }
-
-            cachedA1 = 1f / (1f + g * (g + k))
-            cachedA2 = g * cachedA1
-            cachedA3 = g * cachedA2
-        }
-
-        val v3 = sample - ic2eq[channel]
-        val v1 = cachedA1 * ic1eq[channel] + cachedA2 * v3
-        val v2 = ic2eq[channel] + cachedA2 * ic1eq[channel] + cachedA3 * v3
-
-        ic1eq[channel] = 2f * v1 - ic1eq[channel]
-        ic2eq[channel] = 2f * v2 - ic2eq[channel]
-
-        return when (type) {
-            FilterType.LOW_SHELF -> {
-                sample + (a - 1f) * v2
-            }
-            FilterType.PEAKING -> {
-                sample + k * (a - 1f) * v1
-            }
-            FilterType.HIGH_SHELF -> {
-                val hp = sample - k * v1 - v2
-                sample + (a - 1f) * hp
-            }
-        }
-    }
-
-    fun reset() {
-        ic1eq.fill(0f)
-        ic2eq.fill(0f)
-    }
-}
-
-internal data class StereoFrame(val left: Float, val right: Float)
-
-internal class PrismIsolator {
-    private var sampleRateHz = 48_000f
-
-    // Mid channel LR4 crossovers.
-    private val lowMidLp1 = MonoBiquad()
-    private val lowMidLp2 = MonoBiquad()
-    private val midMidHp1 = MonoBiquad()
-    private val midMidHp2 = MonoBiquad()
-    private val midMidLp1 = MonoBiquad()
-    private val midMidLp2 = MonoBiquad()
-    private val highMidHp1 = MonoBiquad()
-    private val highMidHp2 = MonoBiquad()
-
-    // Side channel LR4 crossovers.
-    private val lowSideLp1 = MonoBiquad()
-    private val lowSideLp2 = MonoBiquad()
-    private val midSideHp1 = MonoBiquad()
-    private val midSideHp2 = MonoBiquad()
-    private val midSideLp1 = MonoBiquad()
-    private val midSideLp2 = MonoBiquad()
-    private val highSideHp1 = MonoBiquad()
-    private val highSideHp2 = MonoBiquad()
-
-    private var normalizationAttackCoef = 0.05f
-    private var normalizationReleaseCoef = 0.006f
-    private var limiterAttackCoef = 0.12f
-    private var limiterReleaseCoef = 0.01f
-    private var limiterEnvelopeAttackCoef = 0.28f
-    private var limiterEnvelopeReleaseCoef = 0.02f
-
-    private var outputNormalization = 1f
-    private var limiterEnvelope = 0f
-    private var limiterGain = 1f
-
-    private fun sanitizeGain(value: Float): Float = value.coerceIn(0f, 1f)
-
-    private fun softSaturate(sample: Float): Float {
-        // FIX: Prevent foldback distortion for massive peaks without hard-clipping early
-        val absSample = abs(sample)
-        return if (absSample <= 1.2f) {
-            sample - (sample * sample * sample) * 0.22f
-        } else {
-            sign(sample) * (1.2f - (1.2f * 1.2f * 1.2f) * 0.22f)
-        }
-    }
-
-    fun configure(sampleRate: Int) {
-        sampleRateHz = sampleRate.toFloat().coerceAtLeast(8_000f)
-
-        // 3-way split tuned for practical stem separation without harsh artifacts.
-        val lowCutoffHz = 160f
-        val highCutoffHz = 3_500f
-
-        lowMidLp1.configureLowPass(sampleRateHz, lowCutoffHz, 0.707f)
-        lowMidLp2.configureLowPass(sampleRateHz, lowCutoffHz, 0.707f)
-        midMidHp1.configureHighPass(sampleRateHz, lowCutoffHz, 0.707f)
-        midMidHp2.configureHighPass(sampleRateHz, lowCutoffHz, 0.707f)
-        midMidLp1.configureLowPass(sampleRateHz, highCutoffHz, 0.707f)
-        midMidLp2.configureLowPass(sampleRateHz, highCutoffHz, 0.707f)
-        highMidHp1.configureHighPass(sampleRateHz, highCutoffHz, 0.707f)
-        highMidHp2.configureHighPass(sampleRateHz, highCutoffHz, 0.707f)
-
-        lowSideLp1.configureLowPass(sampleRateHz, lowCutoffHz, 0.707f)
-        lowSideLp2.configureLowPass(sampleRateHz, lowCutoffHz, 0.707f)
-        midSideHp1.configureHighPass(sampleRateHz, lowCutoffHz, 0.707f)
-        midSideHp2.configureHighPass(sampleRateHz, lowCutoffHz, 0.707f)
-        midSideLp1.configureLowPass(sampleRateHz, highCutoffHz, 0.707f)
-        midSideLp2.configureLowPass(sampleRateHz, highCutoffHz, 0.707f)
-        highSideHp1.configureHighPass(sampleRateHz, highCutoffHz, 0.707f)
-        highSideHp2.configureHighPass(sampleRateHz, highCutoffHz, 0.707f)
-
-        normalizationAttackCoef = 1f - exp(-1f / (sampleRateHz * 0.004f))
-        normalizationReleaseCoef = 1f - exp(-1f / (sampleRateHz * 0.060f))
-        limiterAttackCoef = 1f - exp(-1f / (sampleRateHz * 0.002f))
-        limiterReleaseCoef = 1f - exp(-1f / (sampleRateHz * 0.090f))
-        limiterEnvelopeAttackCoef = 1f - exp(-1f / (sampleRateHz * 0.0015f))
-        limiterEnvelopeReleaseCoef = 1f - exp(-1f / (sampleRateHz * 0.065f))
-    }
-
-    fun process(
-        left: Float,
-        right: Float,
-        channels: Int,
-        vocalsGain: Float,
-        beatsGain: Float,
-        instrumentsGain: Float
-    ): StereoFrame {
-        val safeVocals = sanitizeGain(vocalsGain)
-        val safeBeats = sanitizeGain(beatsGain)
-        val safeInstruments = sanitizeGain(instrumentsGain)
-
-        val stereoRight = if (channels == 2) right else left
-
-        // Mid/Side decomposition.
-        val mid = (left + stereoRight) * 0.5f
-        val side = if (channels == 2) (left - stereoRight) * 0.5f else 0f
-
-        val midLow = lowMidLp2.process(lowMidLp1.process(mid))
-        val midBandRaw = midMidHp2.process(midMidHp1.process(mid))
-        val midMid = midMidLp2.process(midMidLp1.process(midBandRaw))
-        val midHigh = highMidHp2.process(highMidHp1.process(midBandRaw))
-
-        val sideLow = lowSideLp2.process(lowSideLp1.process(side))
-        val sideBandRaw = midSideHp2.process(midSideHp1.process(side))
-        val sideMid = midSideLp2.process(midSideLp1.process(sideBandRaw))
-        val sideHigh = highSideHp2.process(highSideHp1.process(sideBandRaw))
-
-        val vocalsStem = midMid * 0.92f + midHigh * 0.08f
-        val beatsStem = midLow + sideLow * 0.12f
-        val instrumentsStem = sideMid * 0.72f + sideHigh * 1.05f + midHigh * 0.08f
-
-        val outMid = vocalsStem * safeVocals + beatsStem * safeBeats
-        val outSide = instrumentsStem * safeInstruments
-
-        var outL = outMid + outSide
-        var outR = if (channels == 2) outMid - outSide else outL
-
-        val squaredSum =
-            safeVocals * safeVocals + safeBeats * safeBeats + safeInstruments * safeInstruments
-        val targetNormalization = if (squaredSum <= 1e-5f) {
-            0f
-        } else {
-            (1f / sqrt(squaredSum)).coerceIn(0.52f, 1.05f)
-        }
-
-        val normCoef = if (targetNormalization < outputNormalization) {
-            normalizationAttackCoef
-        } else {
-            normalizationReleaseCoef
-        }
-        outputNormalization += (targetNormalization - outputNormalization) * normCoef
-
-        outL *= outputNormalization
-        outR *= outputNormalization
-
-        val peak = max(abs(outL), abs(outR))
-        val envCoef = if (peak > limiterEnvelope) limiterEnvelopeAttackCoef else limiterEnvelopeReleaseCoef
-        limiterEnvelope += (peak - limiterEnvelope) * envCoef
-
-        val targetLimiterGain = if (limiterEnvelope > 0.93f) {
-            0.93f / limiterEnvelope
-        } else {
-            1f
-        }
-        val limiterCoef = if (targetLimiterGain < limiterGain) limiterAttackCoef else limiterReleaseCoef
-        limiterGain += (targetLimiterGain - limiterGain) * limiterCoef
-
-        outL = softSaturate(outL * limiterGain)
-        outR = softSaturate(outR * limiterGain)
-
-        return StereoFrame(outL, outR)
-    }
-
-    fun reset() {
-        lowMidLp1.reset(); lowMidLp2.reset()
-        midMidHp1.reset(); midMidHp2.reset()
-        midMidLp1.reset(); midMidLp2.reset()
-        highMidHp1.reset(); highMidHp2.reset()
-
-        lowSideLp1.reset(); lowSideLp2.reset()
-        midSideHp1.reset(); midSideHp2.reset()
-        midSideLp1.reset(); midSideLp2.reset()
-        highSideHp1.reset(); highSideHp2.reset()
-
-        outputNormalization = 1f
-        limiterEnvelope = 0f
-        limiterGain = 1f
-    }
-}
-
-internal class MonoBiquad {
-    private var b0 = 1f
-    private var b1 = 0f
-    private var b2 = 0f
-    private var a1 = 0f
-    private var a2 = 0f
-    private var z1 = 0f
-    private var z2 = 0f
-
-    fun configureLowPass(sampleRate: Float, cutoffHz: Float, q: Float) {
-        configure(sampleRate, cutoffHz, q, highPass = false)
-    }
-
-    fun configureHighPass(sampleRate: Float, cutoffHz: Float, q: Float) {
-        configure(sampleRate, cutoffHz, q, highPass = true)
-    }
-
-    fun configureBandPass(sampleRate: Float, centerHz: Float, q: Float) {
-        val omega = (2.0 * Math.PI * (centerHz.coerceAtLeast(20f) / sampleRate)).toFloat()
-        val sinW = sin(omega)
-        val cosW = cos(omega)
-        val alpha = sinW / (2f * q.coerceAtLeast(0.1f))
-
-        val rawA0 = 1f + alpha
-        val rawA1 = -2f * cosW
-        val rawA2 = 1f - alpha
-
-        val rawB0 = alpha
-        val rawB1 = 0f
-        val rawB2 = -alpha
-
-        b0 = rawB0 / rawA0
-        b1 = rawB1 / rawA0
-        b2 = rawB2 / rawA0
-        a1 = rawA1 / rawA0
-        a2 = rawA2 / rawA0
-    }
-
-    private fun configure(sampleRate: Float, cutoffHz: Float, q: Float, highPass: Boolean) {
-        val omega = (2.0 * Math.PI * (cutoffHz.coerceAtLeast(20f) / sampleRate)).toFloat()
-        val sinW = sin(omega)
-        val cosW = cos(omega)
-        val alpha = sinW / (2f * q.coerceAtLeast(0.1f))
-
-        val rawB0: Float
-        val rawB1: Float
-        val rawB2: Float
-        val rawA0 = 1f + alpha
-        val rawA1 = -2f * cosW
-        val rawA2 = 1f - alpha
-
-        if (highPass) {
-            rawB0 = (1f + cosW) * 0.5f
-            rawB1 = -(1f + cosW)
-            rawB2 = (1f + cosW) * 0.5f
-        } else {
-            rawB0 = (1f - cosW) * 0.5f
-            rawB1 = 1f - cosW
-            rawB2 = (1f - cosW) * 0.5f
-        }
-
-        b0 = rawB0 / rawA0
-        b1 = rawB1 / rawA0
-        b2 = rawB2 / rawA0
-        a1 = rawA1 / rawA0
-        a2 = rawA2 / rawA0
-    }
-
-    fun process(input: Float): Float {
-        val out = b0 * input + z1
-        z1 = b1 * input - a1 * out + z2
-        z2 = b2 * input - a2 * out
-        return out
-    }
-
-    fun reset() {
-        z1 = 0f
-        z2 = 0f
-    }
-}
-
-internal class FftSpectralAnalyzer(
-    private val windowSize: Int
-) {
-    private var sampleRate: Int = 48_000
-    private var bandCentersHz = floatArrayOf(60f, 250f, 1_000f, 2_500f, 6_000f, 12_000f)
-
-    private var writeIndex = 0
-    private val frameBuffer = FloatArray(windowSize)
-    private val window = FloatArray(windowSize) { index ->
-        (0.5f - 0.5f * cos((2f * PI.toFloat() * index) / (windowSize - 1).coerceAtLeast(1))).coerceIn(0f, 1f)
-    }
-    private val fftBuffer = FloatArray(windowSize)
-    private val fft = FloatFFT_1D(windowSize.toLong())
-    private val latestBandEnergies = FloatArray(6)
-    private val bandStartBins = IntArray(6)
-    private val bandEndBins = IntArray(6)
-
-    fun configure(sampleRate: Int, bandCentersHz: FloatArray) {
-        this.sampleRate = sampleRate.coerceAtLeast(8_000)
-        this.bandCentersHz = bandCentersHz
-
-        val edges = FloatArray(7)
-        edges[0] = 20f
-        for (index in 1 until edges.lastIndex) {
-            val left = this.bandCentersHz[index - 1]
-            val right = this.bandCentersHz[index]
-            edges[index] = sqrt(left * right)
-        }
-        val nyquist = this.sampleRate * 0.5f
-        edges[edges.lastIndex] = (nyquist * 0.95f).coerceAtLeast(edges[edges.lastIndex - 1] + 1f)
-
-        val half = windowSize / 2
-        for (index in bandStartBins.indices) {
-            val start = ((edges[index] / nyquist) * half).toInt().coerceIn(1, half - 1)
-            val end = ((edges[index + 1] / nyquist) * half).toInt().coerceIn(start, half)
-            bandStartBins[index] = start
-            bandEndBins[index] = end
-        }
-
-        reset()
-    }
-
-    fun pushSample(sample: Float) {
-        frameBuffer[writeIndex] = sample
-        writeIndex += 1
-        if (writeIndex >= windowSize) {
-            computeBands()
-            writeIndex = 0
-        }
-    }
-
-    fun getLatestBandEnergies(): FloatArray = latestBandEnergies.copyOf()
-
-    fun reset() {
-        writeIndex = 0
-        frameBuffer.fill(0f)
-        fftBuffer.fill(0f)
-        latestBandEnergies.fill(0f)
-    }
-
-    private fun computeBands() {
-        for (index in frameBuffer.indices) {
-            fftBuffer[index] = frameBuffer[index] * window[index]
-        }
-
-        fft.realForward(fftBuffer)
-
-        val half = windowSize / 2
-        val magnitudes = FloatArray(half + 1)
-        magnitudes[0] = abs(fftBuffer[0])
-        for (bin in 1 until half) {
-            val real = fftBuffer[2 * bin]
-            val imag = fftBuffer[2 * bin + 1]
-            magnitudes[bin] = sqrt(real * real + imag * imag)
-        }
-        magnitudes[half] = abs(fftBuffer[1])
-
-        for (band in latestBandEnergies.indices) {
-            val start = bandStartBins[band]
-            val end = bandEndBins[band]
-            var weightedSum = 0f
-            var weight = 0f
-            for (bin in start..end) {
-                val magnitude = magnitudes[bin]
-                val w = 0.7f + (bin.toFloat() / half.toFloat()) * 0.6f
-                weightedSum += magnitude * w
-                weight += w
-            }
-            val average = if (weight > 1e-6f) weightedSum / weight else 0f
-            latestBandEnergies[band] = ln(1f + average * 4f).coerceAtLeast(0f)
-        }
-    }
-}
-

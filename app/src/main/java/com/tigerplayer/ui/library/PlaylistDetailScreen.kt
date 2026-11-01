@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresExtension
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,11 +48,13 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.M3uPathMode
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import kotlinx.coroutines.launch
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @Composable
@@ -86,6 +90,39 @@ fun PlaylistDetailsScreen(
     }
 
     var dominantColor by remember { mutableStateOf(nameHashColor) }
+
+    // Export options dialog state
+    var showExportDialog by remember { mutableStateOf(false) }
+    var selectedPathMode by remember { mutableStateOf(M3uPathMode.ABSOLUTE) }
+    val coroutineScope = rememberCoroutineScope()
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("audio/x-mpegurl")
+    ) { destinationUri ->
+        if (destinationUri != null) {
+            coroutineScope.launch {
+                val result = viewModel.exportM3uPlaylist(
+                    playlistId = playlistId,
+                    destinationUri = destinationUri,
+                    pathMode = selectedPathMode
+                )
+                if (result.isSuccess) {
+                    val export = result.getOrNull()
+                    Toast.makeText(
+                        context,
+                        "Exported ${export?.trackCount ?: 0} tracks to M3U8",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Export failed: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
 
     // Determine the art to display.
     val displayArt = playlistArtworkUri
@@ -201,8 +238,80 @@ fun PlaylistDetailsScreen(
             onEditClick = {
                 if (isEditMode) viewModel.savePlaylistOrder(playlistId, mutableTracks)
                 isEditMode = !isEditMode
-            }
+            },
+            onExportClick = { showExportDialog = true }
         )
+
+        if (showExportDialog) {
+            AlertDialog(
+                onDismissRequest = { showExportDialog = false },
+                title = { Text("EXPORT M3U8 PLAYLIST", fontWeight = FontWeight.Black) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "Choose path formatting style for the exported playlist file:",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().bounceClick {
+                                selectedPathMode = M3uPathMode.ABSOLUTE
+                            }
+                        ) {
+                            RadioButton(
+                                selected = selectedPathMode == M3uPathMode.ABSOLUTE,
+                                onClick = { selectedPathMode = M3uPathMode.ABSOLUTE }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Absolute Paths", fontWeight = FontWeight.Bold)
+                                Text(
+                                    "/storage/emulated/0/Music/...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().bounceClick {
+                                selectedPathMode = M3uPathMode.RELATIVE
+                            }
+                        ) {
+                            RadioButton(
+                                selected = selectedPathMode == M3uPathMode.RELATIVE,
+                                onClick = { selectedPathMode = M3uPathMode.RELATIVE }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Relative Paths", fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Relative to playlist location",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showExportDialog = false
+                            val safeName = playlistName.trim().replace(Regex("""[\\/:*?"<>|]"""), "_")
+                            exportLauncher.launch("$safeName.m3u8")
+                        }
+                    ) {
+                        Text("SAVE FILE", fontWeight = FontWeight.Black)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showExportDialog = false }) {
+                        Text("CANCEL")
+                    }
+                }
+            )
+        }
 
         if (selectedTrackForOptions != null) {
             ModalBottomSheet(
@@ -234,12 +343,26 @@ fun PlaylistDetailsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlaylistTopBar(name: String, scrollState: LazyListState, isEditMode: Boolean, onBackClick: () -> Unit, onEditClick: () -> Unit) {
+fun PlaylistTopBar(
+    name: String,
+    scrollState: LazyListState,
+    isEditMode: Boolean,
+    onBackClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onExportClick: () -> Unit
+) {
     val isScrolled by remember { derivedStateOf { scrollState.firstVisibleItemIndex > 0 || scrollState.firstVisibleItemScrollOffset > 250 } }
     TopAppBar(
         title = { AnimatedVisibility(visible = isScrolled, enter = fadeIn() + slideInVertically(), exit = fadeOut() + slideOutVertically()) { Text(name.uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
         navigationIcon = { IconButton(onClick = onBackClick, modifier = Modifier.padding(8.dp).background(if (isScrolled) Color.Transparent else Color.Black.copy(alpha = 0.3f), CircleShape)) { Icon(WitcherIcons.Back, "Back", tint = MaterialTheme.colorScheme.onSurface) } },
-        actions = { TextButton(onClick = onEditClick) { Text(text = if (isEditMode) "Done" else "Edit", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) } },
+        actions = {
+            if (!isEditMode) {
+                IconButton(onClick = onExportClick) {
+                    Icon(Icons.Rounded.FileDownload, contentDescription = "Export M3U8", tint = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+            TextButton(onClick = onEditClick) { Text(text = if (isEditMode) "Done" else "Edit", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+        },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = if (isScrolled) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f) else Color.Transparent),
         modifier = Modifier.then(if (isScrolled) Modifier.glassEffect(RectangleShape) else Modifier)
     )

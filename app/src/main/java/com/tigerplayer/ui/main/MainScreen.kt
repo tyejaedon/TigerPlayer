@@ -32,6 +32,7 @@ import com.tigerplayer.navigation.BottomNavTab
 import com.tigerplayer.navigation.MainNavigationPresets
 import com.tigerplayer.navigation.Screen
 import com.tigerplayer.ui.cloud.CloudScreen
+import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.youtube.YouTubeSearchScreen
 import com.tigerplayer.ui.home.HomeScreen
 import com.tigerplayer.ui.home.HomeViewModel
@@ -46,6 +47,8 @@ import com.tigerplayer.ui.player.MiniPlayer
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.prism.SonicPrismRoute
+import com.tigerplayer.ui.settings.SettingsViewModel
+import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.ui.theme.glassEffect
 
 // ------------------------------
@@ -70,13 +73,24 @@ fun MainScreen(
     onNavigateToDiscoverWeeklyDetail: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToQueue: () -> Unit,
+    dashboardViewModel: DashboardViewModel? = null,
+    settingsViewModel: SettingsViewModel? = null,
     // Test-only seam: rememberCoverScreenWindowState() needs a real Activity/display to produce a
     // genuine cover-screen Configuration, which an instrumented Compose test can't simulate. Left
     // null in production so real callers are unaffected (see CoverScreenMountingTest).
     windowStateOverride: CoverScreenWindowState? = null
 ) {
-    val windowState = windowStateOverride ?: rememberCoverScreenWindowState()
+    val effectiveSettingsViewModel = if (windowStateOverride == null) (settingsViewModel ?: hiltViewModel()) else null
+    val settingsState by effectiveSettingsViewModel?.settingsState?.collectAsStateWithLifecycle()
+        ?: remember { mutableStateOf(TigerSettingsState()) }
+    val windowState = windowStateOverride ?: rememberCoverScreenWindowState(
+        forcePreview = settingsState.coverScreenPreviewMode
+    )
     val isCoverScreen = windowState.isCoverScreen
+    val sharedDashboardViewModel = dashboardViewModel ?: hiltViewModel()
+
+    val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val prismViewModel: PrismViewModel = hiltViewModel()
 
     // Audio must load regardless of shell: the cover-screen mini hub reads the same
     // playerViewModel.uiState as the full shell.
@@ -89,6 +103,8 @@ fun MainScreen(
         // app shell (Scaffold + bottom NavigationBar) squeezed into a ~1.9-3.4in panel.
         CoverScreenMiniHub(
             playerViewModel = playerViewModel,
+            dashboardViewModel = sharedDashboardViewModel,
+            prismViewModel = prismViewModel,
             windowState = windowState,
             modifier = Modifier
                 .fillMaxSize()
@@ -102,9 +118,6 @@ fun MainScreen(
 
     val tabNavController = rememberNavController()
     val haptic = LocalHapticFeedback.current
-
-    val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
-    val prismViewModel: PrismViewModel = hiltViewModel()
 
     var playerState by remember { mutableStateOf(PlayerSheetState.MINI) }
     val isExpanded = playerState == PlayerSheetState.EXPANDED
@@ -303,6 +316,7 @@ fun MainScreen(
                         HomeScreen(
                             viewModel = playerViewModel,
                             homeViewModel = homeViewModel,
+                            dashboardViewModel = sharedDashboardViewModel,
                             prismViewModel = prismViewModel,
                             onNavigateToSonicPrism = {
                                 tabNavController.navigate(com.tigerplayer.navigation.Screen.SonicPrism.route)
@@ -432,5 +446,4 @@ fun MainScreen(
         }
     }
 }
-
 

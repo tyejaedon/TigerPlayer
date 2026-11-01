@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -25,16 +27,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -49,11 +57,13 @@ import com.tigerplayer.ui.components.DiscoverCarousel
 import com.tigerplayer.ui.components.RecentlyPlayedRow
 import com.tigerplayer.ui.constellation.ConstellationScreen
 import com.tigerplayer.ui.constellation.ConstellationViewModel
+import com.tigerplayer.ui.devices.AudioDevicesHubSheet
 import com.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.extras.NowBriefWidgetWrapper
 import com.tigerplayer.ui.library.*
 import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.KeyboardTestTags
 import com.tigerplayer.ui.prism.PrismTestTags
 import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.theme.TigerPlayerTheme
@@ -84,6 +94,7 @@ fun HomeScreen(
     onNavigateToDaylist: () -> Unit,
     onNavigateToDiscoverWeekly: () -> Unit,
     homeViewModel: HomeViewModel,
+    dashboardViewModel: DashboardViewModel,
     prismViewModel: PrismViewModel,
     onNavigateToSonicPrism: () -> Unit,
     onBottomNavigationVisibilityChanged: (Boolean) -> Unit = {},
@@ -98,6 +109,7 @@ fun HomeScreen(
 
     var showConstellation by remember { mutableStateOf(false) }
     var showSonicFootprint by remember { mutableStateOf(false) }
+    var showAudioDevicesHub by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     val sonicFootprintOpenRequest by viewModel.sonicFootprintOpenRequest.collectAsStateWithLifecycle()
 
@@ -121,7 +133,6 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
     val weatherUiState by homeViewModel.weatherUiState.collectAsStateWithLifecycle()
-    val dashboardViewModel: DashboardViewModel = hiltViewModel()
     val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
     val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsStateWithLifecycle()
     val daylistMeta by dashboardViewModel.daylistMeta.collectAsStateWithLifecycle()
@@ -133,8 +144,9 @@ fun HomeScreen(
         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint) {
-        if (showSonicFootprint) showSonicFootprint = false
+    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub) {
+        if (showAudioDevicesHub) showAudioDevicesHub = false
+        else if (showSonicFootprint) showSonicFootprint = false
         else if (showConstellation) showConstellation = false
         else if (isStatsExpanded) isStatsExpanded = false
         else if (isSearchActive) {
@@ -143,25 +155,26 @@ fun HomeScreen(
         }
     }
 
-    val query = uiState.searchQuery
-    var localSearchQuery by remember(isSearchActive) { mutableStateOf(query) }
+    val rawSearchQuery by viewModel.rawSearchQuery.collectAsState()
+    val debouncedQuery = uiState.searchQuery
 
-    LaunchedEffect(localSearchQuery) {
-        if (localSearchQuery != uiState.searchQuery) {
-            viewModel.onSearchQueryChanged(localSearchQuery)
-        }
+    val matchedArtists = remember(debouncedQuery, uiState.artists) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.artists.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
+    }
+    val matchedAlbums = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.tracks.filter { it.album.contains(debouncedQuery, ignoreCase = true) }.distinctBy { it.album.lowercase().trim() }
+    }
+    val matchedTracks = remember(debouncedQuery, uiState.tracks) {
+        if (debouncedQuery.isBlank()) emptyList()
+        else uiState.tracks.filter { it.title.contains(debouncedQuery, ignoreCase = true) }
     }
 
-    val matchedArtists = remember(localSearchQuery, uiState.artists) {
-        if (localSearchQuery.isBlank()) emptyList()
-        else uiState.artists.filter { it.name.contains(localSearchQuery, ignoreCase = true) }
-    }
-    val matchedAlbums = remember(localSearchQuery, uiState.tracks) {
-        if (localSearchQuery.isBlank()) emptyList()
-        else uiState.tracks.filter { it.album.contains(localSearchQuery, ignoreCase = true) }.distinctBy { it.album.lowercase().trim() }
-    }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -170,29 +183,43 @@ fun HomeScreen(
             item {
                 HomeHeader(
                     title = "TIGER PLAYER",
-                    searchQuery = localSearchQuery,
+                    searchQuery = rawSearchQuery,
                     isSearchActive = isSearchActive,
                     onSearchToggle = {
                         isSearchActive = !isSearchActive
                         if (!isSearchActive) {
-                            localSearchQuery = ""
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                             viewModel.clearSearch()
                         }
                     },
-                    onSearchQueryChange = { localSearchQuery = it },
+                    onSearchQueryChange = { viewModel.onSearchQueryChanged(it) },
                     onSettingsClick = onNavigateToSettings
                 )
             }
 
-            if (localSearchQuery.isNotEmpty()) {
+            if (rawSearchQuery.isNotEmpty()) {
                 renderSearchResults(
                     uiState = uiState,
                     viewModel = viewModel,
                     matchedArtists = matchedArtists,
                     matchedAlbums = matchedAlbums,
-                    onNavigateToAlbum = onNavigateToAlbum,
-                    onNavigatetoArtist = onNavigatetoArtist,
-                    artistDetails = artistDetails
+                    matchedTracks = matchedTracks,
+                    onNavigateToAlbum = { album ->
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onNavigateToAlbum(album)
+                    },
+                    onNavigatetoArtist = { artist ->
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        onNavigatetoArtist(artist)
+                    },
+                    artistDetails = artistDetails,
+                    onTrackSelected = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }
                 )
             } else {
                 item {
@@ -214,7 +241,10 @@ fun HomeScreen(
 
                 if (uiState.connectedBluetoothDevice.isConnected) {
                     item {
-                        BluetoothNexusCard(deviceInfo = uiState.connectedBluetoothDevice)
+                        BluetoothNexusCard(
+                            deviceInfo = uiState.connectedBluetoothDevice,
+                            onManageDevices = { showAudioDevicesHub = true }
+                        )
                     }
                 }
 
@@ -387,6 +417,12 @@ fun HomeScreen(
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
             }
+        )
+    }
+
+    if (showAudioDevicesHub) {
+        AudioDevicesHubSheet(
+            onDismiss = { showAudioDevicesHub = false }
         )
     }
 }
@@ -787,6 +823,15 @@ fun HomeHeader(
     onSearchToggle: () -> Unit, onSearchQueryChange: (String) -> Unit, onSettingsClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) {
+            focusRequester.requestFocus()
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -824,6 +869,7 @@ fun HomeHeader(
             }, label = "HeaderSearchAnimation"
         ) { searchactive ->
             if (searchactive) {
+                @Suppress("DEPRECATION")
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
@@ -835,9 +881,19 @@ fun HomeHeader(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(52.dp)
+                        .focusRequester(focusRequester)
+                        .testTag(KeyboardTestTags.HOME_SEARCH_FIELD),
                     shape = CircleShape,
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Search,
+                        keyboardType = KeyboardType.Text,
+                        autoCorrect = false
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { keyboardController?.hide() }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.aardBlue,
                         unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
@@ -852,7 +908,12 @@ fun HomeHeader(
                         )
                     },
                     trailingIcon = {
-                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSearchToggle() }) {
+                        IconButton(onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onSearchToggle()
+                        }) {
                             Icon(
                                 Icons.Default.Close,
                                 "Close",

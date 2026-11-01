@@ -2,12 +2,14 @@ package com.tigerplayer.data.repository
 
 import android.content.Context
 import android.database.ContentObserver
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
+import java.io.File
 import com.tigerplayer.data.local.dao.PlaylistDao
 import com.tigerplayer.data.local.dao.TigerDao
 import com.tigerplayer.data.local.dao.TrackStats
@@ -31,6 +33,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
@@ -123,9 +126,9 @@ class AudioRepository @Inject constructor(
     }
 
     /**
-     * THE MASTER ARCHIVE
-     * Combines local high-fidelity FLACs/MP3s and Navidrome remote streams.
-     * Ensures local files are prioritized for bit-perfect output.
+     * Combines local high-fidelity tracks (from Room cache) and Navidrome remote streams.
+     * Ensures local files and remote tracks are merged into a single alphabetically sorted list
+     * without blocking callers or leaking credentials (remote URIs are resolved on-demand).
      */
     fun getUnifiedTracks(
         user: String?,
@@ -164,8 +167,9 @@ class AudioRepository @Inject constructor(
 
 
     /**
-     * LOCAL CACHE LOGIC
-     * retrieves bit-perfect local files from the internal vault.
+     * Retrieves locally cached audio tracks. On first access (or when [forceRefresh] is true),
+     * triggers an incremental reconcile against MediaStore and configured SAF directories.
+     * Executed strictly on Dispatchers.IO to maintain main-safety.
      */
     fun getLocalTracks(forceRefresh: Boolean = false): Flow<List<AudioTrack>> = flow {
         val shouldScan = forceRefresh || hasPrimedLocalScan.compareAndSet(false, true)
@@ -305,39 +309,143 @@ class AudioRepository @Inject constructor(
     }
 
 
-    // ==========================================
-    // --- GRIMOIRE (PLAYLIST) OPERATIONS ---
-    // ==========================================
+    // --- Playlist Persistence & Reordering Operations ---
 
     fun getCustomPlaylists(): Flow<List<Playlist>> {
-        return playlistDao.getPlaylistsWithCount()
+        return flow {
+            ensureSingletonLikedPlaylist()
+            emitAll(playlistDao.getPlaylistsWithCount())
+        }.flowOn(ioDispatcher)
             .onEach { list ->
-                Log.d("AudioRepository", "Archive Emission: Found ${list.size} playlists")
-                list.forEach { Log.d("AudioRepository", "Playlist: ${it.name} ID: ${it.id}") }
+                if (com.tigerplayer.BuildConfig.DEBUG) {
+                    Log.d(TAG, "Playlists loaded: ${list.size}")
+                }
             }
     }
+
     suspend fun createPlaylist(name: String, id: Long? = null) {
-        playlistDao.insertPlaylist(
-            PlaylistEntity(
-                playlistId = id ?: 0L,
-                name = name,
-                artworkUri = null,
-                createdAt = System.currentTimeMillis()
+        withContext(ioDispatcher) {
+            val trimmed = name.trim()
+            if (trimmed.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)) {
+                ensureSingletonLikedPlaylist()
+                return@withContext
+            }
+            playlistDao.insertPlaylist(
+                PlaylistEntity(
+                    playlistId = id ?: 0L,
+                    name = name,
+                    artworkUri = null,
+                    createdAt = System.currentTimeMillis()
+                )
             )
+        }
+    }
+
+    suspend fun createPlaylistWithTracks(
+        name: String,
+        tracks: List<AudioTrack>,
+        artworkUri: String? = null
+    ): Long = withContext(ioDispatcher) {
+        val trimmed = name.trim().ifEmpty { "Curated Playlist" }
+        val resolvedName = resolveUniquePlaylistName(trimmed)
+        val selectedArtwork = artworkUri ?: tracks.firstOrNull()?.artworkUri?.toString()
+        playlistDao.createPlaylistWithTracks(
+            name = resolvedName,
+            trackIds = tracks.map { it.id },
+            artworkUri = selectedArtwork
         )
+    }
+
+    private suspend fun resolveUniquePlaylistName(baseName: String): String {
+        val existingPlaylists = playlistDao.getAllPlaylistsSync().map { it.name }
+        if (!existingPlaylists.any { it.equals(baseName, ignoreCase = true) }) {
+            return baseName
+        }
+        var counter = 2
+        while (true) {
+            val candidate = "$baseName ($counter)"
+            if (!existingPlaylists.any { it.equals(candidate, ignoreCase = true) }) {
+                return candidate
+            }
+            counter++
+        }
+    }
+
+    suspend fun ensureSingletonLikedPlaylist(): Long {
+        return withContext(ioDispatcher) {
+            val trackIds = playlistDao.ensureSingletonLikedPlaylist()
+            trackIds.forEach { trackId ->
+                tigerDao.updateTrackLikeStatus(trackId, true)
+            }
+            PlaylistEntity.LIKED_SONGS_PLAYLIST_ID
+        }
     }
 
     suspend fun updateTrackLikeStatus(trackId: String, isLiked: Boolean) {
         tigerDao.updateTrackLikeStatus(trackId, isLiked)
     }
 
-    // 🔥 NEW: Persist the HD Artwork
+    /**
+     * Persists updated high-resolution artwork URI in Room and resets negative cache tracking.
+     * Called when artwork is asynchronously fetched by MetadataEngine.
+     */
     suspend fun updateTrackArtworkUri(trackId: String, newUri: String) {
         tigerDao.updateTrackArtworkUri(trackId, newUri)
     }
 
+    suspend fun getCachedTrack(trackId: String): CachedTrackEntity? {
+        return tigerDao.getCachedTrackById(trackId)
+    }
+
+    suspend fun recordArtworkLookupFailure(
+        trackId: String,
+        failedAt: Long = System.currentTimeMillis(),
+        attempts: Int
+    ) {
+        tigerDao.updateArtworkLookupFailed(trackId, failedAt, attempts)
+    }
+
+    suspend fun updateHasEmbeddedArtwork(trackId: String, hasEmbedded: Boolean) {
+        tigerDao.updateHasEmbeddedArtwork(trackId, hasEmbedded)
+    }
+
+    /**
+     * Inspects whether the local track has embedded artwork in the underlying audio file.
+     * Results are cached in Room so expensive MediaMetadataRetriever checks occur at most once.
+     */
+    suspend fun hasEmbeddedArtwork(track: AudioTrack): Boolean = withContext(ioDispatcher) {
+        if (track.hasEmbeddedArtwork != null) {
+            return@withContext track.hasEmbeddedArtwork
+        }
+        val cached = tigerDao.getCachedTrackById(track.id)
+        if (cached?.hasEmbeddedArtwork != null) {
+            return@withContext cached.hasEmbeddedArtwork
+        }
+        val detected = checkEmbeddedArtwork(track)
+        tigerDao.updateHasEmbeddedArtwork(track.id, detected)
+        detected
+    }
+
+    private fun checkEmbeddedArtwork(track: AudioTrack): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            if (!track.path.isNullOrBlank() && File(track.path).exists()) {
+                retriever.setDataSource(track.path)
+            } else {
+                retriever.setDataSource(context, track.uri)
+            }
+            val picture = retriever.embeddedPicture
+            picture != null && picture.isNotEmpty()
+        } catch (e: Exception) {
+            false
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {}
+        }
+    }
+
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
-        // AudioRepository.kt line 194
         playlistDao.addTrackToPlaylist(playlistId, trackId)
     }
      fun getAllTracksStats() = tigerDao.getAllTracksStats()
@@ -353,7 +461,6 @@ class AudioRepository @Inject constructor(
 
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
-        // AudioRepository.kt line 211
         playlistDao.removeTrackAndReorder(playlistId, trackId)
 
 
@@ -394,9 +501,10 @@ class AudioRepository @Inject constructor(
 
     // Inside LibraryEngine or AudioRepository
     suspend fun savePlaylistOrder(playlistId: Long, tracks: List<AudioTrack>) {
-        // 🛡️ STOP THE GHOST: Don't allow operations on ID -1 or 0
+        // Invariant guard: synthetic playlist IDs (-1 for Liked Songs, -2 for Recently Added)
+        // are computed dynamically and cannot have custom user-defined track orders persisted.
         if (playlistId <= 0) {
-            Log.e("LibraryEngine", "Abort! Attempted to reorder invalid playlist ID: $playlistId")
+            Log.e(TAG, "Attempted to reorder synthetic or invalid playlist ID: $playlistId")
             return
         }
 
@@ -427,7 +535,10 @@ class AudioRepository @Inject constructor(
         replayGainAlbumDb = replayGainAlbumDb,
         replayGainTrackPeak = replayGainTrackPeak,
         replayGainAlbumPeak = replayGainAlbumPeak,
-        dateModified = dateModified
+        dateModified = dateModified,
+        artworkLookupFailedAt = artworkLookupFailedAt,
+        artworkLookupAttempts = artworkLookupAttempts,
+        hasEmbeddedArtwork = hasEmbeddedArtwork
     )
 
     private fun AudioTrack.toEntity() = CachedTrackEntity(
@@ -450,6 +561,9 @@ class AudioRepository @Inject constructor(
         replayGainAlbumDb = replayGainAlbumDb,
         replayGainTrackPeak = replayGainTrackPeak,
         replayGainAlbumPeak = replayGainAlbumPeak,
-        dateModified = dateModified
+        dateModified = dateModified,
+        artworkLookupFailedAt = artworkLookupFailedAt,
+        artworkLookupAttempts = artworkLookupAttempts,
+        hasEmbeddedArtwork = hasEmbeddedArtwork
     )
 }

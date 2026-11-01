@@ -275,7 +275,7 @@ fun PrismInlineMixer(
 }
 
 @Composable
-private fun PrismFader(
+fun PrismFader(
     label: String,
     value: Float,
     activeColor: Color,

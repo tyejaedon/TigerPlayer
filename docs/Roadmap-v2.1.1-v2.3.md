@@ -128,7 +128,8 @@ timer and folder browsing are missing.
 
 | # | Issue | Priority |
 |---|---|---|
-| [#72](https://github.com/tyejaedon/TigerPlayer/issues/72) | Split the `PlayerViewModel` god object | P1 |
+| [#72](https://github.com/tyejaedon/TigerPlayer/issues/72) | Split the `PlayerViewModel` god object | P1 — Complete |
+| [#268](https://github.com/tyejaedon/TigerPlayer/issues/268) | Architecture & Documentation: code commenting & PlantUML design guide | P2 — Complete |
 | [#73](https://github.com/tyejaedon/TigerPlayer/issues/73) | Test coverage for the four highest-risk paths | P1 |
 | [#74](https://github.com/tyejaedon/TigerPlayer/issues/74) | Room migration tests | P1 |
 | [#75](https://github.com/tyejaedon/TigerPlayer/issues/75) | Dependency risk (vendored AAR, alpha lib, forced stdlib) | P2 |
