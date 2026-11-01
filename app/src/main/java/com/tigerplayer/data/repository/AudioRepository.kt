@@ -341,6 +341,36 @@ class AudioRepository @Inject constructor(
         }
     }
 
+    suspend fun createPlaylistWithTracks(
+        name: String,
+        tracks: List<AudioTrack>,
+        artworkUri: String? = null
+    ): Long = withContext(ioDispatcher) {
+        val trimmed = name.trim().ifEmpty { "Curated Playlist" }
+        val resolvedName = resolveUniquePlaylistName(trimmed)
+        val selectedArtwork = artworkUri ?: tracks.firstOrNull()?.artworkUri?.toString()
+        playlistDao.createPlaylistWithTracks(
+            name = resolvedName,
+            trackIds = tracks.map { it.id },
+            artworkUri = selectedArtwork
+        )
+    }
+
+    private suspend fun resolveUniquePlaylistName(baseName: String): String {
+        val existingPlaylists = playlistDao.getAllPlaylistsSync().map { it.name }
+        if (!existingPlaylists.any { it.equals(baseName, ignoreCase = true) }) {
+            return baseName
+        }
+        var counter = 2
+        while (true) {
+            val candidate = "$baseName ($counter)"
+            if (!existingPlaylists.any { it.equals(candidate, ignoreCase = true) }) {
+                return candidate
+            }
+            counter++
+        }
+    }
+
     suspend fun ensureSingletonLikedPlaylist(): Long {
         return withContext(ioDispatcher) {
             val trackIds = playlistDao.ensureSingletonLikedPlaylist()

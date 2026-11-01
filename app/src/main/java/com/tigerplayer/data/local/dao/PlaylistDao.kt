@@ -102,6 +102,36 @@ abstract class PlaylistDao {
     abstract suspend fun insertPlaylist(playlist: PlaylistEntity): Long
 
     /**
+     * Creates a new playlist and attaches a sequence of tracks with positions 0..N-1.
+     */
+    @Transaction
+    open suspend fun createPlaylistWithTracks(
+        name: String,
+        trackIds: List<String>,
+        artworkUri: String? = null
+    ): Long {
+        val playlistId = insertPlaylist(
+            PlaylistEntity(
+                name = name,
+                artworkUri = artworkUri,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        if (playlistId > 0 && trackIds.isNotEmpty()) {
+            val crossRefs = trackIds.mapIndexed { index, trackId ->
+                PlaylistTrackCrossRef(
+                    playlistId = playlistId,
+                    trackId = trackId,
+                    position = index,
+                    dateAdded = System.currentTimeMillis()
+                )
+            }
+            insertTracksBatch(crossRefs)
+        }
+        return playlistId
+    }
+
+    /**
      * Ensures that exactly one playlist named "Liked Songs" exists as a singleton (ID = -1L).
      * If legacy or duplicate playlists matching "Liked Songs" (case-insensitive) exist from previous
      * versions, their tracks are merged into the singleton liked playlist and the duplicate playlists are removed.

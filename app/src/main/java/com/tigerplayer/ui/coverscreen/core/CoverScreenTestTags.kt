@@ -83,6 +83,8 @@ object CoverScreenTestTags {
     fun libraryAlbum(id: String): String = "cover_screen_library_album_$id"
     fun localPlaylist(id: Long): String = "cover_screen_local_playlist_$id"
     fun editPlaylistPhoto(id: Long): String = "cover_screen_edit_playlist_photo_$id"
+    const val IMPORT_PLAYLIST = "cover_screen_import_playlist"
+    const val IMPORT_STATUS_OVERLAY = "cover_screen_import_status_overlay"
     fun spotifyPlaylist(id: String): String = "cover_screen_spotify_playlist_$id"
     fun discoveryRecommendation(id: String): String = "cover_screen_discovery_recommendation_$id"
     fun discoveryPlay(id: String): String = "cover_screen_discovery_play_$id"

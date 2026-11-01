@@ -487,6 +487,12 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun saveCuratedPlaylist(name: String, tracks: List<AudioTrack>) {
+        viewModelScope.launch {
+            libraryEngine.saveCuratedPlaylist(name, tracks)
+        }
+    }
+
     fun addTrackToPlaylist(playlistId: Long, track: AudioTrack) {
         viewModelScope.launch {
             libraryEngine.addTrackToPlaylist(playlistId, track.id)
