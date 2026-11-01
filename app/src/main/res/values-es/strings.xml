@@ -41,6 +41,7 @@
     <string name="coverscreen_status_no_lyrics_found">NO SE ENCONTRÓ LETRA</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Inicio</string>
     <string name="coverscreen_tab_artists">Artistas</string>
     <string name="coverscreen_tab_albums">Álbumes</string>
     <string name="coverscreen_tab_songs">Canciones</string>
