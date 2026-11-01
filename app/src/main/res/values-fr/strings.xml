@@ -41,6 +41,7 @@
     <string name="coverscreen_status_no_lyrics_found">AUCUNE PAROLE TROUVÉE</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Accueil</string>
     <string name="coverscreen_tab_artists">Artistes</string>
     <string name="coverscreen_tab_albums">Albums</string>
     <string name="coverscreen_tab_songs">Morceaux</string>
