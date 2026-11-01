@@ -300,6 +300,39 @@ class CoverMicroWaveformTest {
     }
 
     @Test
+    fun `populatePositiveWaveformPath smoothly tapers to baseline at horizontal boundaries`() {
+        val path = Path()
+        val fillPath = Path()
+        val width = 200f
+        val maxHeight = 40f
+        val baselineY = 20f
+        val overlapPx = 2f
+        val effectiveBaselineY = baselineY + overlapPx
+
+        // Test with cosine wave and phase offset which would normally start at peak height at x=0
+        populatePositiveWaveformPath(
+            path = path,
+            fillPath = fillPath,
+            points = floatArrayOf(0.5f, 0.5f),
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.2f,
+            phaseOffset = 0.5f,
+            isCosine = true,
+            waveCycles = 0.8f
+        )
+
+        val androidPath = path.asAndroidPath()
+        val bounds = RectF()
+        androidPath.computeBounds(bounds, true)
+
+        // At endpoints x=0 and x=width, boundaryEnvelope tapers amplitude to zero, anchoring bottom at effectiveBaselineY
+        assertEquals(effectiveBaselineY, bounds.bottom, 0.1f)
+    }
+
+    @Test
     fun `CoverNeonPalette includes distinct tertiary color for the third waveform`() {
         val palette = DefaultCoverNeonPalette
 
