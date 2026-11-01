@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -77,8 +78,21 @@ internal fun LocalPlaylistPicker(
     playlists: List<Playlist>,
     onPlaylistSelected: (Playlist) -> Unit,
     onEditPhoto: (Playlist) -> Unit,
-    onImportPlaylist: () -> Unit = {}
+    onImportPlaylist: () -> Unit = {},
+    onCreatePlaylist: (String) -> Unit = {}
 ) {
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    if (showCreateDialog) {
+        CoverScreenCreatePlaylistDialog(
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { name ->
+                showCreateDialog = false
+                onCreatePlaylist(name)
+            }
+        )
+    }
+
     if (playlists.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -95,28 +109,58 @@ internal fun LocalPlaylistPicker(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.08f))
-                        .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                        .clickable(role = Role.Button, onClick = onImportPlaylist)
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                        .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.FileDownload,
-                        contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
-                        tint = MaterialTheme.aardBlue,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.coverscreen_action_import_playlist),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                            .clickable(role = Role.Button, onClick = { showCreateDialog = true })
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .testTag(CoverScreenTestTags.CREATE_PLAYLIST),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                            contentDescription = stringResource(R.string.coverscreen_action_create_playlist),
+                            tint = MaterialTheme.aardBlue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.coverscreen_action_new_playlist),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                            .clickable(role = Role.Button, onClick = onImportPlaylist)
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.FileDownload,
+                            contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
+                            tint = MaterialTheme.aardBlue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.coverscreen_action_import_playlist),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
         }
@@ -202,36 +246,67 @@ internal fun LocalPlaylistPicker(
             )
         }
 
-        // Import M3U/M3U8 button positioned at bottom center
+        // Action buttons positioned at bottom center: New Playlist & Import Playlist
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 6.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF1B1F2A).copy(alpha = 0.90f))
-                    .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-                    .clickable(role = Role.Button, onClick = onImportPlaylist)
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                    .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.FileDownload,
-                    contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
-                    tint = MaterialTheme.aardBlue,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(5.dp))
-                Text(
-                    text = stringResource(R.string.coverscreen_action_import_playlist),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1B1F2A).copy(alpha = 0.90f))
+                        .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                        .clickable(role = Role.Button, onClick = { showCreateDialog = true })
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .testTag(CoverScreenTestTags.CREATE_PLAYLIST),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                        contentDescription = stringResource(R.string.coverscreen_action_create_playlist),
+                        tint = MaterialTheme.aardBlue,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = stringResource(R.string.coverscreen_action_new_playlist),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1B1F2A).copy(alpha = 0.90f))
+                        .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                        .clickable(role = Role.Button, onClick = onImportPlaylist)
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.FileDownload,
+                        contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
+                        tint = MaterialTheme.aardBlue,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = stringResource(R.string.coverscreen_action_import_playlist),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
         }
     }

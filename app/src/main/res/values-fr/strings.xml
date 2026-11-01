@@ -36,6 +36,25 @@
     <string name="coverscreen_action_import_playlist">Importer une playlist</string>
     <string name="coverscreen_import_playlist_success">Playlist \"%1$s\" importée (%2$d pistes)</string>
     <string name="coverscreen_import_playlist_failure">Échec de l\'importation de la playlist : %1$s</string>
+    <string name="coverscreen_action_new_playlist">Nouvelle playlist</string>
+    <string name="coverscreen_action_create_playlist">Créer une playlist</string>
+    <string name="coverscreen_action_rename_playlist">Renommer la playlist</string>
+    <string name="coverscreen_action_delete_playlist">Supprimer la playlist</string>
+    <string name="coverscreen_action_reorder_tracks">Réorganiser les pistes</string>
+    <string name="coverscreen_action_back_to_playlists">Retour aux playlists</string>
+    <string name="coverscreen_dialog_create_playlist_title">NOUVELLE PLAYLIST</string>
+    <string name="coverscreen_dialog_rename_playlist_title">RENOMMER LA PLAYLIST</string>
+    <string name="coverscreen_dialog_delete_playlist_title">SUPPRIMER LA PLAYLIST</string>
+    <string name="coverscreen_dialog_delete_playlist_message">Voulez-vous vraiment supprimer \"%1$s\" ?</string>
+    <string name="coverscreen_dialog_playlist_name_label">Nom de la playlist</string>
+    <string name="coverscreen_action_save">Enregistrer</string>
+    <string name="coverscreen_action_cancel">Annuler</string>
+    <string name="coverscreen_action_delete">Supprimer</string>
+    <string name="coverscreen_action_done">Terminé</string>
+    <string name="coverscreen_action_edit">Modifier</string>
+    <string name="coverscreen_action_shuffle">Aléatoire</string>
+    <string name="coverscreen_empty_playlist_tracks">Cette playlist est vide</string>
+    <string name="coverscreen_action_remove_from_playlist">Retirer de la playlist</string>
 
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">EN LECTURE</string>
