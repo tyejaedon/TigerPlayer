@@ -33,6 +33,9 @@
 
     <string name="coverscreen_action_like">Marcar como me gusta</string>
     <string name="coverscreen_action_edit_playlist_photo">Cambiar foto de la lista</string>
+    <string name="coverscreen_action_import_playlist">Importar lista</string>
+    <string name="coverscreen_import_playlist_success">Lista \"%1$s\" importada (%2$d pistas)</string>
+    <string name="coverscreen_import_playlist_failure">Error al importar lista: %1$s</string>
 
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">EN REPRODUCCIÓN</string>
@@ -41,6 +44,7 @@
     <string name="coverscreen_status_no_lyrics_found">NO SE ENCONTRÓ LETRA</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Inicio</string>
     <string name="coverscreen_tab_artists">Artistas</string>
     <string name="coverscreen_tab_albums">Álbumes</string>
     <string name="coverscreen_tab_songs">Canciones</string>

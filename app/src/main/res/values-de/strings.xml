@@ -34,12 +34,16 @@
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_action_like">Titel zu Lieblingssongs hinzufügen</string>
     <string name="coverscreen_action_edit_playlist_photo">Playlist-Foto ändern</string>
+    <string name="coverscreen_action_import_playlist">Playlist importieren</string>
+    <string name="coverscreen_import_playlist_success">Playlist \"%1$s\" importiert (%2$d Titel)</string>
+    <string name="coverscreen_import_playlist_failure">Fehler beim Importieren der Playlist: %1$s</string>
     <string name="coverscreen_status_now_playing">WIEDERGABE</string>
     <string name="coverscreen_status_paused">ANGEHALTEN</string>
     <string name="coverscreen_status_flex_mode_active">FLEX-MODUS AKTIV</string>
     <string name="coverscreen_status_no_lyrics_found">KEIN SONGTEXT GEFUNDEN</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Start</string>
     <string name="coverscreen_tab_artists">Künstler</string>
     <string name="coverscreen_tab_albums">Alben</string>
     <string name="coverscreen_tab_songs">Titel</string>

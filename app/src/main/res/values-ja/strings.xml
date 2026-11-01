@@ -33,6 +33,9 @@
 
     <string name="coverscreen_action_like">お気に入りに追加</string>
     <string name="coverscreen_action_edit_playlist_photo">プレイリストの画像を変更</string>
+    <string name="coverscreen_action_import_playlist">プレイリストをインポート</string>
+    <string name="coverscreen_import_playlist_success">プレイリスト「%1$s」をインポートしました（%2$d曲）</string>
+    <string name="coverscreen_import_playlist_failure">プレイリストのインポートに失敗しました: %1$s</string>
 
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">再生中</string>
@@ -41,6 +44,7 @@
     <string name="coverscreen_status_no_lyrics_found">歌詞が見つかりません</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">ホーム</string>
     <string name="coverscreen_tab_artists">アーティスト</string>
     <string name="coverscreen_tab_albums">アルバム</string>
     <string name="coverscreen_tab_songs">曲</string>

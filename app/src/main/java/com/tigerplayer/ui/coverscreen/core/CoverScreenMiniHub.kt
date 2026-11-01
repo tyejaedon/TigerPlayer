@@ -168,7 +168,6 @@ fun CoverScreenMiniHub(
             .fillMaxSize()
             .testTag(CoverScreenTestTags.MINI_HUB_ROOT)
             .onGloballyPositioned { coverScreenCoordinates = it }
-            .background(TigerSurfaceCharcoal)
             .semantics {
                 contentDescription = gestureInstructions
                 stateDescription = if (uiState.isPlaying) nowPlayingStatus else pausedStatus
@@ -282,6 +281,9 @@ fun CoverScreenMiniHub(
             }
         }
 
+        val showWaveform = shouldShowCoverWaveform(hasModalOverlay, fullBleedLyricsVisible, isVortexImmersive)
+        val waveformBottomClearance = if (showWaveform) 34.dp else 0.dp
+
         // HINGE / FLEX-MODE AWARE DUAL DISPLAY
         if (windowState.hasSeparatingHinge) {
             Row(
@@ -313,7 +315,12 @@ fun CoverScreenMiniHub(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .padding(horizontal = 8.dp),
+                        .padding(
+                            start = 8.dp,
+                            end = 8.dp,
+                            top = 0.dp,
+                            bottom = waveformBottomClearance
+                        ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.SpaceBetween
                 ) {
@@ -378,7 +385,12 @@ fun CoverScreenMiniHub(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = verticalPadding),
+                    .padding(
+                        start = 12.dp,
+                        end = 12.dp,
+                        top = verticalPadding,
+                        bottom = verticalPadding + waveformBottomClearance
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.SpaceBetween
             ) {
@@ -437,7 +449,7 @@ fun CoverScreenMiniHub(
         }
 
         // WAVEFORM (Visual Anchor)
-        if (shouldShowCoverWaveform(hasModalOverlay, fullBleedLyricsVisible, isVortexImmersive)) {
+        if (showWaveform) {
             CoverMicroWaveform(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,

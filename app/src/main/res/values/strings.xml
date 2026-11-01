@@ -34,12 +34,16 @@
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_action_like">Like song</string>
     <string name="coverscreen_action_edit_playlist_photo">Change playlist photo</string>
+    <string name="coverscreen_action_import_playlist">Import playlist</string>
+    <string name="coverscreen_import_playlist_success">Imported \"%1$s\" (%2$d tracks)</string>
+    <string name="coverscreen_import_playlist_failure">Failed to import playlist: %1$s</string>
     <string name="coverscreen_status_now_playing">NOW PLAYING</string>
     <string name="coverscreen_status_paused">PAUSED</string>
     <string name="coverscreen_status_flex_mode_active">FLEX MODE ACTIVE</string>
     <string name="coverscreen_status_no_lyrics_found">NO LYRICS FOUND</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">Home</string>
     <string name="coverscreen_tab_artists">Artists</string>
     <string name="coverscreen_tab_albums">Albums</string>
     <string name="coverscreen_tab_songs">Songs</string>
