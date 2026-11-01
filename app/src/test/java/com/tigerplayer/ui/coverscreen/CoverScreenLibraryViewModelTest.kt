@@ -78,6 +78,9 @@ class CoverScreenLibraryViewModelTest {
             ioDispatcher = StandardTestDispatcher(testScheduler)
         )
 
+        viewModel.selectTab(CoverScreenLibraryTab.HOME)
+        assertEquals(CoverScreenLibraryTab.HOME, viewModel.selectedTab.value)
+
         viewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
         assertEquals(CoverScreenLibraryTab.ARTISTS, viewModel.selectedTab.value)
 
@@ -86,6 +89,14 @@ class CoverScreenLibraryViewModelTest {
 
         viewModel.selectTab(CoverScreenLibraryTab.SPOTIFY_PLAYLISTS)
         assertEquals(CoverScreenLibraryTab.SPOTIFY_PLAYLISTS, viewModel.selectedTab.value)
+    }
+
+    @Test
+    fun `CoverScreenLibraryTab contains HOME tab as first entry`() {
+        val tabs = CoverScreenLibraryTab.entries
+        org.junit.Assert.assertTrue(tabs.contains(CoverScreenLibraryTab.HOME))
+        assertEquals("Home", CoverScreenLibraryTab.HOME.label)
+        assertEquals(0, tabs.indexOf(CoverScreenLibraryTab.HOME))
     }
     @Test
     fun `CoverScreenLibraryTab contains SONGS placed between ALBUMS and PLAYLISTS`() {

@@ -247,6 +247,10 @@ class LibraryEngine @Inject constructor(
     /** Creates a new custom playlist with the specified [name]. */
     suspend fun createPlaylist(name: String) = audioRepository.createPlaylist(name)
 
+    /** Saves a snapshot of curated tracks into a new standalone playlist with the specified [name]. */
+    suspend fun saveCuratedPlaylist(name: String, tracks: List<AudioTrack>, artworkUri: String? = null): Long =
+        audioRepository.createPlaylistWithTracks(name, tracks, artworkUri)
+
     /** Deletes the playlist identified by [playlistId]. */
     suspend fun deletePlaylist(playlistId: Long) {
         mediaDataRepository.deletePlaylist(playlistId)

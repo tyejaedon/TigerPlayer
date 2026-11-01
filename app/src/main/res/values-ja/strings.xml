@@ -41,6 +41,7 @@
     <string name="coverscreen_status_no_lyrics_found">歌詞が見つかりません</string>
 
     <!-- Cover Screen Tabs -->
+    <string name="coverscreen_tab_home">ホーム</string>
     <string name="coverscreen_tab_artists">アーティスト</string>
     <string name="coverscreen_tab_albums">アルバム</string>
     <string name="coverscreen_tab_songs">曲</string>

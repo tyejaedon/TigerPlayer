@@ -190,6 +190,7 @@ internal fun CoverScreenModalOverlays(
     ) {
         CoverScreenLibraryMenu(
             playerViewModel = playerViewModel,
+            dashboardViewModel = dashboardViewModel,
             onDismiss = onDismissLibrary,
             showSearchInitially = searchOnLibraryOpen
         )
