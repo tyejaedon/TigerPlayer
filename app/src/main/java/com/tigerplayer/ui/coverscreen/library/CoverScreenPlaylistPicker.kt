@@ -24,9 +24,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,10 +73,50 @@ import kotlin.math.roundToInt
 internal fun LocalPlaylistPicker(
     playlists: List<Playlist>,
     onPlaylistSelected: (Playlist) -> Unit,
-    onEditPhoto: (Playlist) -> Unit
+    onEditPhoto: (Playlist) -> Unit,
+    onImportPlaylist: () -> Unit = {}
 ) {
     if (playlists.isEmpty()) {
-        EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_playlists))
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.coverscreen_empty_playlists),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                        .clickable(role = Role.Button, onClick = onImportPlaylist)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.FileDownload,
+                        contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
+                        tint = MaterialTheme.aardBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.coverscreen_action_import_playlist),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
         return
     }
 
@@ -154,6 +197,39 @@ internal fun LocalPlaylistPicker(
                     .align(Alignment.CenterEnd)
                     .padding(end = 4.dp)
             )
+        }
+
+        // Import M3U/M3U8 button positioned at bottom center
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 6.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF1B1F2A).copy(alpha = 0.90f))
+                    .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                    .clickable(role = Role.Button, onClick = onImportPlaylist)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                    .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.FileDownload,
+                    contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
+                    tint = MaterialTheme.aardBlue,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = stringResource(R.string.coverscreen_action_import_playlist),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
         }
     }
 }

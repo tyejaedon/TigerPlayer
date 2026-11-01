@@ -14,6 +14,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -38,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -55,6 +59,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,8 +73,10 @@ import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -127,6 +136,7 @@ fun CoverScreenLibraryMenu(
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
+    val resources = context.resources
     val view = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -141,6 +151,29 @@ fun CoverScreenLibraryMenu(
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
     var playlistToEdit by remember { mutableStateOf<Playlist?>(null) }
+    var importStatusMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val importM3uLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val result = playerViewModel.importM3uPlaylist(uri)
+                result.onSuccess { importResult ->
+                    importStatusMessage = resources.getString(
+                        R.string.coverscreen_import_playlist_success,
+                        importResult.playlistName,
+                        importResult.importedCount
+                    )
+                }.onFailure { err ->
+                    importStatusMessage = resources.getString(
+                        R.string.coverscreen_import_playlist_failure,
+                        err.message ?: "Unknown error"
+                    )
+                }
+            }
+        }
+    }
     val playlistImagePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: android.net.Uri? ->
@@ -554,6 +587,18 @@ fun CoverScreenLibraryMenu(
                                 onEditPhoto = { playlist ->
                                     playlistToEdit = playlist
                                     playlistImagePickerLauncher.launch("image/*")
+                                },
+                                onImportPlaylist = {
+                                    importM3uLauncher.launch(
+                                        arrayOf(
+                                            "audio/x-mpegurl",
+                                            "audio/mpegurl",
+                                            "application/vnd.apple.mpegurl",
+                                            "application/x-mpegurl",
+                                            "text/plain",
+                                            "*/*"
+                                        )
+                                    )
                                 }
                             )
 
@@ -566,6 +611,37 @@ fun CoverScreenLibraryMenu(
                                 }
                             )
                         }
+                    }
+                }
+            }
+
+            // Import status notification overlay
+            importStatusMessage?.let { msg ->
+                LaunchedEffect(msg) {
+                    kotlinx.coroutines.delay(3500)
+                    importStatusMessage = null
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp, start = 16.dp, end = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1E232E))
+                            .border(1.dp, MaterialTheme.aardBlue, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .testTag(CoverScreenTestTags.IMPORT_STATUS_OVERLAY)
+                    ) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }

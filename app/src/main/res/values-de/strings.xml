@@ -34,6 +34,9 @@
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_action_like">Titel zu Lieblingssongs hinzufügen</string>
     <string name="coverscreen_action_edit_playlist_photo">Playlist-Foto ändern</string>
+    <string name="coverscreen_action_import_playlist">Playlist importieren</string>
+    <string name="coverscreen_import_playlist_success">Playlist \"%1$s\" importiert (%2$d Titel)</string>
+    <string name="coverscreen_import_playlist_failure">Fehler beim Importieren der Playlist: %1$s</string>
     <string name="coverscreen_status_now_playing">WIEDERGABE</string>
     <string name="coverscreen_status_paused">ANGEHALTEN</string>
     <string name="coverscreen_status_flex_mode_active">FLEX-MODUS AKTIV</string>
