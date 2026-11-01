@@ -77,5 +77,7 @@ class CoverScreenPlaylistWheelTest {
         assertEquals("cover_screen_playlist_slider", CoverScreenTestTags.PLAYLIST_SLIDER)
         assertEquals("cover_screen_local_playlist_42", CoverScreenTestTags.localPlaylist(42L))
         assertEquals("cover_screen_edit_playlist_photo_42", CoverScreenTestTags.editPlaylistPhoto(42L))
+        assertEquals("cover_screen_import_playlist", CoverScreenTestTags.IMPORT_PLAYLIST)
+        assertEquals("cover_screen_import_status_overlay", CoverScreenTestTags.IMPORT_STATUS_OVERLAY)
     }
 }
