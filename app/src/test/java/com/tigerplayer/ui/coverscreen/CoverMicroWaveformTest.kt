@@ -146,8 +146,8 @@ class CoverMicroWaveformTest {
         val width = 200f
         val baseAmplitude = 6.5f
         val wave1Amp = baseAmplitude
-        val wave2Amp = wave1Amp * 4f
-        val wave3Amp = wave2Amp * 3f
+        val wave2Amp = wave1Amp * 2f
+        val wave3Amp = wave2Amp * 1.5f
         val baselineY = 40f
         val overlapPx = 3f
         val piOver4 = (Math.PI / 4.0).toFloat()
@@ -168,7 +168,7 @@ class CoverMicroWaveformTest {
             frequencyMultiplier = 1.0f
         )
 
-        // Wave 2: Sine Wave starting at PI / 4 radians (4x larger than Wave 1)
+        // Wave 2: Sine Wave starting at PI / 4 radians (2x larger than Wave 1)
         populatePositiveWaveformPath(
             path = path2,
             fillPath = fill2,
@@ -183,7 +183,7 @@ class CoverMicroWaveformTest {
             frequencyMultiplier = 1.0f
         )
 
-        // Wave 3: Cosine Wave (3x larger than Wave 2 = 12x Wave 1)
+        // Wave 3: Cosine Wave (1.5x larger than Wave 2 = 3x Wave 1)
         populatePositiveWaveformPath(
             path = path3,
             fillPath = fill3,
@@ -199,9 +199,9 @@ class CoverMicroWaveformTest {
         )
 
         // Verify exact relative amplitude factor scaling
-        assertEquals(4f, wave2Amp / wave1Amp, 0.001f)
-        assertEquals(3f, wave3Amp / wave2Amp, 0.001f)
-        assertEquals(12f, wave3Amp / wave1Amp, 0.001f)
+        assertEquals(2f, wave2Amp / wave1Amp, 0.001f)
+        assertEquals(1.5f, wave3Amp / wave2Amp, 0.001f)
+        assertEquals(3f, wave3Amp / wave1Amp, 0.001f)
 
         // Verify paths are non-empty
         assertTrue("Wave 1 path must not be empty", !path1.isEmpty)
@@ -300,7 +300,7 @@ class CoverMicroWaveformTest {
     }
 
     @Test
-    fun `populatePositiveWaveformPath smoothly tapers to baseline at horizontal boundaries`() {
+    fun `populatePositiveWaveformPath maintains natural sinusoidal curvature across entire width without boundary flattening`() {
         val path = Path()
         val fillPath = Path()
         val width = 200f
@@ -309,7 +309,7 @@ class CoverMicroWaveformTest {
         val overlapPx = 2f
         val effectiveBaselineY = baselineY + overlapPx
 
-        // Test with cosine wave and phase offset which would normally start at peak height at x=0
+        // Test with cosine wave with phase = 0f: cosine is 1 at x=0, so the curve smoothly starts at apex peak without flattening to baseline
         populatePositiveWaveformPath(
             path = path,
             fillPath = fillPath,
@@ -318,18 +318,19 @@ class CoverMicroWaveformTest {
             maxHeight = maxHeight,
             baselineY = baselineY,
             overlapPx = overlapPx,
-            phase = 1.2f,
-            phaseOffset = 0.5f,
+            phase = 0f,
+            phaseOffset = 0f,
             isCosine = true,
-            waveCycles = 0.8f
+            waveCycles = 2.0f
         )
 
         val androidPath = path.asAndroidPath()
         val bounds = RectF()
         androidPath.computeBounds(bounds, true)
 
-        // At endpoints x=0 and x=width, boundaryEnvelope tapers amplitude to zero, anchoring bottom at effectiveBaselineY
+        // Bottom rests at baseline and top curves up to peak height smoothly
         assertEquals(effectiveBaselineY, bounds.bottom, 0.1f)
+        assertTrue("Wave bounds top must curve up near peak height", bounds.top <= effectiveBaselineY - (maxHeight * 0.85f))
     }
 
     @Test

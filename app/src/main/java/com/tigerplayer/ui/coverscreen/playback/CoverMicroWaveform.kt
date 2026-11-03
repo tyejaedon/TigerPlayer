@@ -233,10 +233,10 @@ fun CoverMicroWaveform(
                 val trackTop = trackCenterY - trackRadius
                 val overlapPx = 1.5.dp.toPx()
                 val effectiveBaselineY = trackTop + overlapPx
-                // Unconfined relative wave amplitude hierarchy: Wave 2 is 4x Wave 1, Wave 3 is 3x Wave 2 (12x Wave 1)
+                // Harmonized relative wave amplitude hierarchy: Wave 2 is 2x Wave 1, Wave 3 is 1.5x Wave 2 (3x Wave 1)
                 val wave1Amplitude = baseWaveAmplitude.toPx()
-                val wave2Amplitude = wave1Amplitude * 4f
-                val wave3Amplitude = wave2Amplitude * 3f
+                val wave2Amplitude = wave1Amplitude * 2f
+                val wave3Amplitude = wave2Amplitude * 1.5f
                 val piOver4 = (Math.PI / 4.0).toFloat() // PI / 4 radians (45 degree phase shift)
                 val piOver2 = (Math.PI / 2.0).toFloat() // PI / 2 radians (90 degree phase shift)
 
@@ -248,7 +248,7 @@ fun CoverMicroWaveform(
                     cornerRadius = CornerRadius(trackRadius, trackRadius)
                 )
 
-                // 1. Populate Wave 3: 3x larger than Wave 2 (12x Wave 1) - unconfined towering apex tier
+                // 1. Populate Wave 3: 1.5x larger than Wave 2 (3x Wave 1) - crowning cyan apex tier
                 populatePositiveWaveformPath(
                     path = wavePath3,
                     fillPath = fillPath3,
@@ -261,12 +261,12 @@ fun CoverMicroWaveform(
                     phaseOffset = 0f,
                     isCosine = true,
                     frequencyMultiplier = 1.0f,
-                    waveCycles = 0.8f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy
                 )
 
-                // 2. Populate Wave 2: 4x larger than Wave 1 - unconfined intermediate middle tier (PI / 4 phase lead)
+                // 2. Populate Wave 2: 2x larger than Wave 1 - intermediate middle tier (PI / 4 phase lead)
                 populatePositiveWaveformPath(
                     path = wavePath2,
                     fillPath = fillPath2,
@@ -279,7 +279,7 @@ fun CoverMicroWaveform(
                     phaseOffset = piOver4,
                     isCosine = false,
                     frequencyMultiplier = 1.0f,
-                    waveCycles = 0.8f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy
                 )
@@ -297,7 +297,7 @@ fun CoverMicroWaveform(
                     phaseOffset = 0f,
                     isCosine = false,
                     frequencyMultiplier = 1.0f,
-                    waveCycles = 0.8f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy
                 )
@@ -312,17 +312,36 @@ fun CoverMicroWaveform(
                         cornerRadius = CornerRadius(trackRadius, trackRadius)
                     )
 
-                    // Unified fill and stroke alpha values across all 3 waves for balanced visual presence
-                    val activeFillAlphaTop = 0.75f
-                    val activeFillAlphaBottom = 0.65f
-                    val activeGlowAlpha = 0.60f
-                    val activeStrokeAlpha = 0.95f
+                    // Optimal transparency for 2.5D volumetric glassmorphic depth
+                    val activeFillAlphaTop = 0.38f
+                    val activeFillAlphaBottom = 0.12f
+                    val activeGlowAlpha = 0.55f
+                    val activeStrokeAlpha = 0.92f
 
-                    // Wave 3 (Cosine Wave): Tertiary Neon Color (3x Wave 2, 12x Wave 1 - crowning cyan peaks)
+                    // 2.5D depth shadow offsets and occlusion tones
+                    val shadowOffset3 = 2.dp.toPx()
+                    val shadowOffset2 = 1.8.dp.toPx()
+                    val shadowOffset1 = 1.5.dp.toPx()
+                    val shadowColor3 = Color.Black.copy(alpha = 0.20f)
+                    val shadowColor2 = Color.Black.copy(alpha = 0.22f)
+                    val shadowColor1 = Color.Black.copy(alpha = 0.25f)
+
+                    // Wave 3 (Cosine Wave): Tertiary Neon Color (1.5x Wave 2, 3x Wave 1 - crowning cyan peaks)
+                    // 2.5D ambient occlusion depth shadow beneath Wave 3
+                    drawContext.canvas.save()
+                    drawContext.canvas.translate(0f, shadowOffset3)
+                    drawPath(
+                        path = fillPath3,
+                        color = shadowColor3
+                    )
+                    drawContext.canvas.restore()
+
+                    // Wave 3 volumetric 2.5D translucent gradient fill
                     drawPath(
                         path = fillPath3,
                         brush = Brush.verticalGradient(
                             colors = listOf(
+                                Color.White.copy(alpha = activeFillAlphaTop * 0.40f),
                                 neonPalette.tertiary.copy(alpha = activeFillAlphaTop),
                                 neonPalette.tertiary.copy(alpha = activeFillAlphaBottom)
                             ),
@@ -330,23 +349,44 @@ fun CoverMicroWaveform(
                             endY = effectiveBaselineY
                         )
                     )
-                    // Wave 3 subtle neon glow halo
+                    // Wave 3 pronounced glitter glow: wide atmospheric bloom + inner neon glow + crisp stroke + white glitter core
+                    drawPath(
+                        path = wavePath3,
+                        color = neonPalette.tertiary.copy(alpha = 0.28f),
+                        style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round)
+                    )
                     drawPath(
                         path = wavePath3,
                         color = neonPalette.tertiary.copy(alpha = activeGlowAlpha),
-                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                        style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath3,
                         color = neonPalette.tertiary.copy(alpha = activeStrokeAlpha),
                         style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
                     )
+                    drawPath(
+                        path = wavePath3,
+                        color = Color.White.copy(alpha = 0.85f),
+                        style = Stroke(width = 0.75.dp.toPx(), cap = StrokeCap.Round)
+                    )
 
-                    // Wave 2 (Sine Wave at PI / 4 rad): Secondary Neon Color (4x Wave 1 - vibrant orange crests)
+                    // Wave 2 (Sine Wave at PI / 4 rad): Secondary Neon Color (2x Wave 1 - vibrant orange crests)
+                    // 2.5D ambient occlusion depth shadow beneath Wave 2
+                    drawContext.canvas.save()
+                    drawContext.canvas.translate(0f, shadowOffset2)
+                    drawPath(
+                        path = fillPath2,
+                        color = shadowColor2
+                    )
+                    drawContext.canvas.restore()
+
+                    // Wave 2 volumetric 2.5D translucent gradient fill
                     drawPath(
                         path = fillPath2,
                         brush = Brush.verticalGradient(
                             colors = listOf(
+                                Color.White.copy(alpha = activeFillAlphaTop * 0.35f),
                                 neonPalette.secondary.copy(alpha = activeFillAlphaTop),
                                 neonPalette.secondary.copy(alpha = activeFillAlphaBottom)
                             ),
@@ -354,23 +394,34 @@ fun CoverMicroWaveform(
                             endY = effectiveBaselineY
                         )
                     )
-                    // Wave 2 subtle neon glow halo
+                    // Wave 2 balanced neon glow halo
                     drawPath(
                         path = wavePath2,
-                        color = neonPalette.secondary.copy(alpha = activeGlowAlpha),
+                        color = neonPalette.secondary.copy(alpha = activeGlowAlpha * 0.75f),
                         style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath2,
-                        color = neonPalette.secondary.copy(alpha = activeStrokeAlpha),
-                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                        color = neonPalette.secondary.copy(alpha = activeStrokeAlpha * 0.90f),
+                        style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
                     )
 
                     // Wave 1 (Sine Wave): Primary Neon Color (Base amplitude - vibrant red foundation glow & solid)
+                    // 2.5D ambient occlusion depth shadow beneath Wave 1
+                    drawContext.canvas.save()
+                    drawContext.canvas.translate(0f, shadowOffset1)
+                    drawPath(
+                        path = fillPath1,
+                        color = shadowColor1
+                    )
+                    drawContext.canvas.restore()
+
+                    // Wave 1 volumetric 2.5D translucent gradient fill
                     drawPath(
                         path = fillPath1,
                         brush = Brush.verticalGradient(
                             colors = listOf(
+                                Color.White.copy(alpha = activeFillAlphaTop * 0.40f),
                                 neonPalette.primary.copy(alpha = activeFillAlphaTop),
                                 neonPalette.primary.copy(alpha = activeFillAlphaBottom)
                             ),
@@ -378,16 +429,26 @@ fun CoverMicroWaveform(
                             endY = effectiveBaselineY
                         )
                     )
-                    // Wave 1 subtle neon glow halo
+                    // Wave 1 pronounced glitter glow: wide atmospheric bloom + inner neon glow + crisp stroke + white glitter core
+                    drawPath(
+                        path = wavePath1,
+                        color = neonPalette.primary.copy(alpha = 0.32f),
+                        style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
+                    )
                     drawPath(
                         path = wavePath1,
                         color = neonPalette.primary.copy(alpha = activeGlowAlpha),
-                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath1,
                         color = neonPalette.primary.copy(alpha = activeStrokeAlpha),
                         style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = wavePath1,
+                        color = Color.White.copy(alpha = 0.90f),
+                        style = Stroke(width = 0.85.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
 
@@ -542,7 +603,7 @@ fun formatCoverDuration(ms: Long): String {
  * @param phaseOffset Fixed phase offset in radians (e.g. PI / 4 for the second wave).
  * @param isCosine Whether this wave uses cosine (true) or sine (false).
  * @param frequencyMultiplier Harmonic frequency scaling factor.
- * @param waveCycles Number of complete wave cycles across the width (defaults to 0.8f for organic song-duration curves).
+ * @param waveCycles Number of complete wave cycles across the width (defaults to 2.0f for consistent sinusoidal wavelength).
  * @param bass Real-time low frequency energy (0..1).
  * @param energy Audio energy scaling factor (0.2..1.2).
  */
@@ -558,7 +619,7 @@ fun populatePositiveWaveformPath(
     phaseOffset: Float = 0f,
     isCosine: Boolean = false,
     frequencyMultiplier: Float = 1f,
-    waveCycles: Float = 0.8f,
+    waveCycles: Float = 2.0f,
     bass: Float = 0f,
     energy: Float = 1f
 ): Path {
@@ -581,7 +642,6 @@ fun populatePositiveWaveformPath(
     val twoPi = (Math.PI * 2.0).toFloat()
     val sampleCount = max(64, points.size)
     val step = width / sampleCount
-    val taperPx = (width * 0.08f).coerceIn(12f, 32f)
 
     // Helper to compute wave Y coordinate at any horizontal pixel position x
     fun computeWaveY(x: Float): Float {
@@ -590,15 +650,7 @@ fun populatePositiveWaveformPath(
         val rawTrig = if (isCosine) cos(angle.toDouble()).toFloat() else sin(angle.toDouble()).toFloat()
         // Raised sinusoid: continuous smooth wave in [0, 1] without flat-line clipping
         val smoothOscillation = 0.5f * (1f + rawTrig)
-
-        // Smoothstep edge windowing envelope so the wave smoothly touches baseline at x=0 and x=width
-        val leftTaper = (x / taperPx).coerceIn(0f, 1f)
-        val rightTaper = ((width - x) / taperPx).coerceIn(0f, 1f)
-        val smoothLeft = leftTaper * leftTaper * (3f - 2f * leftTaper)
-        val smoothRight = rightTaper * rightTaper * (3f - 2f * rightTaper)
-        val boundaryEnvelope = smoothLeft * smoothRight
-
-        val peakHeight = smoothOscillation * effectiveHeight * boundaryEnvelope
+        val peakHeight = smoothOscillation * effectiveHeight
         return effectiveBaselineY - peakHeight
     }
 

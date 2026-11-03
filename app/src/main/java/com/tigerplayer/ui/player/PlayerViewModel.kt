@@ -517,6 +517,20 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun deletePlaylist(playlistId: Long) {
+        if (playlistId == LibraryEngine.LIKED_SONGS_ID) return
+        viewModelScope.launch {
+            libraryEngine.deletePlaylist(playlistId)
+        }
+    }
+
+    fun renamePlaylist(playlistId: Long, newName: String) {
+        if (playlistId == LibraryEngine.LIKED_SONGS_ID || newName.isBlank()) return
+        viewModelScope.launch {
+            libraryEngine.renamePlaylist(playlistId, newName.trim())
+        }
+    }
+
     // --- M3U / M3U8 IMPORT & EXPORT (issue #58) ---
 
     suspend fun importM3uPlaylist(
