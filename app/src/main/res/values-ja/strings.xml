@@ -36,6 +36,25 @@
     <string name="coverscreen_action_import_playlist">プレイリストをインポート</string>
     <string name="coverscreen_import_playlist_success">プレイリスト「%1$s」をインポートしました（%2$d曲）</string>
     <string name="coverscreen_import_playlist_failure">プレイリストのインポートに失敗しました: %1$s</string>
+    <string name="coverscreen_action_new_playlist">新規プレイリスト</string>
+    <string name="coverscreen_action_create_playlist">プレイリストを作成</string>
+    <string name="coverscreen_action_rename_playlist">プレイリスト名を変更</string>
+    <string name="coverscreen_action_delete_playlist">プレイリストを削除</string>
+    <string name="coverscreen_action_reorder_tracks">曲順を変更</string>
+    <string name="coverscreen_action_back_to_playlists">プレイリスト一覧へ戻る</string>
+    <string name="coverscreen_dialog_create_playlist_title">新規プレイリスト</string>
+    <string name="coverscreen_dialog_rename_playlist_title">プレイリスト名を変更</string>
+    <string name="coverscreen_dialog_delete_playlist_title">プレイリストを削除</string>
+    <string name="coverscreen_dialog_delete_playlist_message">「%1$s」を削除してもよろしいですか？</string>
+    <string name="coverscreen_dialog_playlist_name_label">プレイリスト名</string>
+    <string name="coverscreen_action_save">保存</string>
+    <string name="coverscreen_action_cancel">キャンセル</string>
+    <string name="coverscreen_action_delete">削除</string>
+    <string name="coverscreen_action_done">完了</string>
+    <string name="coverscreen_action_edit">編集</string>
+    <string name="coverscreen_action_shuffle">シャッフル</string>
+    <string name="coverscreen_empty_playlist_tracks">このプレイリストは空です</string>
+    <string name="coverscreen_action_remove_from_playlist">プレイリストから削除</string>
 
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">再生中</string>

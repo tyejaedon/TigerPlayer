@@ -322,7 +322,7 @@ fun CoverScreenMiniHub(
                             bottom = waveformBottomClearance
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.SpaceBetween
+                    verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.Center
                 ) {
                     TrackInfoText(
                         track = track,
@@ -357,7 +357,7 @@ fun CoverScreenMiniHub(
                         screenHeightDp = windowState.heightDp.dp
                     )
                     if (shouldShowCoverControls(isVortexImmersive)) {
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         CoverAccessibleControls(
                             isPlaying = uiState.isPlaying,
                             isShuffleEnabled = uiState.isShuffleEnabled,
@@ -392,7 +392,7 @@ fun CoverScreenMiniHub(
                         bottom = verticalPadding + waveformBottomClearance
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.SpaceBetween
+                verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.Center
             ) {
                 TrackInfoText(
                     track = track,
@@ -427,7 +427,7 @@ fun CoverScreenMiniHub(
                     screenHeightDp = windowState.heightDp.dp
                 )
                 if (shouldShowCoverControls(isVortexImmersive)) {
-                    Spacer(modifier = Modifier.height(if (isTightScreen) 6.dp else 10.dp))
+                    Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 6.dp))
                     CoverAccessibleControls(
                         isPlaying = uiState.isPlaying,
                         isShuffleEnabled = uiState.isShuffleEnabled,
