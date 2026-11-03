@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Timeline
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,6 +67,7 @@ import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.KeyboardTestTags
 import com.tigerplayer.ui.prism.PrismTestTags
 import com.tigerplayer.ui.prism.PrismViewModel
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerPlayerTheme
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
@@ -97,6 +99,7 @@ fun HomeScreen(
     dashboardViewModel: DashboardViewModel,
     prismViewModel: PrismViewModel,
     onNavigateToSonicPrism: () -> Unit,
+    onNavigateToEqualizer: (() -> Unit)? = null,
     onBottomNavigationVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -110,6 +113,7 @@ fun HomeScreen(
     var showConstellation by remember { mutableStateOf(false) }
     var showSonicFootprint by remember { mutableStateOf(false) }
     var showAudioDevicesHub by remember { mutableStateOf(false) }
+    var showStudioEqualizer by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     val sonicFootprintOpenRequest by viewModel.sonicFootprintOpenRequest.collectAsStateWithLifecycle()
 
@@ -120,8 +124,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(showConstellation, showSonicFootprint) {
-        onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint)
+    LaunchedEffect(showConstellation, showSonicFootprint, showStudioEqualizer) {
+        onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint || showStudioEqualizer)
     }
 
     DisposableEffect(Unit) {
@@ -144,8 +148,9 @@ fun HomeScreen(
         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub) {
-        if (showAudioDevicesHub) showAudioDevicesHub = false
+    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub || showStudioEqualizer) {
+        if (showStudioEqualizer) showStudioEqualizer = false
+        else if (showAudioDevicesHub) showAudioDevicesHub = false
         else if (showSonicFootprint) showSonicFootprint = false
         else if (showConstellation) showConstellation = false
         else if (isStatsExpanded) isStatsExpanded = false
@@ -254,7 +259,7 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         NexusGatewayCard(
                             modifier = Modifier.weight(1f),
@@ -271,6 +276,17 @@ fun HomeScreen(
                             color = NeuralPurple,
                             icon = Icons.Rounded.GraphicEq,
                             onClick = { showConstellation = true }
+                        )
+                        NexusGatewayCard(
+                            modifier = Modifier.weight(1f),
+                            title = "EQUALIZER",
+                            subtitle = "PEQ & AutoEq",
+                            color = TigerNeonOrange,
+                            icon = Icons.Rounded.Tune,
+                            onClick = {
+                                if (onNavigateToEqualizer != null) onNavigateToEqualizer()
+                                else showStudioEqualizer = true
+                            }
                         )
                     }
                 }
@@ -391,6 +407,17 @@ fun HomeScreen(
             ConstellationScreen(
                 viewModel = constellationViewModel,
                 onClose = { showConstellation = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showStudioEqualizer,
+            enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(400)),
+            exit = fadeOut(tween(250)) + slideOutVertically(targetOffsetY = { it / 4 }, animationSpec = tween(250))
+        ) {
+            com.tigerplayer.ui.equalizer.EqualizerHubView(
+                isCoverScreen = false,
+                onClose = { showStudioEqualizer = false }
             )
         }
     }

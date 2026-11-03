@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.equalizer.EqualizerHubView
 import com.tigerplayer.ui.home.HomeUiState
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.TigerNeonOrange
@@ -77,7 +78,8 @@ fun CoverScreenHomeView(
     onClose: (() -> Unit)? = null,
     onOpenDaylistDetail: (() -> Unit)? = null,
     onOpenDiscoveryDetail: (() -> Unit)? = null,
-    onOpenConstellationDetail: (() -> Unit)? = null
+    onOpenConstellationDetail: (() -> Unit)? = null,
+    onOpenEqHub: (() -> Unit)? = null
 ) {
     val homeState by playerViewModel.homeUiState.collectAsStateWithLifecycle()
     val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
@@ -88,6 +90,7 @@ fun CoverScreenHomeView(
     var internalDaylistOpen by remember { mutableStateOf(false) }
     var internalDiscoveryOpen by remember { mutableStateOf(false) }
     var internalConstellationOpen by remember { mutableStateOf(false) }
+    var internalEqHubOpen by remember { mutableStateOf(false) }
 
     val handleOpenDaylist = {
         if (onOpenDaylistDetail != null) {
@@ -113,6 +116,14 @@ fun CoverScreenHomeView(
         }
     }
 
+    val handleOpenEqHub = {
+        if (onOpenEqHub != null) {
+            onOpenEqHub()
+        } else {
+            internalEqHubOpen = true
+        }
+    }
+
     CoverScreenHomeContent(
         homeState = homeState,
         daylistTracks = daylistTracks,
@@ -122,6 +133,7 @@ fun CoverScreenHomeView(
         onDaylistClick = handleOpenDaylist,
         onDiscoveryClick = handleOpenDiscovery,
         onConstellationClick = handleOpenConstellation,
+        onEqHubClick = handleOpenEqHub,
         modifier = modifier,
         onClose = onClose
     )
@@ -233,6 +245,18 @@ fun CoverScreenHomeView(
             }
         }
     }
+
+    if (internalEqHubOpen) {
+        Dialog(
+            onDismissRequest = { internalEqHubOpen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            EqualizerHubView(
+                isCoverScreen = true,
+                onClose = { internalEqHubOpen = false }
+            )
+        }
+    }
 }
 
 /**
@@ -248,6 +272,7 @@ fun CoverScreenHomeContent(
     onDaylistClick: () -> Unit,
     onDiscoveryClick: () -> Unit,
     onConstellationClick: () -> Unit = {},
+    onEqHubClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null
 ) {
@@ -267,6 +292,14 @@ fun CoverScreenHomeContent(
                 CoverScreenHomeHeader(
                     onClose = onClose,
                     modifier = Modifier.testTag(CoverScreenTestTags.HOME_HEADER)
+                )
+            }
+
+            // Equalizer & AutoEq Hub Section Card
+            item {
+                CoverScreenEqHubCard(
+                    onOpenEqHub = onEqHubClick,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
