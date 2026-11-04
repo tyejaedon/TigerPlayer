@@ -200,7 +200,7 @@ class KeyboardImeActionsTest {
             .performImeAction()
 
         composeRule.runOnIdle {
-            io.mockk.verify {
+            io.mockk.coVerify {
                 mockViewModel.connectToNavidrome(
                     "https://navidrome.local:4533",
                     "witcher",

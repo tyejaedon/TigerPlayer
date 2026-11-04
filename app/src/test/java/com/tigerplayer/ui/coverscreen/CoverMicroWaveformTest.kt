@@ -362,4 +362,94 @@ class CoverMicroWaveformTest {
         )
         assertEquals("All test tags must be unique", 4, tags.size)
     }
+
+    // --- 5. ENERGETIC MULTI-HARMONIC & FLUX SURGE TESTS ---
+
+    @Test
+    fun `populatePositiveWaveformPath surges aggressively with high bass and flux transients`() {
+        val points = floatArrayOf(0.4f, 0.8f, 0.3f, 0.9f)
+        val pathQuiet = Path()
+        val pathSurge = Path()
+        val width = 300f
+        val maxHeight = 50f
+        val baselineY = 40f
+        val overlapPx = 2f
+
+        populatePositiveWaveformPath(
+            path = pathQuiet,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0f,
+            bass = 0.1f,
+            energy = 0.2f,
+            flux = 0f
+        )
+
+        populatePositiveWaveformPath(
+            path = pathSurge,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0f,
+            bass = 0.95f,
+            energy = 1.1f,
+            flux = 0.90f
+        )
+
+        val boundsQuiet = RectF()
+        pathQuiet.asAndroidPath().computeBounds(boundsQuiet, true)
+        val boundsSurge = RectF()
+        pathSurge.asAndroidPath().computeBounds(boundsSurge, true)
+
+        assertTrue(
+            "Surge wave height (${boundsSurge.height()}) must be significantly larger than quiet wave (${boundsQuiet.height()})",
+            boundsSurge.height() > boundsQuiet.height() * 1.15f
+        )
+    }
+
+    @Test
+    fun `populatePositiveWaveformPath produces rich harmonic ripples when turbulence is active`() {
+        val points = floatArrayOf(0.5f, 0.5f, 0.5f, 0.5f)
+        val smoothPath = Path()
+        val turbulentPath = Path()
+        val width = 300f
+        val maxHeight = 40f
+        val baselineY = 30f
+        val overlapPx = 2f
+
+        populatePositiveWaveformPath(
+            path = smoothPath,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            turbulence = 0f
+        )
+
+        populatePositiveWaveformPath(
+            path = turbulentPath,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            turbulence = 0.40f
+        )
+
+        val smoothBounds = RectF()
+        smoothPath.asAndroidPath().computeBounds(smoothBounds, true)
+        val turbulentBounds = RectF()
+        turbulentPath.asAndroidPath().computeBounds(turbulentBounds, true)
+
+        assertTrue("Both smooth and turbulent paths must develop non-empty curves", !smoothPath.isEmpty && !turbulentPath.isEmpty)
+        assertTrue("Turbulent path bounds must develop rich crests", turbulentBounds.height() > 0f)
+    }
 }

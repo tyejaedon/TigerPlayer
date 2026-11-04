@@ -132,6 +132,7 @@ fun CoverScreenMiniHubContent(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
                 energy = uiState.audioReactiveFrame.energy,
+                flux = uiState.audioReactiveFrame.flux,
                 isPlaying = uiState.isPlaying,
                 isRenderingActive = false,
                 duration = track?.durationMs ?: 240_000L,
