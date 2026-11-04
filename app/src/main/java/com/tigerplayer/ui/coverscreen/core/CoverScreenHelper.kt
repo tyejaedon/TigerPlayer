@@ -22,6 +22,25 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
 @Composable
+fun WetPaint(
+    imageModel: Any?,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    fadeBottomPercent: Float = 0.05f,
+    blurRadius: Float = 14f,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
+    WetPaintingFadeImage(
+        imageModel = imageModel,
+        modifier = modifier,
+        contentDescription = contentDescription,
+        fadeBottomPercent = fadeBottomPercent,
+        blurRadius = blurRadius,
+        contentScale = contentScale
+    )
+}
+
+@Composable
 fun WetPaintingFadeImage(
     imageModel: Any?,
     modifier: Modifier = Modifier,

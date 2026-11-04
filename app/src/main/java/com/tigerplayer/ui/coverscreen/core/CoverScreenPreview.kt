@@ -150,6 +150,12 @@ fun CoverScreenMiniHubContent(
 
 @CoverScreenPreviews
 @Composable
+fun CoverScreenPreview() {
+    CoverScreenMiniHubPreview()
+}
+
+@CoverScreenPreviews
+@Composable
 private fun CoverScreenMiniHubPreview() {
     val sampleTrack = remember {
         Track(
