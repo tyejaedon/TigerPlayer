@@ -62,6 +62,25 @@ class EqualizerHubViewModelTest {
         every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
         coEvery { autoEqRepository.searchHeadphones(any()) } returns emptyList()
 
+        every { autoEqRepository.parseParametricEqText(any(), any(), any(), any(), any()) } answers {
+            val modelName = arg<String>(1)
+            val source = arg<String>(2)
+            val target = arg<String>(3)
+            val form = arg<String>(4)
+            HeadphoneSpecs(
+                modelName = modelName,
+                source = source,
+                targetCurve = target,
+                formFactor = form,
+                preampDb = -4.5f,
+                bands = listOf(
+                    com.tigerplayer.data.model.AutoEqBand(filterType = "PK", frequencyHz = 28f, gainDb = 6.2f, q = 1.41f),
+                    com.tigerplayer.data.model.AutoEqBand(filterType = "LSC", frequencyHz = 105f, gainDb = -2.0f, q = 0.71f),
+                    com.tigerplayer.data.model.AutoEqBand(filterType = "HSC", frequencyHz = 10000f, gainDb = 1.8f, q = 0.71f)
+                )
+            )
+        }
+
         viewModel = EqualizerHubViewModel(
             adaptiveDspEngine = adaptiveDspEngine,
             audioDeviceEngine = audioDeviceEngine,
