@@ -2,15 +2,20 @@ package com.tigerplayer.ui.equalizer
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
@@ -42,62 +47,93 @@ fun EqualizerFrequencyCurve(
     val maxLog = remember { log10(20000.0) }
     val rangeLog = remember { maxLog - minLog }
 
-    val interactiveModifier = if (isInteractive && onNodeDragged != null) {
-        modifier.pointerInput(bands) {
-            var activeDragIndex = -1
+    // Keep latest state references so pointerInput never restarts mid-drag when bands update
+    val currentBands by rememberUpdatedState(bands)
+    val currentOnNodeDragged by rememberUpdatedState(onNodeDragged)
+    val currentOnBandSelected by rememberUpdatedState(onBandSelected)
 
-            detectDragGestures(
-                onDragStart = { startOffset ->
+    // Pre-allocate paths and effects to avoid per-frame GC allocations during dragging
+    val curvePath = remember { Path() }
+    val fillPath = remember { Path() }
+    val dashedEffect = remember { PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f) }
+    val dbSteps = remember { listOf(12f, 6f, 0f, -6f, -12f) }
+    val markerFreqs = remember { listOf(100.0, 1000.0, 10000.0) }
+
+    val interactiveModifier = if (isInteractive) {
+        modifier
+            .pointerInput(Unit) {
+                detectTapGestures { tapOffset ->
                     val w = size.width.toFloat()
                     val h = size.height.toFloat()
-                    if (w > 0f && h > 0f) {
-                        // Find closest band node
-                        val closest = bands.mapIndexed { idx, band ->
-                            val freqLog = log10(band.frequencyHz.toDouble().coerceIn(20.0, 20000.0))
-                            val nx = ((freqLog - minLog) / rangeLog).toFloat() * w
-                            val ny = (0.5f - (band.gainDb / 30f)) * h
-                            Triple(idx, nx, ny)
-                        }.minByOrNull { (_, nx, ny) ->
-                            hypot(nx - startOffset.x, ny - startOffset.y)
-                        }
+                    if (w <= 0f || h <= 0f) return@detectTapGestures
 
-                        if (closest != null) {
-                            val dist = hypot(closest.second - startOffset.x, closest.third - startOffset.y)
-                            if (dist < 48.dp.toPx()) {
-                                activeDragIndex = closest.first
-                                onBandSelected?.invoke(closest.first)
-                            }
-                        }
+                    val hitRadiusPx = 48.dp.toPx()
+                    val closest = currentBands.mapIndexedNotNull { idx, band ->
+                        if (!band.isEnabled) return@mapIndexedNotNull null
+                        val freqLog = log10(band.frequencyHz.toDouble().coerceIn(20.0, 20000.0))
+                        val nx = ((freqLog - minLog) / rangeLog).toFloat() * w
+                        val ny = (0.5f - (band.gainDb / 30f)) * h
+                        val dist = hypot(nx - tapOffset.x, ny - tapOffset.y)
+                        Triple(idx, dist, band)
+                    }.minByOrNull { it.second }
+
+                    if (closest != null && closest.second <= hitRadiusPx) {
+                        currentOnBandSelected?.invoke(closest.first)
                     }
-                },
-                onDrag = { change, dragAmount ->
-                    if (activeDragIndex in bands.indices) {
+                }
+            }
+            .pointerInput(Unit) {
+                var activeDragIndex = -1
+                var dragPositionPx = Offset.Zero
+
+                detectDragGestures(
+                    onDragStart = { startOffset ->
                         val w = size.width.toFloat()
                         val h = size.height.toFloat()
                         if (w > 0f && h > 0f) {
-                            val band = bands[activeDragIndex]
-                            val freqLog = log10(band.frequencyHz.toDouble().coerceIn(20.0, 20000.0))
-                            val currentNx = ((freqLog - minLog) / rangeLog).toFloat() * w
-                            val currentNy = (0.5f - (band.gainDb / 30f)) * h
+                            val hitRadiusPx = 48.dp.toPx()
+                            val closest = currentBands.mapIndexedNotNull { idx, band ->
+                                if (!band.isEnabled) return@mapIndexedNotNull null
+                                val freqLog = log10(band.frequencyHz.toDouble().coerceIn(20.0, 20000.0))
+                                val nx = ((freqLog - minLog) / rangeLog).toFloat() * w
+                                val ny = (0.5f - (band.gainDb / 30f)) * h
+                                val dist = hypot(nx - startOffset.x, ny - startOffset.y)
+                                Triple(idx, Offset(nx, ny), dist)
+                            }.minByOrNull { it.third }
 
-                            val newX = (currentNx + dragAmount.x).coerceIn(0f, w)
-                            val newY = (currentNy + dragAmount.y).coerceIn(0f, h)
-
-                            val newFraction = (newX / w).toDouble().coerceIn(0.0, 1.0)
-                            val targetFreq = 10.0.pow(minLog + newFraction * rangeLog).toFloat()
-
-                            val gainFraction = (0.5f - (newY / h))
-                            val targetGain = (gainFraction * 30f).coerceIn(-15f, 15f)
-
-                            onNodeDragged(activeDragIndex, targetFreq, targetGain)
-                            change.consume()
+                            if (closest != null && closest.third < hitRadiusPx) {
+                                activeDragIndex = closest.first
+                                dragPositionPx = closest.second
+                                currentOnBandSelected?.invoke(closest.first)
+                            } else {
+                                activeDragIndex = -1
+                            }
                         }
-                    }
-                },
-                onDragEnd = { activeDragIndex = -1 },
-                onDragCancel = { activeDragIndex = -1 }
-            )
-        }
+                    },
+                    onDrag = { change, dragAmount ->
+                        if (activeDragIndex in currentBands.indices) {
+                            val w = size.width.toFloat()
+                            val h = size.height.toFloat()
+                            if (w > 0f && h > 0f) {
+                                val newX = (dragPositionPx.x + dragAmount.x).coerceIn(0f, w)
+                                val newY = (dragPositionPx.y + dragAmount.y).coerceIn(0f, h)
+                                dragPositionPx = Offset(newX, newY)
+
+                                val newFraction = (newX / w).toDouble().coerceIn(0.0, 1.0)
+                                val targetFreq = 10.0.pow(minLog + newFraction * rangeLog).toFloat()
+
+                                val gainFraction = 0.5f - (newY / h)
+                                val targetGain = (gainFraction * 30f).coerceIn(-15f, 15f)
+
+                                currentOnNodeDragged?.invoke(activeDragIndex, targetFreq, targetGain)
+                                change.consume()
+                            }
+                        }
+                    },
+                    onDragEnd = { activeDragIndex = -1 },
+                    onDragCancel = { activeDragIndex = -1 }
+                )
+            }
     } else {
         modifier
     }
@@ -112,14 +148,8 @@ fun EqualizerFrequencyCurve(
         if (showGrid) {
             val gridColor = Color.White.copy(alpha = 0.08f)
             val centerLineColor = Color.White.copy(alpha = 0.22f)
-            val stroke1 = Stroke(width = 1f)
-            val dashedStroke = Stroke(
-                width = 1f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
-            )
 
             // Horizontal Decibel lines: +12dB, +6dB, 0dB, -6dB, -12dB
-            val dbSteps = listOf(12f, 6f, 0f, -6f, -12f)
             dbSteps.forEach { db ->
                 val y = (0.5f - (db / 30f)) * h
                 drawLine(
@@ -127,12 +157,11 @@ fun EqualizerFrequencyCurve(
                     start = Offset(0f, y),
                     end = Offset(w, y),
                     strokeWidth = if (db == 0f) 1.5f else 1f,
-                    pathEffect = if (db != 0f) dashedStroke.pathEffect else null
+                    pathEffect = if (db != 0f) dashedEffect else null
                 )
             }
 
             // Vertical logarithmic frequency grid lines (100 Hz, 1 kHz, 10 kHz)
-            val markerFreqs = listOf(100.0, 1000.0, 10000.0)
             markerFreqs.forEach { f ->
                 val fLog = log10(f)
                 val x = ((fLog - minLog) / rangeLog).toFloat() * w
@@ -147,8 +176,8 @@ fun EqualizerFrequencyCurve(
 
         // 2. Render Smooth Frequency Response Curve
         if (points.isNotEmpty()) {
-            val curvePath = Path()
-            val fillPath = Path()
+            curvePath.reset()
+            fillPath.reset()
 
             val firstPoint = points.first()
             val startX = firstPoint.x * w
@@ -167,8 +196,8 @@ fun EqualizerFrequencyCurve(
 
                 val midX = (px + cx) / 2f
                 val midY = (py + cy) / 2f
-                curvePath.quadraticBezierTo(px, py, midX, midY)
-                fillPath.quadraticBezierTo(px, py, midX, midY)
+                curvePath.quadraticTo(px, py, midX, midY)
+                fillPath.quadraticTo(px, py, midX, midY)
             }
 
             val lastPoint = points.last()
@@ -197,7 +226,11 @@ fun EqualizerFrequencyCurve(
             drawPath(
                 path = curvePath,
                 color = curveColor,
-                style = Stroke(width = 3.dp.toPx())
+                style = Stroke(
+                    width = 3.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
             )
         }
 
@@ -208,6 +241,7 @@ fun EqualizerFrequencyCurve(
             val freqLog = log10(band.frequencyHz.toDouble().coerceIn(20.0, 20000.0))
             val nx = ((freqLog - minLog) / rangeLog).toFloat() * w
             val ny = (0.5f - (band.gainDb / 30f)) * h
+            val centerOffset = Offset(nx, ny)
 
             val isSelected = idx == selectedBandIndex
 
@@ -216,7 +250,7 @@ fun EqualizerFrequencyCurve(
                 drawCircle(
                     color = band.color.copy(alpha = 0.35f),
                     radius = 16.dp.toPx(),
-                    center = Offset(nx, ny)
+                    center = centerOffset
                 )
             }
 
@@ -224,14 +258,14 @@ fun EqualizerFrequencyCurve(
             drawCircle(
                 color = if (isSelected) TigerNeonOrange else band.color,
                 radius = if (isSelected) 8.dp.toPx() else 6.dp.toPx(),
-                center = Offset(nx, ny)
+                center = centerOffset
             )
 
             // Center solid dot
             drawCircle(
                 color = Color.White,
-                radius = if (isSelected) 4.dp.toPx() else 2.5f.dp.toPx(),
-                center = Offset(nx, ny)
+                radius = if (isSelected) 4.dp.toPx() else 2.5.dp.toPx(),
+                center = centerOffset
             )
         }
     }

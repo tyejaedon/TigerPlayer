@@ -1,8 +1,10 @@
 package com.tigerplayer.ui.equalizer
 
 import androidx.media3.common.util.UnstableApi
+import com.tigerplayer.data.local.CoverScreenEqPreset
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.AudioDeviceType
 import com.tigerplayer.data.model.AudioOutputDevice
 import com.tigerplayer.data.model.HeadphoneSearchResult
@@ -11,11 +13,13 @@ import com.tigerplayer.data.repository.AutoEqRepository
 import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.AudioDeviceEngine
+import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.engine.FilterType
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -52,8 +56,10 @@ class EqualizerHubViewModelTest {
         Dispatchers.setMain(testDispatcher)
 
         every { adaptiveDspEngine.getSampleRate() } returns 48000
+        every { adaptiveDspEngine.audioReactiveFrame } returns MutableStateFlow(AudioReactiveFrame())
         every { audioDeviceEngine.activeDevice } returns activeDeviceFlow
         every { playbackPrefs.acousticEnvironmentMode } returns envModeFlow
+        every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
         coEvery { autoEqRepository.searchHeadphones(any()) } returns emptyList()
 
         viewModel = EqualizerHubViewModel(
@@ -185,5 +191,45 @@ class EqualizerHubViewModelTest {
         assertEquals(AcousticEnvironmentMode.VINYL_WARMTH, viewModel.uiState.value.environmentMode)
         verify { adaptiveDspEngine.setAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH) }
         coVerify { playbackPrefs.saveAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH.name) }
+    }
+
+    @Test
+    fun `selecting SPATIAL_NEXUS studio tab switches active engine source and dispatches 4 spatial nodes`() = runTest(testDispatcher) {
+        viewModel.selectStudioTab(EqualizerStudioTab.SPATIAL_NEXUS)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(EqualizerStudioTab.SPATIAL_NEXUS, state.studioTab)
+        assertEquals(EqualizerEngineSource.SPATIAL_NODES, state.activeEngineSource)
+        assertEquals(4, state.spatialNodes.size)
+        verify { adaptiveDspEngine.updateAcousticNodes(match { it.size == 4 }) }
+    }
+
+    @Test
+    fun `moveSpatialNode updates position and clamps coordinates within -1 and 1`() = runTest(testDispatcher) {
+        viewModel.selectStudioTab(EqualizerStudioTab.SPATIAL_NEXUS)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.moveSpatialNode("sub", androidx.compose.ui.geometry.Offset(-1.5f, 0.5f))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val subNode = viewModel.uiState.value.spatialNodes.first { it.id == "sub" }
+        assertEquals(-1.0f, subNode.spatialPos.x, 0.01f)
+        assertEquals(0.5f, subNode.spatialPos.y, 0.01f)
+        assertEquals("Custom Shape", viewModel.uiState.value.spatialMood)
+    }
+
+    @Test
+    fun `setSpatialMoodPreset applies predefined mood positions and persists`() = runTest(testDispatcher) {
+        viewModel.setSpatialMoodPreset("Night Drive")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("Night Drive", state.spatialMood)
+        assertEquals(EqualizerEngineSource.SPATIAL_NODES, state.activeEngineSource)
+        val sub = state.spatialNodes.first { it.id == "sub" }
+        assertEquals(-0.6f, sub.spatialPos.x, 0.01f)
+        assertEquals(-0.6f, sub.spatialPos.y, 0.01f)
+        coVerify { settingsDataStore.setCoverScreenEqPreset(CoverScreenEqPreset.NIGHT_DRIVE) }
     }
 }
