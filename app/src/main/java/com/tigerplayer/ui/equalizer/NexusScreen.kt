@@ -77,6 +77,16 @@ fun AuralNexusScreen(
     viewModel: AuralNexusViewModel,
     onClose: () -> Unit
 ) {
+    var isStudioMode by remember { mutableStateOf(false) }
+
+    if (isStudioMode) {
+        EqualizerHubView(
+            isCoverScreen = false,
+            onClose = { isStudioMode = false }
+        )
+        return
+    }
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val audioFrame by viewModel.audioReactiveFrame.collectAsStateWithLifecycle()
     val presets = remember { listOf("Neural Adaptive", "Night Drive", "Pure Vocal", "Studio Flat") }
@@ -93,7 +103,11 @@ fun AuralNexusScreen(
         )
 
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Header(uiState.currentMood, onClose)
+            Header(
+                currentMood = uiState.currentMood,
+                onSwitchToStudio = { isStudioMode = true },
+                onClose = onClose
+            )
 
             NexusSpatialCanvas(
                 nodes = uiState.nodes,
@@ -117,7 +131,11 @@ fun AuralNexusScreen(
 }
 
 @Composable
-private fun Header(currentMood: String, onClose: () -> Unit) {
+private fun Header(
+    currentMood: String,
+    onSwitchToStudio: () -> Unit,
+    onClose: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -143,14 +161,35 @@ private fun Header(currentMood: String, onClose: () -> Unit) {
             )
         }
 
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(NeonWhite.copy(alpha = 0.08f), CircleShape)
-                .bounceClick { onClose() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = NeonWhite)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CyberCyan.copy(alpha = 0.15f))
+                    .border(1.dp, CyberCyan.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    .bounceClick { onSwitchToStudio() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "STUDIO PEQ →",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = CyberCyan,
+                    fontSize = 10.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(NeonWhite.copy(alpha = 0.08f), CircleShape)
+                    .bounceClick { onClose() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = NeonWhite)
+            }
         }
     }
 }

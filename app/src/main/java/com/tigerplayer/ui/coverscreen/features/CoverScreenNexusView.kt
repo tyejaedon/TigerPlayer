@@ -31,6 +31,17 @@ fun CoverScreenNexusView(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isHubMode by remember { mutableStateOf(false) }
+
+    if (isHubMode) {
+        com.tigerplayer.ui.equalizer.EqualizerHubView(
+            isCoverScreen = true,
+            onClose = onClose,
+            modifier = modifier
+        )
+        return
+    }
+
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedNodeId by remember { mutableStateOf<String?>(null) }
 
@@ -69,8 +80,23 @@ fun CoverScreenNexusView(
                         fontWeight = FontWeight.Bold,
                         color = TigerCyberCyan
                     )
-                    IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close EQ", tint = Color.White)
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = { isHubMode = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "PEQ HUB →",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = com.tigerplayer.ui.theme.TigerNeonOrange
+                            )
+                        }
+
+                        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close EQ", tint = Color.White)
+                        }
                     }
                 }
 

@@ -12,6 +12,8 @@ object CoverScreenTestTags {
     const val HOME_DAYLIST_CARD = "cover_screen_home_daylist_card"
     const val HOME_DISCOVERY_CARD = "cover_screen_home_discovery_card"
     const val HOME_CONSTELLATION_CARD = "cover_screen_home_constellation_card"
+    const val HOME_EQ_HUB_CARD = "cover_screen_home_eq_hub_card"
+    const val HOME_EQ_MASTER_SWITCH = "cover_screen_home_eq_master_switch"
     const val HOME_CLOSE_BUTTON = "cover_screen_home_close_button"
     const val ARTISTS_GRID = "cover_screen_artists_grid"
     const val ARTISTS_EMPTY_STATE = "cover_screen_artists_empty_state"
