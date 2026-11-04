@@ -63,7 +63,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
+import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.pow
 
 private val CyberCyan = Color(0xFF00E5FF)
 private val ToxicLime = Color(0xFF39FF14)
@@ -111,7 +113,7 @@ fun AuralNexusScreen(
 
             NexusSpatialCanvas(
                 nodes = uiState.nodes,
-                curvePoints = uiState.frequencyResponseCurve,
+                curveBuffer = uiState.frequencyResponseCurve,
                 audioFrame = audioFrame,
                 modifier = Modifier.weight(1f),
                 onNodeDragged = viewModel::moveNode
@@ -125,7 +127,7 @@ fun AuralNexusScreen(
                 letterSpacing = 2.sp,
                 modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp)
             )
-            PresetSelector(presets, uiState.currentMood, viewModel)
+            NexusMoodPresetSelector(presets, uiState.currentMood, viewModel::setMoodPreset)
         }
     }
 }
@@ -197,7 +199,8 @@ private fun Header(
 @Composable
 internal fun NexusSpatialCanvas(
     nodes: List<SpatialNode>,
-    curvePoints: List<Offset>,
+    curvePoints: List<Offset> = emptyList(),
+    curveBuffer: FloatArray = FloatArray(0),
     audioFrame: AudioReactiveFrame,
     modifier: Modifier = Modifier,
     onNodeDragged: (String, Offset) -> Unit
@@ -236,13 +239,23 @@ internal fun NexusSpatialCanvas(
 
             // OPTIMIZED NEON TUBE RENDER
             scratchPath.rewind()
-            buildSmoothCurvePath(
-                path = scratchPath,
-                points = curvePoints,
-                width = size.width,
-                centerY = size.height * 0.5f,
-                yScale = size.height * 0.38f
-            )
+            if (curveBuffer.size >= 4) {
+                buildSmoothCurvePath(
+                    path = scratchPath,
+                    points = curveBuffer,
+                    width = size.width,
+                    centerY = size.height * 0.5f,
+                    yScale = size.height * 0.38f
+                )
+            } else if (curvePoints.isNotEmpty()) {
+                buildSmoothCurvePath(
+                    path = scratchPath,
+                    points = curvePoints,
+                    width = size.width,
+                    centerY = size.height * 0.5f,
+                    yScale = size.height * 0.38f
+                )
+            }
             val tubeGradient = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, ToxicLime, CyberCyan))
             drawPath(scratchPath, tubeGradient, alpha = 0.14f, style = Stroke(42f, cap = StrokeCap.Round))
             drawPath(scratchPath, tubeGradient, alpha = 0.45f, style = Stroke(18f, cap = StrokeCap.Round))
@@ -350,19 +363,66 @@ internal fun NexusSpatialCanvas(
                     fontWeight = FontWeight.Black,
                     modifier = Modifier.align(Alignment.BottomCenter).offset(y = 8.dp)
                 )
+
+                if (isDragging) {
+                    val clampedX = dragOffset.x.coerceIn(-1f, 1f)
+                    val clampedY = dragOffset.y.coerceIn(-1f, 1f)
+                    val t = (clampedX + 1f) * 0.5f
+                    val currentFreq = SpatialNode.MIN_FREQ * (SpatialNode.MAX_FREQ / SpatialNode.MIN_FREQ).pow(t)
+                    val currentGain = (-clampedY) * SpatialNode.MAX_GAIN_DB
+                    val safeGain = if (abs(currentGain) < 0.05f) 0.0f else currentGain
+                    val freqText = if (currentFreq >= 1000f) {
+                        String.format(Locale.US, "%.1f kHz", currentFreq / 1000f)
+                    } else {
+                        String.format(Locale.US, "%.0f Hz", currentFreq)
+                    }
+                    val gainText = String.format(Locale.US, "%+.1f dB", safeGain)
+                    val tooltipText = "$freqText | $gainText"
+
+                    val isNearTop = animatedPos.y < -0.7f
+                    val tooltipOffsetX = when {
+                        animatedPos.x < -0.7f -> 16.dp
+                        animatedPos.x > 0.7f -> (-16).dp
+                        else -> 0.dp
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .align(if (isNearTop) Alignment.BottomCenter else Alignment.TopCenter)
+                            .offset(
+                                x = tooltipOffsetX,
+                                y = if (isNearTop) 28.dp else (-26).dp
+                            )
+                            .background(Color(0xEE080810), RoundedCornerShape(8.dp))
+                            .border(1.dp, node.color.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .testTag("nexus_tooltip_${node.id}")
+                    ) {
+                        Text(
+                            text = tooltipText,
+                            color = NeonWhite,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PresetSelector(
+fun NexusMoodPresetSelector(
     presets: List<String>,
     selected: String,
-    viewModel: AuralNexusViewModel
+    onSelectMood: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     LazyRow(
-        modifier = Modifier.padding(bottom = 32.dp),
+        modifier = modifier.padding(bottom = 32.dp),
         contentPadding = PaddingValues(horizontal = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -382,7 +442,7 @@ private fun PresetSelector(
                     .clip(CircleShape)
                     .background(bgColor)
                     .border(1.dp, if (active) Color.Transparent else NeonWhite.copy(alpha = 0.10f), CircleShape)
-                    .bounceClick { viewModel.setMoodPreset(mood) }
+                    .bounceClick { onSelectMood(mood) }
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
                 Text(
@@ -399,7 +459,7 @@ private fun PresetSelector(
 
 @Composable
 private fun NebulaBackground(
-    points: List<Offset>,
+    points: FloatArray,
     audioFrame: AudioReactiveFrame,
     modifier: Modifier = Modifier
 ) {
@@ -417,7 +477,7 @@ private fun NebulaBackground(
     val cachedPath = remember { Path() }
 
     Canvas(modifier = modifier) {
-        if (points.isEmpty()) return@Canvas
+        if (points.size < 4) return@Canvas
 
         cachedPath.rewind()
         buildSmoothCurvePath(
@@ -427,7 +487,7 @@ private fun NebulaBackground(
             centerY = size.height * 0.5f,
             yScale = size.height * 0.42f
         )
-        
+
         val gradient = Brush.horizontalGradient(listOf(HotPink, ElectricAmber, ToxicLime, CyberCyan))
 
         drawPath(
@@ -459,6 +519,31 @@ private fun nodeBandPeak(nodeId: String, frame: AudioReactiveFrame): Float {
     }.coerceIn(0f, 1f)
 }
 
+private fun buildSmoothCurvePath(
+    path: Path,
+    points: FloatArray,
+    width: Float,
+    centerY: Float,
+    yScale: Float
+) {
+    if (points.size < 4) return
+
+    val firstX = points[0] * width
+    val firstY = centerY + points[1] * yScale
+    path.moveTo(firstX, firstY)
+
+    var i = 2
+    while (i < points.size) {
+        val prevX = points[i - 2] * width
+        val prevY = centerY + points[i - 1] * yScale
+        val currX = points[i] * width
+        val currY = centerY + points[i + 1] * yScale
+
+        val controlX = (prevX + currX) * 0.5f
+        path.cubicTo(controlX, prevY, controlX, currY, currX, currY)
+        i += 2
+    }
+}
 
 private fun buildSmoothCurvePath(
     path: Path,

@@ -150,12 +150,12 @@ fun PlaylistDetailsScreen(
         uri?.let { viewModel.updatePlaylistImage(context, playlistId, it) }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(modifier = Modifier.fillMaxSize().background(ambientBrush)) {
         // 1. DYNAMIC PARALLAX BACKGROUND
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(ambientBrush)
+
         ) {
             if (displayArt != null) {
                 AsyncImage(
