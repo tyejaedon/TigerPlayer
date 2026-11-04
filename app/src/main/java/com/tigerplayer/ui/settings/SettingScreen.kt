@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.AlertDialog
@@ -115,6 +117,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
+    onOpenEqualizer: (() -> Unit)? = null,
     onBackClick: () -> Unit
 ) {
     val settings by viewModel.settingsState.collectAsStateWithLifecycle()
@@ -331,6 +334,19 @@ fun SettingsScreen(
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
+
+                if (onOpenEqualizer != null) {
+                    ListItem(
+                        headlineContent = { Text("STUDIO EQUALIZER & AUTOEQ", fontWeight = FontWeight.Bold) },
+                        supportingContent = { Text("10-band parametric curves, headphone targets, and preamp headroom") },
+                        leadingContent = { Icon(Icons.Rounded.Tune, null, tint = accent) },
+                        trailingContent = {
+                            Text("OPEN →", color = accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        },
+                        modifier = Modifier.clickable { onOpenEqualizer() },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                }
 
                 ListItem(
                     headlineContent = { Text("SYSTEM DECODER / DSP", fontWeight = FontWeight.Bold) },
