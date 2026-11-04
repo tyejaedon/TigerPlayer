@@ -68,15 +68,15 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           🌠 2. ARTIST LAYER (Fibonacci Spiral Arms)
+           🌠 2. ARTIST LAYER (Fibonacci Spiral Arms & Solar System Spacing)
         ----------------------------------- */
         val artists = graph.nodes.filter { it.type == NodeType.ARTIST }
         val goldenAngle = PI * (3.0 - sqrt(5.0))
-        val baseRadius = 2800f
+        val baseRadius = 5500f // Expanded solar-system / galaxy scale
 
         artists.forEachIndexed { i, artist ->
-            val spiralFactor = i.toFloat() * 0.35f
-            val radius = baseRadius * sqrt(i + 1f) + random.nextFloat() * 300f
+            val spiralFactor = i.toFloat() * 0.45f
+            val radius = baseRadius * sqrt(i + 1f) * 1.6f + random.nextFloat() * 800f
             val angle = (i * goldenAngle + spiralFactor).toFloat()
             val color = palette.random(random)
 
@@ -92,7 +92,7 @@ class OrbitalLayoutEngine @Inject constructor() {
                     baseOrbitCenter = galaxyCenter,
                     orbitRadius = radius,
                     baseAngle = angle,
-                    orbitSpeed = (0.0008f + random.nextFloat() * 0.0006f),
+                    orbitSpeed = (0.0004f + random.nextFloat() * 0.0004f),
                     color = color,
                     depth = VisualDepth.CORE,
                     scale = 1.0f + (artist.importance * 0.8f),
@@ -109,7 +109,7 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           🪐 3. ALBUM LAYER (Orbital Chains)
+           🪐 3. ALBUM LAYER (Planetary Orbital Chains)
         ----------------------------------- */
         val albums = graph.nodes.filter { it.type == NodeType.ALBUM }
         albums.groupBy { it.parentId }.forEach { (artistId, group) ->
@@ -117,7 +117,7 @@ class OrbitalLayoutEngine @Inject constructor() {
             val orbitStep = (2 * PI) / group.size.coerceAtLeast(1)
 
             group.forEachIndexed { i, album ->
-                val radius = 700f + (i * 220f) + (random.nextFloat() * 120f)
+                val radius = 1500f + (i * 450f) + (random.nextFloat() * 200f)
 
                 result.add(
                     PositionedNode(
@@ -131,7 +131,7 @@ class OrbitalLayoutEngine @Inject constructor() {
                         baseOrbitCenter = galaxyCenter,
                         orbitRadius = radius,
                         baseAngle = (i * orbitStep).toFloat(),
-                        orbitSpeed = 0.006f + random.nextFloat() * 0.004f,
+                        orbitSpeed = 0.003f + random.nextFloat() * 0.002f,
                         color = parent.color.copy(alpha = 0.85f),
                         depth = VisualDepth.MID,
                         scale = 0.8f + (album.importance * 0.5f),
@@ -154,7 +154,7 @@ class OrbitalLayoutEngine @Inject constructor() {
             val step = (2 * PI) / group.size.coerceAtLeast(1)
 
             group.forEachIndexed { i, track ->
-                val radius = 300f + (i * 90f) + random.nextFloat() * 60f
+                val radius = 400f + (i * 150f) + random.nextFloat() * 100f
 
                 result.add(
                     PositionedNode(
