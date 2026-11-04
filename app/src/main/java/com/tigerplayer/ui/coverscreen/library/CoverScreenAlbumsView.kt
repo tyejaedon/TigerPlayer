@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -108,7 +109,10 @@ fun CoverScreenAlbumsView(
     var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
     val ambientBrush = rememberTigerAmbientGradient(
-        accent = MaterialTheme.aardBlue,
+        accent = rememberArtworkAccent(
+            imageModel = album.artworkUrl.takeIf { !it.isNullOrBlank() } ?: R.drawable.ic_tiger_logo,
+            fallback = MaterialTheme.aardBlue
+        ),
         baseTopAlpha = 0.22f
     )
 

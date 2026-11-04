@@ -23,13 +23,13 @@ plugins {
 // 🔥 THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
 configure<ApplicationExtension> {
     namespace = "com.tigerplayer"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.tigerplayer"
         minSdk = 29
         //noinspection OldTargetApi
-        targetSdk = 36
+        targetSdk = 37
         // Dynamic version code/name injection (used for beta/release pipelines) with committed fallback
         versionCode = project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull()
             ?: System.getenv("BETA_VERSION_CODE")?.toIntOrNull()
@@ -147,6 +147,7 @@ ksp {
 
 dependencies {
     implementation(libs.androidx.glance.preview)
+    implementation(libs.foundation.layout)
     // --- Coroutines ---
     // Declared explicitly for every flavor. The Compose runtime constrains
     // kotlinx-coroutines-android to 1.9.0, and coroutines-play-services (which used to pull it

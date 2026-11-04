@@ -1,8 +1,11 @@
 package com.tigerplayer.ui.coverscreen
 
+import android.graphics.drawable.BitmapDrawable
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -94,18 +97,21 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.tigerplayer.R
+import coil.compose.AsyncImage
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.platform.LocalContext
+import androidx.palette.graphics.Palette
+import coil.request.ImageRequest
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
-import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -150,10 +156,20 @@ fun CoverScreenPlaylistDetailView(
     val likedHeartColor = Color(0xFFE91E63)
     val accentColor = if (isLikedPlaylist) likedHeartColor else MaterialTheme.aardBlue
 
-    val ambientBrush = rememberTigerAmbientGradient(
-        accent = accentColor,
-        baseTopAlpha = 0.22f
+    var dominantColor by remember(playlist.id, playlist.artworkUri) { mutableStateOf(TigerNeonOrange) }
+
+    val animatedDominantColor by animateColorAsState(
+        targetValue = dominantColor,
+        animationSpec = tween(1000),
+        label = "AlbumColorAnimation"
     )
+    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.22f)
+    val context = LocalContext.current
+
+    val imageModel = remember(playlist.artworkUri) {
+        if (!playlist.artworkUri.isNullOrBlank()) playlist.artworkUri else R.drawable.ic_tiger_logo
+    }
+
 
     BackHandler(enabled = true) {
         when {
@@ -185,6 +201,21 @@ fun CoverScreenPlaylistDetailView(
                 )
             }
     ) {
+        WetPaintingFadeImage(
+            imageModel = imageModel,
+            contentDescription = playlist.name,
+            fadeBottomPercent = 0.08f,
+            blurRadius = 18f,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.18f))
+        )
+
         Column(modifier = Modifier.fillMaxSize()) {
             // 1. TOP BAR NAVIGATION & ACTIONS
             val backToPlaylistsText = stringResource(R.string.coverscreen_action_back_to_playlists)
@@ -325,103 +356,6 @@ fun CoverScreenPlaylistDetailView(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // 3D FLOATING HERO ARTWORK & METADATA
-                item(key = "playlist_hero_artwork") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Ambient Backdrop Glow
-                        Box(
-                            modifier = Modifier
-                                .size(126.dp)
-                                .shadow(
-                                    elevation = 20.dp,
-                                    shape = RoundedCornerShape(24.dp),
-                                    spotColor = accentColor.copy(alpha = 0.45f),
-                                    ambientColor = Color.Black
-                                )
-                                .background(
-                                    accentColor.copy(alpha = 0.20f),
-                                    RoundedCornerShape(24.dp)
-                                )
-                        )
-
-                        // Framed Artwork Container
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(150.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .border(
-                                    width = 1.2.dp,
-                                    brush = Brush.verticalGradient(
-                                        listOf(
-                                            Color.White.copy(alpha = 0.45f),
-                                            accentColor.copy(alpha = 0.25f),
-                                            Color.White.copy(alpha = 0.10f)
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(22.dp)
-                                )
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable {
-                                    if (!isLikedPlaylist) {
-                                        onChangeCoverPhoto()
-                                    }
-                                }
-                        ) {
-                            if (isLikedPlaylist) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.radialGradient(
-                                                colors = listOf(
-                                                    likedHeartColor.copy(alpha = 0.50f),
-                                                    Color.Black.copy(alpha = 0.90f)
-                                                )
-                                            )
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Favorite,
-                                        contentDescription = null,
-                                        tint = likedHeartColor,
-                                        modifier = Modifier.size(54.dp)
-                                    )
-                                }
-                            } else {
-                                val imageModel = if (!playlist.artworkUri.isNullOrBlank()) playlist.artworkUri else R.drawable.ic_tiger_logo
-                                WetPaintingFadeImage(
-                                    imageModel = imageModel,
-                                    contentDescription = playlist.name,
-                                    fadeBottomPercent = 0.05f,
-                                    blurRadius = 14f,
-                                    contentScale = if (!playlist.artworkUri.isNullOrBlank()) ContentScale.Crop else ContentScale.Fit,
-                                    modifier = Modifier.fillMaxWidth().height(150.dp)
-                                )
-                            }
-
-                            // Specular Light Streak
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.22f),
-                                                Color.White.copy(alpha = 0.04f),
-                                                Color.Transparent
-                                            )
-                                        )
-                                    )
-                            )
-                        }
-                    }
-                }
 
                 // PLAYLIST TITLE & INFO
                 item(key = "playlist_metadata_bar") {
