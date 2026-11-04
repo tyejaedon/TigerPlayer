@@ -40,6 +40,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,6 +69,7 @@ import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.Artist
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.coverscreen.library.formatTrackDuration
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerTextHigh
 import com.tigerplayer.ui.theme.aardBlue
@@ -341,6 +343,23 @@ fun CoverScreenArtistsGrid(
                                 }
                             }
                         }
+                        if (!currentArtist.bio.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "BIOGRAPHY",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.aardBlue,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = currentArtist.bio,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 16.sp
+                            )
+                        }
                     }
                 }
 
@@ -476,8 +495,8 @@ private fun ArtistThumbnail(name: String, imageUrl: String?) {
                 modifier = Modifier.size(44.dp)
             )
         } else {
-            AsyncImage(
-                model = imageUrl,
+            WetPaintingFadeImage(
+                imageModel = imageUrl,
                 contentDescription = "$name artwork",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

@@ -33,7 +33,8 @@ data class ArtistSummary(
     val trackCount: Int,
     val albumCount: Int,
     val genres: String?,
-    val imageUrl: String?
+    val imageUrl: String?,
+    val bio: String?
 )
 
 data class SonicFootprintStats(
@@ -498,6 +499,7 @@ abstract class TigerDao {
             grouped_artists.trackCount AS trackCount,
             grouped_artists.albumCount AS albumCount,
             artist_cache.genres AS genres,
+            artist_cache.bio AS bio,
             (
                 SELECT cached_tracks.artworkUriString
                 FROM cached_tracks

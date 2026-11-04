@@ -1,9 +1,13 @@
 package com.tigerplayer.ui.coverscreen
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -185,11 +189,22 @@ internal fun CoverScreenMediaCycleViewport(
         AnimatedContent(
             targetState = currentViewIndex,
             transitionSpec = {
-                if (targetState > initialState) {
-                    slideInHorizontally { it } + fadeIn() togetherWith slideOutHorizontally { -it } + fadeOut()
-                } else {
-                    slideInHorizontally { -it } + fadeIn() togetherWith slideOutHorizontally { it } + fadeOut()
-                }
+                val direction = if (targetState > initialState) 1 else -1
+                (slideInHorizontally(
+                    animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+                ) { it * direction } + fadeIn(
+                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                ) + scaleIn(
+                    initialScale = 0.94f,
+                    animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+                )) togetherWith (slideOutHorizontally(
+                    animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+                ) { -it * direction } + fadeOut(
+                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                ) + scaleOut(
+                    targetScale = 1.06f,
+                    animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+                ))
             },
             label = "CoverMediaCycleAnimation",
             modifier = Modifier.fillMaxSize()
@@ -222,7 +237,7 @@ internal fun CoverScreenMediaCycleViewport(
                                             heartAlpha.animateTo(
                                                 0f,
                                                 androidx.compose.animation.core.tween(
-                                                    durationMillis = 650,
+                                                    durationMillis = 750,
                                                     delayMillis = 150
                                                 )
                                             )
@@ -248,10 +263,10 @@ internal fun CoverScreenMediaCycleViewport(
                         if (showLikedHeart) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxHeight(0.92f)
+                                    .fillMaxHeight(0.95f)
                                     .aspectRatio(1f)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.Black.copy(alpha = 0.35f)),
+                                    .background(Color.Black.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -259,7 +274,7 @@ internal fun CoverScreenMediaCycleViewport(
                                     contentDescription = stringResource(R.string.coverscreen_action_like),
                                     tint = TigerNeonRed,
                                     modifier = Modifier
-                                        .size(48.dp)
+                                        .size(55.dp)
                                         .scale(heartScale.value)
                                         .alpha(heartAlpha.value)
                                 )

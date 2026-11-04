@@ -392,7 +392,7 @@ fun CoverScreenMiniHub(
                         bottom = verticalPadding + waveformBottomClearance
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.Center
+                verticalArrangement = Arrangement.Top
             ) {
                 TrackInfoText(
                     track = track,
@@ -427,7 +427,7 @@ fun CoverScreenMiniHub(
                     screenHeightDp = windowState.heightDp.dp
                 )
                 if (shouldShowCoverControls(isVortexImmersive)) {
-                    Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 6.dp))
+                    Spacer(modifier = Modifier.height(if (isTightScreen) 39.dp else 53.dp))
                     CoverAccessibleControls(
                         isPlaying = uiState.isPlaying,
                         isShuffleEnabled = uiState.isShuffleEnabled,

@@ -99,6 +99,7 @@ import com.tigerplayer.R
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.bounceClick
@@ -350,7 +351,8 @@ fun CoverScreenPlaylistDetailView(
                         // Framed Artwork Container
                         Box(
                             modifier = Modifier
-                                .size(134.dp)
+                                .fillMaxWidth()
+                                .height(150.dp)
                                 .clip(RoundedCornerShape(22.dp))
                                 .border(
                                     width = 1.2.dp,
@@ -370,16 +372,7 @@ fun CoverScreenPlaylistDetailView(
                                     }
                                 }
                         ) {
-                            if (!playlist.artworkUri.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = playlist.artworkUri,
-                                    contentDescription = playlist.name,
-                                    contentScale = ContentScale.Crop,
-                                    fallback = painterResource(R.drawable.ic_tiger_logo),
-                                    error = painterResource(R.drawable.ic_tiger_logo),
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else if (isLikedPlaylist) {
+                            if (isLikedPlaylist) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -401,13 +394,14 @@ fun CoverScreenPlaylistDetailView(
                                     )
                                 }
                             } else {
-                                AsyncImage(
-                                    model = null,
+                                val imageModel = if (!playlist.artworkUri.isNullOrBlank()) playlist.artworkUri else R.drawable.ic_tiger_logo
+                                WetPaintingFadeImage(
+                                    imageModel = imageModel,
                                     contentDescription = playlist.name,
-                                    contentScale = ContentScale.Crop,
-                                    fallback = painterResource(R.drawable.ic_tiger_logo),
-                                    error = painterResource(R.drawable.ic_tiger_logo),
-                                    modifier = Modifier.fillMaxSize()
+                                    fadeBottomPercent = 0.05f,
+                                    blurRadius = 14f,
+                                    contentScale = if (!playlist.artworkUri.isNullOrBlank()) ContentScale.Crop else ContentScale.Fit,
+                                    modifier = Modifier.fillMaxWidth().height(150.dp)
                                 )
                             }
 

@@ -1,4 +1,4 @@
-package com.tigerplayer.ui.coverscreen
+package com.tigerplayer.ui.coverscreen.library
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.BorderStroke
@@ -43,6 +43,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,7 +57,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -68,9 +68,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.coverscreen.CoverScreenAlbum
+import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.glassEffect
@@ -205,32 +206,32 @@ fun CoverScreenAlbumsView(
 
                         // 3D Framed Glass Cover
                         Box(
-                            modifier = Modifier
-                                .size(144.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .border(
-                                    width = 1.2.dp,
-                                    brush = Brush.verticalGradient(
-                                        listOf(
-                                            Color.White.copy(alpha = 0.45f),
-                                            MaterialTheme.aardBlue.copy(alpha = 0.25f),
-                                            Color.White.copy(alpha = 0.10f)
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(22.dp)
-                                )
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                            modifier = Modifier.size(144.dp)
                         ) {
-                            AsyncImage(
-                                model = album.artworkUrl,
+                            WetPaintingFadeImage(
+                                imageModel = album.artworkUrl.takeIf { !it.isNullOrBlank() } ?: R.drawable.ic_tiger_logo,
                                 contentDescription = stringResource(
                                     R.string.coverscreen_artwork_album_description,
                                     album.name
                                 ),
+                                fadeBottomPercent = 0.05f,
+                                blurRadius = 14f,
                                 contentScale = ContentScale.Crop,
-                                fallback = painterResource(R.drawable.ic_tiger_logo),
-                                error = painterResource(R.drawable.ic_tiger_logo),
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .border(
+                                        width = 1.2.dp,
+                                        brush = Brush.verticalGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.45f),
+                                                MaterialTheme.aardBlue.copy(alpha = 0.25f),
+                                                Color.White.copy(alpha = 0.10f)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(22.dp)
+                                    )
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
                             )
 
                             // Specular Light Streak

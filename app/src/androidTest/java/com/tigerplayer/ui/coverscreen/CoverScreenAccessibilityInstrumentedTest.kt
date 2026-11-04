@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.engine.CoverScreenStatsSnapshot
+import com.tigerplayer.ui.coverscreen.library.CoverScreenAlbumsView
 import com.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.PlayerUiState
