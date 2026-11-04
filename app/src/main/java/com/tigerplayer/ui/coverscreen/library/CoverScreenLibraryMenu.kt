@@ -10,8 +10,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
@@ -69,6 +72,7 @@ import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.cloud.CloudViewModel
+import com.tigerplayer.ui.coverscreen.library.CoverScreenAlbumsView
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.settings.SettingsViewModel
@@ -354,7 +358,8 @@ fun CoverScreenLibraryMenu(
                 }
                 CoverScreenAlbumsView(
                     album = displayAlbum,
-                    artistName = album.artistId.takeUnless { it.isNullOrBlank() } ?: albumTracks.firstOrNull()?.artist.orEmpty(),
+                    artistName = album.artistId.takeUnless { it.isNullOrBlank() }
+                        ?: albumTracks.firstOrNull()?.artist.orEmpty(),
                     tracks = albumTracks,
                     onBack = {
                         selectedAlbum = null
@@ -554,7 +559,16 @@ fun CoverScreenLibraryMenu(
                         modifier = Modifier
                             .fillMaxSize()
                             .testTag(CoverScreenTestTags.LIBRARY_CONTENT),
-                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        transitionSpec = {
+                            fadeIn(
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) + scaleIn(
+                                initialScale = 0.98f,
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) togetherWith fadeOut(
+                                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                            )
+                        },
                         label = "Cover screen library tab"
                     ) { tab ->
                         when (tab) {

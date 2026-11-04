@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.coverscreen
 
 import androidx.compose.ui.unit.dp
+import com.tigerplayer.ui.coverscreen.library.formatTrackDuration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

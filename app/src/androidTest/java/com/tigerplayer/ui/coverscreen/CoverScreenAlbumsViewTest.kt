@@ -8,6 +8,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.coverscreen.library.CoverScreenAlbumsView
 import com.tigerplayer.ui.theme.TigerPlayerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule

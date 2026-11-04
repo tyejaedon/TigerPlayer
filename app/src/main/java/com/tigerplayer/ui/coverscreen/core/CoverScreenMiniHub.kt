@@ -71,6 +71,7 @@ fun CoverScreenMiniHub(
     modifier: Modifier = Modifier
 ) {
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val sleepTimerState by playerViewModel.sleepTimerState.collectAsStateWithLifecycle()
     val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
     val discoveryWeeklyTracks by dashboardViewModel.discoveryWeeklyTracks.collectAsStateWithLifecycle()
     val daylistMeta by dashboardViewModel.daylistMeta.collectAsStateWithLifecycle()
@@ -352,6 +353,25 @@ fun CoverScreenMiniHub(
                             searchOnLibraryOpen = false
                             libraryVisible = true
                         },
+                        onOpenPlaybackSettings = {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            playbackSettingsVisible = true
+                        },
+                        playlists = uiState.customPlaylists,
+                        onAddToPlaylist = { playlistId ->
+                            track?.let { currentTrack ->
+                                playerViewModel.addTrackToPlaylist(playlistId, currentTrack)
+                            }
+                        },
+                        playbackSpeed = uiState.playbackSpeed,
+                        pitchRatio = uiState.pitch,
+                        onSpeedChangeFinished = { playerViewModel.setPlaybackSpeed(it) },
+                        onPitchChangeFinished = { playerViewModel.setPitch(it) },
+                        sleepTimerState = sleepTimerState,
+                        onSetSleepTimerDuration = { playerViewModel.setSleepTimerDuration(it) },
+                        onSetEndOfTrackSleepTimer = { playerViewModel.setSleepTimerEndOfTrack() },
+                        onSetEndOfQueueSleepTimer = { playerViewModel.setSleepTimerEndOfQueue() },
+                        onCancelSleepTimer = { playerViewModel.cancelSleepTimer() },
                         onMediaCyclePositioned = { mediaCycleTouchBounds = it },
                         onSeek = { playerViewModel.seekTo(it) },
                         screenHeightDp = windowState.heightDp.dp
@@ -392,7 +412,7 @@ fun CoverScreenMiniHub(
                         bottom = verticalPadding + waveformBottomClearance
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.Center
+                verticalArrangement = Arrangement.Top
             ) {
                 TrackInfoText(
                     track = track,
@@ -422,12 +442,31 @@ fun CoverScreenMiniHub(
                         searchOnLibraryOpen = false
                         libraryVisible = true
                     },
+                    onOpenPlaybackSettings = {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        playbackSettingsVisible = true
+                    },
+                    playlists = uiState.customPlaylists,
+                    onAddToPlaylist = { playlistId ->
+                        track?.let { currentTrack ->
+                            playerViewModel.addTrackToPlaylist(playlistId, currentTrack)
+                        }
+                    },
+                    playbackSpeed = uiState.playbackSpeed,
+                    pitchRatio = uiState.pitch,
+                    onSpeedChangeFinished = { playerViewModel.setPlaybackSpeed(it) },
+                    onPitchChangeFinished = { playerViewModel.setPitch(it) },
+                    sleepTimerState = sleepTimerState,
+                    onSetSleepTimerDuration = { playerViewModel.setSleepTimerDuration(it) },
+                    onSetEndOfTrackSleepTimer = { playerViewModel.setSleepTimerEndOfTrack() },
+                    onSetEndOfQueueSleepTimer = { playerViewModel.setSleepTimerEndOfQueue() },
+                    onCancelSleepTimer = { playerViewModel.cancelSleepTimer() },
                     onMediaCyclePositioned = { mediaCycleTouchBounds = it },
                     onSeek = { playerViewModel.seekTo(it) },
                     screenHeightDp = windowState.heightDp.dp
                 )
                 if (shouldShowCoverControls(isVortexImmersive)) {
-                    Spacer(modifier = Modifier.height(if (isTightScreen) 4.dp else 6.dp))
+                    Spacer(modifier = Modifier.height(if (isTightScreen) 39.dp else 53.dp))
                     CoverAccessibleControls(
                         isPlaying = uiState.isPlaying,
                         isShuffleEnabled = uiState.isShuffleEnabled,
@@ -454,6 +493,7 @@ fun CoverScreenMiniHub(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
                 energy = uiState.audioReactiveFrame.energy,
+                flux = uiState.audioReactiveFrame.flux,
                 isPlaying = uiState.isPlaying,
                 isRenderingActive = isRenderingActive,
                 duration = track?.durationMs ?: 1L,

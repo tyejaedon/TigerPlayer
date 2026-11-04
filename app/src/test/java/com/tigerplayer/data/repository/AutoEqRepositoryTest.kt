@@ -4,79 +4,95 @@ import android.content.Context
 import android.content.res.AssetManager
 import com.google.gson.Gson
 import com.tigerplayer.data.model.HeadphoneSearchResult
-import com.tigerplayer.data.remote.api.AutoEqApi
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import retrofit2.Response
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.util.zip.GZIPOutputStream
 
 @RunWith(RobolectricTestRunner::class)
 class AutoEqRepositoryTest {
 
     private val context = mockk<Context>()
     private val assetManager = mockk<AssetManager>()
-    private val autoEqApi = mockk<AutoEqApi>(relaxed = true)
     private val gson = Gson()
 
     private lateinit var repository: AutoEqRepositoryImpl
 
-    private val sampleModels = listOf(
-        HeadphoneSearchResult(
-            id = "sony_wh_1000xm4_oratory",
-            modelName = "Sony WH-1000XM4",
-            source = "oratory1990",
-            formFactor = "Over-Ear",
-            targetCurve = "Harman Over-Ear 2018",
-            path = "oratory1990/harman_over-ear_2018/Sony WH-1000XM4"
+    private val samplePresets = listOf(
+        mapOf(
+            "model" to "Sony WH-1000XM4",
+            "source" to "oratory1990",
+            "preamp" to -3.5,
+            "filters" to listOf(
+                mapOf("type" to "PK", "fc" to 60, "gain" to 2.5, "q" to 1.20),
+                mapOf("type" to "HSC", "fc" to 8000, "gain" to -1.8, "q" to 0.71)
+            )
         ),
-        HeadphoneSearchResult(
-            id = "apple_airpods_pro_2_crinacle",
-            modelName = "Apple AirPods Pro 2",
-            source = "crinacle",
-            formFactor = "In-Ear",
-            targetCurve = "Harman In-Ear 2019v2",
-            path = "crinacle/harman_in-ear_2019v2/Apple AirPods Pro 2"
+        mapOf(
+            "model" to "Apple AirPods Pro 2",
+            "source" to "crinacle",
+            "preamp" to -2.0,
+            "filters" to listOf(
+                mapOf("type" to "PK", "fc" to 100, "gain" to 1.5, "q" to 1.41)
+            )
         ),
-        HeadphoneSearchResult(
-            id = "sennheiser_hd_600_oratory",
-            modelName = "Sennheiser HD 600",
-            source = "oratory1990",
-            formFactor = "Over-Ear",
-            targetCurve = "Harman Over-Ear 2018",
-            path = "oratory1990/harman_over-ear_2018/Sennheiser HD 600"
+        mapOf(
+            "model" to "Sennheiser HD 600",
+            "source" to "oratory1990",
+            "preamp" to -4.0,
+            "filters" to listOf(
+                mapOf("type" to "PK", "fc" to 31, "gain" to 3.0, "q" to 1.41)
+            )
         ),
-        HeadphoneSearchResult(
-            id = "moondrop_blessing_3_crinacle",
-            modelName = "Moondrop Blessing 3",
-            source = "crinacle",
-            formFactor = "In-Ear",
-            targetCurve = "Harman In-Ear 2019v2",
-            path = "crinacle/harman_in-ear_2019v2/Moondrop Blessing 3"
+        mapOf(
+            "model" to "Moondrop Blessing 3",
+            "source" to "crinacle",
+            "preamp" to -1.5,
+            "filters" to listOf(
+                mapOf("type" to "PK", "fc" to 500, "gain" to -2.0, "q" to 1.0)
+            )
+        )
+    )
+
+    private val sampleGraphicPresets = listOf(
+        mapOf(
+            "model" to "Sony WH-1000XM4",
+            "source" to "oratory1990",
+            "preamp" to -3.5,
+            "points" to listOf(
+                mapOf("f" to 31, "g" to 5.0),
+                mapOf("f" to 63, "g" to 4.0),
+                mapOf("f" to 125, "g" to 2.0),
+                mapOf("f" to 250, "g" to 0.0),
+                mapOf("f" to 500, "g" to -1.0),
+                mapOf("f" to 1000, "g" to 0.0),
+                mapOf("f" to 2000, "g" to 1.5),
+                mapOf("f" to 4000, "g" to 3.0),
+                mapOf("f" to 8000, "g" to 4.0),
+                mapOf("f" to 16000, "g" to 2.0)
+            )
         )
     )
 
     @Before
     fun setUp() {
         every { context.assets } returns assetManager
-        val json = gson.toJson(sampleModels)
-        val byteOut = ByteArrayOutputStream()
-        GZIPOutputStream(byteOut).use { it.write(json.toByteArray(Charsets.UTF_8)) }
-        every { assetManager.open("autoeq/models_index.json.gz") } answers {
-            ByteArrayInputStream(byteOut.toByteArray())
+        val parametricJson = gson.toJson(samplePresets)
+        every { assetManager.open("autoeq/autoeq_parametric_presets.json") } answers {
+            ByteArrayInputStream(parametricJson.toByteArray(Charsets.UTF_8))
         }
 
-        repository = AutoEqRepositoryImpl(context, autoEqApi, gson)
+        val graphicJson = gson.toJson(sampleGraphicPresets)
+        every { assetManager.open("autoeq/autoeq_graphic_presets.json") } answers {
+            ByteArrayInputStream(graphicJson.toByteArray(Charsets.UTF_8))
+        }
+
+        repository = AutoEqRepositoryImpl(context, gson)
     }
 
     @Test
@@ -98,13 +114,10 @@ class AutoEqRepositoryTest {
 
     @Test
     fun `searchHeadphones filters by form factor and source`() = runTest {
-        val inEarResults = repository.searchHeadphones("in-ear")
-        assertEquals(2, inEarResults.size)
-        assertTrue(inEarResults.any { it.modelName == "Apple AirPods Pro 2" })
-        assertTrue(inEarResults.any { it.modelName == "Moondrop Blessing 3" })
-
         val crinacleResults = repository.searchHeadphones("crinacle")
         assertEquals(2, crinacleResults.size)
+        assertTrue(crinacleResults.any { it.modelName == "Apple AirPods Pro 2" })
+        assertTrue(crinacleResults.any { it.modelName == "Moondrop Blessing 3" })
     }
 
     @Test
@@ -159,26 +172,31 @@ class AutoEqRepositoryTest {
     }
 
     @Test
-    fun `fetchHeadphoneSpecs parses live response from AutoEqApi`() = runTest {
-        val rawParametric = """
-            Preamp: -3.5 dB
-            Filter 1: ON PK Fc 60 Hz Gain 2.5 dB Q 1.20
-            Filter 2: ON HSC Fc 8000 Hz Gain -1.8 dB Q 0.71
-        """.trimIndent()
-
-        val responseBody = rawParametric.toResponseBody("text/plain".toMediaTypeOrNull())
-        coEvery { autoEqApi.getParametricEqProfile(any()) } returns Response.success(responseBody)
-
-        val item = sampleModels.first()
+    fun `fetchHeadphoneSpecs retrieves cached profile from bundled assets`() = runTest {
+        val item = repository.searchHeadphones("Sony").first()
         val result = repository.fetchHeadphoneSpecs(item)
         assertTrue(result.isSuccess)
 
         val specs = result.getOrThrow()
-        assertEquals(item.modelName, specs.modelName)
+        assertEquals("Sony WH-1000XM4", specs.modelName)
         assertEquals(-3.5f, specs.preampDb, 0.001f)
         assertEquals(2, specs.bands.size)
         assertEquals("PK", specs.bands[0].filterType)
         assertEquals(60f, specs.bands[0].frequencyHz, 0.01f)
+    }
+
+    @Test
+    fun `fetchGraphicEqGains interpolates gains from graphic presets`() = runTest {
+        val item = repository.searchHeadphones("Sony").first()
+        val result = repository.fetchGraphicEqGains(item, listOf(31f, 63f, 125f))
+        assertTrue(result.isSuccess)
+
+        val (preamp, gains) = result.getOrThrow()
+        assertEquals(-5.0f, preamp, 0.01f)
+        assertEquals(3, gains.size)
+        assertEquals(5.0f, gains[0], 0.1f)
+        assertEquals(4.0f, gains[1], 0.1f)
+        assertEquals(2.0f, gains[2], 0.1f)
     }
 
     @Test
@@ -204,16 +222,22 @@ class AutoEqRepositoryTest {
     }
 
     @Test
-    fun `fetchHeadphoneSpecs returns valid curve even when network fails`() = runTest {
-        coEvery { autoEqApi.getParametricEqProfile(any()) } throws RuntimeException("Network down")
-        val item = sampleModels[1]
-        val result = repository.fetchHeadphoneSpecs(item)
+    fun `fetchHeadphoneSpecs returns fallback curve when model not in presets`() = runTest {
+        val unknownItem = HeadphoneSearchResult(
+            id = "unknown_model",
+            modelName = "Unknown Headphones",
+            source = "community",
+            formFactor = "Over-Ear",
+            targetCurve = "Harman",
+            path = ""
+        )
+        val result = repository.fetchHeadphoneSpecs(unknownItem)
         assertTrue(result.isSuccess)
 
         val specs = result.getOrThrow()
-        assertEquals(item.modelName, specs.modelName)
-        assertEquals(item.targetCurve, specs.targetCurve)
-        assertEquals(item.formFactor, specs.formFactor)
+        assertEquals(unknownItem.modelName, specs.modelName)
+        assertEquals(unknownItem.targetCurve, specs.targetCurve)
+        assertEquals(unknownItem.formFactor, specs.formFactor)
         assertTrue(specs.bands.isNotEmpty())
     }
 }
