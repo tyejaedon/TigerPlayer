@@ -38,10 +38,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.PremiumGlassCard
 import com.tigerplayer.ui.theme.TigerNeonOrange
@@ -78,49 +80,32 @@ fun AlbumDetailsScreen(
     val firstTrack = albumTracks.firstOrNull()
 
     // --- DYNAMIC COLOR EXTRACTION ---
-    var dominantColor by remember(albumName, firstTrack?.artworkUri) { mutableStateOf(TigerNeonOrange) }
-
-    val animatedDominantColor by animateColorAsState(
-        targetValue = dominantColor,
-        animationSpec = tween(1000),
-        label = "AlbumColorAnimation"
+    val heroArtwork = remember(firstTrack?.artworkUri) {
+        firstTrack?.artworkUri?.toString()?.takeIf { it.isNotBlank() } ?: R.drawable.ic_tiger_logo
+    }
+    val artworkAccent = rememberArtworkAccent(
+        imageModel = heroArtwork,
+        fallback = TigerNeonOrange
     )
-    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.22f)
+    val ambientBackBrush = rememberTigerAmbientGradient(artworkAccent, baseTopAlpha = 0.22f)
 
-    val imageRequest = remember(firstTrack?.artworkUri) {
+    val imageRequest = remember(heroArtwork) {
         ImageRequest.Builder(context)
-            .data(firstTrack?.artworkUri)
+            .data(heroArtwork)
             .crossfade(true)
             .allowHardware(false)
-            .listener(
-                onSuccess = { _, result ->
-                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                    bitmap?.let { b ->
-                        Palette.from(b).generate { palette ->
-                            val colorInt = palette?.vibrantSwatch?.rgb
-                                ?: palette?.lightVibrantSwatch?.rgb
-                                ?: palette?.dominantSwatch?.rgb
-
-                            colorInt?.let { dominantColor = Color(it) }
-                        }
-                    }
-                },
-                onError = { _, _ ->
-                    dominantColor = TigerNeonOrange
-                }
-            )
             .build()
     }
 
-    val accentColor = remember(dominantColor) {
+    val accentColor = remember(artworkAccent) {
         val hsl = FloatArray(3)
-        androidx.core.graphics.ColorUtils.colorToHSL(dominantColor.toArgb(), hsl)
+        androidx.core.graphics.ColorUtils.colorToHSL(artworkAccent.toArgb(), hsl)
         if (hsl[2] < 0.5f) {
             hsl[2] = 0.75f
             hsl[1] = (hsl[1] + 0.15f).coerceAtMost(1f)
             Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
         } else {
-            dominantColor
+            artworkAccent
         }
     }
 
@@ -149,21 +134,22 @@ fun AlbumDetailsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(ambientBrush)
+                .background(ambientBackBrush)
         ) {
             // Parallax Blurred Artwork Background
-            AsyncImage(
-                model = imageRequest,
+            WetPaintingFadeImage(
+                imageModel = heroArtwork,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                fadeBottomPercent = 0.08f,
+                blurRadius = 18f,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
                         val parallaxOffset = if (firstVisibleIndex == 0) scrollOffset * 0.40f else 0f
                         translationY = -parallaxOffset
-                        alpha = 0.32f
+                        alpha = 0.52f
                     }
-                    .blur(80.dp)
             )
 
             // Animated 3D Light Refraction Orbs

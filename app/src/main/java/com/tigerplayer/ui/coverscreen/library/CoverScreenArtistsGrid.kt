@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -171,7 +172,10 @@ fun CoverScreenArtistsGrid(
         }
 
         val ambientBrush = rememberTigerAmbientGradient(
-            accent = MaterialTheme.aardBlue,
+            accent = rememberArtworkAccent(
+                imageModel = heroImage,
+                fallback = MaterialTheme.aardBlue
+            ),
             baseTopAlpha = 0.16f
         )
 
@@ -191,6 +195,27 @@ fun CoverScreenArtistsGrid(
                     )
                 }
         ) {
+            WetPaintingFadeImage(
+                imageModel = heroImage,
+                contentDescription = "Image of ${currentArtist.name}",
+                fadeBottomPercent = 0.12f,
+                blurRadius = 18f,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Transparent,
+                            0.5f to Color.Black.copy(alpha = 0.3f),
+                            1.0f to Color.Black.copy(alpha = 0.88f)
+                        )
+                    )
+            )
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 32.dp),
