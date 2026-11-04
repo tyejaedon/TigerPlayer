@@ -105,6 +105,7 @@ import androidx.palette.graphics.Palette
 import coil.request.ImageRequest
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.WitcherIcons
@@ -118,12 +119,16 @@ import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
 fun CoverScreenPlaylistDetailView(
     playlist: Playlist,
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     isLikedPlaylist: Boolean,
     currentTrackId: String?,
     isPlaying: Boolean,
     onBack: () -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayNext: (AudioTrack) -> Unit = {},
     onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
+    onGoToAlbum: (String) -> Unit = {},
     onPlayAll: (List<AudioTrack>) -> Unit,
     onShufflePlay: (List<AudioTrack>) -> Unit,
     onRenamePlaylist: (String) -> Unit,
@@ -599,68 +604,15 @@ fun CoverScreenPlaylistDetailView(
 
     // Track options bottom sheet
     trackForOptions?.let { track ->
-        ModalBottomSheet(
-            onDismissRequest = { trackForOptions = null },
-            containerColor = Color(0xFF1B1F2A)
-        ) {
-            Column(modifier = Modifier.padding(bottom = 24.dp, start = 16.dp, end = 16.dp)) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-                Text(
-                    text = track.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onAddToQueue(track)
-                            trackForOptions = null
-                        }
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = null, tint = accentColor)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("Add to Queue", color = Color.White, fontWeight = FontWeight.Medium)
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onRemoveTrack(track)
-                            mutableTracks = mutableTracks.filter { it.id != track.id }
-                            trackForOptions = null
-                        }
-                        .padding(vertical = 12.dp, horizontal = 8.dp)
-                        .testTag(CoverScreenTestTags.playlistTrackRemove(track.id)),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = stringResource(R.string.coverscreen_action_remove_from_playlist),
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
+        SongOptionsSheet(
+            track = track,
+            playlists = playlists,
+            onDismiss = { trackForOptions = null },
+            onPlayNext = { onPlayNext(track) },
+            onAddToQueue = { onAddToQueue(track) },
+            onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, track) },
+            onGoToAlbum = { albumName -> onGoToAlbum(albumName) }
+        )
     }
 }
 
@@ -686,7 +638,7 @@ private fun CoverScreenPlaylistTrackRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp)
-            .bounceClick { onClick() }
+            .bounceClick(onClick = onClick, onLongClick = onOptionsClick)
             .testTag(CoverScreenTestTags.playlistTrack(track.id)),
         shape = RoundedCornerShape(14.dp),
         color = if (isCurrent) accentColor.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f)

@@ -71,8 +71,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.coverscreen.CoverScreenAlbum
 import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.glassEffect
@@ -83,9 +85,12 @@ fun CoverScreenAlbumsView(
     album: CoverScreenAlbum,
     artistName: String,
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     onBack: () -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayNext: (AudioTrack) -> Unit = {},
     onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
     onRemoveFromQueue: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier,
     onPlayAll: (List<AudioTrack>) -> Unit = {
@@ -431,6 +436,19 @@ fun CoverScreenAlbumsView(
                     )
                 }
             }
+        }
+
+        optionsTrack?.let { selectedTrack ->
+            SongOptionsSheet(
+                track = selectedTrack,
+                playlists = playlists,
+                showGoToAlbum = false,
+                onDismiss = { optionsTrack = null },
+                onPlayNext = { onPlayNext(selectedTrack) },
+                onAddToQueue = { onAddToQueue(selectedTrack) },
+                onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, selectedTrack) },
+                onGoToAlbum = {}
+            )
         }
     }
 }

@@ -77,6 +77,10 @@ import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.utils.ArtistUtils
 
 data class CoverScreenAlbum(
@@ -93,10 +97,16 @@ fun CoverScreenArtistsGrid(
     albums: List<CoverScreenAlbum>,
     modifier: Modifier = Modifier,
     tracks: List<AudioTrack> = emptyList(),
+    playlists: List<Playlist> = emptyList(),
     onAlbumSelected: (CoverScreenAlbum) -> Unit = {},
-    onPlayTrack: (AudioTrack) -> Unit = {}
+    onPlayTrack: (AudioTrack) -> Unit = {},
+    onPlayNext: (AudioTrack) -> Unit = {},
+    onAddToQueue: (AudioTrack) -> Unit = {},
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
+    onGoToAlbum: (String) -> Unit = {}
 ) {
     var selectedArtist by remember { mutableStateOf<Artist?>(null) }
+    var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
     val view = LocalView.current
     val currentArtist = selectedArtist
 
@@ -444,11 +454,26 @@ fun CoverScreenArtistsGrid(
                             onClick = {
                                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                 onPlayTrack(track)
+                            },
+                            onLongClick = {
+                                optionsTrack = track
                             }
                         )
                     }
                 }
             }
+        }
+
+        optionsTrack?.let { selectedTrack ->
+            SongOptionsSheet(
+                track = selectedTrack,
+                playlists = playlists,
+                onDismiss = { optionsTrack = null },
+                onPlayNext = { onPlayNext(selectedTrack) },
+                onAddToQueue = { onAddToQueue(selectedTrack) },
+                onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, selectedTrack) },
+                onGoToAlbum = { albumName -> onGoToAlbum(albumName) }
+            )
         }
     }
 }
@@ -600,7 +625,8 @@ private fun CoverArtistAlbumCard(
 @Composable
 private fun CoverArtistTrackRow(
     track: AudioTrack,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -608,7 +634,10 @@ private fun CoverArtistTrackRow(
             .padding(horizontal = 12.dp)
             .clip(RoundedCornerShape(12.dp))
             .glassEffect(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         shape = RoundedCornerShape(12.dp)
     ) {
