@@ -11,6 +11,8 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Fixed
+- **Detail View AsyncImage Optimization, Dynamic Scroll Transitions, Header Shade Removal & Cover Screen Alignment**: optimized `WetPaintingFadeImage` and `AsyncImage` background rendering with hardware bitmap caching and single-pass blur layers; fixed parallax scroll calculations (`offset`) in `PlaylistDetailScreen`, `CoverScreenPlaylistDetailView`, and `CoverScreenAlbumsView` to eliminate empty black background gaps; added dynamic 3D collapse, scale, and fade out scroll transitions for cover artwork headers; removed dark background shading (`Color.Black.copy(...)` overlays and top bar container colors) behind album and playlist titles; restored 3D floating cover artwork to `CoverScreenPlaylistDetailView`; aligned cover screen album and playlist detail views with main app `AlbumDetailScreen` design. (closes #352)
 ## [2.1.6] - 2026-11-05
 
 ### Added

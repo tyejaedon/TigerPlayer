@@ -222,7 +222,7 @@ fun AlbumDetailsScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Black.copy(alpha = (topBarAlpha * 0.75f).coerceIn(0f, 0.75f)),
+                        containerColor = Color.Transparent,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                     ),
@@ -247,7 +247,7 @@ fun AlbumDetailsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(bottom = 190.dp)
+                contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 // --- 1. HERO 3D FLOATING GLASS ARTWORK ---
                 item {
@@ -354,7 +354,7 @@ fun AlbumDetailsScreen(
                                     Brush.verticalGradient(
                                         listOf(
                                             accentColor.copy(alpha = 0.16f),
-                                            Color.Black.copy(alpha = 0.25f)
+                                            Color.Transparent
                                         )
                                     ),
                                     MaterialTheme.shapes.extraLarge

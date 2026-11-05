@@ -213,12 +213,22 @@ class EqualizerHubViewModelTest {
     }
 
     @Test
-    fun `selecting SPATIAL_NEXUS studio tab switches active engine source and dispatches 4 spatial nodes`() = runTest(testDispatcher) {
+    fun `selecting studio tab updates ui state without mutating active engine source`() = runTest(testDispatcher) {
+        val initialSource = viewModel.uiState.value.activeEngineSource
         viewModel.selectStudioTab(EqualizerStudioTab.SPATIAL_NEXUS)
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(EqualizerStudioTab.SPATIAL_NEXUS, state.studioTab)
+        assertEquals(initialSource, state.activeEngineSource) // Should not change
+    }
+
+    @Test
+    fun `setActiveEngineSource switches active engine source and dispatches nodes`() = runTest(testDispatcher) {
+        viewModel.setActiveEngineSource(EqualizerEngineSource.SPATIAL_NODES)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
         assertEquals(EqualizerEngineSource.SPATIAL_NODES, state.activeEngineSource)
         assertEquals(4, state.spatialNodes.size)
         verify { adaptiveDspEngine.updateAcousticNodes(match { it.size == 4 }) }
@@ -226,9 +236,6 @@ class EqualizerHubViewModelTest {
 
     @Test
     fun `moveSpatialNode updates position and clamps coordinates within -1 and 1`() = runTest(testDispatcher) {
-        viewModel.selectStudioTab(EqualizerStudioTab.SPATIAL_NEXUS)
-        testDispatcher.scheduler.advanceUntilIdle()
-
         viewModel.moveSpatialNode("sub", androidx.compose.ui.geometry.Offset(-1.5f, 0.5f))
         testDispatcher.scheduler.advanceUntilIdle()
 

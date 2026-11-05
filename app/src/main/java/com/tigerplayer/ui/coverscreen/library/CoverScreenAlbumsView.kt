@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -144,7 +145,7 @@ fun CoverScreenAlbumsView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .glassEffect(RectangleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
+                    .background(Color.Transparent)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -181,8 +182,11 @@ fun CoverScreenAlbumsView(
                 )
             }
 
+            val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+
             // 2. SCROLLABLE ALBUM HERO & TRACK LIST
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.ALBUM_TRACKS),
@@ -191,10 +195,20 @@ fun CoverScreenAlbumsView(
             ) {
                 // 3D FLOATING HERO ARTWORK
                 item(key = "album_hero_artwork") {
+                    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                    val heroAlpha = (1f - (rawOffset / 400f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (rawOffset / 1200f)).coerceIn(0.85f, 1f)
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 6.dp),
+                            .padding(top = 10.dp, bottom = 6.dp)
+                            .graphicsLayer {
+                                alpha = heroAlpha
+                                scaleX = heroScale
+                                scaleY = heroScale
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         // Ambient Backdrop Glow
@@ -268,7 +282,7 @@ fun CoverScreenAlbumsView(
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 2.dp),
                         shape = RoundedCornerShape(18.dp),
-                        color = Color.Black.copy(alpha = 0.35f),
+                        color = Color.Transparent,
                         border = BorderStroke(
                             1.dp,
                             Brush.verticalGradient(

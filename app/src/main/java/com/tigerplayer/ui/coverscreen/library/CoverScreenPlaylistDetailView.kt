@@ -57,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -228,7 +229,7 @@ fun CoverScreenPlaylistDetailView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .glassEffect(RectangleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
+                    .background(Color.Transparent)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -352,15 +353,95 @@ fun CoverScreenPlaylistDetailView(
                 }
             }
 
+            val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+
             // 2. SCROLLABLE PLAYLIST CONTENT
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.PLAYLIST_TRACKS),
                 contentPadding = PaddingValues(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 3D FLOATING HERO ARTWORK & METADATA
+                // 3D FLOATING HERO ARTWORK
+                item(key = "playlist_hero_artwork") {
+                    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                    val heroAlpha = (1f - (rawOffset / 400f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (rawOffset / 1200f)).coerceIn(0.85f, 1f)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 6.dp)
+                            .graphicsLayer {
+                                alpha = heroAlpha
+                                scaleX = heroScale
+                                scaleY = heroScale
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Ambient Backdrop Glow
+                        Box(
+                            modifier = Modifier
+                                .size(136.dp)
+                                .shadow(
+                                    elevation = 20.dp,
+                                    shape = RoundedCornerShape(26.dp),
+                                    spotColor = accentColor.copy(alpha = 0.45f),
+                                    ambientColor = Color.Black
+                                )
+                                .background(
+                                    accentColor.copy(alpha = 0.20f),
+                                    RoundedCornerShape(26.dp)
+                                )
+                        )
+
+                        // 3D Framed Glass Cover
+                        Box(
+                            modifier = Modifier.size(144.dp)
+                        ) {
+                            WetPaintingFadeImage(
+                                imageModel = imageModel,
+                                contentDescription = playlist.name,
+                                fadeBottomPercent = 0.05f,
+                                blurRadius = 14f,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .border(
+                                        width = 1.2.dp,
+                                        brush = Brush.verticalGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.45f),
+                                                accentColor.copy(alpha = 0.25f),
+                                                Color.White.copy(alpha = 0.10f)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(22.dp)
+                                    )
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            )
+
+                            // Specular Light Streak
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.22f),
+                                                Color.White.copy(alpha = 0.04f),
+                                                Color.Transparent
+                                            )
+                                        )
+                                    )
+                            )
+                        }
+                    }
+                }
 
                 // PLAYLIST TITLE & INFO
                 item(key = "playlist_metadata_bar") {

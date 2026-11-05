@@ -169,17 +169,7 @@ class EqualizerHubViewModel(
     }
 
     fun selectStudioTab(tab: EqualizerStudioTab) {
-        val newSource = if (tab == EqualizerStudioTab.SPATIAL_NEXUS) {
-            EqualizerEngineSource.SPATIAL_NODES
-        } else {
-            EqualizerEngineSource.PARAMETRIC_BANDS
-        }
-        val sourceChanged = _uiState.value.activeEngineSource != newSource || _uiState.value.studioTab != tab
-        _uiState.update { it.copy(studioTab = tab, activeEngineSource = newSource) }
-        if (sourceChanged) {
-            recomputeCurveAndTelemetry()
-            dispatchDspNodes()
-        }
+        _uiState.update { it.copy(studioTab = tab) }
     }
 
     fun setActiveEngineSource(source: EqualizerEngineSource) {
