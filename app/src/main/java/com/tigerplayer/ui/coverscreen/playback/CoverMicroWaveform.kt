@@ -642,7 +642,8 @@ fun calculateWaveformYWithEffectiveHeight(
     frequencyMultiplier: Float = 1f,
     waveCycles: Float = 2.0f,
     turbulence: Float = 0.28f,
-    edgeTaper: Float = 0.12f
+    edgeTaper: Float = 0.12f,
+    points: FloatArray? = null
 ): Float {
     if (width <= 0f || effectiveHeight <= 0f) {
         return effectiveBaselineY
@@ -667,8 +668,17 @@ fun calculateWaveformYWithEffectiveHeight(
         0f
     }
 
-    // Raised sinusoid with vibey harmonic ripples; strictly clamped >= 0 to guarantee positive crests
-    val smoothOscillation = (baseOscillation + harmonicRipple).coerceAtLeast(0f)
+    // Data-driven phase warp from WaveformEngine & WaveformCaptureProcessor for organic wavy motion
+    val sampleAmp = if (points != null && points.isNotEmpty()) {
+        val ptIdx = (normalizedX * (points.size - 1)).toInt().coerceIn(0, points.size - 1)
+        points[ptIdx].coerceIn(0f, 1f)
+    } else {
+        0.5f
+    }
+    val dataPhaseWarp = sampleAmp * 0.35f
+    val adjustedAngle = angle + dataPhaseWarp
+    val adjustedRawTrig = if (isCosine) cos(adjustedAngle.toDouble()).toFloat() else sin(adjustedAngle.toDouble()).toFloat()
+    val adjustedOscillation = (0.5f * (1f + adjustedRawTrig) + harmonicRipple).coerceAtLeast(0f)
 
     // Smooth boundary envelope W(x): continuous raised-cosine tapering that anchors to the baseline
     // at x = 0 (shift 0) and x = width (intercepting effectiveBaselineY), derivative-continuous into the body
@@ -685,7 +695,7 @@ fun calculateWaveformYWithEffectiveHeight(
         else -> 1f
     }
 
-    val peakHeight = smoothOscillation * effectiveHeight * envelope
+    val peakHeight = adjustedOscillation * effectiveHeight * envelope
     return effectiveBaselineY - peakHeight
 }
 
@@ -710,7 +720,8 @@ fun calculateWaveformY(
     energy: Float = 1f,
     flux: Float = 0f,
     turbulence: Float = 0.28f,
-    edgeTaper: Float = 0.12f
+    edgeTaper: Float = 0.12f,
+    points: FloatArray? = null
 ): Float {
     if (width <= 0f || maxHeight <= 0f) {
         return baselineY + overlapPx
@@ -722,9 +733,9 @@ fun calculateWaveformY(
     val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
     val safeFlux = if (flux.isFinite()) flux.coerceIn(0f, 1f) else 0f
 
-    val transientKick = (safeBass * safeBass * 0.20f) + (safeFlux * 0.15f)
+    val transientKick = (safeBass * safeBass * 0.30f) + (safeFlux * 0.25f)
     val baseEnergyFactor = (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
-    val energyModulation = 0.90f + 0.10f * baseEnergyFactor + transientKick
+    val energyModulation = (0.92f + 0.08f * baseEnergyFactor + transientKick).coerceIn(0.5f, 1.15f)
     val effectiveHeight = maxHeight * energyModulation
 
     return calculateWaveformYWithEffectiveHeight(
@@ -738,7 +749,8 @@ fun calculateWaveformY(
         frequencyMultiplier = frequencyMultiplier,
         waveCycles = waveCycles,
         turbulence = turbulence,
-        edgeTaper = edgeTaper
+        edgeTaper = edgeTaper,
+        points = points
     )
 }
 
@@ -773,12 +785,10 @@ fun populatePositiveWaveformPath(
     val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
     val safeFlux = if (flux.isFinite()) flux.coerceIn(0f, 1f) else 0f
 
-    // Highly responsive audio energy breathing with snappy transient attack kicks:
-    // Retains >= 90% base height during silence or zero energy (contractual safety for unit tests),
-    // but violently surges up to 1.35x on heavy bass drops and transient drum attacks.
-    val transientKick = (safeBass * safeBass * 0.20f) + (safeFlux * 0.15f)
+    // Enhanced audio energy breathing with snappy transient attack kicks and DspEngine telemetry:
+    val transientKick = (safeBass * safeBass * 0.30f) + (safeFlux * 0.25f)
     val baseEnergyFactor = (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
-    val energyModulation = 0.90f + 0.10f * baseEnergyFactor + transientKick
+    val energyModulation = (0.92f + 0.08f * baseEnergyFactor + transientKick).coerceIn(0.5f, 1.15f)
     val effectiveHeight = maxHeight * energyModulation
 
     val sampleCount = max(64, points.size)
@@ -795,7 +805,8 @@ fun populatePositiveWaveformPath(
         frequencyMultiplier = frequencyMultiplier,
         waveCycles = waveCycles,
         turbulence = turbulence,
-        edgeTaper = edgeTaper
+        edgeTaper = edgeTaper,
+        points = points
     )
     path.moveTo(0f, y0)
     fillPath?.let { fill ->
@@ -816,7 +827,8 @@ fun populatePositiveWaveformPath(
             frequencyMultiplier = frequencyMultiplier,
             waveCycles = waveCycles,
             turbulence = turbulence,
-            edgeTaper = edgeTaper
+            edgeTaper = edgeTaper,
+            points = points
         )
         path.lineTo(x, y)
         fillPath?.lineTo(x, y)
