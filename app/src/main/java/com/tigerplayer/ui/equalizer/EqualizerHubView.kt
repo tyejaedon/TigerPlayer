@@ -597,65 +597,93 @@ private fun MainAppStudioEqualizerLayout(
         } else {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 2. Mode Selector & Actions Bar
-            Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                EqualizerBandMode.entries.forEach { mode ->
-                    val selected = state.bandMode == mode
-                    Button(
-                        onClick = { viewModel.setBandMode(mode) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selected) TigerNeonOrange else DarkCardBg
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp)
+            // 2. Mode Selector & Actions Bar (TigerPlayer Command Palette Style)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkCardBg),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Band Mode Toggle Group
+                    Row(
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = mode.title,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selected) Color.White else Color.White.copy(alpha = 0.7f)
-                        )
+                        EqualizerBandMode.entries.forEach { mode ->
+                            val selected = state.bandMode == mode
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (selected) TigerNeonOrange else Color.Transparent)
+                                    .clickable { viewModel.setBandMode(mode) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = mode.title,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selected) Color.White else Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+
+                    // AutoEq and Import Tools
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(TigerCyberCyan)
+                                .clickable { onOpenAutoEq() }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Headphones,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "AutoEq",
+                                    color = Color.Black,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = onOpenImport,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+                                .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentPaste,
+                                contentDescription = "Import AutoEq Text",
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(
-                    onClick = onOpenAutoEq,
-                    colors = ButtonDefaults.buttonColors(containerColor = TigerCyberCyan),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    modifier = Modifier.height(34.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Headphones,
-                        contentDescription = null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("AutoEq", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-
-                IconButton(
-                    onClick = onOpenImport,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .background(DarkCardBg, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentPaste,
-                        contentDescription = "Import AutoEq Text",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -1020,31 +1048,46 @@ private fun StudioFaderStrip(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    // Vertical track line
+                    // Vertical track line (Neon Underglow)
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
-                            .width(4.dp)
-                            .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(2.dp))
-                    )
+                            .fillMaxHeight(0.9f)
+                            .width(6.dp)
+                            .background(
+                                color = if (band.gainDb != 0f) band.color.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f),
+                                shape = RoundedCornerShape(3.dp)
+                            )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(2.dp)
+                                .align(Alignment.Center)
+                                .background(
+                                    color = if (band.gainDb != 0f) band.color.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(1.dp)
+                                )
+                        )
+                    }
 
                     // Center 0 dB notch
                     Box(
                         modifier = Modifier
-                            .width(12.dp)
-                            .height(1.dp)
-                            .background(Color.White.copy(alpha = 0.3f))
+                            .width(16.dp)
+                            .height(2.dp)
+                            .background(Color.White.copy(alpha = 0.5f))
                     )
 
-                    // Dynamic Gain Thumb Dot
+                    // Dynamic Gain Thumb Dot (Cyberpunk style)
                     Box(
                         modifier = Modifier
                             .align(BiasAlignment(0f, verticalBias))
-                            .size(14.dp)
+                            .size(18.dp)
                             .background(
-                                color = if (!band.isEnabled) Color.Gray else if (band.gainDb != 0f) TigerCyberCyan else Color.White,
+                                color = if (!band.isEnabled) Color.Gray else if (band.gainDb != 0f) band.color else Color.White,
                                 shape = CircleShape
                             )
+                            .border(2.dp, Color.Black.copy(alpha = 0.8f), CircleShape)
                     )
                 }
 
