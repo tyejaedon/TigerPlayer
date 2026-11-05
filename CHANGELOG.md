@@ -12,6 +12,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [Unreleased]
 
 ### Added
+- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
 
 - **Cover Screen Equalizer & AutoEq Hub with Responsive Studio Parametric Console**: developed an industry-standard Equalizer & AutoEq Hub (`EqualizerHubView`, `EqualizerHubViewModel`, `CoverScreenEqHubCard`) hosted directly on `CoverScreenHomeView` and accessible across the main application (`Screen.Equalizer`, `HomeScreen` Nexus section, `SettingScreen` Neural DSP, and `CoverScreenNexusView`); features 10-band ISO octave center frequencies (31 Hz - 16 kHz), 5-band compact mode, fine-tuning steppers (+/- 0.5 dB) and touch-friendly faders, draggable real-time frequency response curve (`BiquadDesigner.magnitudeAt`), composite peak headroom calculation to prevent digital overs (`BiquadDesigner.calculateCompositePeakGainDb`), master bypass toggle, 15 curated industry presets (Flat, Bass Boost, Vocal, Treble, Electronic, Rock, Jazz, etc.), direct AutoEq headphone database search (3000+ headphone models) with one-click profile application, and Peace / ParametricEQ text importing. (closes #281)
 - **Cover Screen Curved Waveform & Playback Layout**: configured `CoverMicroWaveform` so that waves remain naturally curved across their entire horizontal span without boundary edge windowing or flattening; harmonized wave amplitude progression across tiers (Wave 2 at 2x Wave 1, Wave 3 at 1.5x Wave 2); introduced 2.5D render depth projection with zero-allocation canvas shadow offsets, multi-layer glitter glow and specular core highlights on Waves 1 & 3, and optimal glassmorphic fill transparency; clustered cover playback controls closer to the album art/lyrics section via `Arrangement.Center` in `CoverScreenMiniHub` for optimal lyrics rendering clearance. (#322)
@@ -49,6 +50,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [2.1.6-beta.1] - 2026-10-27
 
 ### Added
+- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
 
 - **Spotify diagnostics & setup dialog**: added `SpotifyAuthError` model and `SpotifyAuthErrorDialog`, converting cryptic OAuth callbacks and configuration omissions into actionable developer and setup guidance (missing `secrets.properties` keys, redirect URI whitelisting, account permissions, and offline state) with accessible 48dp dismiss and retry actions.
 - **Cover screen settings**: added full `CoverScreenSettingsView` mirroring all primary app preferences, including Spotify authentication controls, AMOLED black toggles, neon accent swatches, PiP controls, and playback parameters.
@@ -68,6 +70,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [2.1.5] - 2026-10-25
 
 ### Added
+- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
 
 - **Cover screen preview**: added `coverScreenPreviewMode` preference in settings and an exit button in cover screen settings, enabling cover screen UI preview and testing on standard phone displays. (#275)
 
@@ -80,6 +83,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [2.1.4] - 2026-10-24
 
 ### Added
+- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
 
 - **Architecture & Documentation**: Added comprehensive PlantUML architectural design guide (docs/architecture/architecture-design.md) and essential inline code comments across core modules (service/, engine/, data/, ui/), documenting threading models, domain invariants, and Media3 audio pipelines while removing stale line-number comments and decorative emoji banners. (#268)
 - **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
@@ -125,6 +129,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   and clear status feedback on successful reauthorization. (#201)
 
 ### Added
+- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
 
 - **F-Droid**: Reproducible builds support with binary verification metadata and allowed signing keys
   documentation. (#246)
@@ -132,6 +137,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [2.1.2] - 2026-09-23
 
 ### Added
+- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
 
 - **Full player**: the Speed/Pitch dialog has a restore-to-default action that resets both to
   `1.0x` in one tap. (#167)

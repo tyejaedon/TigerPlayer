@@ -62,4 +62,34 @@ class CoverScreenVortexVisualizerTest {
             shouldShowCoverWaveform(hasModalOverlay = false, fullBleedLyricsVisible = true, isVortexImmersive = false)
         )
     }
+
+    @Test
+    fun `cover art size expands adaptively and stays prominent across screen dimensions`() {
+        // Tight cover screen (Motorola Razr 2022 ~343dp): ~164.64dp -> expands significantly beyond old 130dp
+        val tightArt = calculateCoverArtSize(343.dp, isLarge = false)
+        assertTrue("Tight screen cover art must be at least 160dp", tightArt >= 160.dp)
+
+        // Standard cover screen (Samsung Galaxy Z Flip 5/6 ~374dp): ~179.52dp -> prominent square presentation
+        val standardArt = calculateCoverArtSize(374.dp, isLarge = false)
+        assertTrue("Standard Flip cover art must be at least 175dp", standardArt >= 175.dp)
+
+        // Spacious cover screen (Motorola Razr+ ~416dp): ~199.68dp
+        val spaciousArt = calculateCoverArtSize(416.dp, isLarge = false)
+        assertTrue("Spacious screen cover art must be at least 195dp", spaciousArt >= 195.dp)
+
+        // Flex mode: ~190dp
+        val flexArt = calculateCoverArtSize(800.dp, isLarge = true)
+        assertTrue("Flex mode cover art must be at least 180dp", flexArt >= 180.dp)
+
+        // Safe boundaries
+        val zeroArt = calculateCoverArtSize(0.dp, isLarge = false)
+        assertEquals(182.4.dp, zeroArt)
+        val infArt = calculateCoverArtSize(androidx.compose.ui.unit.Dp.Infinity, isLarge = false)
+        assertEquals(182.4.dp, infArt)
+    }
+
+    @Test
+    fun `immersive hint test tag matches convention`() {
+        assertEquals("cover_screen_immersive_hint", CoverScreenTestTags.IMMERSIVE_HINT)
+    }
 }

@@ -64,6 +64,7 @@ object CoverScreenTestTags {
     const val MICRO_WAVEFORM_CURRENT_TIME = "cover_screen_micro_waveform_current_time"
     const val MICRO_WAVEFORM_END_TIME = "cover_screen_micro_waveform_end_time"
     const val MICRO_WAVEFORM_SLIDER = "cover_screen_micro_waveform_slider"
+    const val IMMERSIVE_HINT = "cover_screen_immersive_hint"
 
     fun artist(id: String): String = "cover_screen_artist_$id"
     fun album(id: String): String = "cover_screen_album_$id"

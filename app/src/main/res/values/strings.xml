@@ -13,6 +13,10 @@
     <string name="coverscreen_gesture_long_press_settings">Long press for playback settings</string>
     <string name="coverscreen_gesture_instructions">Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down to close.</string>
     <string name="coverscreen_talkback_gesture_instructions">Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down to close.</string>
+    <string name="coverscreen_immersive_hint">Hold anywhere to show controls</string>
+    <string name="coverscreen_action_hide_controls">Hide controls</string>
+    <string name="coverscreen_action_show_controls">Show controls</string>
+    <string name="coverscreen_action_toggle_immersive">Toggle immersive mode</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Previous track</string>

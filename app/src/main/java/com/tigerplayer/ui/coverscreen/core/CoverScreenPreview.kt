@@ -112,7 +112,7 @@ fun CoverScreenMiniHubContent(
             )
 
             if (shouldShowCoverControls(isVortexImmersive)) {
-                Spacer(modifier = Modifier.height(if (isTightScreen) 39.dp else 53.dp))
+                Spacer(modifier = Modifier.height(if (isTightScreen) 8.dp else 14.dp))
                 CoverAccessibleControls(
                     isPlaying = uiState.isPlaying,
                     isShuffleEnabled = uiState.isShuffleEnabled,
