@@ -214,8 +214,8 @@ fun FieryWavySeeker(
                 val effectiveBaselineY = trackTop + overlapPx
 
                 val wave1Amplitude = baseWaveAmplitude.toPx()
-                val wave2Amplitude = wave1Amplitude * 4f
-                val wave3Amplitude = wave2Amplitude * 3f
+                val wave2Amplitude = wave1Amplitude * 2f
+                val wave3Amplitude = wave2Amplitude * 1.5f
                 val piOver4 = (Math.PI / 4.0).toFloat()
 
                 // Base track background
@@ -226,7 +226,7 @@ fun FieryWavySeeker(
                     cornerRadius = CornerRadius(trackRadius, trackRadius)
                 )
 
-                // Populate Wave 3: Cosine unconfined apex tier (12x Wave 1)
+                // Populate Wave 3: Cosine apex tier (harmonized 3x Wave 1)
                 populatePositiveWaveformPath(
                     path = wavePath3,
                     fillPath = fillPath3,
@@ -246,7 +246,7 @@ fun FieryWavySeeker(
                     turbulence = if (shouldAnimate) 0.35f else 0f
                 )
 
-                // Populate Wave 2: Middle tier (4x Wave 1, PI/4 phase lead)
+                // Populate Wave 2: Middle tier (harmonized 2x Wave 1, PI/4 phase lead)
                 populatePositiveWaveformPath(
                     path = wavePath2,
                     fillPath = fillPath2,
