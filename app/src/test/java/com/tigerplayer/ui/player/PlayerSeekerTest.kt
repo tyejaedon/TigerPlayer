@@ -60,8 +60,8 @@ class PlayerSeekerTest {
         val points = floatArrayOf(0.2f, 0.5f, 0.8f, 0.4f, 0.9f, 0.3f)
         val width = 1000f
         val wave1Amp = 20f
-        val wave2Amp = wave1Amp * 4f
-        val wave3Amp = wave2Amp * 3f
+        val wave2Amp = wave1Amp * 2f
+        val wave3Amp = wave2Amp * 1.5f
         val baselineY = 100f
         val overlapPx = 4f
 

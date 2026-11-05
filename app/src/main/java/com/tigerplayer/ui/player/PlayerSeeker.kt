@@ -214,8 +214,8 @@ fun FieryWavySeeker(
                 val effectiveBaselineY = trackTop + overlapPx
 
                 val wave1Amplitude = baseWaveAmplitude.toPx()
-                val wave2Amplitude = wave1Amplitude * 4f
-                val wave3Amplitude = wave2Amplitude * 3f
+                val wave2Amplitude = wave1Amplitude * 2f
+                val wave3Amplitude = wave2Amplitude * 1.5f
                 val piOver4 = (Math.PI / 4.0).toFloat()
 
                 // Base track background
