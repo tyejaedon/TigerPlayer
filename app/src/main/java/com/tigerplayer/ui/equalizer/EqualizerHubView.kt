@@ -532,6 +532,11 @@ private fun MainAppStudioEqualizerLayout(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // DSP Signal Chain Pill
+        DspSignalChainPill(state = state)
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         // Top Studio Workspace Tabs: Studio PEQ vs Spatial Nexus vs Acoustic Space
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -565,6 +570,12 @@ private fun MainAppStudioEqualizerLayout(
 
         if (state.studioTab == EqualizerStudioTab.SPATIAL_NEXUS) {
             Spacer(modifier = Modifier.height(10.dp))
+            EngineSourceToggle(
+                title = "SPATIAL NEXUS ENGINE",
+                isActive = state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES,
+                onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.SPATIAL_NODES) }
+            )
+            Spacer(modifier = Modifier.height(10.dp))
             NexusSpatialCanvas(
                 nodes = state.spatialNodes,
                 curvePoints = state.frequencyCurvePoints,
@@ -596,6 +607,13 @@ private fun MainAppStudioEqualizerLayout(
             )
         } else {
             Spacer(modifier = Modifier.height(12.dp))
+
+            EngineSourceToggle(
+                title = "PARAMETRIC EQ ENGINE",
+                isActive = state.activeEngineSource == EqualizerEngineSource.PARAMETRIC_BANDS,
+                onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
+            )
+            Spacer(modifier = Modifier.height(10.dp))
 
             // 2. Mode Selector & Actions Bar (TigerPlayer Command Palette Style)
             Card(
@@ -1431,6 +1449,155 @@ private fun AutoEqImportDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun DspSignalChainPill(state: EqualizerHubUiState) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(DarkCardBg, RoundedCornerShape(8.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "DSP CHAIN",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Black,
+            color = Color.White.copy(alpha = 0.4f),
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(end = 10.dp)
+        )
+
+        // 1. Device / Target
+        val targetName = state.connectedDeviceName.ifBlank { "Speaker" }
+        SignalChainBlock(
+            icon = Icons.Default.Headphones,
+            label = targetName,
+            isActive = true
+        )
+
+        SignalChainArrow()
+
+        // 2. Active Engine Source (PEQ vs Spatial)
+        val isSpatial = state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES
+        SignalChainBlock(
+            icon = if (isSpatial) Icons.Default.AutoFixHigh else Icons.Default.GraphicEq,
+            label = if (isSpatial) "Spatial Nexus" else "Parametric EQ",
+            isActive = state.isEqEnabled,
+            color = if (state.isEqEnabled) TigerCyberCyan else Color.Gray
+        )
+
+        SignalChainArrow()
+
+        // 3. Acoustic Space
+        val isSpaceActive = state.environmentMode != AcousticEnvironmentMode.STUDIO
+        SignalChainBlock(
+            icon = Icons.Default.GraphicEq,
+            label = state.environmentMode.name.replace("_", " ").lowercase(Locale.US).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() },
+            isActive = true,
+            color = if (isSpaceActive) TigerNeonOrange else Color.Gray
+        )
+    }
+}
+
+@Composable
+private fun SignalChainBlock(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isActive: Boolean,
+    color: Color = TigerCyberCyan
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isActive) color.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (isActive) color else Color.Gray,
+            modifier = Modifier.size(12.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = if (isActive) label else "Bypassed",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isActive) color else Color.Gray
+        )
+    }
+}
+
+@Composable
+private fun SignalChainArrow() {
+    Text(
+        text = "➔",
+        fontSize = 12.sp,
+        color = Color.White.copy(alpha = 0.3f),
+        modifier = Modifier.padding(horizontal = 6.dp)
+    )
+}
+
+@Composable
+fun EngineSourceToggle(
+    title: String,
+    isActive: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isActive) TigerCyberCyan.copy(alpha = 0.15f) else DarkCardBg)
+            .border(1.dp, if (isActive) TigerCyberCyan.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Default.GraphicEq,
+                contentDescription = null,
+                tint = if (isActive) TigerCyberCyan else Color.Gray,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (isActive) TigerCyberCyan else Color.White.copy(alpha = 0.6f),
+                letterSpacing = 1.sp
+            )
+        }
+
+        if (isActive) {
+            Text(
+                text = "ACTIVE",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Black,
+                color = TigerCyberCyan,
+                fontSize = 10.sp,
+                modifier = Modifier
+                    .background(TigerCyberCyan.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        } else {
+            Text(
+                text = "ENABLE",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 10.sp
+            )
         }
     }
 }
