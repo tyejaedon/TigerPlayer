@@ -65,31 +65,15 @@ fun WetPaintingFadeImage(
     val imageRequest = remember(imageModel) {
         ImageRequest.Builder(context)
             .data(imageModel)
-            .crossfade(true)
+            .allowHardware(true)
+            .memoryCacheKey("wet_fade_${imageModel}")
+            .crossfade(false)
             .build()
     }
 
     val transitionStart = (1f - fadeBottomPercent).coerceIn(0f, 1f)
 
     Box(modifier = modifier) {
-        // LAYER 1: Soft Blurred Underlayer ("Wet Bleed")
-        AsyncImage(
-            model = imageRequest,
-            contentDescription = null,
-            contentScale = contentScale,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        renderEffect = RenderEffect
-                            .createBlurEffect(blurRadius, blurRadius, Shader.TileMode.CLAMP)
-                            .asComposeRenderEffect()
-                    }
-                    alpha = 0.85f
-                }
-        )
-
-        // LAYER 2: Sharp Original fading out via DstIn alpha mask
         AsyncImage(
             model = imageRequest,
             contentDescription = contentDescription,
@@ -97,21 +81,32 @@ fun WetPaintingFadeImage(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    compositingStrategy = CompositingStrategy.Offscreen
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0f) {
+                        renderEffect = RenderEffect
+                            .createBlurEffect(blurRadius, blurRadius, Shader.TileMode.CLAMP)
+                            .asComposeRenderEffect()
+                    }
+                    if (fadeBottomPercent > 0f) {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }
                 }
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0.0f to Color.Black,
-                                transitionStart to Color.Black,
-                                1.0f to Color.Transparent
+                .then(
+                    if (fadeBottomPercent > 0f) {
+                        Modifier.drawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0.0f to Color.Black,
+                                        transitionStart to Color.Black,
+                                        1.0f to Color.Transparent
+                                    )
+                                ),
+                                blendMode = BlendMode.DstIn
                             )
-                        ),
-                        blendMode = BlendMode.DstIn
-                    )
-                }
+                        }
+                    } else Modifier
+                )
         )
     }
 }
@@ -130,6 +125,7 @@ fun WetPaintingFadeImage(
         val request = ImageRequest.Builder(context)
             .data(resolvedModel)
             .allowHardware(false)
+            .size(100, 100)
             .build()
 
         val result = context.imageLoader.execute(request)
