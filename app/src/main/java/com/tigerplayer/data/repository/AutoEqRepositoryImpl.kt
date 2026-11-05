@@ -190,21 +190,30 @@ class AutoEqRepositoryImpl @Inject constructor(
 
         graphicLoadMutex.withLock {
             if (isGraphicLoaded && graphicPresetsMap.isNotEmpty()) return@withContext
-            try {
-                context.assets.open(ASSET_GRAPHIC_JSON).use { inputStream ->
-                    InputStreamReader(inputStream, Charsets.UTF_8).use { reader ->
-                        val listType = object : TypeToken<List<GraphicPresetJson>>() {}.type
-                        val parsed: List<GraphicPresetJson> = gson.fromJson(reader, listType) ?: emptyList()
-                        for (preset in parsed) {
-                            val id = "${preset.source}:${preset.model}"
-                            graphicPresetsMap[id] = preset
+            val candidateAssets = listOf(ASSET_GRAPHIC_JSON, ASSET_PRESETS_JSON)
+            for (assetPath in candidateAssets) {
+                try {
+                    context.assets.open(assetPath).use { inputStream ->
+                        InputStreamReader(inputStream, Charsets.UTF_8).use { reader ->
+                            val listType = object : TypeToken<List<GraphicPresetJson>>() {}.type
+                            val parsed: List<GraphicPresetJson> = gson.fromJson(reader, listType) ?: emptyList()
+                            if (parsed.isNotEmpty()) {
+                                for (preset in parsed) {
+                                    val id = "${preset.source}:${preset.model}"
+                                    graphicPresetsMap[id] = preset
+                                }
+                                isGraphicLoaded = true
+                                return@withLock
+                            }
                         }
-                        isGraphicLoaded = true
                     }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.d(TAG, "GraphicEQ asset not loaded from $assetPath: ${e.message}")
                 }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.e(TAG, "Failed to load bundled GraphicEQ JSON: $ASSET_GRAPHIC_JSON", e)
+            }
+            if (!isGraphicLoaded) {
+                Log.w(TAG, "Failed to load bundled GraphicEQ JSON from candidate assets: $candidateAssets")
             }
         }
     }
@@ -393,5 +402,6 @@ class AutoEqRepositoryImpl @Inject constructor(
         private const val TAG = "AutoEqRepository"
         private const val ASSET_PARAMETRIC_JSON = "autoeq/autoeq_parametric_presets.json"
         private const val ASSET_GRAPHIC_JSON = "autoeq/autoeq_graphic_presets.json"
+        private const val ASSET_PRESETS_JSON = "autoeq/autoeq_presets.json"
     }
 }
