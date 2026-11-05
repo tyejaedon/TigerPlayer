@@ -39,7 +39,11 @@ Android OS and Google Play require that `versionCode` is a positive 32-bit integ
 
 To ensure beta builds can be continuously updated by testers and cleanly superseded by official production releases, TigerPlayer employs the **SemVer Multiplier Formula**:
 
-$$\text{versionCode} = \text{MAJOR} \times 1{,}000{,}000 + \text{MINOR} \times 10{,}000 + \text{PATCH} \times 100 + \text{BETA\_INDEX}$$
+$$\text{versionCode} = \text{MAJOR} \times 1{,}000{,}000 + \text{MINOR} \times 10{,}000 + \text{PATCH} \times 100 + \text{BUILD\_INDEX}$$
+
+- For candidate betas (`-beta.X`), `BUILD_INDEX` is the 1-based beta index $1 \le \text{BUILD\_INDEX} \le 98$.
+- For production releases, `BUILD_INDEX` defaults to `99` so production builds cleanly supersede candidate betas.
+- **Historical Downgrade Protection Floor:** Because pre-release builds `v2.2.0-beta.1` through `v2.2.0-beta.19` were published with `versionCode` up to `2020019`, a strict historical floor of **`2020020`** is enforced across `app/build.gradle.kts` and `release.yml`. This guarantees that `v2.1.6` (`versionCode = 2020020`) can be installed directly over `v2.2.0-beta.19` without triggering Android OS `[INSTALL_FAILED_VERSION_DOWNGRADE]`, while upcoming `v2.2.0` production (`versionCode = 2020099`) and `v2.3.0` (`versionCode = 2030099`) monotonically supersede it.
 
 ### Example Progression:
 
@@ -47,14 +51,15 @@ $$\text{versionCode} = \text{MAJOR} \times 1{,}000{,}000 + \text{MINOR} \times 1
 | :--- | :--- | :--- | :--- |
 | **Legacy Baseline** | `v2.1.5` | `6` | Installed baseline |
 | **Beta 1** | `v2.2.0-beta.1` | `2020001` | Upgradeable over baseline ($2{,}020{,}001 > 6$) |
-| **Beta 2** | `v2.2.0-beta.2` | `2020002` | Upgradeable over Beta 1 ($2{,}020{,}002 > 2{,}020{,}001$) |
-| **Beta 3** | `v2.2.0-beta.3` | `2020003` | Upgradeable over Beta 2 |
-| **Production Final**| `v2.2.0` | `2020099` | Supersedes all preceding Betas ($2{,}020{,}099 > 2{,}020{,}003$) |
+| **Beta 19** | `v2.2.0-beta.19` | `2020019` | Peak published beta code |
+| **Production v2.1.6** | `v2.1.6` | `2020020` | Supersedes Beta 19 via floor ($2{,}020{,}020 > 2{,}020{,}019$) |
+| **Production Final**| `v2.2.0` | `2020099` | Supersedes v2.1.6 and all preceding Betas ($2{,}020{,}099 > 2{,}020{,}020$) |
+| **Future Production**| `v2.3.0` | `2030099` | Monotonically supersedes v2.2.0 ($2{,}030{,}099 > 2{,}020{,}099$) |
 
 In Gradle (`app/build.gradle.kts`), version codes and names can be injected via:
-- Gradle CLI properties: `-PVERSION_CODE=2020001 -PVERSION_NAME=2.2.0-beta.1`
-- Environment variables: `BETA_VERSION_CODE` and `BETA_VERSION_NAME`
-- Fallback to committed defaults (`versionCode = 6`, `versionName = "2.1.5"`) for local developer builds.
+- Gradle CLI properties: `-PVERSION_CODE=2020020 -PVERSION_NAME=2.1.6`
+- Environment variables: `BETA_VERSION_CODE` / `VERSION_CODE` and `BETA_VERSION_NAME` / `VERSION_NAME`
+- Automatic dynamic derivation in `app/build.gradle.kts` using the SemVer multiplier formula with the `2020020` historical floor.
 
 ---
 
