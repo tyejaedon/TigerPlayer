@@ -128,11 +128,10 @@ fun LyricsDisplay(
                 val density = LocalDensity.current
 
                 val totalOffsetMs = lyrics.offsetMs + manualOffsetMs
-                val activeIndex by remember(lyrics, manualOffsetMs) {
-                    derivedStateOf {
-                        val adjustedPosition = currentPosition + totalOffsetMs
-                        parsed.indexOfLast { it.timeMs <= adjustedPosition }
-                    }
+                val adjustedPosition = currentPosition + totalOffsetMs
+                val activeIndex = remember(lyrics, manualOffsetMs, adjustedPosition) {
+                    val index = parsed.indexOfLast { it.timeMs <= adjustedPosition }
+                    if (index == -1 && parsed.isNotEmpty()) 0 else index
                 }
 
                 LaunchedEffect(activeIndex, isUserDragging) {
@@ -184,6 +183,7 @@ fun LyricsDisplay(
                                 index = index,
                                 lineTimeMs = line.timeMs,
                                 activeColor = TigerNeonOrange,
+                                textColor = textColor,
                                 activeFontSize = activeFontSize,
                                 inactiveScale = inactiveScale,
                                 lineVerticalPadding = lineVerticalPadding,
@@ -276,6 +276,7 @@ private fun LyricRow(
     index: Int,
     lineTimeMs: Long,
     activeColor: Color,
+    textColor: Color,
     activeFontSize: TextUnit,
     inactiveScale: Float,
     lineVerticalPadding: Dp,
@@ -290,7 +291,7 @@ private fun LyricRow(
         label = "LyricScale"
     )
     val alpha by animateFloatAsState(
-        targetValue = if (isActive) 1f else 0.45f,
+        targetValue = if (isActive) 1f else 0.6f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessLow
@@ -298,9 +299,11 @@ private fun LyricRow(
         label = "LyricAlpha"
     )
 
+    val color = if (isActive) activeColor else textColor
+
     Text(
         text = text.ifBlank { "•••" },
-        color = activeColor,
+        color = color,
         style = MaterialTheme.typography.headlineMedium.copy(
             fontWeight = FontWeight.Black,
             fontSize = activeFontSize
