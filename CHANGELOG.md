@@ -37,6 +37,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Changed
 
+- **Playback slider waveform baseline anchoring**: anchored 3-tier sinusoidal harmonic waveforms across both the Main Player seeker (FieryWavySeeker) and Cover Screen mini player seeker (CoverMicroWaveform) to start at shift 0 on the baseline x-axis at x = 0 and smoothly intercept the track baseline at x = width; applied a raised-cosine boundary envelope W(x) with continuous first-derivative transitions to prevent edge detachment and mid-oscillation termination while preserving full dynamic audio reactivity, multi-harmonic turbulence, and zero heap allocations. (#337)
 - **Android Gradle Plugin**: pinned AGP to 9.4.0 for Android Studio compatibility and refreshed dependency verification metadata.
 
 ### Fixed
