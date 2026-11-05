@@ -11,14 +11,13 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+## [2.1.6] - 2026-11-05
+
 ### Added
+- **Release Hardening & Stress Testing Suite**: implemented high-intensity algorithmic stress testing and fuzzing (`ReleaseHardeningStressTest`) verifying mathematical stability across 32-band parametric biquad configurations, 5,000-line chronological LRC parsing, standard RFC 8216 / extended M3U import under malformed inputs, strict zero-shift baseline waveform anchoring, and race-free concurrent audio device routing. (closes #343)
 - **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
-
 - **Cover Screen Settings Parity & Layout Optimization**: brought `CoverScreenSettingsView` to full functional parity with `SettingScreen` for compact displays; added toggles for online artwork lookup (`fetchOnlineArtwork`) and background lyrics auto-downloading (`autoDownloadLyrics`); added Studio Equalizer & AutoEQ shortcut to launch the Equalizer Nexus; integrated custom Music Folders management with SAF directory pickers (include/exclude actions, custom folder list, and deletion); added JSON Backup & Restore section with export, strategy selection (Add to Existing / Replace All), and import; added real-time haptics telemetry debugging panel for debug builds (`BuildConfig.DEBUG`); added safety confirmation dialogs prior to logging out of Spotify or Navidrome accounts; ensured all interactive controls comply with >= 48dp touch targets and compact screen legibility. (closes #336)
-
 - **Offline AutoEq preset JSON assets**: bundled complete precomputed parametric and graphic AutoEq measurement profiles (`autoeq_parametric_presets.json`, `autoeq_presets.json`, `autoeq_graphic_presets.json`) directly into application assets (`app/src/main/assets/autoeq/`), sanitized with clean UTF-8 encoding (no BOM) to prevent parser malformed JSON exceptions; updated `.gitignore` to track production preset assets while ignoring raw intermediate text files; enhanced `AutoEqRepositoryImpl` with robust asset resolution supporting both `autoeq_graphic_presets.json` and fallback `autoeq_presets.json`. (closes #345)
-
-
 - **Cover Screen Equalizer & AutoEq Hub with Responsive Studio Parametric Console**: developed an industry-standard Equalizer & AutoEq Hub (`EqualizerHubView`, `EqualizerHubViewModel`, `CoverScreenEqHubCard`) hosted directly on `CoverScreenHomeView` and accessible across the main application (`Screen.Equalizer`, `HomeScreen` Nexus section, `SettingScreen` Neural DSP, and `CoverScreenNexusView`); features 10-band ISO octave center frequencies (31 Hz - 16 kHz), 5-band compact mode, fine-tuning steppers (+/- 0.5 dB) and touch-friendly faders, draggable real-time frequency response curve (`BiquadDesigner.magnitudeAt`), composite peak headroom calculation to prevent digital overs (`BiquadDesigner.calculateCompositePeakGainDb`), master bypass toggle, 15 curated industry presets (Flat, Bass Boost, Vocal, Treble, Electronic, Rock, Jazz, etc.), direct AutoEq headphone database search (3000+ headphone models) with one-click profile application, and Peace / ParametricEQ text importing. (closes #281)
 - **Cover Screen Curved Waveform & Playback Layout**: configured `CoverMicroWaveform` so that waves remain naturally curved across their entire horizontal span without boundary edge windowing or flattening; harmonized wave amplitude progression across tiers (Wave 2 at 2x Wave 1, Wave 3 at 1.5x Wave 2); introduced 2.5D render depth projection with zero-allocation canvas shadow offsets, multi-layer glitter glow and specular core highlights on Waves 1 & 3, and optimal glassmorphic fill transparency; clustered cover playback controls closer to the album art/lyrics section via `Arrangement.Center` in `CoverScreenMiniHub` for optimal lyrics rendering clearance. (#322)
 - **Cover Screen Playlist Management**: enabled comprehensive playlist management directly on the Cover Screen; added a "New Playlist" button and creation dialog in `LocalPlaylistPicker` (both empty and carousel states); introduced dedicated `CoverScreenPlaylistDetailView` supporting playlist renaming, playlist deletion with confirmation (protecting singleton Liked Songs from deletion), drag-and-drop song reordering with move up/down controls and order persistence via `PlayerViewModel.savePlaylistOrder`, track removal, Play All, Shuffle Play, and custom cover photo updates. (#320)
@@ -48,6 +47,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ### Fixed
 
+- **AudioDeviceRepository race condition**: fixed race condition during Bluetooth disconnection events where rapid reconnect/disconnect could leave an incorrect active audio device route. (#339)
 - **Spotify artwork negative cache & backoff**: prevented perpetual repeated Spotify artwork network requests for unmatched local tracks by recording misses with timestamps and attempt counts in Room (`TigerDatabase` version 16 migration), implementing a 7-day base cool-off with exponential backoff on repeated failures, preferring embedded artwork over network round-trips, and adding a user-visible "ONLINE ARTWORK LOOKUP" setting to disable online artwork fetching entirely. (#64)
 - **Auto-headroom composite peak calculation**: replaced naive algebraic summation of positive EQ band gains in `AdaptiveDspEngine` with true composite filter response peak detection via `BiquadDesigner.calculateCompositePeakGainDb()`; avoids drastic Fletcher-Munson loudness drops on non-overlapping frequency bands while accurately calculating cumulative compounding on overlapping filters and cancellation on opposing boost/cut nodes. (#289)
 - **Lossless dynamic compression & true-peak limiting**: removed hardcoded 0.82f (-1.72 dBFS) limiter threshold in `AdaptiveDspEngine`; bypassed AGC gain reduction completely on lossless streams (`audio/flac`, `audio/wav`, `audio/alac`, `audio/aiff`, and 24-bit/Float PCM) when EQ is flat (0 dB boost or negative cuts); tuned look-ahead limiter to transparent 1.0f (0.0 dBFS) true-peak protection with 0.8ms attack and 50ms release, preventing dynamic range squashing, transient dulling, and volume pumping. (#288)
@@ -55,8 +55,6 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [2.1.6-beta.1] - 2026-10-27
 
 ### Added
-- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
-
 - **Spotify diagnostics & setup dialog**: added `SpotifyAuthError` model and `SpotifyAuthErrorDialog`, converting cryptic OAuth callbacks and configuration omissions into actionable developer and setup guidance (missing `secrets.properties` keys, redirect URI whitelisting, account permissions, and offline state) with accessible 48dp dismiss and retry actions.
 - **Cover screen settings**: added full `CoverScreenSettingsView` mirroring all primary app preferences, including Spotify authentication controls, AMOLED black toggles, neon accent swatches, PiP controls, and playback parameters.
 - **Cover screen navigation**: wired interactive settings launcher button in `CoverScreenLibraryMenu` with haptic feedback and back-gesture handling.
@@ -75,8 +73,6 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [2.1.5] - 2026-10-25
 
 ### Added
-- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
-
 - **Cover screen preview**: added `coverScreenPreviewMode` preference in settings and an exit button in cover screen settings, enabling cover screen UI preview and testing on standard phone displays. (#275)
 
 ### Fixed
@@ -88,8 +84,6 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [2.1.4] - 2026-10-24
 
 ### Added
-- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
-
 - **Architecture & Documentation**: Added comprehensive PlantUML architectural design guide (docs/architecture/architecture-design.md) and essential inline code comments across core modules (service/, engine/, data/, ui/), documenting threading models, domain invariants, and Media3 audio pipelines while removing stale line-number comments and decorative emoji banners. (#268)
 - **Cover screen**: added an artist grid for local and Spotify libraries, with artwork thumbnails,
   album counts, artist album lists, and swipe-back navigation. (#220)
@@ -134,16 +128,12 @@ the terse, per-change log — add an entry here in the same PR as the change, un
   and clear status feedback on successful reauthorization. (#201)
 
 ### Added
-- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
-
 - **F-Droid**: Reproducible builds support with binary verification metadata and allowed signing keys
   documentation. (#246)
 
 ## [2.1.2] - 2026-09-23
 
 ### Added
-- **Cover Screen Cover Art Prominence & Press-and-Hold Immersive Interaction**: enlarged album artwork in `CoverScreenMediaCycleViewport` / `TrackInfoText` to prominent viewport proportions adaptively scaling to cover display dimensions (~165dp on compact displays, ~180dp on standard flip displays, and ~200dp on spacious screens); replaced double-tap immersive toggle with an intuitive press-and-hold (long-press) interaction on the root `CoverScreenMiniHub` container with haptic feedback; implemented a smooth 350ms crossfade transition for media controls, track info, and waveforms; introduced a subtle, non-obscuring bottom hint chip (`coverscreen_immersive_hint`) during immersive visualizer mode instructing the user to hold anywhere to restore controls; updated TalkBack semantics and custom actions across all 5 supported locales. (closes #335)
-
 - **Full player**: the Speed/Pitch dialog has a restore-to-default action that resets both to
   `1.0x` in one tap. (#167)
 - **Connected Accounts**: a new Settings section to log out of Spotify and Navidrome independently,
