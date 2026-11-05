@@ -152,6 +152,30 @@ internal fun calculateCoverLyricsBoxHeight(
     return adaptiveHeight.coerceAtMost(120.dp).coerceAtLeast(minLineHeight)
 }
 
+/**
+ * Calculates adaptive visual dimensions for album artwork in the cover-screen viewport.
+ *
+ * Expands cover art prominence on compact outer displays (e.g. Motorola Razr, Samsung Galaxy Z Flip)
+ * and flex-mode split views, providing an immersive, high-visibility square artwork presentation
+ * while maintaining proper clearance for controls and waveforms.
+ */
+internal fun calculateCoverArtSize(
+    screenHeightDp: Dp,
+    isLarge: Boolean = false
+): Dp {
+    if (isLarge) {
+        val flexTarget = if (screenHeightDp > 0.dp && screenHeightDp != Dp.Infinity) {
+            (screenHeightDp * 0.45f).coerceIn(160.dp, 220.dp)
+        } else {
+            190.dp
+        }
+        return flexTarget
+    }
+
+    val effectiveHeight = if (screenHeightDp > 0.dp && screenHeightDp != Dp.Infinity) screenHeightDp else 380.dp
+    return (effectiveHeight * 0.48f).coerceIn(150.dp, 220.dp)
+}
+
 internal const val COVER_MEDIA_CYCLE_PAGE_COUNT = 2
 
 /**
@@ -169,6 +193,7 @@ internal fun CoverScreenMediaCycleViewport(
     isLarge: Boolean,
     minLineHeight: Dp,
     targetHeight: Dp,
+    targetArtHeight: Dp = targetHeight,
     onDoubleTapAlbumArt: () -> Unit = {},
     onDoubleTapLyrics: () -> Unit = {},
     onSeek: ((Long) -> Unit)? = null,
@@ -177,10 +202,17 @@ internal fun CoverScreenMediaCycleViewport(
     var totalDragX by remember { mutableFloatStateOf(0f) }
     val swipeThresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
 
+    val effectiveTargetHeight = if (currentViewIndex == 0) targetArtHeight else targetHeight
+    val animatedViewportHeight by animateDpAsState(
+        targetValue = effectiveTargetHeight,
+        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        label = "CoverViewportHeight"
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth(if (isLarge) 0.85f else 0.94f)
-            .heightIn(min = minLineHeight, max = targetHeight)
+            .height(animatedViewportHeight)
             .testTag(CoverScreenTestTags.LYRICS_CONTAINER)
             .pointerInput(currentViewIndex) {
                 detectHorizontalDragGestures(
@@ -267,22 +299,22 @@ internal fun CoverScreenMediaCycleViewport(
                         AsyncImage(
                             model = track?.artworkUri,
                             contentDescription = track?.title,
-                            contentScale = ContentScale.Fit,
+                            contentScale = ContentScale.Crop,
                             fallback = painterResource(R.drawable.ic_tiger_logo),
                             modifier = Modifier
-                                .fillMaxHeight(0.92f)
+                                .fillMaxHeight(0.98f)
                                 .aspectRatio(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
                         )
 
                         if (showLikedHeart) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxHeight(0.95f)
+                                    .fillMaxHeight(0.98f)
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.Black.copy(alpha = 0.15f)),
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color.Black.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -290,7 +322,7 @@ internal fun CoverScreenMediaCycleViewport(
                                     contentDescription = stringResource(R.string.coverscreen_action_like),
                                     tint = TigerNeonRed,
                                     modifier = Modifier
-                                        .size(55.dp)
+                                        .size(64.dp)
                                         .scale(heartScale.value)
                                         .alpha(heartAlpha.value)
                                 )
@@ -301,9 +333,7 @@ internal fun CoverScreenMediaCycleViewport(
                 // Dot 2: Lyrics View
                 else -> {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapLyrics() }) },
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         LyricsDisplay(
@@ -367,6 +397,10 @@ internal fun TrackInfoText(
         isLarge = isLarge,
         statsVisible = statsVisible
     )
+    val targetArtHeight = calculateCoverArtSize(
+        screenHeightDp = screenHeightDp,
+        isLarge = isLarge
+    )
 
     // View index: 0 = Album (dot 1), 1 = Lyrics (dot 2)
     var currentViewIndex by remember { mutableIntStateOf(0) }
@@ -418,9 +452,7 @@ internal fun TrackInfoText(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onToggleVortexImmersive() }) },
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
@@ -685,8 +717,9 @@ internal fun TrackInfoText(
                 isLarge = isLarge,
                 minLineHeight = minLineHeight,
                 targetHeight = targetLyricsHeight,
+                targetArtHeight = targetArtHeight,
                 onDoubleTapAlbumArt = onDoubleTapAlbumArt,
-                onDoubleTapLyrics = onToggleVortexImmersive,
+                onDoubleTapLyrics = {},
                 onSeek = onSeek,
                 modifier = Modifier.onGloballyPositioned {
                     onMediaCyclePositioned(it.boundsInRoot())

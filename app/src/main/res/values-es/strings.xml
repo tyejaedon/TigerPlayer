@@ -13,6 +13,10 @@
     <string name="coverscreen_gesture_long_press_settings">Mantener presionado para ajustes de reproducción</string>
     <string name="coverscreen_gesture_instructions">Minirreproductor de pantalla externa. Toca para reproducir o pausar. Desliza a la izquierda para siguiente, a la derecha para anterior, arriba para cola y abajo para cerrar.</string>
     <string name="coverscreen_talkback_gesture_instructions">Minirreproductor de pantalla externa. Toca para reproducir o pausar. Desliza a la izquierda para siguiente, a la derecha para anterior, arriba para cola y abajo para cerrar.</string>
+    <string name="coverscreen_immersive_hint">Mantén presionado en cualquier lugar para mostrar los controles</string>
+    <string name="coverscreen_action_hide_controls">Ocultar controles</string>
+    <string name="coverscreen_action_show_controls">Mostrar controles</string>
+    <string name="coverscreen_action_toggle_immersive">Alternar modo inmersivo</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Pista anterior</string>

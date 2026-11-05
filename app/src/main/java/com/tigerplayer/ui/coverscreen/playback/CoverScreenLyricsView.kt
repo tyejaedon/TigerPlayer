@@ -16,7 +16,8 @@ import com.tigerplayer.ui.player.LyricsDisplay
 fun CoverScreenLyricsView(
     lyrics: Lyrics,
     currentPosition: Long,
-    onDoubleTap: () -> Unit,
+    onDoubleTap: () -> Unit = {},
+    onLongPress: () -> Unit = onDoubleTap,
     onSeek: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -27,7 +28,10 @@ fun CoverScreenLyricsView(
             // A semi-transparent black overlay ensures text contrast.
             .background(Color.Black.copy(alpha = 0.55f))
             .pointerInput(Unit) {
-                detectTapGestures(onDoubleTap = { onDoubleTap() })
+                detectTapGestures(
+                    onDoubleTap = { onDoubleTap() },
+                    onLongPress = { onLongPress() }
+                )
             }
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center
