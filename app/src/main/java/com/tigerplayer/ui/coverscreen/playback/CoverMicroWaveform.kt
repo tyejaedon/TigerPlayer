@@ -145,7 +145,7 @@ fun CoverMicroWaveform(
         )
         Triple(animatedPhase, energyState, fluxState)
     } else {
-        Triple(0f, 0.2f, 0f)
+        Triple(0f, (0.2f + energy * 0.9f).coerceIn(0.2f, 1.2f), 0f)
     }
 
     val points = remember(amplitudes) {
