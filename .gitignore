@@ -63,4 +63,5 @@ local.properties
 keystore.properties
 signing.properties
 google-services.json
-/app/src/main/assets/autoeq/
+/app/src/main/assets/autoeq/graphic_eq/
+/app/src/main/assets/autoeq/parametric_eq/

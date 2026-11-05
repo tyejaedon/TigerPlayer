@@ -91,6 +91,9 @@ class AutoEqRepositoryTest {
         every { assetManager.open("autoeq/autoeq_graphic_presets.json") } answers {
             ByteArrayInputStream(graphicJson.toByteArray(Charsets.UTF_8))
         }
+        every { assetManager.open("autoeq/autoeq_presets.json") } answers {
+            ByteArrayInputStream(graphicJson.toByteArray(Charsets.UTF_8))
+        }
 
         repository = AutoEqRepositoryImpl(context, gson)
     }
@@ -239,5 +242,29 @@ class AutoEqRepositoryTest {
         assertEquals(unknownItem.targetCurve, specs.targetCurve)
         assertEquals(unknownItem.formFactor, specs.formFactor)
         assertTrue(specs.bands.isNotEmpty())
+    }
+
+    @Test
+    fun `fetchGraphicEqGains resolves presets from autoeq_presets json fallback if graphic asset throws`() = runTest {
+        val testContext = mockk<Context>()
+        val testAssetManager = mockk<AssetManager>()
+        every { testContext.assets } returns testAssetManager
+        val parametricJson = gson.toJson(samplePresets)
+        every { testAssetManager.open("autoeq/autoeq_parametric_presets.json") } answers {
+            ByteArrayInputStream(parametricJson.toByteArray(Charsets.UTF_8))
+        }
+        every { testAssetManager.open("autoeq/autoeq_graphic_presets.json") } throws java.io.FileNotFoundException()
+        val graphicJson = gson.toJson(sampleGraphicPresets)
+        every { testAssetManager.open("autoeq/autoeq_presets.json") } answers {
+            ByteArrayInputStream(graphicJson.toByteArray(Charsets.UTF_8))
+        }
+
+        val fallbackRepo = AutoEqRepositoryImpl(testContext, gson)
+        val item = fallbackRepo.searchHeadphones("Sony").first()
+        val result = fallbackRepo.fetchGraphicEqGains(item, listOf(31f, 63f))
+        assertTrue(result.isSuccess)
+        val (preamp, gains) = result.getOrThrow()
+        assertEquals(-5.0f, preamp, 0.01f)
+        assertEquals(2, gains.size)
     }
 }
