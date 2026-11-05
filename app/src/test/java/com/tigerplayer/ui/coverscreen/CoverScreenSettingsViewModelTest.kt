@@ -9,6 +9,7 @@ import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.NavidromePrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.SkipShortAudio
+import com.tigerplayer.data.local.SpotifyPrefs
 import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
 import com.tigerplayer.data.local.TigerSettingsState
@@ -29,6 +30,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -36,6 +38,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -48,16 +51,16 @@ class CoverScreenSettingsViewModelTest {
     private val libraryEngine: LibraryEngine = mockk(relaxed = true)
     private val hapticsDebugMonitor: HapticsDebugMonitor = mockk(relaxed = true)
     private val backupManager: BackupManager = mockk(relaxed = true)
-    private val spotifyAuthManager: SpotifyAuthManager = mockk(relaxed = true)
+    private val spotifyPrefs: SpotifyPrefs = mockk(relaxed = true)
     private val spotifyRepository: SpotifyRepository = mockk(relaxed = true)
     private val navidromePrefs: NavidromePrefs = mockk(relaxed = true)
 
     private val settingsStateFlow = MutableStateFlow(TigerSettingsState())
     private val hapticsStateFlow = MutableStateFlow(HapticsDebugState())
     private val foldersFlow = MutableStateFlow<List<MusicFolder>>(emptyList())
-    private val spotifyTokenFlow = MutableStateFlow("")
     private val navidromeUrlFlow = MutableStateFlow<String?>(null)
 
+    private lateinit var spotifyAuthManager: SpotifyAuthManager
     private lateinit var viewModel: SettingsViewModel
 
     @Before
@@ -67,9 +70,17 @@ class CoverScreenSettingsViewModelTest {
         every { settingsDataStore.settingsFlow } returns settingsStateFlow
         every { hapticsDebugMonitor.state } returns hapticsStateFlow
         every { libraryEngine.getMusicFolders() } returns foldersFlow
-        every { spotifyAuthManager.token } returns spotifyTokenFlow
-        every { spotifyAuthManager.authError } returns MutableStateFlow(null)
+        every { spotifyPrefs.accessToken } returns flowOf("")
+        every { spotifyPrefs.tokenTimestamp } returns flowOf(null)
+        every { spotifyPrefs.refreshToken } returns flowOf(null)
+        every { spotifyPrefs.grantedScope } returns flowOf(null)
         every { navidromePrefs.serverUrl } returns navidromeUrlFlow
+
+        spotifyAuthManager = SpotifyAuthManager(
+            spotifyPrefs = spotifyPrefs,
+            spotifyAuthApi = mockk(relaxed = true),
+            ioDispatcher = UnconfinedTestDispatcher()
+        )
 
         viewModel = SettingsViewModel(
             settingsDataStore = settingsDataStore,
@@ -202,7 +213,8 @@ class CoverScreenSettingsViewModelTest {
         viewModel.logoutSpotify()
         advanceUntilIdle()
         coVerify(exactly = 1) { spotifyRepository.disconnect() }
-        coVerify(exactly = 1) { spotifyAuthManager.logout() }
+        coVerify(exactly = 1) { spotifyPrefs.clearToken() }
+        assertTrue(spotifyAuthManager.token.value.isEmpty())
 
         viewModel.logoutNavidrome()
         advanceUntilIdle()
