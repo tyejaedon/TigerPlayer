@@ -255,6 +255,10 @@ internal fun CoverScreenModalOverlays(
     ) {
         CoverScreenSettingsView(
             viewModel = hiltViewModel<SettingsViewModel>(),
+            onOpenEqualizer = {
+                onDismissSettings()
+                onOpenNexus()
+            },
             onClose = onDismissSettings
         )
     }
