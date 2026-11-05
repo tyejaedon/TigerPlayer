@@ -711,7 +711,8 @@ private fun PlayerControlsContent(
                 textColor = dynamicTextColor,
                 artworkUri = currentTrack.artworkUri,
                 energy = uiState.audioReactiveFrame.energy,
-                bass = uiState.audioReactiveFrame.bass
+                bass = uiState.audioReactiveFrame.bass,
+                flux = uiState.audioReactiveFrame.flux
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
