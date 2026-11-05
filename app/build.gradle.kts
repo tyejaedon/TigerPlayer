@@ -36,7 +36,7 @@ configure<ApplicationExtension> {
             ?: 7
         versionName = project.findProperty("VERSION_NAME")?.toString()
             ?: System.getenv("BETA_VERSION_NAME")
-            ?: "2.1.6-beta.1"
+            ?: "2.1.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Spotify Manifest Placeholders

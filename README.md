@@ -1,6 +1,7 @@
 # TigerPlayer 🐅🐺
 
-[![Release Candidate](https://img.shields.io/badge/Beta%20Release-v2.2.0--beta.13-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.2.0-beta.13)
+[![Latest Release](https://img.shields.io/badge/Release-v2.1.6-3DDC84?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.1.6)
+[![Beta Preview](https://img.shields.io/badge/Beta%20Preview-v2.2.0--beta.19-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/tyejaedon/TigerPlayer/android-ci.yml?branch=master&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/tyejaedon/TigerPlayer/actions/workflows/android-ci.yml)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Target SDK](https://img.shields.io/badge/Android-10%20to%2016%20(API%2029--36)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/)
@@ -12,16 +13,29 @@ Built with **Kotlin**, **Jetpack Compose**, **AndroidX Media3**, **Room**, **Hil
 
 ---
 
-## 🔥 Latest Release: v2.2 Beta Candidate (`v2.2.0-beta.13`)
+## 🚀 Latest Stable Release: v2.1.6
 
-The **v2.2 Parity & Audiophile Milestone** is now in public beta testing! Pre-built, cryptographically signed APKs are available for immediate sideloading:
+TigerPlayer **v2.1.6** delivers complete clamshell cover-screen settings parity, immersive visualizer interactions, 10-band studio parametric EQ with AutoEq headphone integration, live synchronized lyrics, universal M3U/M3U8 import/export, and smart audio device profiling.
 
 | Edition | Description | Direct Download |
 |:---|:---|:---|
-| 🎵 **Full Edition** | Complete feature suite: Local Library + Spotify App Remote + Online Lyrics | [Download Full Signed APK (`v2.2.0-beta.13`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.2.0-beta.13/TigerPlayer-2.2.0-beta.13-full-signed.apk) |
-| 🛡️ **FOSS Edition** | 100% Free & Open Source: zero proprietary binaries, zero tracking, zero API keys required | [Download FOSS Signed APK (`v2.2.0-beta.13`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.2.0-beta.13/TigerPlayer-2.2.0-beta.13-foss-signed.apk) |
+| 🎵 **Full Release** | Complete feature suite: Local Library + Spotify App Remote + Online Lyrics | [Download Full Release APK (`v2.1.6`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.6/app-full-release.apk) |
+| 🛡️ **FOSS Release** | 100% Free & Open Source: zero proprietary binaries, zero tracking, F-Droid reproducible | [Download FOSS Release APK (`v2.1.6`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.6/app-foss-release.apk) |
 
-> 📦 **Play Store Bundle & Checksums:** View signed Android App Bundles (`.aab`), SHA-256 digests, and the SPDX Software Bill of Materials on the [GitHub Release Candidate Page](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.2.0-beta.13).
+> 📖 **Release Notes & Changelog:** Read the complete end-user [v2.1.6 Release Notes](docs/Release-Notes-v2.1.6.md) and technical [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## 🔥 Preview: v2.2 Beta Program
+
+The **v2.2 Parity & Audiophile Milestone** preview builds are available for experimental testing:
+
+| Edition | Description | Direct Download |
+|:---|:---|:---|
+| 🎵 **Full Beta** | Preview builds with latest experimental DSP & features | [Download Full Beta APK](https://github.com/tyejaedon/TigerPlayer/releases) |
+| 🛡️ **FOSS Beta** | Libre preview builds | [Download FOSS Beta APK](https://github.com/tyejaedon/TigerPlayer/releases) |
+
+> 📦 **Play Store Bundle & Checksums:** View signed Android App Bundles (`.aab`), SHA-256 digests, and the SPDX Software Bill of Materials on the [GitHub Releases Page](https://github.com/tyejaedon/TigerPlayer/releases).
 
 ---
 
@@ -219,6 +233,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.github/instructions/AGENT-WORKFL
 
 ## 📝 Documentation & Changelog
 
+- [`docs/Release-Notes-v2.1.6.md`](docs/Release-Notes-v2.1.6.md) — Official end-user release notes for v2.1.6.
 - [`CHANGELOG.md`](CHANGELOG.md) — Running record of all user-visible and engineering changes.
 - [`docs/Beta-Pipeline-and-Release-Process.md`](docs/Beta-Pipeline-and-Release-Process.md) — Pre-production beta architecture, versioning formulas, and signing workflows.
 - [`docs/Roadmap-v2.1.1-v2.3.md`](docs/Roadmap-v2.1.1-v2.3.md) — Release milestones, issue index, and parity tracker.
