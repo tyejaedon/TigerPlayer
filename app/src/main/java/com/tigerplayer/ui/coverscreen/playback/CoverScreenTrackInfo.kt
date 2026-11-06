@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import com.tigerplayer.ui.theme.TigerNeonRed
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -194,6 +195,7 @@ internal fun CoverScreenMediaCycleViewport(
     minLineHeight: Dp,
     targetHeight: Dp,
     targetArtHeight: Dp = targetHeight,
+    onToggleVortexImmersive: () -> Unit = {},
     onDoubleTapAlbumArt: () -> Unit = {},
     onDoubleTapLyrics: () -> Unit = {},
     onSeek: ((Long) -> Unit)? = null,
@@ -264,15 +266,18 @@ internal fun CoverScreenMediaCycleViewport(
                     val heartScale = remember { androidx.compose.animation.core.Animatable(0.4f) }
                     val heartAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
                     val coroutineScope = rememberCoroutineScope()
+                    var heartAnimJob by remember { mutableStateOf<Job?>(null) }
 
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .testTag(CoverScreenTestTags.ALBUM_ART_CONTAINER)
                             .pointerInput(track?.id) {
                                 detectTapGestures(
                                     onDoubleTap = {
                                         onDoubleTapAlbumArt()
-                                        coroutineScope.launch {
+                                        heartAnimJob?.cancel()
+                                        heartAnimJob = coroutineScope.launch {
                                             showLikedHeart = true
                                             heartScale.snapTo(0.4f)
                                             heartAlpha.snapTo(1f)
@@ -291,6 +296,9 @@ internal fun CoverScreenMediaCycleViewport(
                                             )
                                             showLikedHeart = false
                                         }
+                                    },
+                                    onLongPress = {
+                                        onToggleVortexImmersive()
                                     }
                                 )
                             },
@@ -314,7 +322,8 @@ internal fun CoverScreenMediaCycleViewport(
                                     .fillMaxHeight(0.98f)
                                     .aspectRatio(1f)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(Color.Black.copy(alpha = 0.2f)),
+                                    .background(Color.Black.copy(alpha = 0.2f))
+                                    .testTag(CoverScreenTestTags.LIKE_HEART_OVERLAY),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -333,7 +342,14 @@ internal fun CoverScreenMediaCycleViewport(
                 // Dot 2: Lyrics View
                 else -> {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = { onDoubleTapLyrics() },
+                                    onLongPress = { onToggleVortexImmersive() }
+                                )
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         LyricsDisplay(
@@ -401,6 +417,7 @@ internal fun TrackInfoText(
         screenHeightDp = screenHeightDp,
         isLarge = isLarge
     )
+    val targetHeight = maxOf(targetLyricsHeight, targetArtHeight)
 
     // View index: 0 = Album (dot 1), 1 = Lyrics (dot 2)
     var currentViewIndex by remember { mutableIntStateOf(0) }
@@ -716,10 +733,11 @@ internal fun TrackInfoText(
                 currentPosition = currentPosition,
                 isLarge = isLarge,
                 minLineHeight = minLineHeight,
-                targetHeight = targetLyricsHeight,
-                targetArtHeight = targetArtHeight,
+                targetHeight = targetHeight,
+                targetArtHeight = targetHeight,
+                onToggleVortexImmersive = onToggleVortexImmersive,
                 onDoubleTapAlbumArt = onDoubleTapAlbumArt,
-                onDoubleTapLyrics = {},
+                onDoubleTapLyrics = onDoubleTapAlbumArt,
                 onSeek = onSeek,
                 modifier = Modifier.onGloballyPositioned {
                     onMediaCyclePositioned(it.boundsInRoot())

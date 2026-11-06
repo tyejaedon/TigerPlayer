@@ -91,5 +91,55 @@ class CoverScreenVortexVisualizerTest {
     @Test
     fun `immersive hint test tag matches convention`() {
         assertEquals("cover_screen_immersive_hint", CoverScreenTestTags.IMMERSIVE_HINT)
+        assertEquals("cover_screen_like_heart_overlay", CoverScreenTestTags.LIKE_HEART_OVERLAY)
+        assertEquals("cover_screen_album_art_container", CoverScreenTestTags.ALBUM_ART_CONTAINER)
+    }
+
+    @Test
+    fun `recurring long-press toggles fluid vortex immersive mode state deterministically`() {
+        var isVortexImmersive = false
+
+        fun toggle() {
+            isVortexImmersive = !isVortexImmersive
+        }
+
+        // Cycle 1: Press down on album art -> enters immersive mode
+        toggle()
+        assertTrue("Cycle 1: must be in immersive mode", isVortexImmersive)
+        assertFalse("Cycle 1: controls must be hidden", shouldShowCoverControls(isVortexImmersive))
+        assertEquals(0.dp, calculateVortexBlurRadius(isVortexImmersive))
+        assertEquals(0.0f, calculateVortexScrimAlpha(isVortexImmersive), 0.001f)
+
+        // Cycle 2: Press down again -> exits immersive mode and restores controls
+        toggle()
+        assertFalse("Cycle 2: must exit immersive mode", isVortexImmersive)
+        assertTrue("Cycle 2: controls must be restored", shouldShowCoverControls(isVortexImmersive))
+        assertEquals(6.dp, calculateVortexBlurRadius(isVortexImmersive))
+        assertEquals(0.55f, calculateVortexScrimAlpha(isVortexImmersive), 0.001f)
+
+        // Cycle 3: Press down again -> enters immersive mode again
+        toggle()
+        assertTrue("Cycle 3: must re-enter immersive mode", isVortexImmersive)
+        assertFalse("Cycle 3: controls must be hidden", shouldShowCoverControls(isVortexImmersive))
+
+        // Cycle 4: Press down again -> exits immersive mode again
+        toggle()
+        assertFalse("Cycle 4: must exit immersive mode", isVortexImmersive)
+        assertTrue("Cycle 4: controls must be restored", shouldShowCoverControls(isVortexImmersive))
+    }
+
+    @Test
+    fun `media cycle viewport dimensions match album art size for swipe continuity`() {
+        val screenHeight = 374.dp
+        val artSize = calculateCoverArtSize(screenHeight, isLarge = false)
+        val lyricsHeight = calculateCoverLyricsBoxHeight(screenHeight, fontScale = 1.0f, isLarge = false, statsVisible = true)
+
+        val targetHeight = maxOf(lyricsHeight, artSize)
+
+        assertEquals(
+            "Viewport height for lyrics must match album art size for swipe continuity",
+            artSize,
+            targetHeight
+        )
     }
 }

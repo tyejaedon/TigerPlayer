@@ -46,6 +46,8 @@ object CoverScreenTestTags {
     const val QUEUE_REMOVE_DIALOG = "cover_screen_queue_remove_dialog"
     const val QUEUE_REMOVE_CONFIRM = "cover_screen_queue_remove_confirm"
     const val LYRICS_CONTAINER = "cover_screen_lyrics_container"
+    const val ALBUM_ART_CONTAINER = "cover_screen_album_art_container"
+    const val LIKE_HEART_OVERLAY = "cover_screen_like_heart_overlay"
     const val STATS_WIDGET = "cover_screen_stats_widget"
     const val STATS_CHART = "cover_screen_stats_chart"
     const val DISCOVERY_VIEW = "cover_screen_discovery_view"
