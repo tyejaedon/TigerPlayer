@@ -1,6 +1,6 @@
 # TigerPlayer 🐅🐺
 
-[![Latest Release](https://img.shields.io/badge/Release-v2.1.6-3DDC84?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.1.6)
+[![Latest Release](https://img.shields.io/badge/Release-v2.1.7-3DDC84?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.1.7)
 [![Beta Preview](https://img.shields.io/badge/Beta%20Preview-v2.2.0--beta.19-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/tyejaedon/TigerPlayer/android-ci.yml?branch=master&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/tyejaedon/TigerPlayer/actions/workflows/android-ci.yml)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
@@ -13,16 +13,16 @@ Built with **Kotlin**, **Jetpack Compose**, **AndroidX Media3**, **Room**, **Hil
 
 ---
 
-## 🚀 Latest Stable Release: v2.1.6
+## 🚀 Latest Stable Release: v2.1.7
 
-TigerPlayer **v2.1.6** delivers complete clamshell cover-screen settings parity, immersive visualizer interactions, 10-band studio parametric EQ with AutoEq headphone integration, live synchronized lyrics, universal M3U/M3U8 import/export, and smart audio device profiling.
+TigerPlayer **v2.1.7** introduces dynamic orbital motion physics to the Constellation Engine, a dedicated full-screen GPU Fluid Visualizer screen, proactive Home audio smart cards & mood carousel, refined studio parametric EQ with real-time spectrum analysis, harmonized wave motion, and Cover Screen gesture continuity.
 
 | Edition | Description | Direct Download |
 |:---|:---|:---|
-| 🎵 **Full Release** | Complete feature suite: Local Library + Spotify App Remote + Online Lyrics | [Download Full Release APK (`v2.1.6`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.6/app-full-release.apk) |
-| 🛡️ **FOSS Release** | 100% Free & Open Source: zero proprietary binaries, zero tracking, F-Droid reproducible | [Download FOSS Release APK (`v2.1.6`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.6/app-foss-release.apk) |
+| 🎵 **Full Release** | Complete feature suite: Local Library + Spotify App Remote + Online Lyrics | [Download Full Release APK (`v2.1.7`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.7/app-full-release.apk) |
+| 🛡️ **FOSS Release** | 100% Free & Open Source: zero proprietary binaries, zero tracking, F-Droid reproducible | [Download FOSS Release APK (`v2.1.7`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.7/app-foss-release.apk) |
 
-> 📖 **Release Notes & Changelog:** Read the complete end-user [v2.1.6 Release Notes](docs/Release-Notes-v2.1.6.md) and technical [CHANGELOG.md](CHANGELOG.md).
+> 📖 **Release Notes & Changelog:** Read the complete end-user [v2.1.7 Release Notes](docs/Release-Notes-v2.1.7.md) and technical [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -233,6 +233,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.github/instructions/AGENT-WORKFL
 
 ## 📝 Documentation & Changelog
 
+- [`docs/Release-Notes-v2.1.7.md`](docs/Release-Notes-v2.1.7.md) — Official end-user release notes for v2.1.7.
 - [`docs/Release-Notes-v2.1.6.md`](docs/Release-Notes-v2.1.6.md) — Official end-user release notes for v2.1.6.
 - [`CHANGELOG.md`](CHANGELOG.md) — Running record of all user-visible and engineering changes.
 - [`docs/Beta-Pipeline-and-Release-Process.md`](docs/Beta-Pipeline-and-Release-Process.md) — Pre-production beta architecture, versioning formulas, and signing workflows.
