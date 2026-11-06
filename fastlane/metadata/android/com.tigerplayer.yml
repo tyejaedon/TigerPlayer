@@ -24,8 +24,8 @@ AutoUpdateMode: Version %v
 UpdateCheckMode: Tags
 
 # Current release version
-CurrentVersion: 2.1.6
-CurrentVersionCode: 7
+CurrentVersion: 2.1.7
+CurrentVersionCode: 8
 
 Builds:
   - versionName: 2.1.2
@@ -65,6 +65,14 @@ Builds:
   - versionName: 2.1.6
     versionCode: 7
     commit: v2.1.6
+    subdir: app
+    gradle:
+      - foss
+    binary: https://github.com/tyejaedon/TigerPlayer/releases/download/v%v/app-foss-release.apk
+
+  - versionName: 2.1.7
+    versionCode: 8
+    commit: v2.1.7
     subdir: app
     gradle:
       - foss
