@@ -222,6 +222,7 @@ private fun CoverScreenEqualizerLayout(
                     bands = state.bands,
                     isInteractive = false,
                     selectedBandIndex = state.selectedBandIndex,
+                    audioFrame = state.audioReactiveFrame,
                     modifier = Modifier.fillMaxSize(),
                     curveColor = if (state.isEqEnabled) TigerCyberCyan else Color.Gray
                 )
@@ -709,7 +710,7 @@ private fun MainAppStudioEqualizerLayout(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp),
+                .height(240.dp),
             colors = CardDefaults.cardColors(containerColor = DarkCardBg),
             shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
@@ -720,6 +721,7 @@ private fun MainAppStudioEqualizerLayout(
                     bands = state.bands,
                     isInteractive = true,
                     selectedBandIndex = state.selectedBandIndex,
+                    audioFrame = state.audioReactiveFrame,
                     onNodeDragged = { idx, newFreq, newGain ->
                         if (state.bandMode == EqualizerBandMode.AUTOEQ_PARAMETRIC) {
                             viewModel.updateBandFrequency(idx, newFreq)
