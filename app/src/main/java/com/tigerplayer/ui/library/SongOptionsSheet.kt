@@ -40,8 +40,10 @@ fun SongOptionsSheet(
     track: AudioTrack,
     playlists: List<Playlist>,
     iconTintOverride: Color? = null,
+    showGoToAlbum: Boolean = true,
     onDismiss: () -> Unit,
     onPlayNext: () -> Unit,
+    onAddToQueue: () -> Unit = {},
     onAddToPlaylist: (Long) -> Unit,
     onGoToAlbum: (String) -> Unit
 ) {
@@ -135,6 +137,16 @@ fun SongOptionsSheet(
                     }
 
                     SheetActionRow(
+                        icon = WitcherIcons.Playlist,
+                        text = "Add to Queue",
+                        accentColor = MaterialTheme.aardBlue,
+                        iconTintOverride = iconTintOverride
+                    ) {
+                        onAddToQueue()
+                        onDismiss()
+                    }
+
+                    SheetActionRow(
                         icon = WitcherIcons.Add,
                         text = "Add to Playlist",
                         accentColor = MaterialTheme.aardBlue,
@@ -143,14 +155,16 @@ fun SongOptionsSheet(
                         showPlaylistSelector = true
                     }
 
-                    SheetActionRow(
-                        icon = WitcherIcons.Album,
-                        text = "Go to Album",
-                        accentColor = MaterialTheme.igniRed,
-                        iconTintOverride = iconTintOverride
-                    ) {
-                        onGoToAlbum(track.album)
-                        onDismiss()
+                    if (showGoToAlbum) {
+                        SheetActionRow(
+                            icon = WitcherIcons.Album,
+                            text = "Go to Album",
+                            accentColor = MaterialTheme.igniRed,
+                            iconTintOverride = iconTintOverride
+                        ) {
+                            onGoToAlbum(track.album)
+                            onDismiss()
+                        }
                     }
                 }
             }

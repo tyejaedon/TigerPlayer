@@ -41,7 +41,7 @@ import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.tigerplayer.ui.dashboard.DashboardViewModel
-import com.tigerplayer.ui.equalizer.AuralNexusViewModel
+import com.tigerplayer.ui.equalizer.EqualizerHubViewModel
 import com.tigerplayer.ui.player.PlayerUiState
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.prism.PrismViewModel
@@ -241,7 +241,7 @@ internal fun CoverScreenModalOverlays(
         modifier = Modifier.fillMaxSize()
     ) {
         CoverScreenNexusView(
-            viewModel = hiltViewModel<AuralNexusViewModel>(),
+            viewModel = hiltViewModel<EqualizerHubViewModel>(),
             onClose = onDismissNexus
         )
     }
@@ -255,6 +255,10 @@ internal fun CoverScreenModalOverlays(
     ) {
         CoverScreenSettingsView(
             viewModel = hiltViewModel<SettingsViewModel>(),
+            onOpenEqualizer = {
+                onDismissSettings()
+                onOpenNexus()
+            },
             onClose = onDismissSettings
         )
     }

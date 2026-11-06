@@ -11,7 +11,6 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -32,6 +31,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.Subject
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -142,6 +144,7 @@ fun FullPlayerScreen(
 
 
     var showOptionsSheet by remember { mutableStateOf(false) }
+    var showImmersiveVisualizer by remember { mutableStateOf(false) }
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     var useUnifiedFlexLyrics by rememberSaveable { mutableStateOf(true) }
@@ -329,7 +332,8 @@ fun FullPlayerScreen(
                 isCoverOptimized = useCoverOptimizedUi,
                 track = currentTrack,
                 sleepTimerActive = sleepTimerState.mode != SleepTimerMode.OFF,
-                onShowSleepTimer = { showSleepTimerSheet = true }
+                onShowSleepTimer = { showSleepTimerSheet = true },
+                onShowVisualizer = { showImmersiveVisualizer = true }
             )
 
             if (uiState.spotifyReauthRequired) {
@@ -451,6 +455,12 @@ fun FullPlayerScreen(
                     }
                 )
             }
+
+            if (showImmersiveVisualizer) {
+                com.tigerplayer.ui.visualizer.ImmersiveVisualizerScreen(
+                    onClose = { showImmersiveVisualizer = false }
+                )
+            }
         }
     }
 }
@@ -531,7 +541,6 @@ private fun PlayerMainContent(
                     lyrics = uiState.currentLyrics,
                     currentPosition = uiState.currentPosition,
                     textColor = dynamicTextColor,
-                    activeColor = dynamicAccentColor,
                     manualOffsetMs = uiState.lyricsManualOffsetMs,
                     showOffsetControls = true,
                     onLineClick = { timeMs -> viewModel.seekTo(timeMs) },
@@ -711,7 +720,8 @@ private fun PlayerControlsContent(
                 textColor = dynamicTextColor,
                 artworkUri = currentTrack.artworkUri,
                 energy = uiState.audioReactiveFrame.energy,
-                bass = uiState.audioReactiveFrame.bass
+                bass = uiState.audioReactiveFrame.bass,
+                flux = uiState.audioReactiveFrame.flux
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -738,7 +748,8 @@ internal fun PlaybackRateDialog(
     initialPitchRatio: Float,
     onDismissRequest: () -> Unit,
     onSpeedChangeFinished: (Float) -> Unit,
-    onPitchChangeFinished: (Float) -> Unit
+    onPitchChangeFinished: (Float) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val speedMin = PlaybackRatePolicy.MIN_VALUE
     val speedMax = PlaybackRatePolicy.MAX_VALUE
@@ -769,15 +780,18 @@ internal fun PlaybackRateDialog(
 
     Dialog(onDismissRequest = onDismissRequest) {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .clip(dialogShape)
                 .background(Color(0xFF121212).copy(alpha = 0.94f))
                 .glassEffect(dialogShape)
                 .border(1.dp, Color.White.copy(alpha = 0.14f), dialogShape)
-                .padding(24.dp)
+                .padding(20.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -938,7 +952,8 @@ fun HeaderRitual(
     isCoverOptimized: Boolean,
     sleepTimerActive: Boolean,
     onShowSleepTimer: () -> Unit,
-    track: AudioTrack
+    track: AudioTrack,
+    onShowVisualizer: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = if (isCoverOptimized) 8.dp else 16.dp, bottom = 8.dp),
@@ -988,6 +1003,16 @@ fun HeaderRitual(
                     onClick = onShowSleepTimer,
                     contentDescription = "Sleep timer",
                     testTag = "header_sleep_timer_button",
+                    isCoverOptimized = isCoverOptimized,
+                    iconTint = dynamicTextColor
+                )
+
+                HeaderButton(
+                    icon = Icons.Rounded.GraphicEq,
+                    active = false,
+                    onClick = onShowVisualizer,
+                    contentDescription = "Immersive Visualizer",
+                    testTag = "header_visualizer_button",
                     isCoverOptimized = isCoverOptimized,
                     iconTint = dynamicTextColor
                 )

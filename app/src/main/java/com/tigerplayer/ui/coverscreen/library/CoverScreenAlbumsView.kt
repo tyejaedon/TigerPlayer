@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,6 +57,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -70,8 +72,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.coverscreen.CoverScreenAlbum
 import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.glassEffect
@@ -82,9 +86,12 @@ fun CoverScreenAlbumsView(
     album: CoverScreenAlbum,
     artistName: String,
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     onBack: () -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayNext: (AudioTrack) -> Unit = {},
     onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
     onRemoveFromQueue: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier,
     onPlayAll: (List<AudioTrack>) -> Unit = {
@@ -108,7 +115,10 @@ fun CoverScreenAlbumsView(
     var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
     val ambientBrush = rememberTigerAmbientGradient(
-        accent = MaterialTheme.aardBlue,
+        accent = rememberArtworkAccent(
+            imageModel = album.artworkUrl.takeIf { !it.isNullOrBlank() } ?: R.drawable.ic_tiger_logo,
+            fallback = MaterialTheme.aardBlue
+        ),
         baseTopAlpha = 0.22f
     )
 
@@ -135,7 +145,7 @@ fun CoverScreenAlbumsView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .glassEffect(RectangleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
+                    .background(Color.Transparent)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -172,8 +182,11 @@ fun CoverScreenAlbumsView(
                 )
             }
 
+            val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+
             // 2. SCROLLABLE ALBUM HERO & TRACK LIST
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.ALBUM_TRACKS),
@@ -182,10 +195,20 @@ fun CoverScreenAlbumsView(
             ) {
                 // 3D FLOATING HERO ARTWORK
                 item(key = "album_hero_artwork") {
+                    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                    val heroAlpha = (1f - (rawOffset / 400f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (rawOffset / 1200f)).coerceIn(0.85f, 1f)
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 6.dp),
+                            .padding(top = 10.dp, bottom = 6.dp)
+                            .graphicsLayer {
+                                alpha = heroAlpha
+                                scaleX = heroScale
+                                scaleY = heroScale
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         // Ambient Backdrop Glow
@@ -259,7 +282,7 @@ fun CoverScreenAlbumsView(
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 2.dp),
                         shape = RoundedCornerShape(18.dp),
-                        color = Color.Black.copy(alpha = 0.35f),
+                        color = Color.Transparent,
                         border = BorderStroke(
                             1.dp,
                             Brush.verticalGradient(
@@ -427,6 +450,19 @@ fun CoverScreenAlbumsView(
                     )
                 }
             }
+        }
+
+        optionsTrack?.let { selectedTrack ->
+            SongOptionsSheet(
+                track = selectedTrack,
+                playlists = playlists,
+                showGoToAlbum = false,
+                onDismiss = { optionsTrack = null },
+                onPlayNext = { onPlayNext(selectedTrack) },
+                onAddToQueue = { onAddToQueue(selectedTrack) },
+                onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, selectedTrack) },
+                onGoToAlbum = {}
+            )
         }
     }
 }

@@ -19,15 +19,16 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.tigerplayer.ui.equalizer.AuralNexusViewModel
+import com.tigerplayer.ui.equalizer.EqualizerHubViewModel
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.glassEffect
 import kotlin.math.hypot
 
 @Composable
 fun CoverScreenNexusView(
-    viewModel: AuralNexusViewModel,
+    viewModel: EqualizerHubViewModel = hiltViewModel(),
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -108,13 +109,13 @@ fun CoverScreenNexusView(
                         .fillMaxWidth()
                         .height(180.dp)
                         .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(16.dp))
-                        .pointerInput(state.nodes) {
+                        .pointerInput(state.spatialNodes) {
                             detectDragGestures(
                                 onDragStart = { offset ->
                                     val canvasWidth = size.width.toFloat()
                                     val canvasHeight = size.height.toFloat()
                                     if (canvasWidth > 0f && canvasHeight > 0f) {
-                                        val clicked = state.nodes.minByOrNull { node ->
+                                        val clicked = state.spatialNodes.minByOrNull { node ->
                                             val nx = (node.spatialPos.x + 1f) / 2f * canvasWidth
                                             val ny = (1f - (node.spatialPos.y + 1f) / 2f) * canvasHeight
                                             hypot(nx - offset.x, ny - offset.y)
@@ -134,11 +135,11 @@ fun CoverScreenNexusView(
                                         val canvasWidth = size.width.toFloat()
                                         val canvasHeight = size.height.toFloat()
                                         if (canvasWidth > 0f && canvasHeight > 0f) {
-                                            val node = state.nodes.find { it.id == id }
+                                            val node = state.spatialNodes.find { it.id == id }
                                             if (node != null) {
                                                 val newX = (node.spatialPos.x + (dragAmount.x / (canvasWidth / 2f))).coerceIn(-1f, 1f)
                                                 val newY = (node.spatialPos.y - (dragAmount.y / (canvasHeight / 2f))).coerceIn(-1f, 1f)
-                                                viewModel.moveNode(id, Offset(newX, newY))
+                                                viewModel.moveSpatialNode(id, Offset(newX, newY))
                                                 change.consume()
                                             }
                                         }
@@ -169,7 +170,7 @@ fun CoverScreenNexusView(
                         )
 
                         // Draw Nodes
-                        state.nodes.forEach { node ->
+                        state.spatialNodes.forEach { node ->
                             val nx = (node.spatialPos.x + 1f) / 2f * canvasWidth
                             val ny = (1f - (node.spatialPos.y + 1f) / 2f) * canvasHeight
 
@@ -191,7 +192,7 @@ fun CoverScreenNexusView(
 
                 // Active Preset / Mood Label
                 Text(
-                    text = "Active EQ Preset: ${state.currentMood}",
+                    text = "Active EQ Preset: ${state.spatialMood}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.7f)
                 )

@@ -301,6 +301,14 @@ fun CoverScreenLibraryMenu(
                 .fillMaxSize()
                 .imePadding()
         ) {
+            val goToAlbum: (String) -> Unit = { albumName ->
+                keyboardController?.hide()
+                focusManager.clearFocus()
+                val targetAlbum = filteredLocalAlbums.find { it.name.equals(albumName, ignoreCase = true) }
+                    ?: CoverScreenAlbum(id = albumName, artistId = "", name = albumName, trackCount = 1)
+                selectedAlbum = targetAlbum
+            }
+
             if (showSettings) {
                 CoverScreenSettingsView(
                     viewModel = settingsViewModel,
@@ -313,12 +321,16 @@ fun CoverScreenLibraryMenu(
                 CoverScreenPlaylistDetailView(
                     playlist = playlist,
                     tracks = selectedPlaylistTracks,
+                    playlists = playlists,
                     isLikedPlaylist = isLiked,
                     currentTrackId = playerState.currentTrack?.id,
                     isPlaying = playerState.isPlaying,
                     onBack = { selectedPlaylist = null },
                     onPlayTrack = playerViewModel::playTrack,
+                    onPlayNext = playerViewModel::addNextToQueue,
                     onAddToQueue = playerViewModel::addToQueue,
+                    onAddToPlaylist = { playlistId, track -> playerViewModel.addTrackToPlaylist(playlistId, track) },
+                    onGoToAlbum = goToAlbum,
                     onPlayAll = playerViewModel::playAll,
                     onShufflePlay = { tracksToPlay ->
                         if (tracksToPlay.isNotEmpty()) {
@@ -361,11 +373,14 @@ fun CoverScreenLibraryMenu(
                     artistName = album.artistId.takeUnless { it.isNullOrBlank() }
                         ?: albumTracks.firstOrNull()?.artist.orEmpty(),
                     tracks = albumTracks,
+                    playlists = playlists,
                     onBack = {
                         selectedAlbum = null
                     },
                     onPlayTrack = playerViewModel::playTrack,
+                    onPlayNext = playerViewModel::addNextToQueue,
                     onAddToQueue = playerViewModel::addToQueue,
+                    onAddToPlaylist = { playlistId, track -> playerViewModel.addTrackToPlaylist(playlistId, track) },
                     onRemoveFromQueue = { track ->
                         val index = playerState.queue.indexOfFirst { it.id == track.id }
                         if (index >= 0) playerViewModel.removeFromQueue(index)
@@ -593,13 +608,18 @@ fun CoverScreenLibraryMenu(
                                 artists = artists,
                                 albums = filteredLocalAlbums,
                                 tracks = playerState.allTracks,
+                                playlists = playlists,
                                 onAlbumSelected = { album ->
                                     selectedAlbum = album
                                 },
                                 onPlayTrack = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.playTrack(track)
-                                }
+                                },
+                                onPlayNext = playerViewModel::addNextToQueue,
+                                onAddToQueue = playerViewModel::addToQueue,
+                                onAddToPlaylist = { playlistId, track -> playerViewModel.addTrackToPlaylist(playlistId, track) },
+                                onGoToAlbum = goToAlbum
                             )
 
                             CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
@@ -609,16 +629,22 @@ fun CoverScreenLibraryMenu(
 
                             CoverScreenLibraryTab.SONGS -> SongPicker(
                                 tracks = filteredSongs,
+                                playlists = playlists,
                                 currentTrackId = playerState.currentTrack?.id,
                                 isPlaying = playerState.isPlaying,
                                 onPlayTrack = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.playTrack(track)
                                 },
+                                onPlayNext = playerViewModel::addNextToQueue,
                                 onAddToQueue = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                     playerViewModel.addToQueue(track)
-                                }
+                                },
+                                onAddToPlaylist = { playlistId, track ->
+                                    playerViewModel.addTrackToPlaylist(playlistId, track)
+                                },
+                                onGoToAlbum = goToAlbum
                             )
 
                             CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(

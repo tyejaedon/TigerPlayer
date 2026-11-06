@@ -19,8 +19,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,13 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import coil.request.ImageRequest
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import com.tigerplayer.ui.home.SectionTitle
 import com.tigerplayer.ui.player.PlayerViewModel
-import com.tigerplayer.ui.theme.DominantColorExtractor
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
@@ -42,7 +41,6 @@ import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.utils.ArtistUtils
-import kotlinx.coroutines.launch
 
 @RequiresExtension(extension = Build.VERSION_CODES.TIRAMISU, version = 15)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -53,9 +51,7 @@ fun ArtistDetailsScreen(
     onBackClick: () -> Unit,
     onAlbumClick: (String) -> Unit = {}
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val colorScope = rememberCoroutineScope()
 
     val normalizedArtistName = remember(artistName) {
         ArtistUtils.getBaseArtist(artistName).trim()
@@ -86,43 +82,21 @@ fun ArtistDetailsScreen(
     // --- 2. THE DYNAMIC PALETTE RITUAL (Fixed & Keyed) ---
     val fallbackColor = MaterialTheme.colorScheme.background
 
-    // THE FIX: Keying 'remember' to artistName ensures the color resets
-    // to fall back the moment you switch artists.
-    var dominantColor by remember(artistName) { mutableStateOf(fallbackColor) }
-
-    val animatedDominantColor by animateColorAsState(
-        targetValue = dominantColor,
-        animationSpec = tween(1000), // Smooth transition as the palette is forged
-        label = "DominantColorTransition"
-    )
-    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.18f)
-
-    val imageUrl = remember(profile?.imageUrl, artistTracks) {
-        // Priority 1: The official Artist Lore image (Last.fm)
-        // Priority 2: The most recent track's artwork (Local)
+    val imageUrl = remember(profile?.imageUrl, artistTracks, artistName) {
         profile?.imageUrl?.takeIf { it.isNotBlank() }
             ?: artistTracks.firstOrNull()?.artworkUri?.toString()
+            ?: R.drawable.ic_tiger_logo
     }
-
-    val imageRequest = remember(imageUrl) {
-        ImageRequest.Builder(context)
-            .data(imageUrl)
-            .crossfade(800)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .allowHardware(false) // Required for Palette to read the bitmap
-            .listener(onSuccess = { _, result ->
-                colorScope.launch {
-                    dominantColor = DominantColorExtractor.extractSnappedNeon(
-                        drawable = result.drawable,
-                        fallback = TigerNeonOrange
-                    )
-                }
-            }, onError = { _, _ ->
-                dominantColor = fallbackColor
-            })
-            .build()
-    }
+    val artworkAccent = rememberArtworkAccent(
+        imageModel = imageUrl,
+        fallback = TigerNeonOrange
+    )
+    val animatedDominantColor by animateColorAsState(
+        targetValue = artworkAccent,
+        animationSpec = tween(1000),
+        label = "DominantColorTransition"
+    )
+    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.22f)
 
     LaunchedEffect(artistName) {
         viewModel.fetchArtistProfile(artistName)
@@ -131,14 +105,26 @@ fun ArtistDetailsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(fallbackColor) // Use fallback as base
+            .background(fallbackColor)
     ) {
-        // AMBIENT GLOW: Now correctly uses fallbackColor to prevent harsh edges
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(ambientBrush)
-        )
+        ) {
+            WetPaintingFadeImage(
+                imageModel = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                fadeBottomPercent = 0.08f,
+                blurRadius = 18f,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = 0.52f
+                    }
+            )
+        }
 
         Scaffold(
             containerColor = Color.Transparent,
@@ -172,7 +158,7 @@ fun ArtistDetailsScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
-                item { ArtistHeroImage(imageRequest, artistName) }
+                item { ArtistHeroImage(imageUrl, artistName) }
 
                 item { ArtistVanguardStats(profile, animatedDominantColor) }
 
@@ -273,7 +259,7 @@ fun ArtistAlbumCard(
                 error = painterResource(R.drawable.ic_tiger_logo),
                 modifier = Modifier.fillMaxSize()
             )
-            
+
             // --- TRACK COUNT BADGE ---
             Box(
                 modifier = Modifier

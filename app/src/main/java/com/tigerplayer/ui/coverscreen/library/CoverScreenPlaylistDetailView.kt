@@ -1,8 +1,11 @@
 package com.tigerplayer.ui.coverscreen
 
+import android.graphics.drawable.BitmapDrawable
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -54,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -94,30 +98,38 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.tigerplayer.R
+import coil.compose.AsyncImage
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.platform.LocalContext
+import androidx.palette.graphics.Palette
+import coil.request.ImageRequest
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
-import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoverScreenPlaylistDetailView(
     playlist: Playlist,
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     isLikedPlaylist: Boolean,
     currentTrackId: String?,
     isPlaying: Boolean,
     onBack: () -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayNext: (AudioTrack) -> Unit = {},
     onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
+    onGoToAlbum: (String) -> Unit = {},
     onPlayAll: (List<AudioTrack>) -> Unit,
     onShufflePlay: (List<AudioTrack>) -> Unit,
     onRenamePlaylist: (String) -> Unit,
@@ -150,10 +162,20 @@ fun CoverScreenPlaylistDetailView(
     val likedHeartColor = Color(0xFFE91E63)
     val accentColor = if (isLikedPlaylist) likedHeartColor else MaterialTheme.aardBlue
 
-    val ambientBrush = rememberTigerAmbientGradient(
-        accent = accentColor,
-        baseTopAlpha = 0.22f
+    var dominantColor by remember(playlist.id, playlist.artworkUri) { mutableStateOf(TigerNeonOrange) }
+
+    val animatedDominantColor by animateColorAsState(
+        targetValue = dominantColor,
+        animationSpec = tween(1000),
+        label = "AlbumColorAnimation"
     )
+    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.22f)
+    val context = LocalContext.current
+
+    val imageModel = remember(playlist.artworkUri) {
+        if (!playlist.artworkUri.isNullOrBlank()) playlist.artworkUri else R.drawable.ic_tiger_logo
+    }
+
 
     BackHandler(enabled = true) {
         when {
@@ -185,6 +207,21 @@ fun CoverScreenPlaylistDetailView(
                 )
             }
     ) {
+        WetPaintingFadeImage(
+            imageModel = imageModel,
+            contentDescription = playlist.name,
+            fadeBottomPercent = 0.08f,
+            blurRadius = 18f,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.18f))
+        )
+
         Column(modifier = Modifier.fillMaxSize()) {
             // 1. TOP BAR NAVIGATION & ACTIONS
             val backToPlaylistsText = stringResource(R.string.coverscreen_action_back_to_playlists)
@@ -192,7 +229,7 @@ fun CoverScreenPlaylistDetailView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .glassEffect(RectangleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
+                    .background(Color.Transparent)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -316,94 +353,77 @@ fun CoverScreenPlaylistDetailView(
                 }
             }
 
+            val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+
             // 2. SCROLLABLE PLAYLIST CONTENT
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.PLAYLIST_TRACKS),
                 contentPadding = PaddingValues(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 3D FLOATING HERO ARTWORK & METADATA
+                // 3D FLOATING HERO ARTWORK
                 item(key = "playlist_hero_artwork") {
+                    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                    val heroAlpha = (1f - (rawOffset / 400f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (rawOffset / 1200f)).coerceIn(0.85f, 1f)
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp),
+                            .padding(top = 10.dp, bottom = 6.dp)
+                            .graphicsLayer {
+                                alpha = heroAlpha
+                                scaleX = heroScale
+                                scaleY = heroScale
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         // Ambient Backdrop Glow
                         Box(
                             modifier = Modifier
-                                .size(126.dp)
+                                .size(136.dp)
                                 .shadow(
                                     elevation = 20.dp,
-                                    shape = RoundedCornerShape(24.dp),
+                                    shape = RoundedCornerShape(26.dp),
                                     spotColor = accentColor.copy(alpha = 0.45f),
                                     ambientColor = Color.Black
                                 )
                                 .background(
                                     accentColor.copy(alpha = 0.20f),
-                                    RoundedCornerShape(24.dp)
+                                    RoundedCornerShape(26.dp)
                                 )
                         )
 
-                        // Framed Artwork Container
+                        // 3D Framed Glass Cover
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(150.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .border(
-                                    width = 1.2.dp,
-                                    brush = Brush.verticalGradient(
-                                        listOf(
-                                            Color.White.copy(alpha = 0.45f),
-                                            accentColor.copy(alpha = 0.25f),
-                                            Color.White.copy(alpha = 0.10f)
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(22.dp)
-                                )
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable {
-                                    if (!isLikedPlaylist) {
-                                        onChangeCoverPhoto()
-                                    }
-                                }
+                            modifier = Modifier.size(144.dp)
                         ) {
-                            if (isLikedPlaylist) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.radialGradient(
-                                                colors = listOf(
-                                                    likedHeartColor.copy(alpha = 0.50f),
-                                                    Color.Black.copy(alpha = 0.90f)
-                                                )
+                            WetPaintingFadeImage(
+                                imageModel = imageModel,
+                                contentDescription = playlist.name,
+                                fadeBottomPercent = 0.05f,
+                                blurRadius = 14f,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .border(
+                                        width = 1.2.dp,
+                                        brush = Brush.verticalGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.45f),
+                                                accentColor.copy(alpha = 0.25f),
+                                                Color.White.copy(alpha = 0.10f)
                                             )
                                         ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Favorite,
-                                        contentDescription = null,
-                                        tint = likedHeartColor,
-                                        modifier = Modifier.size(54.dp)
+                                        shape = RoundedCornerShape(22.dp)
                                     )
-                                }
-                            } else {
-                                val imageModel = if (!playlist.artworkUri.isNullOrBlank()) playlist.artworkUri else R.drawable.ic_tiger_logo
-                                WetPaintingFadeImage(
-                                    imageModel = imageModel,
-                                    contentDescription = playlist.name,
-                                    fadeBottomPercent = 0.05f,
-                                    blurRadius = 14f,
-                                    contentScale = if (!playlist.artworkUri.isNullOrBlank()) ContentScale.Crop else ContentScale.Fit,
-                                    modifier = Modifier.fillMaxWidth().height(150.dp)
-                                )
-                            }
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            )
 
                             // Specular Light Streak
                             Box(
@@ -665,68 +685,15 @@ fun CoverScreenPlaylistDetailView(
 
     // Track options bottom sheet
     trackForOptions?.let { track ->
-        ModalBottomSheet(
-            onDismissRequest = { trackForOptions = null },
-            containerColor = Color(0xFF1B1F2A)
-        ) {
-            Column(modifier = Modifier.padding(bottom = 24.dp, start = 16.dp, end = 16.dp)) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-                Text(
-                    text = track.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onAddToQueue(track)
-                            trackForOptions = null
-                        }
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = null, tint = accentColor)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("Add to Queue", color = Color.White, fontWeight = FontWeight.Medium)
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onRemoveTrack(track)
-                            mutableTracks = mutableTracks.filter { it.id != track.id }
-                            trackForOptions = null
-                        }
-                        .padding(vertical = 12.dp, horizontal = 8.dp)
-                        .testTag(CoverScreenTestTags.playlistTrackRemove(track.id)),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = stringResource(R.string.coverscreen_action_remove_from_playlist),
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
+        SongOptionsSheet(
+            track = track,
+            playlists = playlists,
+            onDismiss = { trackForOptions = null },
+            onPlayNext = { onPlayNext(track) },
+            onAddToQueue = { onAddToQueue(track) },
+            onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, track) },
+            onGoToAlbum = { albumName -> onGoToAlbum(albumName) }
+        )
     }
 }
 
@@ -752,7 +719,7 @@ private fun CoverScreenPlaylistTrackRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp)
-            .bounceClick { onClick() }
+            .bounceClick(onClick = onClick, onLongClick = onOptionsClick)
             .testTag(CoverScreenTestTags.playlistTrack(track.id)),
         shape = RoundedCornerShape(14.dp),
         color = if (isCurrent) accentColor.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f)

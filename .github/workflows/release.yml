@@ -33,17 +33,72 @@ jobs:
         with:
           cache-read-only: "false"
       - run: ./gradlew --dependency-verification=strict help --stacktrace
+      - name: Resolve monotonic version code and name
+        id: versioning
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF="${GITHUB_REF}"
+          INPUT_REF="${{ inputs.ref }}"
+          TAG=""
+          if [[ "$REF" == refs/tags/v* ]]; then
+            TAG="${REF#refs/tags/}"
+          elif [[ "$INPUT_REF" == v* ]]; then
+            TAG="$INPUT_REF"
+          fi
+
+          if [[ -n "$TAG" ]]; then
+            VERSION_NAME="${TAG#v}"
+            if [[ "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.?([0-9]+))? ]]; then
+              MAJOR="${BASH_REMATCH[1]}"
+              MINOR="${BASH_REMATCH[2]}"
+              PATCH="${BASH_REMATCH[3]}"
+              BETA_NUM="${BASH_REMATCH[5]:-99}"
+              CALCULATED_CODE=$(( MAJOR * 1000000 + MINOR * 10000 + PATCH * 100 + BETA_NUM ))
+              if (( CALCULATED_CODE < 2020020 )); then
+                VERSION_CODE=2020020
+              else
+                VERSION_CODE=$CALCULATED_CODE
+              fi
+            else
+              VERSION_CODE=2020020
+            fi
+          else
+            VERSION_NAME="2.1.7"
+            VERSION_CODE=2020020
+          fi
+
+          echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "version_code=${VERSION_CODE}" >> $GITHUB_OUTPUT
+          echo "=============================================="
+          echo "RELEASE VERSION SPECIFICATION:"
+          echo "  versionName : ${VERSION_NAME}"
+          echo "  versionCode : ${VERSION_CODE}"
+          echo "=============================================="
+
       # `full` is the distributable flavor for tagged releases (includes Spotify App Remote).
       # `foss` is F-Droid's reproducible flavor (no proprietary deps/keys required) — it's built
       # here too purely so both flavors' APKs are attached to the GitHub Release; F-Droid's own
       # infrastructure independently builds and signs `foss` from source (see
       # docs/FDroid-Submission-Plan.md), this job's foss APK is just unsigned convenience evidence.
-      - run: ./gradlew :app:minifyFullReleaseWithR8 :app:minifyFossReleaseWithR8 --stacktrace
-      - run: ./gradlew :app:bundleFullRelease --stacktrace
+      - run: |
+          ./gradlew :app:minifyFullReleaseWithR8 :app:minifyFossReleaseWithR8 \
+            -PVERSION_CODE="${{ steps.versioning.outputs.version_code }}" \
+            -PVERSION_NAME="${{ steps.versioning.outputs.version_name }}" \
+            --stacktrace
+      - run: |
+          ./gradlew :app:bundleFullRelease \
+            -PVERSION_CODE="${{ steps.versioning.outputs.version_code }}" \
+            -PVERSION_NAME="${{ steps.versioning.outputs.version_name }}" \
+            --stacktrace
       # Sideloadable unsigned APKs, in addition to the Play-style AAB, so the
       # release-candidate evidence is directly installable for manual verification —
       # one per distribution flavor (AGP names each file with its flavor already).
-      - run: ./gradlew :app:assembleFullRelease :app:assembleFossRelease --stacktrace
+      - run: |
+          ./gradlew :app:assembleFullRelease :app:assembleFossRelease \
+            -PVERSION_CODE="${{ steps.versioning.outputs.version_code }}" \
+            -PVERSION_NAME="${{ steps.versioning.outputs.version_name }}" \
+            --stacktrace
       - name: Generate checksums
         shell: bash
         run: |

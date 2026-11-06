@@ -295,15 +295,26 @@ fun CoverScreenHomeContent(
                 )
             }
 
-            // Equalizer & AutoEq Hub Section Card
+            // Top Row Section: Equalizer & AutoEq Hub + Constellation Galaxy
             item {
-                CoverScreenEqHubCard(
-                    onOpenEqHub = onEqHubClick,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CoverScreenEqHubCard(
+                        onOpenEqHub = onEqHubClick,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    CoverConstellationCard(
+                        modifier = Modifier.weight(1f),
+                        nodeCount = homeState.statistics.topArtists.size,
+                        onClick = onConstellationClick
+                    )
+                }
             }
 
-            // First Row Section: Daylist and Discovery Weekly Curations
+            // Bottom Section: Daylist and Discovery Weekly Curations
             item {
                 CoverScreenCurationSection(
                     daylistTracks = daylistTracks,
@@ -312,15 +323,6 @@ fun CoverScreenHomeContent(
                     discoveryMeta = discoveryMeta,
                     onDaylistClick = onDaylistClick,
                     onDiscoveryClick = onDiscoveryClick
-                )
-            }
-
-            // Second Section: Constellation Galaxy Card
-            item {
-                CoverConstellationCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    nodeCount = homeState.statistics.topArtists.size,
-                    onClick = onConstellationClick
                 )
             }
 

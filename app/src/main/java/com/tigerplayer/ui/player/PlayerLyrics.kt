@@ -1,10 +1,13 @@
 package com.tigerplayer.ui.player
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -34,6 +37,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tigerplayer.data.model.Lyrics
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import java.util.Locale
 import kotlin.math.abs
 
@@ -58,7 +62,6 @@ fun LyricsDisplay(
     lyrics: Lyrics,
     currentPosition: Long,
     textColor: Color,
-    activeColor: Color = Color.Red,
     activeFontSize: TextUnit = 24.sp,
     inactiveFontSize: TextUnit = 20.sp,
     plainLyricsFontSize: TextUnit = 24.sp,
@@ -69,6 +72,13 @@ fun LyricsDisplay(
     onOffsetAdjust: ((Long) -> Unit)? = null,
     onOffsetReset: (() -> Unit)? = null
 ) {
+    val lyricScrollSpec = remember {
+        tween<Float>(
+            durationMillis = 500,
+            easing = FastOutSlowInEasing
+        )
+    }
+
     when (lyrics) {
         is Lyrics.None -> {
             Box(Modifier.fillMaxSize().testTag(LyricsTestTags.NO_LYRICS_FOUND), Alignment.Center) {
@@ -114,36 +124,38 @@ fun LyricsDisplay(
                 }
             } else {
                 val listState = rememberLazyListState()
-                val totalOffsetMs = lyrics.offsetMs + manualOffsetMs
-                val adjustedPosition = currentPosition + totalOffsetMs
-                val activeIndex = remember(adjustedPosition, parsed) {
-                    parsed.indexOfLast { it.timeMs <= adjustedPosition }
-                }
-
+                val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
                 val density = LocalDensity.current
 
-                LaunchedEffect(activeIndex) {
-                    if (activeIndex >= 0 && activeIndex < parsed.size && !listState.isScrollInProgress) {
+                val totalOffsetMs = lyrics.offsetMs + manualOffsetMs
+                val adjustedPosition = currentPosition + totalOffsetMs
+                val activeIndex = remember(lyrics, manualOffsetMs, adjustedPosition) {
+                    val index = parsed.indexOfLast { it.timeMs <= adjustedPosition }
+                    if (index == -1 && parsed.isNotEmpty()) 0 else index
+                }
+
+                LaunchedEffect(activeIndex, isUserDragging) {
+                    if (activeIndex in parsed.indices && !isUserDragging) {
                         val layoutInfo = listState.layoutInfo
                         val activeItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIndex }
 
                         if (activeItem != null) {
-                            // Active item is already rendered/visible: perform single unified glide to exact center
                             val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
                             val itemCenter = activeItem.offset + (activeItem.size / 2)
                             val delta = (itemCenter - viewportCenter).toFloat()
+
                             if (abs(delta) > 1f) {
                                 listState.animateScrollBy(
                                     value = delta,
-                                    animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+                                    animationSpec = lyricScrollSpec
                                 )
                             }
                         } else {
-                            // Active item is off-screen (e.g. initial track start or seek):
-                            // Center in one single scroll pass
                             val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                            val approxItemHeightPx = with(density) { (lineVerticalPadding * 2 + activeFontSize.toDp()).toPx() }.toInt()
-                            val centerOffset = -(viewportHeight / 2 - approxItemHeightPx / 2)
+                            val approxItemHeightPx = with(density) {
+                                (lineVerticalPadding * 2 + activeFontSize.toDp()).toPx()
+                            }.toInt()
+                            val centerOffset = -((viewportHeight / 2) - (approxItemHeightPx / 2))
                             listState.animateScrollToItem(activeIndex, scrollOffset = centerOffset)
                         }
                     }
@@ -162,40 +174,20 @@ fun LyricsDisplay(
                             items = parsed,
                             key = { index, line -> "lyric_${line.timeMs}_$index" }
                         ) { index, line ->
-                            val isActive = (index == activeIndex && activeIndex >= 0)
+                            val isActive = index == activeIndex
                             val inactiveScale = (inactiveFontSize.value / activeFontSize.value).coerceIn(0.75f, 1f)
-                            val scale by animateFloatAsState(
-                                targetValue = if (isActive) 1.05f else inactiveScale,
-                                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                                label = "LyricScale"
-                            )
-                            val alpha by animateFloatAsState(
-                                targetValue = if (isActive) 1f else 0.45f,
-                                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                                label = "LyricAlpha"
-                            )
 
-                            Text(
-                                text = line.text.ifBlank { "•••" },
-                                color = if (isActive) activeColor else textColor,
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = activeFontSize
-                                ),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("${LyricsTestTags.LYRIC_LINE_PREFIX}$index")
-                                    .clickable(
-                                        enabled = onLineClick != null,
-                                        onClick = { onLineClick?.invoke(line.timeMs) }
-                                    )
-                                    .padding(vertical = lineVerticalPadding, horizontal = 24.dp)
-                                    .graphicsLayer {
-                                        scaleX = scale
-                                        scaleY = scale
-                                        this.alpha = alpha
-                                    }
+                            LyricRow(
+                                text = line.text,
+                                isActive = isActive,
+                                index = index,
+                                lineTimeMs = line.timeMs,
+                                activeColor = TigerNeonOrange,
+                                textColor = textColor,
+                                activeFontSize = activeFontSize,
+                                inactiveScale = inactiveScale,
+                                lineVerticalPadding = lineVerticalPadding,
+                                onLineClick = onLineClick
                             )
                         }
                     }
@@ -276,4 +268,59 @@ private fun LyricsOffsetControls(
             }
         }
     }
+}
+@Composable
+private fun LyricRow(
+    text: String,
+    isActive: Boolean,
+    index: Int,
+    lineTimeMs: Long,
+    activeColor: Color,
+    textColor: Color,
+    activeFontSize: TextUnit,
+    inactiveScale: Float,
+    lineVerticalPadding: Dp,
+    onLineClick: ((Long) -> Unit)?
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isActive) 1.05f else inactiveScale,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "LyricScale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isActive) 1f else 0.6f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "LyricAlpha"
+    )
+
+    val color = if (isActive) activeColor else textColor
+
+    Text(
+        text = text.ifBlank { "•••" },
+        color = color,
+        style = MaterialTheme.typography.headlineMedium.copy(
+            fontWeight = FontWeight.Black,
+            fontSize = activeFontSize
+        ),
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("${LyricsTestTags.LYRIC_LINE_PREFIX}$index")
+            .clickable(
+                enabled = onLineClick != null,
+                onClick = { onLineClick?.invoke(lineTimeMs) }
+            )
+            .padding(vertical = lineVerticalPadding, horizontal = 24.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
+    )
 }

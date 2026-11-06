@@ -6,6 +6,10 @@ import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AcousticNode
 import com.tigerplayer.engine.FilterType
 
+import com.tigerplayer.engine.AudioReactiveFrame
+import kotlin.math.abs
+import kotlin.math.pow
+
 /**
  * Filter band representation for the Parametric Equalizer Hub.
  *
@@ -54,9 +58,66 @@ enum class EqualizerBandMode(val title: String) {
  */
 enum class EqualizerStudioTab(val title: String) {
     STUDIO_EQ("Equalizer"),
+    SPATIAL_NEXUS("Spatial Nexus"),
     AUTOEQ_CATALOG("AutoEq Database"),
     ACOUSTIC_SPACE("Acoustic Space")
 }
+
+/**
+ * Determines whether the active audio DSP chain is driven by parametric faders or 2D spatial gesture nodes.
+ */
+enum class EqualizerEngineSource {
+    PARAMETRIC_BANDS,
+    SPATIAL_NODES
+}
+
+/**
+ * Interactive 2D spatial acoustic node used in the Aural Nexus spatial canvas.
+ */
+data class SpatialNode(
+    val id: String,
+    val label: String,
+    val type: FilterType,
+    val baseFreq: Float,
+    val spatialPos: Offset, // Normalized X,Y (-1f to 1f)
+    val color: Color
+) {
+    companion object {
+        const val MIN_FREQ = 20f
+        const val MAX_FREQ = 20_000f
+        const val MAX_GAIN_DB = 15f
+    }
+
+    fun toAcousticNode(): AcousticNode {
+        val clampedX = spatialPos.x.coerceIn(-1f, 1f)
+        val clampedY = spatialPos.y.coerceIn(-1f, 1f)
+
+        // Exact logarithmic mapping from 20Hz..20kHz across the X axis.
+        val t = (clampedX + 1f) * 0.5f
+        val frequency = MIN_FREQ * (MAX_FREQ / MIN_FREQ).pow(t)
+
+        // Strict +15dB..-15dB mapping where top is positive gain.
+        val gain = (-clampedY) * MAX_GAIN_DB
+
+        val radial = (abs(clampedX) + abs(clampedY)) * 0.5f
+        val q = when (type) {
+            FilterType.LOW_SHELF, FilterType.HIGH_SHELF -> 0.65f + radial * 0.9f
+            FilterType.PEAKING -> 0.9f + (1f - abs(clampedY)) * 3.1f
+        }.coerceIn(0.5f, 4.6f)
+
+        return AcousticNode(id, label, type, frequency, gain, q)
+    }
+}
+
+/**
+ * Default 4-node Aural Nexus spatial configuration.
+ */
+val DEFAULT_SPATIAL_NODES = listOf(
+    SpatialNode("sub", "Sub", FilterType.LOW_SHELF, 60f, Offset(-0.75f, -0.20f), Color(0xFFFF007F)),
+    SpatialNode("warmth", "Body", FilterType.PEAKING, 220f, Offset(-0.30f, 0.05f), Color(0xFFFFD500)),
+    SpatialNode("presence", "Presence", FilterType.PEAKING, 3600f, Offset(0.28f, -0.30f), Color(0xFF39FF14)),
+    SpatialNode("air", "Air", FilterType.HIGH_SHELF, 12_000f, Offset(0.72f, -0.16f), Color(0xFF00E5FF))
+)
 
 /**
  * Industry-standard 10-band ISO octave center frequencies.
@@ -184,6 +245,10 @@ data class EqualizerHubUiState(
     val connectedDeviceName: String = "Internal Speaker",
     val environmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.STUDIO,
     val studioTab: EqualizerStudioTab = EqualizerStudioTab.STUDIO_EQ,
+    val activeEngineSource: EqualizerEngineSource = EqualizerEngineSource.PARAMETRIC_BANDS,
+    val spatialNodes: List<SpatialNode> = DEFAULT_SPATIAL_NODES,
+    val spatialMood: String = "Neural Adaptive",
+    val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame(),
     val frequencyCurvePoints: List<Offset> = emptyList(),
     val isSearchingAutoEq: Boolean = false,
     val autoEqQuery: String = "",
