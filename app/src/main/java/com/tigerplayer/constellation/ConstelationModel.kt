@@ -87,6 +87,8 @@ data class PositionedNode(
     val fluidInfluence: Float,
     val energy: Float,
     val trailLength: Float,
+    val eccentricity: Float = 0.0f,
+    val phaseOffset: Float = 0.0f,
     /** Populated for TRACK nodes: the owning artist's display name. */
     val artistName: String? = null,
     /** Populated for ARTIST nodes: their top 3 most-played local songs. */
