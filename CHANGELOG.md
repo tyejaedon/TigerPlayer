@@ -12,6 +12,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [Unreleased]
 
 ### Added
+- **Constellation Engine Motion Physics & Cover Screen Parity**: re-implemented dynamic orbital motion physics math in `ConstellationPhysics` (elliptical orbits with eccentricity, phase offsets, rotational speed variations, audio energy pulse modulation, and parent-child relative orbital positions); reeled in planet (artist node) orbital distances in `OrbitalLayoutEngine` by ~16x for a cohesive, dense galaxy view; updated main `ConstellationScreen` default camera zoom to `0.45f`; brought live 60 FPS motion physics rendering, interactive touch selection, and artist reading cards to `CoverScreenConstellationView`; added unit tests in `OrbitalLayoutEngineTest`. (closes #369)
 - **Cover Screen Gesture Contracts, Like Overlay & Lyrics Sizing Continuity**: fixed double-tap like animation over album artwork in `CoverScreenMediaCycleViewport` with clean job cancellation (`heartAnimJob`) and test tag assertions (`CoverScreenTestTags.LIKE_HEART_OVERLAY`); matched lyrics container dimensions to album artwork size (`targetArtHeight`), eliminating viewport height jumps and layout shifts between swipe pages; enforced recurring Fluid Vortex long-press/press-and-hold toggle behavior on album artwork and media cycle viewport; added test coverage in `CoverScreenVortexVisualizerTest` verifying deterministic recurring toggle state transitions across consecutive cycles. (closes #362)
 
 ### Fixed
