@@ -217,8 +217,7 @@ fun CoverScreenMiniHub(
                 shouldIgnoreGestureAt = { position ->
                     if (isVortexImmersive) return@coverScreenGestures false
                     val positionInRoot = coverScreenCoordinates?.localToRoot(position) ?: position
-                    (seekerTouchBounds?.contains(positionInRoot) == true) ||
-                            (mediaCycleTouchBounds?.contains(positionInRoot) == true)
+                    seekerTouchBounds?.contains(positionInRoot) == true
                 },
                 onTap = {
                     if (libraryVisible) return@coverScreenGestures

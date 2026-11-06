@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Cover Screen Gesture Contracts, Like Overlay & Lyrics Sizing Continuity**: fixed double-tap like animation over album artwork in `CoverScreenMediaCycleViewport` with clean job cancellation (`heartAnimJob`) and test tag assertions (`CoverScreenTestTags.LIKE_HEART_OVERLAY`); matched lyrics container dimensions to album artwork size (`targetArtHeight`), eliminating viewport height jumps and layout shifts between swipe pages; enforced recurring Fluid Vortex long-press/press-and-hold toggle behavior on album artwork and media cycle viewport; added test coverage in `CoverScreenVortexVisualizerTest` verifying deterministic recurring toggle state transitions across consecutive cycles. (closes #362)
+
 ### Fixed
 - **Detail View AsyncImage Optimization, Dynamic Scroll Transitions, Header Shade Removal & Cover Screen Alignment**: optimized `WetPaintingFadeImage` and `AsyncImage` background rendering with hardware bitmap caching and single-pass blur layers; fixed parallax scroll calculations (`offset`) in `PlaylistDetailScreen`, `CoverScreenPlaylistDetailView`, and `CoverScreenAlbumsView` to eliminate empty black background gaps; added dynamic 3D collapse, scale, and fade out scroll transitions for cover artwork headers; removed dark background shading (`Color.Black.copy(...)` overlays and top bar container colors) behind album and playlist titles; restored 3D floating cover artwork to `CoverScreenPlaylistDetailView`; aligned cover screen album and playlist detail views with main app `AlbumDetailScreen` design. (closes #352)
 ## [2.1.6] - 2026-11-05
