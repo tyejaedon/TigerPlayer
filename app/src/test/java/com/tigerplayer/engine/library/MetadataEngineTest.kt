@@ -15,8 +15,10 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.days
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -106,6 +108,33 @@ class MetadataEngineTest {
 
         assertEquals(ARTIST_PRESEED_CONCURRENCY, maxInFlight.get())
         assertTrue(maxInFlight.get() <= ARTIST_PRESEED_CONCURRENCY)
+    }
+
+    @Test
+    fun `preSeedArtistCache completes promptly when artist has null imageUrl without timing out`() = runTest {
+        val collectedArtists = Collections.synchronizedList(mutableListOf<String>())
+        every { mediaDataRepository.getArtistDetails(any()) } answers {
+            val artistName = firstArg<String>()
+            flow {
+                collectedArtists.add(artistName)
+                // Emits artist details with null imageUrl, then suspends indefinitely (simulating open Room Flow)
+                emit(ArtistDetails(name = artistName, imageUrl = null, bio = "Unknown lore"))
+                awaitCancellation()
+            }
+        }
+        val tracks = listOf(
+            track(1, artist = "NoArtArtist 1"),
+            track(2, artist = "NoArtArtist 2"),
+            track(3, artist = "NoArtArtist 3")
+        )
+
+        // Should complete promptly by taking the first emission, rather than hanging for 5000ms
+        engine().preSeedArtistCache(tracks)
+
+        assertEquals(3, collectedArtists.size)
+        assertTrue(collectedArtists.contains("NoArtArtist 1"))
+        assertTrue(collectedArtists.contains("NoArtArtist 2"))
+        assertTrue(collectedArtists.contains("NoArtArtist 3"))
     }
 
     @Test

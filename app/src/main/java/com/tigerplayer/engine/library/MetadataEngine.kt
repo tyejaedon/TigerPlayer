@@ -335,7 +335,6 @@ class MetadataEngine @Inject constructor(
                         try {
                             withTimeout(ARTIST_PRESEED_TIMEOUT) {
                                 mediaDataRepository.getArtistDetails(name)
-                                    .filter { it.imageUrl != null }
                                     .take(1)
                                     .collect()
                             }
