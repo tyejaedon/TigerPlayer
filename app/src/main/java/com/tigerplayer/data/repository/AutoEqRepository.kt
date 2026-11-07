@@ -9,6 +9,12 @@ interface AutoEqRepository {
     suspend fun searchHeadphones(query: String): List<HeadphoneSearchResult>
     suspend fun findBestMatch(deviceName: String): HeadphoneSearchResult?
     suspend fun fetchHeadphoneSpecs(item: HeadphoneSearchResult): Result<HeadphoneSpecs>
+
+    suspend fun fetchGraphicEqGains(
+        item: HeadphoneSearchResult,
+        targetFrequenciesHz: List<Float>
+    ): Result<Pair<Float, List<Float>>>
+
     fun parseParametricEqText(
         rawText: String,
         modelName: String,

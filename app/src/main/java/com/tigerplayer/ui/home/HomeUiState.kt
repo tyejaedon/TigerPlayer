@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.home
 
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.HeadphoneSearchResult
 import com.tigerplayer.ui.player.StatItem
 import com.tigerplayer.utils.BluetoothDeviceInfo
 
@@ -35,6 +36,10 @@ data class HomeUiState(
     val discoverTracks: List<AudioTrack> = emptyList(),
     val recentlyPlayedTracks: List<AudioTrack> = emptyList(),
     val recommendedTracks: List<AudioTrack> = emptyList(),
+
+    // 🔥 NEW: Proactive Contextual Smart Cards
+    val autoEqMatch: HeadphoneSearchResult? = null,
+    val connectedDeviceName: String? = null,
 
     val errorMessage: String? = null
 )

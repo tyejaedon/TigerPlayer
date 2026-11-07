@@ -98,6 +98,7 @@ data class PlayerUiState(
     val currentQueueIndex: Int = -1,
     val visualMode: PlayerVisualMode = PlayerVisualMode.ARTWORK,
     val currentWaveform: List<Float> = emptyList(),
+    val waveformSensitivity: Float = 1f,
     val audioReactiveFrame: AudioReactiveFrame = AudioReactiveFrame(),
     val mainViewState: MainViewState = MainViewState.ARTWORK,
     val connectedBluetoothDevice: BluetoothDeviceInfo = BluetoothDeviceInfo(),
@@ -318,6 +319,17 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             _albumSortOrder.collect { order -> _uiState.update { it.copy(albumSortOrder = order) } }
         }
+
+        // --- 2d. VISUALIZER & WAVEFORM SETTINGS SYNC ---
+        viewModelScope.launch {
+            settingsDataStore.settingsFlow.collect { settings ->
+                fluidRenderer.setSensitivity(settings.visualizerSensitivity)
+                fluidRenderer.setPaletteMode(settings.visualizerPaletteMode)
+                _uiState.update { state ->
+                    state.copy(waveformSensitivity = settings.waveformSensitivity)
+                }
+            }
+        }
         viewModelScope.launch {
             _playlistSortOrder.collect { order -> _uiState.update { it.copy(playlistSortOrder = order) } }
         }
@@ -514,6 +526,20 @@ class PlayerViewModel @Inject constructor(
     fun updatePlaylistImage(context: Context, playlistId: Long, uri: Uri) {
         viewModelScope.launch {
             libraryEngine.updatePlaylistArtwork(context, playlistId, uri)
+        }
+    }
+
+    fun deletePlaylist(playlistId: Long) {
+        if (playlistId == LibraryEngine.LIKED_SONGS_ID) return
+        viewModelScope.launch {
+            libraryEngine.deletePlaylist(playlistId)
+        }
+    }
+
+    fun renamePlaylist(playlistId: Long, newName: String) {
+        if (playlistId == LibraryEngine.LIKED_SONGS_ID || newName.isBlank()) return
+        viewModelScope.launch {
+            libraryEngine.renamePlaylist(playlistId, newName.trim())
         }
     }
 

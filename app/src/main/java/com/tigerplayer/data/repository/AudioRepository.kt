@@ -201,7 +201,8 @@ class AudioRepository @Inject constructor(
                             .split(',')
                             .map(String::trim)
                             .filter(String::isNotEmpty),
-                        imageUrl = artist.imageUrl
+                        imageUrl = artist.imageUrl,
+                        bio = artist.bio
                     )
                 }
             }

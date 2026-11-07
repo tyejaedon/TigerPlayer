@@ -32,14 +32,15 @@ import com.tigerplayer.data.local.entity.WaveformCacheEntity
         AudioDeviceEntity::class, // <-- Added for audio devices & history (issue #300)
         DevicePresetEntity::class // <-- Added for per-device EQ presets (issue #300)
     ],
-    version = 16, // <-- Bumped to 16 for artwork negative cache & embedded detection (issue #64)
+    version = 17, // <-- Bumped to 17 for indices on playback_history and cached_tracks (issue #374)
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 11, to = 12),
         AutoMigration(from = 12, to = 13),
         AutoMigration(from = 13, to = 14),
         AutoMigration(from = 14, to = 15),
-        AutoMigration(from = 15, to = 16)
+        AutoMigration(from = 15, to = 16),
+        AutoMigration(from = 16, to = 17)
     ]
 )
 @TypeConverters(Converters::class)

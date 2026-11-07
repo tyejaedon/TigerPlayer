@@ -10,10 +10,16 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -38,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -55,19 +62,27 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.R
+import com.tigerplayer.data.model.Artist
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.cloud.CloudViewModel
+import com.tigerplayer.ui.coverscreen.library.CoverScreenAlbumsView
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.ui.theme.WitcherIcons
+import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.utils.ArtistUtils
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -127,6 +142,7 @@ fun CoverScreenLibraryMenu(
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
+    val resources = context.resources
     val view = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -136,11 +152,38 @@ fun CoverScreenLibraryMenu(
     val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
     val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
     val selectedTab by libraryViewModel.selectedTab.collectAsStateWithLifecycle()
+    val artistGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val albumGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val songListState = androidx.compose.foundation.lazy.rememberLazyListState()
     var showSettings by remember { mutableStateOf(false) }
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    var selectedArtist by remember { mutableStateOf<Artist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
     var playlistToEdit by remember { mutableStateOf<Playlist?>(null) }
+    var importStatusMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val importM3uLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val result = playerViewModel.importM3uPlaylist(uri)
+                result.onSuccess { importResult ->
+                    importStatusMessage = resources.getString(
+                        R.string.coverscreen_import_playlist_success,
+                        importResult.playlistName,
+                        importResult.importedCount
+                    )
+                }.onFailure { err ->
+                    importStatusMessage = resources.getString(
+                        R.string.coverscreen_import_playlist_failure,
+                        err.message ?: "Unknown error"
+                    )
+                }
+            }
+        }
+    }
     val playlistImagePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: android.net.Uri? ->
@@ -225,6 +268,7 @@ fun CoverScreenLibraryMenu(
             showSettings -> showSettings = false
             selectedAlbum != null -> selectedAlbum = null
             selectedPlaylist != null -> selectedPlaylist = null
+            selectedArtist != null -> selectedArtist = null
             searchActive -> {
                 keyboardController?.hide()
                 focusManager.clearFocus()
@@ -256,52 +300,93 @@ fun CoverScreenLibraryMenu(
             .fillMaxSize()
             .testTag(CoverScreenTestTags.LIBRARY_MENU)
             .semantics { contentDescription = libraryDesc },
-        color = MaterialTheme.colorScheme.background,
-        shape = RoundedCornerShape(20.dp)
+        color = Color.Black
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
         ) {
+            val goToAlbum: (String) -> Unit = { albumName ->
+                keyboardController?.hide()
+                focusManager.clearFocus()
+                val targetAlbum = filteredLocalAlbums.find { it.name.equals(albumName, ignoreCase = true) }
+                    ?: CoverScreenAlbum(id = albumName, artistId = "", name = albumName, trackCount = 1)
+                selectedAlbum = targetAlbum
+            }
+
             if (showSettings) {
                 CoverScreenSettingsView(
                     viewModel = settingsViewModel,
                     onClose = { showSettings = false }
                 )
-            } else if (selectedAlbum != null || selectedPlaylist != null) {
-                val album = selectedAlbum
-                val playlist = selectedPlaylist
+            } else if (selectedPlaylist != null) {
+                val playlist = selectedPlaylist!!
+                val isLiked = playlist.id == com.tigerplayer.data.local.entity.PlaylistEntity.LIKED_SONGS_PLAYLIST_ID ||
+                        playlist.name.equals(com.tigerplayer.data.local.entity.PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)
+                CoverScreenPlaylistDetailView(
+                    playlist = playlist,
+                    tracks = selectedPlaylistTracks,
+                    playlists = playlists,
+                    isLikedPlaylist = isLiked,
+                    currentTrackId = playerState.currentTrack?.id,
+                    isPlaying = playerState.isPlaying,
+                    onBack = { selectedPlaylist = null },
+                    onPlayTrack = playerViewModel::playTrack,
+                    onPlayNext = playerViewModel::addNextToQueue,
+                    onAddToQueue = playerViewModel::addToQueue,
+                    onAddToPlaylist = { playlistId, track -> playerViewModel.addTrackToPlaylist(playlistId, track) },
+                    onGoToAlbum = goToAlbum,
+                    onPlayAll = playerViewModel::playAll,
+                    onShufflePlay = { tracksToPlay ->
+                        if (tracksToPlay.isNotEmpty()) {
+                            val shuffled = tracksToPlay.shuffled()
+                            playerViewModel.playTrack(shuffled.first())
+                            shuffled.drop(1).forEach(playerViewModel::addToQueue)
+                        }
+                    },
+                    onRenamePlaylist = { newName ->
+                        playerViewModel.renamePlaylist(playlist.id, newName)
+                        selectedPlaylist = playlist.copy(name = newName)
+                    },
+                    onDeletePlaylist = {
+                        playerViewModel.deletePlaylist(playlist.id)
+                        selectedPlaylist = null
+                    },
+                    onSaveOrder = { reorderedTracks ->
+                        playerViewModel.savePlaylistOrder(playlist.id, reorderedTracks)
+                        selectedPlaylistTracks = reorderedTracks
+                    },
+                    onRemoveTrack = { track ->
+                        playerViewModel.removeTrackFromPlaylist(playlist.id, track)
+                        selectedPlaylistTracks = selectedPlaylistTracks.filter { it.id != track.id }
+                    },
+                    onChangeCoverPhoto = {
+                        playlistToEdit = playlist
+                        playlistImagePickerLauncher.launch("image/*")
+                    }
+                )
+            } else if (selectedAlbum != null) {
+                val album = selectedAlbum!!
                 val albumTracks = remember(album, playerState.allTracks) {
                     getCoverScreenAlbumTracks(album, playerState.allTracks)
                 }
-                val displayAlbum = remember(album, albumTracks.size, playlist, selectedPlaylistTracks.size) {
-                    when {
-                        album != null -> album.copy(trackCount = albumTracks.size)
-                        playlist != null -> CoverScreenAlbum(
-                            id = playlist.id.toString(),
-                            artistId = "playlist",
-                            name = playlist.name,
-                            trackCount = selectedPlaylistTracks.size,
-                            artworkUrl = playlist.artworkUri
-                        )
-                        else -> CoverScreenAlbum("", "", "", 0)
-                    }
+                val displayAlbum = remember(album, albumTracks.size) {
+                    album.copy(trackCount = albumTracks.size)
                 }
                 CoverScreenAlbumsView(
                     album = displayAlbum,
-                    artistName = if (playlist != null) "Playlist" else album?.artistId.takeUnless { it.isNullOrBlank() } ?: albumTracks.firstOrNull()?.artist.orEmpty(),
-                    tracks = when {
-                        playlist != null -> selectedPlaylistTracks
-                        album != null -> albumTracks
-                        else -> emptyList()
-                    },
+                    artistName = album.artistId.takeUnless { it.isBlank() }
+                        ?: albumTracks.firstOrNull()?.artist.orEmpty(),
+                    tracks = albumTracks,
+                    playlists = playlists,
                     onBack = {
                         selectedAlbum = null
-                        selectedPlaylist = null
                     },
                     onPlayTrack = playerViewModel::playTrack,
+                    onPlayNext = playerViewModel::addNextToQueue,
                     onAddToQueue = playerViewModel::addToQueue,
+                    onAddToPlaylist = { playlistId, track -> playerViewModel.addTrackToPlaylist(playlistId, track) },
                     onRemoveFromQueue = { track ->
                         val index = playerState.queue.indexOfFirst { it.id == track.id }
                         if (index >= 0) playerViewModel.removeFromQueue(index)
@@ -486,6 +571,9 @@ fun CoverScreenLibraryMenu(
                     CoverScreenLibraryTabRow(
                         selectedTab = selectedTab,
                         onTabSelected = { tab ->
+                            selectedArtist = null
+                            selectedAlbum = null
+                            selectedPlaylist = null
                             libraryViewModel.selectTab(tab)
                         }
                     )
@@ -495,7 +583,16 @@ fun CoverScreenLibraryMenu(
                         modifier = Modifier
                             .fillMaxSize()
                             .testTag(CoverScreenTestTags.LIBRARY_CONTENT),
-                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        transitionSpec = {
+                            fadeIn(
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) + scaleIn(
+                                initialScale = 0.98f,
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) togetherWith fadeOut(
+                                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                            )
+                        },
                         label = "Cover screen library tab"
                     ) { tab ->
                         when (tab) {
@@ -513,39 +610,94 @@ fun CoverScreenLibraryMenu(
                                 onArtistSelected = { artistName ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.onSearchQueryChanged(artistName)
+                                    selectedArtist = null
+                                    selectedAlbum = null
+                                    selectedPlaylist = null
                                     libraryViewModel.selectTab(CoverScreenLibraryTab.ARTISTS)
                                 }
                             )
-                            CoverScreenLibraryTab.ARTISTS -> CoverScreenArtistsGrid(
-                                artists = artists,
-                                albums = filteredLocalAlbums,
-                                tracks = playerState.allTracks,
-                                onAlbumSelected = { album ->
-                                    selectedAlbum = album
-                                },
-                                onPlayTrack = { track ->
-                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    playerViewModel.playTrack(track)
+                            CoverScreenLibraryTab.ARTISTS -> {
+                                if (selectedArtist == null) {
+                                    CoverScreenArtistsGrid(
+                                        artists = artists,
+                                        albums = filteredLocalAlbums,
+                                        tracks = playerState.allTracks,
+                                        playlists = playlists,
+                                        state = artistGridState,
+                                        onArtistSelected = { artist ->
+                                            selectedArtist = artist
+                                        },
+                                        onAlbumSelected = { album ->
+                                            selectedAlbum = album
+                                        },
+                                        onPlayTrack = { track ->
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            playerViewModel.playTrack(track)
+                                        },
+                                        onPlayNext = playerViewModel::addNextToQueue,
+                                        onAddToQueue = playerViewModel::addToQueue,
+                                        onAddToPlaylist = { playlistId, track -> playerViewModel.addTrackToPlaylist(playlistId, track) },
+                                        onGoToAlbum = goToAlbum
+                                    )
+                                } else {
+                                    CoverScreenArtistDetail(
+                                        artist = selectedArtist!!,
+                                        albums = filteredLocalAlbums,
+                                        tracks = playerState.allTracks,
+                                        playlists = playlists,
+                                        onBack = { selectedArtist = null },
+                                        onAlbumSelected = { album ->
+                                            selectedAlbum = album
+                                        },
+                                        onPlayTrack = { track ->
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            playerViewModel.playTrack(track)
+                                        },
+                                        onPlayNext = playerViewModel::addNextToQueue,
+                                        onAddToQueue = playerViewModel::addToQueue,
+                                        onAddToPlaylist = { playlistId, track -> playerViewModel.addTrackToPlaylist(playlistId, track) },
+                                        onGoToAlbum = goToAlbum,
+                                        onPlayAll = { tracksToPlay ->
+                                            if (tracksToPlay.isNotEmpty()) {
+                                                playerViewModel.playAll(tracksToPlay)
+                                            }
+                                        },
+                                        onShufflePlay = { tracksToPlay ->
+                                            if (tracksToPlay.isNotEmpty()) {
+                                                val shuffled = tracksToPlay.shuffled()
+                                                playerViewModel.playTrack(shuffled.first())
+                                                shuffled.drop(1).forEach(playerViewModel::addToQueue)
+                                            }
+                                        }
+                                    )
                                 }
-                            )
+                            }
 
                             CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
                                 albums = filteredLocalAlbums,
+                                state = albumGridState,
                                 onAlbumSelected = { selectedAlbum = it }
                             )
 
                             CoverScreenLibraryTab.SONGS -> SongPicker(
                                 tracks = filteredSongs,
+                                playlists = playlists,
                                 currentTrackId = playerState.currentTrack?.id,
                                 isPlaying = playerState.isPlaying,
+                                state = songListState,
                                 onPlayTrack = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.playTrack(track)
                                 },
+                                onPlayNext = playerViewModel::addNextToQueue,
                                 onAddToQueue = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                     playerViewModel.addToQueue(track)
-                                }
+                                },
+                                onAddToPlaylist = { playlistId, track ->
+                                    playerViewModel.addTrackToPlaylist(playlistId, track)
+                                },
+                                onGoToAlbum = goToAlbum
                             )
 
                             CoverScreenLibraryTab.PLAYLISTS -> LocalPlaylistPicker(
@@ -554,6 +706,21 @@ fun CoverScreenLibraryMenu(
                                 onEditPhoto = { playlist ->
                                     playlistToEdit = playlist
                                     playlistImagePickerLauncher.launch("image/*")
+                                },
+                                onImportPlaylist = {
+                                    importM3uLauncher.launch(
+                                        arrayOf(
+                                            "audio/x-mpegurl",
+                                            "audio/mpegurl",
+                                            "application/vnd.apple.mpegurl",
+                                            "application/x-mpegurl",
+                                            "text/plain",
+                                            "*/*"
+                                        )
+                                    )
+                                },
+                                onCreatePlaylist = { name ->
+                                    playerViewModel.createPlaylist(name)
                                 }
                             )
 
@@ -566,6 +733,37 @@ fun CoverScreenLibraryMenu(
                                 }
                             )
                         }
+                    }
+                }
+            }
+
+            // Import status notification overlay
+            importStatusMessage?.let { msg ->
+                LaunchedEffect(msg) {
+                    kotlinx.coroutines.delay(3500.milliseconds)
+                    importStatusMessage = null
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp, start = 16.dp, end = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1E232E))
+                            .border(1.dp, MaterialTheme.aardBlue, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .testTag(CoverScreenTestTags.IMPORT_STATUS_OVERLAY)
+                    ) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }

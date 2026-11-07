@@ -14,6 +14,7 @@ import com.tigerplayer.utils.BluetoothDeviceManager
 import io.mockk.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -36,6 +37,7 @@ class AudioDeviceRepositoryTest {
         every { settingsDataStore.settingsFlow } returns settingsStateFlow
         coEvery { audioDeviceDao.getAllDevicesFlow() } returns MutableStateFlow(emptyList())
         coEvery { audioDeviceDao.getDeviceById(any()) } returns null
+        coEvery { autoEqRepository.findBestMatch(any()) } returns null
 
         repository = AudioDeviceRepositoryImpl(
             audioDeviceDao = audioDeviceDao,
@@ -234,5 +236,72 @@ class AudioDeviceRepositoryTest {
         assertEquals("bose_preset", active.assignedPresetId)
         // Auto-apply was disabled, so current active preset should be null
         assertNull(repository.currentActivePreset.value)
+    }
+
+    @Test
+    fun `observing bluetooth connectedDevice transition from connected to disconnected resets active route to speaker`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val testRepo = AudioDeviceRepositoryImpl(
+            audioDeviceDao = audioDeviceDao,
+            bluetoothDeviceManager = bluetoothDeviceManager,
+            autoEqRepository = autoEqRepository,
+            settingsDataStore = settingsDataStore,
+            ioDispatcher = testDispatcher
+        )
+        testScheduler.advanceUntilIdle()
+
+        // Emit connected bluetooth device
+        btStateFlow.value = BluetoothDeviceInfo(
+            name = "Sony WH-1000XM4",
+            address = "AA:BB:CC:DD:EE:FF",
+            isConnected = true,
+            codec = "LDAC",
+            batteryLevel = 85
+        )
+        testScheduler.advanceUntilIdle()
+
+        var active = testRepo.currentActiveDevice.value
+        assertEquals("AA:BB:CC:DD:EE:FF", active.deviceId)
+        assertEquals("Sony WH-1000XM4", active.displayName)
+        assertEquals(AudioDeviceType.BLUETOOTH, active.type)
+
+        // Now emit disconnection transition
+        btStateFlow.value = BluetoothDeviceInfo(
+            name = "Internal Speaker",
+            address = "",
+            isConnected = false
+        )
+        testScheduler.advanceUntilIdle()
+
+        active = testRepo.currentActiveDevice.value
+        assertEquals(AudioOutputDevice.DEVICE_ID_SPEAKER, active.deviceId)
+        assertEquals(AudioDeviceType.PHONE_SPEAKER, active.type)
+    }
+
+    @Test
+    fun `initial disconnected bluetooth flow emission does not reset manually recorded bluetooth device`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val testRepo = AudioDeviceRepositoryImpl(
+            audioDeviceDao = audioDeviceDao,
+            bluetoothDeviceManager = bluetoothDeviceManager,
+            autoEqRepository = autoEqRepository,
+            settingsDataStore = settingsDataStore,
+            ioDispatcher = testDispatcher
+        )
+        testScheduler.advanceUntilIdle()
+
+        testRepo.recordDeviceConnected(
+            deviceId = "AA:BB:CC:DD:EE:FF",
+            displayName = "Sony WH-1000XM4",
+            type = AudioDeviceType.BLUETOOTH,
+            codec = "LDAC",
+            batteryLevel = 90
+        )
+        testScheduler.advanceUntilIdle()
+
+        val active = testRepo.currentActiveDevice.value
+        assertEquals("AA:BB:CC:DD:EE:FF", active.deviceId)
+        assertEquals("Sony WH-1000XM4", active.displayName)
+        assertEquals(AudioDeviceType.BLUETOOTH, active.type)
     }
 }

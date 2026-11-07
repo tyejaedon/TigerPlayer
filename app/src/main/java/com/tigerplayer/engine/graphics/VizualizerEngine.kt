@@ -41,6 +41,17 @@ class FluidVortexView @JvmOverloads constructor(
         renderMode = RENDERMODE_CONTINUOUSLY
     }
 
+    /**
+     * Toggles whether the physics advection runs continuously or is paused to save GPU resources.
+     */
+    fun setRenderingActive(active: Boolean) {
+        renderMode = if (active) {
+            RENDERMODE_CONTINUOUSLY
+        } else {
+            RENDERMODE_WHEN_DIRTY
+        }
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         // Re-enforce translucent surface format in case Android resets it on attach
@@ -48,8 +59,14 @@ class FluidVortexView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
-        // Release GPU textures and FBO resources when the player view is detached
-        renderer?.release()
+        // Release GPU textures and FBO resources on the EGL render thread context
+        val r = renderer
+        if (r != null) {
+            queueEvent {
+                r.release()
+            }
+            renderer = null
+        }
         super.onDetachedFromWindow()
     }
 }
