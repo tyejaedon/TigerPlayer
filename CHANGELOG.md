@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Smooth Anticipatory Lyrics Viewport & Cyclic Carousel Motion**: overhauled `PlayerLyrics` and `CoverScreenLyricsView` with `LyricsViewportCoordinator` to replace discrete, jerky snap scrolling with an anticipatory lead-in window (~750ms) and continuous sub-frame position extrapolation (`withFrameMillis`), eliminating the 250ms polling quantization lag; implemented dynamic multi-line item height caching to ensure exact vertical centering; calmed active line scale springs with non-bouncy damping (`Spring.DampingRatioNoBouncy`); introduced 3D cylindrical cyclic carousel projection (`rotationX`, perspective camera depth, and dynamic alpha/color transitions) for rolling lyrics movement; added unit test suite in `LyricsViewportCoordinatorTest`. (closes #393)
+
 ### Fixed
 - **Cover Screen Nexus Card Overlays & Navigation Parity**: mounted modal dialog overlays in `CoverScreenHomeView` for `CoverSonicFootprintCard` (`SonicFootprintScreen`), `CoverSpatialNexusCard` (`CoverScreenNexusView`), and `CoverAcousticSpaceCard` (`AcousticSpaceView`); added navigation callbacks (`onOpenFootprint`, `onOpenSpatialNexus`, `onOpenAcousticSpace`); centralized test tags in `CoverScreenTestTags` and added test coverage in `CoverScreenHomeViewTest`. (closes #383)
 - **MetadataEngine Pre-Seed Timeout on Missing Artwork**: eliminated 5000 ms timeout stalls and repetitive `Pre-seed failed: Timed out waiting for 5000 ms` warnings in `MetadataEngine.preSeedArtistCache()` by taking the first emission from `mediaDataRepository.getArtistDetails(name)` instead of filtering on non-null `imageUrl` against an infinite Room flow; added unit test coverage in `MetadataEngineTest`. (closes #381)
