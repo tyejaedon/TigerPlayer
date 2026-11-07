@@ -12,6 +12,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [Unreleased]
 
 ### Fixed
+- **Artist Detail Screen Crash on Glance LocalContext Import**: replaced incorrect `androidx.glance.LocalContext` import with standard Jetpack Compose `androidx.compose.ui.platform.LocalContext`, preventing `IllegalStateException: No default context` when navigating to `ArtistDetailsScreen`. (closes #379)
 - **Cover Screen Nexus Card Overlays & Navigation Parity**: mounted modal dialog overlays in `CoverScreenHomeView` for `CoverSonicFootprintCard` (`SonicFootprintScreen`), `CoverSpatialNexusCard` (`CoverScreenNexusView`), and `CoverAcousticSpaceCard` (`AcousticSpaceView`); added navigation callbacks (`onOpenFootprint`, `onOpenSpatialNexus`, `onOpenAcousticSpace`); centralized test tags in `CoverScreenTestTags` and added test coverage in `CoverScreenHomeViewTest`. (closes #383)
 - **MetadataEngine Pre-Seed Timeout on Missing Artwork**: eliminated 5000 ms timeout stalls and repetitive `Pre-seed failed: Timed out waiting for 5000 ms` warnings in `MetadataEngine.preSeedArtistCache()` by taking the first emission from `mediaDataRepository.getArtistDetails(name)` instead of filtering on non-null `imageUrl` against an infinite Room flow; added unit test coverage in `MetadataEngineTest`. (closes #381)
 
