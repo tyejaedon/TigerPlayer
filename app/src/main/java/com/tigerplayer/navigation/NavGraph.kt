@@ -186,7 +186,8 @@ fun TigerPlayerNavGraph(
 
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onOpenEqualizer = { navController.navigate(Screen.Equalizer.route) }
             )
         }
 
@@ -350,6 +351,17 @@ fun TigerPlayerNavGraph(
                 playlistImageUrl = it.decodeNullableUrl("imageUrl"),
                 viewModel = hiltViewModel(),
                 onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        // ----------------------------------
+        // 🔹 Studio Equalizer & AutoEq Hub
+        // ----------------------------------
+
+        composable(Screen.Equalizer.route) {
+            com.tigerplayer.ui.equalizer.EqualizerHubView(
+                isCoverScreen = false,
+                onClose = { navController.popBackStack() }
             )
         }
     }

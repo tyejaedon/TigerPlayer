@@ -320,4 +320,49 @@ class PlayerViewModelTest {
         viewModel.resetLyricsOffset()
         assertEquals(0L, viewModel.uiState.value.lyricsManualOffsetMs)
     }
+
+    @Test
+    fun `deletePlaylist delegates to libraryEngine for normal playlist`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.deletePlaylist(42L)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { libraryEngine.deletePlaylist(42L) }
+    }
+
+    @Test
+    fun `deletePlaylist ignores Liked Songs ID`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.deletePlaylist(LibraryEngine.LIKED_SONGS_ID)
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { libraryEngine.deletePlaylist(any()) }
+    }
+
+    @Test
+    fun `renamePlaylist delegates to libraryEngine with trimmed name`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.renamePlaylist(42L, "  Cyberpunk Beats  ")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { libraryEngine.renamePlaylist(42L, "Cyberpunk Beats") }
+    }
+
+    @Test
+    fun `renamePlaylist ignores Liked Songs ID and blank names`() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.renamePlaylist(LibraryEngine.LIKED_SONGS_ID, "New Name")
+        viewModel.renamePlaylist(42L, "   ")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { libraryEngine.renamePlaylist(any(), any()) }
+    }
 }

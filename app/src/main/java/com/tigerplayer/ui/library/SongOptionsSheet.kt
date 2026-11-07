@@ -40,19 +40,23 @@ fun SongOptionsSheet(
     track: AudioTrack,
     playlists: List<Playlist>,
     iconTintOverride: Color? = null,
+    showGoToAlbum: Boolean = true,
     onDismiss: () -> Unit,
     onPlayNext: () -> Unit,
+    onAddToQueue: () -> Unit = {},
     onAddToPlaylist: (Long) -> Unit,
-    onGoToAlbum: (String) -> Unit
+    onGoToAlbum: (String) -> Unit,
+    onQueueAdded: (AudioTrack) -> Unit = {},
+    onPlaylistAdded: (AudioTrack, Playlist) -> Unit = { _, _ -> }
 ) {
     var showPlaylistSelector by remember { mutableStateOf(false) }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         scrimColor = Color.Black.copy(alpha = 0.7f),
         dragHandle = {
-            // Custom Glass Drag Handle
             Box(
                 Modifier
                     .padding(vertical = 12.dp)
@@ -61,13 +65,11 @@ fun SongOptionsSheet(
             )
         }
     ) {
-        // --- 1. THE PROFOUND GLASS BODY ---
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 8.dp, end = 8.dp, bottom = 12.dp)
-                .glassEffect(RoundedCornerShape(32.dp)), // Heavy rounding
-            // Use theme-provided elevated surface so this adapts with dark/light palettes.
+                .glassEffect(RoundedCornerShape(32.dp)),
             color = MaterialTheme.elevatedSurface.copy(alpha = 0.72f),
             shape = RoundedCornerShape(32.dp),
             border = BorderStroke(
@@ -88,7 +90,6 @@ fun SongOptionsSheet(
                     .fillMaxWidth()
                     .padding(20.dp)
             ) {
-                // --- HEADER: THE MEDALLION ---
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -122,7 +123,6 @@ fun SongOptionsSheet(
                     }
                 }
 
-                // --- ACTIONS RITUAL ---
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     SheetActionRow(
                         icon = WitcherIcons.Play,
@@ -135,6 +135,17 @@ fun SongOptionsSheet(
                     }
 
                     SheetActionRow(
+                        icon = WitcherIcons.Playlist,
+                        text = "Add to Queue",
+                        accentColor = MaterialTheme.aardBlue,
+                        iconTintOverride = iconTintOverride
+                    ) {
+                        onAddToQueue()
+                        onQueueAdded(track)
+                        onDismiss()
+                    }
+
+                    SheetActionRow(
                         icon = WitcherIcons.Add,
                         text = "Add to Playlist",
                         accentColor = MaterialTheme.aardBlue,
@@ -143,21 +154,22 @@ fun SongOptionsSheet(
                         showPlaylistSelector = true
                     }
 
-                    SheetActionRow(
-                        icon = WitcherIcons.Album,
-                        text = "Go to Album",
-                        accentColor = MaterialTheme.igniRed,
-                        iconTintOverride = iconTintOverride
-                    ) {
-                        onGoToAlbum(track.album)
-                        onDismiss()
+                    if (showGoToAlbum) {
+                        SheetActionRow(
+                            icon = WitcherIcons.Album,
+                            text = "Go to Album",
+                            accentColor = MaterialTheme.igniRed,
+                            iconTintOverride = iconTintOverride
+                        ) {
+                            onGoToAlbum(track.album)
+                            onDismiss()
+                        }
                     }
                 }
             }
         }
     }
 
-    // --- 2. THE FLOATING GRIMOIRE (Playlist Selector) ---
     if (showPlaylistSelector) {
         Dialog(onDismissRequest = { }) {
             Surface(
@@ -181,7 +193,10 @@ fun SongOptionsSheet(
 
                     if (playlists.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No playlists yet.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                            Text(
+                                "No playlists yet.",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            )
                         }
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -191,6 +206,7 @@ fun SongOptionsSheet(
                                     iconTintOverride = iconTintOverride
                                 ) {
                                     onAddToPlaylist(playlist.id)
+                                    onPlaylistAdded(track, playlist)
                                     onDismiss()
                                 }
                             }
@@ -201,7 +217,6 @@ fun SongOptionsSheet(
         }
     }
 }
-
 @Composable
 private fun SheetActionRow(
     icon: ImageVector,

@@ -18,6 +18,8 @@ import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.MusicFolder
+import com.tigerplayer.data.model.StorageBreakdown
+import com.tigerplayer.data.model.formatBytes
 import com.tigerplayer.data.repository.SpotifyAuthError
 import com.tigerplayer.data.repository.SpotifyAuthManager
 import com.tigerplayer.data.repository.SpotifyRepository
@@ -87,6 +89,16 @@ class SettingsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000L),
             initialValue = ThemeMode.SYSTEM
         )
+
+    private val _storageBreakdown = MutableStateFlow(StorageBreakdown(isCalculating = true))
+    val storageBreakdown: StateFlow<StorageBreakdown> = _storageBreakdown.asStateFlow()
+
+    private val _storageEventMessage = MutableStateFlow<String?>(null)
+    val storageEventMessage: StateFlow<String?> = _storageEventMessage.asStateFlow()
+
+    init {
+        refreshStorageBreakdown()
+    }
 
     private val _libraryRescanState = MutableStateFlow(LibraryRescanState())
     val libraryRescanState: StateFlow<LibraryRescanState> = _libraryRescanState.asStateFlow()
@@ -252,6 +264,18 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setAutoDownloadLyrics(enabled) }
     }
 
+    fun setVisualizerSensitivity(sensitivity: Float) {
+        viewModelScope.launch { settingsDataStore.setVisualizerSensitivity(sensitivity) }
+    }
+
+    fun setVisualizerPaletteMode(mode: com.tigerplayer.data.local.VisualizerPaletteMode) {
+        viewModelScope.launch { settingsDataStore.setVisualizerPaletteMode(mode) }
+    }
+
+    fun setWaveformSensitivity(sensitivity: Float) {
+        viewModelScope.launch { settingsDataStore.setWaveformSensitivity(sensitivity) }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             settingsDataStore.resetToDefaults()
@@ -329,5 +353,58 @@ class SettingsViewModel @Inject constructor(
             navidromePrefs.clearCredentials()
             triggerLibraryRescan()
         }
+    }
+
+    // --- Storage & Cache Operations (issue #391) ---
+
+    fun refreshStorageBreakdown() {
+        viewModelScope.launch {
+            _storageBreakdown.value = _storageBreakdown.value.copy(isCalculating = true)
+            _storageBreakdown.value = libraryEngine.getStorageBreakdown()
+        }
+    }
+
+    fun clearArtworkCache() {
+        viewModelScope.launch {
+            val freedBytes = libraryEngine.clearArtworkCache()
+            _storageEventMessage.value = "Cleared artwork cache (${freedBytes.formatBytes()} freed)"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearLyricsCache() {
+        viewModelScope.launch {
+            libraryEngine.clearLyricsCache()
+            _storageEventMessage.value = "Cleared synchronized lyrics cache"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearArtistCache() {
+        viewModelScope.launch {
+            libraryEngine.clearArtistCache()
+            _storageEventMessage.value = "Cleared artist metadata cache"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearWaveformCache() {
+        viewModelScope.launch {
+            libraryEngine.clearWaveformCache()
+            _storageEventMessage.value = "Cleared waveform analysis cache"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearAllTemporaryCaches() {
+        viewModelScope.launch {
+            val freedBytes = libraryEngine.clearAllTemporaryCaches()
+            _storageEventMessage.value = "All temporary archives purged (${freedBytes.formatBytes()} freed)"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun consumeStorageEventMessage() {
+        _storageEventMessage.value = null
     }
 }

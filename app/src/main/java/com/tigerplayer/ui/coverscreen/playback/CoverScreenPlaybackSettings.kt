@@ -83,7 +83,7 @@ fun CoverScreenPlaybackSettings(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.76f))
+            .background(Color.Black)
             .clickable(onClick = onClose)
             .testTag(CoverScreenTestTags.PLAYBACK_SETTINGS)
     ) {
@@ -144,11 +144,11 @@ fun CoverScreenPlaybackSettings(
                 ) {
                     Icon(
                         Icons.Rounded.GraphicEq,
-                        contentDescription = "Open Nexus Spatial EQ",
+                        contentDescription = "Open Equalizer & AutoEq Hub",
                         tint = com.tigerplayer.ui.theme.TigerNeonOrange
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Nexus Spatial 3D EQ")
+                    Text("Equalizer & AutoEq Hub")
                 }
 
                 FilledTonalButton(

@@ -1,6 +1,7 @@
-package com.tigerplayer.ui.coverscreen
+package com.tigerplayer.ui.coverscreen.library
 
 import android.view.HapticFeedbackConstants
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -31,8 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +43,8 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,8 +57,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -68,9 +70,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.library.FloatingRitualControlDock
+import com.tigerplayer.ui.coverscreen.CoverScreenAlbum
+import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.glassEffect
@@ -81,9 +87,12 @@ fun CoverScreenAlbumsView(
     album: CoverScreenAlbum,
     artistName: String,
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     onBack: () -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayNext: (AudioTrack) -> Unit = {},
     onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
     onRemoveFromQueue: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier,
     onPlayAll: (List<AudioTrack>) -> Unit = {
@@ -103,18 +112,20 @@ fun CoverScreenAlbumsView(
     }
 ) {
     val view = LocalView.current
+    val context = LocalContext.current
     var revealedTrackId by remember { mutableStateOf<String?>(null) }
     var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
-    val ambientBrush = rememberTigerAmbientGradient(
-        accent = MaterialTheme.aardBlue,
-        baseTopAlpha = 0.22f
-    )
+    val imageModel = remember(album.artworkUrl, tracks) {
+        album.artworkUrl?.takeIf { it.isNotBlank() }
+            ?: tracks.firstOrNull()?.artworkUri?.toString()?.takeIf { it.isNotBlank() }
+            ?: R.drawable.ic_tiger_logo
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ambientBrush)
+            .background(Color.Black)
             .pointerInput(album.id) {
                 var dragDistance = 0f
                 detectHorizontalDragGestures(
@@ -127,6 +138,25 @@ fun CoverScreenAlbumsView(
                 )
             }
     ) {
+        // Fullscreen Ambient Background Artwork Layer
+        WetPaintingFadeImage(
+            imageModel = imageModel,
+            contentDescription = stringResource(
+                R.string.coverscreen_artwork_album_description,
+                album.name
+            ),
+            fadeBottomPercent = 0.08f,
+            blurRadius = 4f,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.18f))
+        )
+
         Column(modifier = Modifier.fillMaxSize()) {
             // 1. TOP BAR NAVIGATION
             val backToAlbumsText = stringResource(R.string.coverscreen_action_back_to_albums)
@@ -134,7 +164,7 @@ fun CoverScreenAlbumsView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .glassEffect(RectangleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
+                    .background(Color.Transparent)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -171,20 +201,34 @@ fun CoverScreenAlbumsView(
                 )
             }
 
+            val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+
             // 2. SCROLLABLE ALBUM HERO & TRACK LIST
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.ALBUM_TRACKS),
-                contentPadding = PaddingValues(bottom = 28.dp),
+                contentPadding = PaddingValues(bottom = 90.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+
                 // 3D FLOATING HERO ARTWORK
                 item(key = "album_hero_artwork") {
+                    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                    val heroAlpha = (1f - (rawOffset / 400f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (rawOffset / 1200f)).coerceIn(0.85f, 1f)
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 6.dp),
+                            .padding(top = 10.dp, bottom = 6.dp)
+                            .graphicsLayer {
+                                alpha = heroAlpha
+                                scaleX = heroScale
+                                scaleY = heroScale
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         // Ambient Backdrop Glow
@@ -205,35 +249,35 @@ fun CoverScreenAlbumsView(
 
                         // 3D Framed Glass Cover
                         Box(
-                            modifier = Modifier
-                                .size(144.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .border(
-                                    width = 1.2.dp,
-                                    brush = Brush.verticalGradient(
-                                        listOf(
-                                            Color.White.copy(alpha = 0.45f),
-                                            MaterialTheme.aardBlue.copy(alpha = 0.25f),
-                                            Color.White.copy(alpha = 0.10f)
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(22.dp)
-                                )
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                            modifier = Modifier.size(144.dp)
                         ) {
-                            AsyncImage(
-                                model = album.artworkUrl,
+                            WetPaintingFadeImage(
+                                imageModel = imageModel,
                                 contentDescription = stringResource(
                                     R.string.coverscreen_artwork_album_description,
                                     album.name
                                 ),
+                                fadeBottomPercent = 0.05f,
+                                blurRadius = 0f,
                                 contentScale = ContentScale.Crop,
-                                fallback = painterResource(R.drawable.ic_tiger_logo),
-                                error = painterResource(R.drawable.ic_tiger_logo),
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .border(
+                                        width = 1.2.dp,
+                                        brush = Brush.verticalGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.45f),
+                                                MaterialTheme.aardBlue.copy(alpha = 0.25f),
+                                                Color.White.copy(alpha = 0.10f)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(22.dp)
+                                    )
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
                             )
 
-                            // Specular Light Streak
+                            // Glass Specular Sheen
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -251,14 +295,14 @@ fun CoverScreenAlbumsView(
                     }
                 }
 
-                // VANGUARD DOSSIER CARD (Album metadata & actions)
+                // VANGUARD DOSSIER CARD (Album metadata)
                 item(key = "album_dossier") {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 2.dp),
                         shape = RoundedCornerShape(18.dp),
-                        color = Color.Black.copy(alpha = 0.35f),
+                        color = Color.Transparent,
                         border = BorderStroke(
                             1.dp,
                             Brush.verticalGradient(
@@ -311,90 +355,6 @@ fun CoverScreenAlbumsView(
                                     )
                                 }
                             }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            // Play All & Shuffle Dock
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val playAllLabel = stringResource(R.string.coverscreen_action_play_all)
-                                Button(
-                                    onClick = {
-                                        if (tracks.isNotEmpty()) {
-                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                            onPlayAll(tracks)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .defaultMinSize(minHeight = 48.dp)
-                                        .minimumInteractiveComponentSize()
-                                        .semantics {
-                                            role = Role.Button
-                                            onClick(label = playAllLabel) {
-                                                if (tracks.isNotEmpty()) {
-                                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                                    onPlayAll(tracks)
-                                                }
-                                                true
-                                            }
-                                        }
-                                        .testTag(CoverScreenTestTags.PLAY_ALL),
-                                    shape = CircleShape,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.aardBlue,
-                                        contentColor = Color.Black
-                                    )
-                                ) {
-                                    Icon(
-                                        imageVector = WitcherIcons.Play,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = playAllLabel.uppercase(),
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 12.sp,
-                                        letterSpacing = 1.sp
-                                    )
-                                }
-
-                                // Shuffle Glass Button
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .glassEffect(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.08f))
-                                        .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-                                        .clickable(
-                                            role = Role.Button,
-                                            onClickLabel = "Shuffle",
-                                            onClick = {
-                                                if (tracks.isNotEmpty()) {
-                                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                                    onShufflePlay(tracks)
-                                                }
-                                            }
-                                        )
-                                        .semantics {
-                                            role = Role.Button
-                                            contentDescription = "Shuffle Album"
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = WitcherIcons.Shuffle,
-                                        contentDescription = "Shuffle",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
                         }
                     }
                 }
@@ -426,6 +386,56 @@ fun CoverScreenAlbumsView(
                     )
                 }
             }
+        }
+
+        if (tracks.isNotEmpty()) {
+            FloatingRitualControlDock(
+                accentColor = MaterialTheme.aardBlue,
+                onPlayClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    onPlayAll(tracks)
+                },
+                onShuffleClick = {
+                    if (tracks.isNotEmpty()) {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        onShufflePlay(tracks)
+                    }
+                },
+                playButtonText = "START RITUAL",
+                shuffleDescription = "Shuffle Album",
+                playTestTag = CoverScreenTestTags.PLAY_ALL,
+                shuffleTestTag = CoverScreenTestTags.PLAYBACK_SHUFFLE,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+            )
+        }
+
+        optionsTrack?.let { selectedTrack ->
+            SongOptionsSheet(
+                track = selectedTrack,
+                playlists = playlists,
+                showGoToAlbum = false,
+                onDismiss = { optionsTrack = null },
+                onPlayNext = { onPlayNext(selectedTrack) },
+                onAddToQueue = { onAddToQueue(selectedTrack) },
+                onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, selectedTrack) },
+                onGoToAlbum = {},
+                onQueueAdded = {
+                    Toast.makeText(
+                        context,
+                        "${it.title} added to queue",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                onPlaylistAdded = { song, playlist ->
+                    Toast.makeText(
+                        context,
+                        "${song.title} added to ${playlist.name}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
         }
     }
 }
@@ -606,32 +616,7 @@ private fun TrackRow(
                     contentDescription = null
                 )
             }
-            DropdownMenu(
-                expanded = isOptionsExpanded,
-                onDismissRequest = onDismissOptions
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.coverscreen_action_play_now)) },
-                    onClick = {
-                        onDismissOptions()
-                        onPlay()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.coverscreen_action_add_to_queue)) },
-                    onClick = {
-                        onDismissOptions()
-                        onAddToQueue()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.coverscreen_action_remove_from_queue)) },
-                    onClick = {
-                        onDismissOptions()
-                        onRemoveFromQueue()
-                    }
-                )
-            }
+
         }
     }
 }
