@@ -79,7 +79,7 @@ fun FieryWavySeeker(
     energy: Float = uiState.audioReactiveFrame.energy,
     bass: Float = uiState.audioReactiveFrame.bass,
     flux: Float = uiState.audioReactiveFrame.flux,
-    baseWaveAmplitude: Dp = 8.dp
+    baseWaveAmplitude: Dp = (8 * uiState.waveformSensitivity).dp
 ) {
     val context = LocalContext.current
     val isInspection = LocalInspectionMode.current

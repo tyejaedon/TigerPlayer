@@ -100,4 +100,21 @@ class SettingsDataStoreTest {
             assertEquals(CoverScreenEqPreset.NEURAL_ADAPTIVE, snapshot.coverScreenEqPreset)
         }
     }
+
+    @Test
+    fun persists_and_reads_visualizer_and_waveform_preferences() {
+        runBlocking {
+            val settingsDataStore = SettingsDataStore(InMemoryPreferencesDataStore())
+
+            settingsDataStore.setVisualizerSensitivity(1.5f)
+            settingsDataStore.setVisualizerPaletteMode(VisualizerPaletteMode.DEFAULT_NEON)
+            settingsDataStore.setWaveformSensitivity(1.8f)
+
+            val snapshot = settingsDataStore.settingsFlow.first()
+
+            assertEquals(1.5f, snapshot.visualizerSensitivity, 0.001f)
+            assertEquals(VisualizerPaletteMode.DEFAULT_NEON, snapshot.visualizerPaletteMode)
+            assertEquals(1.8f, snapshot.waveformSensitivity, 0.001f)
+        }
+    }
 }
