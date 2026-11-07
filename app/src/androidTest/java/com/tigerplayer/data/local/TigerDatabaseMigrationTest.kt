@@ -291,4 +291,50 @@ class TigerDatabaseMigrationTest {
         cursor.close()
         db.close()
     }
+
+    @Test
+    fun migrate16To17_preservesHistoryAndTracks_andCreatesIndices() {
+        // Arrange: create the DB at version 16 and insert history + track rows.
+        var db: SupportSQLiteDatabase = helper.createDatabase(testDbName, 16)
+        db.execSQL(
+            """
+            INSERT INTO playback_history
+                (trackId, title, artist, album, imageUrl, durationListenedMs, timestamp, source)
+            VALUES
+                ('local_track_005', 'Index Test Track', 'Tiger Unit', 'Midnight Circuit', NULL,
+                 200000, 1719374600000, 'LOCAL')
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO cached_tracks
+                (id, title, artist, album, uriString, artworkUriString, durationMs, mimeType,
+                 bitrate, sampleRate, trackNumber, year, dateAdded, isLiked, path,
+                 replayGainTrackDb, replayGainAlbumDb, replayGainTrackPeak, replayGainAlbumPeak,
+                 dateModified, artworkLookupFailedAt, artworkLookupAttempts, hasEmbeddedArtwork)
+            VALUES
+                ('local_track_005', 'Index Test Track', 'Tiger Unit', 'Midnight Circuit',
+                 'content://media/external/audio/media/46', 'content://media/external/audio/albumart/11',
+                 200000, 'audio/flac', 960000, 48000, 8, '2026', 1719374400, 1,
+                 '/storage/emulated/0/Music/Tiger/Index Test Track.flac', NULL, NULL, NULL, NULL,
+                 1719374400, 0, 0, NULL)
+            """.trimIndent()
+        )
+        db.close()
+
+        // Act: run migration 16 -> 17.
+        db = helper.runMigrationsAndValidate(testDbName, 17, true)
+
+        // Assert: rows survive intact.
+        val historyCursor = db.query("SELECT * FROM playback_history WHERE trackId = 'local_track_005'")
+        assertTrue("playback_history row must survive migration to 17", historyCursor.moveToFirst())
+        assertEquals("Index Test Track", historyCursor.getString(historyCursor.getColumnIndexOrThrow("title")))
+        historyCursor.close()
+
+        val trackCursor = db.query("SELECT * FROM cached_tracks WHERE id = 'local_track_005'")
+        assertTrue("cached_tracks row must survive migration to 17", trackCursor.moveToFirst())
+        assertEquals("Tiger Unit", trackCursor.getString(trackCursor.getColumnIndexOrThrow("artist")))
+        trackCursor.close()
+        db.close()
+    }
 }

@@ -32,6 +32,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import coil.imageLoader
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.tigerplayer.data.local.PlaybackPrefs
@@ -907,6 +908,7 @@ class AudioPlayerService : MediaSessionService() {
             release()
             mediaSession = null
         }
+        imageLoader.memoryCache?.clear()
         serviceScope.cancel()
         super.onDestroy()
     }
