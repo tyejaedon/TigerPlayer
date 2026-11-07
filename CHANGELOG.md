@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Fixed
+- **MetadataEngine Pre-Seed Timeout on Missing Artwork**: eliminated 5000 ms timeout stalls and repetitive `Pre-seed failed: Timed out waiting for 5000 ms` warnings in `MetadataEngine.preSeedArtistCache()` by taking the first emission from `mediaDataRepository.getArtistDetails(name)` instead of filtering on non-null `imageUrl` against an infinite Room flow; added unit test coverage in `MetadataEngineTest`. (closes #381)
+
 ## [2.1.7] - 2026-11-06
 
 ### Added
