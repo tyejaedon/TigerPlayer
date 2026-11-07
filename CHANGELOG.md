@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Main Player In-Place Immersive Vortex Mode, Drag-to-Collapse & Transition Polish**: replaced the legacy graphic EQ header button in `FullPlayerScreen` with an in-place Immersive Fluid Visualizer toggle (`Icons.Rounded.Waves`), animating blur radius, scrim, and controls to 0 alpha while maintaining a tap-anywhere dismiss layer, floating hint pill, and back-press restore handler; added intuitive drag-down-to-collapse gesture on the player header; synchronized player sheet dismiss animation with background library scale using matching spring physics (`stiffness = 250f`, `dampingRatio = 0.85f`); replaced zoom/inflation scaling during artwork/lyrics/queue switches with directional horizontal slides; eliminated 300ms tap latency on `MiniPlayer` by scoping double-tap to like to the artwork thumbnail. (closes #400)
+
 ### Fixed
 - **Cover Screen Nexus Card Overlays & Navigation Parity**: mounted modal dialog overlays in `CoverScreenHomeView` for `CoverSonicFootprintCard` (`SonicFootprintScreen`), `CoverSpatialNexusCard` (`CoverScreenNexusView`), and `CoverAcousticSpaceCard` (`AcousticSpaceView`); added navigation callbacks (`onOpenFootprint`, `onOpenSpatialNexus`, `onOpenAcousticSpace`); centralized test tags in `CoverScreenTestTags` and added test coverage in `CoverScreenHomeViewTest`. (closes #383)
 - **MetadataEngine Pre-Seed Timeout on Missing Artwork**: eliminated 5000 ms timeout stalls and repetitive `Pre-seed failed: Timed out waiting for 5000 ms` warnings in `MetadataEngine.preSeedArtistCache()` by taking the first emission from `mediaDataRepository.getArtistDetails(name)` instead of filtering on non-null `imageUrl` against an infinite Room flow; added unit test coverage in `MetadataEngineTest`. (closes #381)
