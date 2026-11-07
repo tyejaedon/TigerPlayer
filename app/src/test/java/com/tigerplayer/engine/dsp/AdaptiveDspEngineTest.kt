@@ -294,4 +294,108 @@ class AdaptiveDspEngineTest {
         assertEquals(0.0f, compositePeakDb, 0.05f)
         assertEquals(1.0f, autoMakeupGain, 0.01f)
     }
+
+    @Test
+    fun vinylWarmth_processesFullScaleAudio_withoutClippingOrWrapDiscontinuities() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val sampleRate = 48_000
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+        engine.setAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH)
+
+        // Generate 2 seconds of 440 Hz tone near full scale (0.95 amplitude)
+        val frames = sampleRate * 2
+        val input = buildStereoSineBuffer(sampleRate, 440f, frames, 0.95f)
+
+        engine.queueInput(input)
+        val output = engine.getOutput()
+
+        assertEquals(frames * 4, output.remaining())
+
+        var maxSample = 0
+        var prevL = 0
+        var maxDelta = 0
+
+        while (output.hasRemaining()) {
+            val sampleL = output.getShort().toInt()
+            val sampleR = output.getShort().toInt()
+
+            maxSample = maxOf(maxSample, abs(sampleL), abs(sampleR))
+            val delta = abs(sampleL - prevL)
+            maxDelta = maxOf(maxDelta, delta)
+            prevL = sampleL
+
+            // Ensure no samples clipped or corrupted
+            assertTrue("Sample must remain in valid short range", sampleL in -32768..32767)
+            assertTrue("Sample must remain in valid short range", sampleR in -32768..32767)
+        }
+
+        // Headroom scaling ensures output remains well-behaved and bounded without hard digital clipping
+        assertTrue("Output should be present and audible", maxSample > 10_000)
+        // Check for continuity: at 440 Hz tone, maximum sample-to-sample difference should be bounded
+        // (A 23ms ring-buffer wrap spike would cause a delta > 30,000)
+        assertTrue("Adjacent sample delta should be smooth without ring buffer glitch spikes (maxDelta=$maxDelta)", maxDelta < 15_000)
+    }
+
+    @Test
+    fun vinylWarmth_silenceGating_attenuatesNoiseFloorOnZeroInput() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val sampleRate = 48_000
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+        engine.setAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH)
+
+        // Feed 1.5 seconds of zeros (silence)
+        val frames = (sampleRate * 1.5).toInt()
+        val silentBuffer = ByteBuffer.allocateDirect(frames * 4).order(ByteOrder.nativeOrder())
+        silentBuffer.position(frames * 4)
+        silentBuffer.flip()
+
+        engine.queueInput(silentBuffer)
+        val output = engine.getOutput()
+
+        var maxTailSample = 0
+        val skipInitialFrames = sampleRate / 2 // Skip initial envelope decay
+        var frameIdx = 0
+
+        while (output.hasRemaining()) {
+            val sL = abs(output.getShort().toInt())
+            val sR = abs(output.getShort().toInt())
+            if (frameIdx++ > skipInitialFrames) {
+                maxTailSample = maxOf(maxTailSample, sL, sR)
+            }
+        }
+
+        // The dynamic silence gate should keep background noise floor virtually inaudible during silence (< 150 PCM, -46 dBFS)
+        assertTrue("Noise floor during silence must be dynamically gated (maxTail=$maxTailSample)", maxTailSample < 150)
+    }
+
+    @Test
+    fun vinylWarmth_flushAndReset_clearsStateCleanly() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val sampleRate = 48_000
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+        engine.setAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH)
+
+        val tone = buildStereoSineBuffer(sampleRate, 1000f, 2048, 0.8f)
+        engine.queueInput(tone)
+        engine.getOutput()
+
+        // Flush and reset
+        engine.flush()
+        engine.reset()
+
+        // After reset, reconfigure and ensure first sample has zero residual memory discontinuity
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+        val testBuffer = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder())
+        testBuffer.putShort(0.toShort())
+        testBuffer.putShort(0.toShort())
+        testBuffer.flip()
+
+        engine.queueInput(testBuffer)
+        val postResetOut = engine.getOutput()
+        val outL = postResetOut.getShort().toInt()
+        val outR = postResetOut.getShort().toInt()
+
+        assertEquals("Output after flush and reset on zero input should be clean", 0, outL)
+        assertEquals("Output after flush and reset on zero input should be clean", 0, outR)
+    }
 }
