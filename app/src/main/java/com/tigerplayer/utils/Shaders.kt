@@ -473,17 +473,18 @@ object FluidShaders {
         color += haloTint * outerHalo * (0.24 + intensity * 0.32);
 
         // Prevent central overburn while keeping edge gradients vivid.
-        float centerMask = 1.0 - smoothstep(0.04, 0.34, dist);
-        float centerLimiter = mix(1.0, 0.70, centerMask * smoothstep(0.42, 1.0, peak));
+        float centerMask = 1.0 - smoothstep(0.04, 0.38, dist);
+        float centerLimiter = mix(1.0, 0.65, centerMask * smoothstep(0.35, 0.95, peak));
         color *= centerLimiter;
 
         color = ACESFilm(color);
         color = pow(color, vec3(1.0 / 2.2));
 
-        float vignette = 1.0 - smoothstep(0.40, 0.92, dist);
-        color *= mix(0.64, 1.0, vignette);
+        // Relaxed vignette to allow fluid color to flow smoothly edge-to-edge
+        float vignette = 1.0 - smoothstep(0.65, 1.15, dist);
+        color *= mix(0.85, 1.0, vignette);
 
-        float alpha = clamp(intensity * 0.9 + luma * 0.35, 0.08, 0.95);
+        float alpha = clamp(intensity * 0.92 + luma * 0.35, 0.12, 0.98);
 
         outColor = vec4(color, alpha);
     }
