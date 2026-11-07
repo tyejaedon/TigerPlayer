@@ -302,7 +302,7 @@ class CoverMicroWaveformTest {
     }
 
     @Test
-    fun `populatePositiveWaveformPath maintains natural sinusoidal curvature across entire width with smooth boundary anchoring`() {
+    fun `populatePositiveWaveformPath maintains natural sinusoidal curvature across entire width without boundary flattening`() {
         val path = Path()
         val fillPath = Path()
         val width = 200f
@@ -311,7 +311,7 @@ class CoverMicroWaveformTest {
         val overlapPx = 2f
         val effectiveBaselineY = baselineY + overlapPx
 
-        // Test with cosine wave with phase = 0f: smoothly anchored at baseline endpoints with shift 0 and peaks in body
+        // Test with cosine wave with phase = 0f: cosine is 1 at x=0, so the curve smoothly starts at apex peak without flattening to baseline
         populatePositiveWaveformPath(
             path = path,
             fillPath = fillPath,
@@ -323,16 +323,44 @@ class CoverMicroWaveformTest {
             phase = 0f,
             phaseOffset = 0f,
             isCosine = true,
-            waveCycles = 2.0f
+            waveCycles = 2.0f,
+            edgeTaper = 0f
         )
 
         val androidPath = path.asAndroidPath()
         val bounds = RectF()
         androidPath.computeBounds(bounds, true)
 
-        // Bottom rests at baseline and top curves up to peak height smoothly in body
+        // Bottom rests at baseline and top curves up to peak height smoothly
         assertEquals(effectiveBaselineY, bounds.bottom, 0.1f)
         assertTrue("Wave bounds top must curve up near peak height", bounds.top <= effectiveBaselineY - (maxHeight * 0.85f))
+    }
+
+    @Test
+    fun `calculateWaveformY maintains natural curved elevation at origin when edgeTaper is zero`() {
+        val width = 200f
+        val maxHeight = 40f
+        val baselineY = 20f
+        val overlapPx = 2f
+        val effectiveBaselineY = baselineY + overlapPx
+
+        val y0 = calculateWaveformY(
+            x = 0f,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0f,
+            phaseOffset = 0f,
+            isCosine = true,
+            waveCycles = 2.0f,
+            edgeTaper = 0f
+        )
+
+        // With cosine and phase 0, cos(0) = 1, so rawTrig = 1, smoothOscillation = 1.0
+        // Elevation at origin should retain natural crest height, NOT flattened to baseline
+        assertTrue("Wave at origin must retain natural curved elevation above baseline", y0 < effectiveBaselineY)
+        assertEquals("Wave at origin reaches apex height without edge flattening", effectiveBaselineY - (maxHeight * 0.90f), y0, maxHeight * 0.15f)
     }
 
     @Test

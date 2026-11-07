@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Restored Curved Waveform Aesthetic & Glassmorphic Motion**: restored the fluid visual aesthetic, sweeping continuous sinusoidal curvature, and glassmorphic 2.5D specular glow to `CoverMicroWaveform` and `FieryWavySeeker`; configured unified 2.0 wave cycles and 1.0x fundamental frequency across tiers; removed artificial edge-pinching boundary tapering and discrete sample-stepped phase kinks; restored calm 820 ms hypnotic phase drift; reinstated static, unblurred stroke widths with crisp specular white cores; tightened vertical energy breathing dynamics; updated `CoverMicroWaveformTest` with natural curvature assertions. (closes #385)
+
 ### Fixed
 - **Cover Screen Nexus Card Overlays & Navigation Parity**: mounted modal dialog overlays in `CoverScreenHomeView` for `CoverSonicFootprintCard` (`SonicFootprintScreen`), `CoverSpatialNexusCard` (`CoverScreenNexusView`), and `CoverAcousticSpaceCard` (`AcousticSpaceView`); added navigation callbacks (`onOpenFootprint`, `onOpenSpatialNexus`, `onOpenAcousticSpace`); centralized test tags in `CoverScreenTestTags` and added test coverage in `CoverScreenHomeViewTest`. (closes #383)
 - **MetadataEngine Pre-Seed Timeout on Missing Artwork**: eliminated 5000 ms timeout stalls and repetitive `Pre-seed failed: Timed out waiting for 5000 ms` warnings in `MetadataEngine.preSeedArtistCache()` by taking the first emission from `mediaDataRepository.getArtistDetails(name)` instead of filtering on non-null `imageUrl` against an infinite Room flow; added unit test coverage in `MetadataEngineTest`. (closes #381)
