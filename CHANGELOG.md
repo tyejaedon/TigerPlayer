@@ -12,6 +12,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [Unreleased]
 
 ### Fixed
+- **Cover Screen Album Detail Background & Hero Art Parity**: rectified `CoverScreenAlbumsView` background so the album artwork fills the entire screen with an ambient blurred layer and dark overlay matching `CoverScreenPlaylistDetailView`; added the dynamic 3D floating hero artwork card inside the scrollable list; removed blur (`blurRadius = 0f`) on the floating hero artwork in both `CoverScreenAlbumsView` and `CoverScreenPlaylistDetailView`. (closes #386)
 - **Cover Screen Nexus Card Overlays & Navigation Parity**: mounted modal dialog overlays in `CoverScreenHomeView` for `CoverSonicFootprintCard` (`SonicFootprintScreen`), `CoverSpatialNexusCard` (`CoverScreenNexusView`), and `CoverAcousticSpaceCard` (`AcousticSpaceView`); added navigation callbacks (`onOpenFootprint`, `onOpenSpatialNexus`, `onOpenAcousticSpace`); centralized test tags in `CoverScreenTestTags` and added test coverage in `CoverScreenHomeViewTest`. (closes #383)
 - **MetadataEngine Pre-Seed Timeout on Missing Artwork**: eliminated 5000 ms timeout stalls and repetitive `Pre-seed failed: Timed out waiting for 5000 ms` warnings in `MetadataEngine.preSeedArtistCache()` by taking the first emission from `mediaDataRepository.getArtistDetails(name)` instead of filtering on non-null `imageUrl` against an infinite Room flow; added unit test coverage in `MetadataEngineTest`. (closes #381)
 
