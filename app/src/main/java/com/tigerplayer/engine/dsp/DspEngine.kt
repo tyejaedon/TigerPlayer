@@ -103,19 +103,23 @@ class AdaptiveDspEngine @Inject constructor(
     /** StateFlow emitting real-time audio spectral dynamics for visualizer consumption. */
     val audioReactiveFrame: StateFlow<AudioReactiveFrame> = _audioReactiveFrame.asStateFlow()
 
-    private var vinylNoiseSeed = 0x13579BDF
-    private var vinylNoiseDc = 0f
+    private var vinylNoiseSeedL = 0x13579BDF
+    private var vinylNoiseSeedR = 0x2468ACE0
+    private var vinylNoiseLpL = 0f
+    private var vinylNoiseLpR = 0f
+    private var vinylRumblePhase = 0f
+    private var vinylSignalEnvelope = 0f
     private val hallProcessor = SchroederHallProcessor()
 
-    // VINYL WOW LFO
+    // VINYL WOW LFO (~0.55 Hz rotation, ~33 1/3 RPM)
     private var vinylWowPhase = 0f
-    private val vinylWowFreq = 0.5f // 0.5 Hz Wow
+    private val vinylWowFreq = 0.55f
     private val vinylWowBufferL = FloatArray(1024)
     private val vinylWowBufferR = FloatArray(1024)
     private var vinylWowIndex = 0
 
     // VINYL RIAA SHELF (SVF)
-    private var vinylShelf: StateVariableFilter? = null
+    private val vinylShelf = StateVariableFilter(FilterType.LOW_SHELF, 44100, 350f, 2.5f, 0.5f)
 
     // Real-time 6-band analyzer (band-pass filter bank).
     private val spectralBandCenters = floatArrayOf(60f, 250f, 1_000f, 2_500f, 6_000f, 12_000f)
@@ -141,19 +145,46 @@ class AdaptiveDspEngine @Inject constructor(
     private fun clamp01(v: Float): Float = v.coerceIn(0f, 1f)
 
     /**
-     * Generates white noise sample using a fast linear congruential pseudo-random generator.
+     * Generates white noise sample for Left channel using a fast linear congruential pseudo-random generator.
      *
      * @return Pseudo-random float sample in range [-1.0, 1.0].
      */
-    private fun nextNoise(): Float {
-        vinylNoiseSeed = vinylNoiseSeed * 1664525 + 1013904223
-        val normalized = ((vinylNoiseSeed ushr 8) and 0x00FFFFFF) / 16777215f
+    private fun nextNoiseL(): Float {
+        vinylNoiseSeedL = vinylNoiseSeedL * 1664525 + 1013904223
+        val normalized = ((vinylNoiseSeedL ushr 8) and 0x00FFFFFF) / 16777215f
         return normalized * 2f - 1f
     }
 
     /**
-     * Applies analog vinyl record characteristics (0.5Hz Pitch Wow LFO, soft polynomial saturation,
-     * low-level vinyl hiss, and RIAA warmth low-shelf filter).
+     * Generates white noise sample for Right channel using a separate PRNG seed for stereo decorrelation.
+     *
+     * @return Pseudo-random float sample in range [-1.0, 1.0].
+     */
+    private fun nextNoiseR(): Float {
+        vinylNoiseSeedR = vinylNoiseSeedR * 1664525 + 1013904223
+        val normalized = ((vinylNoiseSeedR ushr 8) and 0x00FFFFFF) / 16777215f
+        return normalized * 2f - 1f
+    }
+
+    /**
+     * Smooth, continuous cubic soft saturator with continuous first derivative:
+     * f(x) = x - x^3 / 6.75 for |x| <= 1.5, smoothly saturated to sgn(x) * 1.0.
+     * Guaranteed zero foldback and no step discontinuities at the saturation boundary.
+     *
+     * @param x Input drive sample.
+     * @return Saturated output sample.
+     */
+    private fun softSaturate(x: Float): Float {
+        val clamped = x.coerceIn(-1.5f, 1.5f)
+        return clamped - (clamped * clamped * clamped) / 6.75f
+    }
+
+    /**
+     * Applies analog vinyl record characteristics:
+     * 1. 0.55 Hz wow LFO (sample-rate aware ~2-3 cents pitch modulation with glitch-free fractional interpolation).
+     * 2. Continuous soft saturation non-linearity adding subtle 2nd and 3rd harmonics.
+     * 3. Spatially decorrelated vinyl surface noise, low-frequency rumble, and dynamic silence gating.
+     * 4. RIAA low-shelf warmth filter (+2.5 dB at 350 Hz) with -2.5 dB pre-attenuation auto-headroom.
      *
      * @param sampleL Left channel input sample.
      * @param sampleR Right channel input sample.
@@ -162,55 +193,64 @@ class AdaptiveDspEngine @Inject constructor(
      * @return [StereoFrame] containing processed warm vinyl stereo samples.
      */
     private fun applyVinylWarmth(sampleL: Float, sampleR: Float, channels: Int, sampleRate: Int): StereoFrame {
-        // 1. WOW LFO (Pitch Modulation)
+        // 1. WOW LFO (Continuous Fractional Delay Pitch Modulation)
         vinylWowPhase += (2f * PI.toFloat() * vinylWowFreq) / sampleRate.toFloat()
         if (vinylWowPhase > 2f * PI.toFloat()) vinylWowPhase -= 2f * PI.toFloat()
 
-        val modulation = sin(vinylWowPhase) * 1.5f + 2.0f // 0.5 to 3.5 samples delay
+        // Scaled to produce ~2-3 cents of authentic analog wow (~0.15% frequency shift)
+        val wowExcursion = (sampleRate * 0.000433f).coerceIn(8f, 32f)
+        val delay = 48.0f + sin(vinylWowPhase) * wowExcursion
 
         vinylWowBufferL[vinylWowIndex] = sampleL
-        vinylWowBufferR[vinylWowIndex] = sampleR
+        vinylWowBufferR[vinylWowIndex] = if (channels == 2) sampleR else sampleL
 
-        val readIdx = (vinylWowIndex - modulation.toInt() + 1024) % 1024
-        val frac = modulation - modulation.toInt()
-        val nextIdx = (readIdx + 1) % 1024
+        val delayInt = delay.toInt()
+        val frac = delay - delayInt.toFloat()
 
-        val wowL = vinylWowBufferL[readIdx] * (1f - frac) + vinylWowBufferL[nextIdx] * frac
-        val wowR = vinylWowBufferR[readIdx] * (1f - frac) + vinylWowBufferR[nextIdx] * frac
-        vinylWowIndex = (vinylWowIndex + 1) % 1024
+        val idx0 = (vinylWowIndex - delayInt + 1024) and 1023
+        val idx1 = (idx0 - 1 + 1024) and 1023
 
-        // 2. SATURATION (Non-linear)
+        val wowL = vinylWowBufferL[idx0] * (1f - frac) + vinylWowBufferL[idx1] * frac
+        val wowR = if (channels == 2) {
+            vinylWowBufferR[idx0] * (1f - frac) + vinylWowBufferR[idx1] * frac
+        } else {
+            wowL
+        }
+        vinylWowIndex = (vinylWowIndex + 1) and 1023
+
+        // 2. ANALOG SATURATION (Continuous 2nd/3rd Harmonic Warmth)
         val drive = 1.08f
         val drivenL = wowL * drive
         val drivenR = wowR * drive
+        // Slight quadratic bias introduces musical 2nd harmonic warmth alongside cubic 3rd harmonic
+        val satL = softSaturate(drivenL + 0.03f * drivenL * drivenL)
+        val satR = softSaturate(drivenR + 0.03f * drivenR * drivenR)
 
-        val softL = if (abs(drivenL) <= 1.25f) {
-            drivenL - ((drivenL * drivenL * drivenL) / 4.5f)
-        } else {
-            sign(drivenL) * 0.83f // Smoothly flattens at the peak of the curve
-        }
+        // 3. STEREO DECORRELATED SURFACE NOISE & RUMBLE WITH SILENCE GATING
+        val inMag = max(abs(sampleL), abs(sampleR))
+        vinylSignalEnvelope += (inMag - vinylSignalEnvelope) * 0.002f
+        val gate = (vinylSignalEnvelope * 30f).coerceIn(0f, 1f)
 
-        val softR = if (abs(drivenR) <= 1.25f) {
-            drivenR - ((drivenR * drivenR * drivenR) / 4.5f)
-        } else {
-            sign(drivenR) * 0.83f
-        }
+        // Low-pass filtered surface texture (soft broadband warmth instead of harsh static)
+        vinylNoiseLpL += (nextNoiseL() * 0.0006f - vinylNoiseLpL) * 0.15f
+        vinylNoiseLpR += (nextNoiseR() * 0.0006f - vinylNoiseLpR) * 0.15f
 
-        // 3. NOISE & HISS
-        val rawNoise = nextNoise() * 0.0012f
-        vinylNoiseDc += (rawNoise - vinylNoiseDc) * 0.004f
-        val hiss = rawNoise - vinylNoiseDc
+        // Turntable platter rumble (~28 Hz)
+        vinylRumblePhase += (2f * PI.toFloat() * 28f) / sampleRate.toFloat()
+        if (vinylRumblePhase > 2f * PI.toFloat()) vinylRumblePhase -= 2f * PI.toFloat()
+        val rumble = sin(vinylRumblePhase) * 0.0003f
 
-        // 4. RIAA / WARMTH SHELF
-        if (vinylShelf == null || vinylShelf?.sampleRate != sampleRate) {
-            vinylShelf = StateVariableFilter(FilterType.LOW_SHELF, sampleRate, 350f, 2.5f, 0.5f)
-        }
+        val noiseL = (vinylNoiseLpL + rumble) * gate
+        val noiseR = (vinylNoiseLpR - rumble * 0.5f) * gate
 
-        var outL = (wowL * 0.86f + softL * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
-        var outR = (wowR * 0.86f + softR * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
+        // 4. MIX & RIAA LOW-SHELF WITH HEADROOM PRE-ATTENUATION
+        // Pre-attenuate by -2.5 dB (~0.75f) to accommodate the +2.5 dB shelf boost without clipping
+        val headroom = 0.75f
+        val mixL = (wowL * 0.85f + satL * 0.15f + noiseL) * headroom
+        val mixR = (wowR * 0.85f + satR * 0.15f + noiseR) * headroom
 
-        outL = vinylShelf!!.process(outL, 0)
-        if (channels == 2) outR = vinylShelf!!.process(outR, 1)
+        val outL = vinylShelf.process(mixL, 0)
+        val outR = if (channels == 2) vinylShelf.process(mixR, 1) else outL
 
         return StereoFrame(outL, outR)
     }
@@ -507,8 +547,10 @@ class AdaptiveDspEngine @Inject constructor(
         lookAheadDelaySamples = (inputAudioFormat.sampleRate * 0.0045f)
             .roundToInt()
             .coerceIn(24, LOOK_AHEAD_BUFFER_SIZE - 1)
-        hallProcessor.configure(inputAudioFormat.sampleRate.coerceAtLeast(8000))
-        prismIsolator.configure(inputAudioFormat.sampleRate.coerceAtLeast(8000))
+        val safeRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
+        hallProcessor.configure(safeRate)
+        prismIsolator.configure(safeRate)
+        vinylShelf.updateParameters(350f, 2.5f, 0.5f, safeRate)
         configureSpectralAnalyzer(inputAudioFormat.sampleRate)
 
         // FIXED: Re-apply current EQ nodes if track changes sample rates
@@ -851,8 +893,13 @@ class AdaptiveDspEngine @Inject constructor(
         lookAheadBufferL.fill(0f)
         lookAheadBufferR.fill(0f)
         lookAheadIndex = 0
-        vinylNoiseSeed = 0x13579BDF.toInt()
-        vinylNoiseDc = 0f
+        vinylNoiseSeedL = 0x13579BDF
+        vinylNoiseSeedR = 0x2468ACE0
+        vinylNoiseLpL = 0f
+        vinylNoiseLpR = 0f
+        vinylRumblePhase = 0f
+        vinylSignalEnvelope = 0f
+        vinylShelf.reset()
         hallProcessor.reset()
         prismIsolator.reset()
         prismCurrentVocals = prismTargetMix.vocals
