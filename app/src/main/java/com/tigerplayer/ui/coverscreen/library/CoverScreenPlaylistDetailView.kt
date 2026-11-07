@@ -400,7 +400,7 @@ fun CoverScreenPlaylistDetailView(
                                 imageModel = imageModel,
                                 contentDescription = playlist.name,
                                 fadeBottomPercent = 0.05f,
-                                blurRadius = 14f,
+                                blurRadius = 0f,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .fillMaxSize()

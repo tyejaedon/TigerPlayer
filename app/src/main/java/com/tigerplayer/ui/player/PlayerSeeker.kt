@@ -121,7 +121,7 @@ fun FieryWavySeeker(
         val animatedPhase by transition.animateFloat(
             initialValue = 0f,
             targetValue = (Math.PI * 2.0).toFloat(),
-            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 520, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 820, easing = LinearEasing)),
             label = "WavePhase"
         )
         val energyState by animateFloatAsState(
@@ -238,12 +238,13 @@ fun FieryWavySeeker(
                     phase = phase,
                     phaseOffset = 0f,
                     isCosine = true,
-                    frequencyMultiplier = 1.35f,
-                    waveCycles = 6.4f,
+                    frequencyMultiplier = 1.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
-                    flux = if (shouldAnimate) animatedFlux else 0f,
-                    turbulence = if (shouldAnimate) 0.35f else 0f
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // Populate Wave 2: Middle tier (harmonized 2x Wave 1, PI/4 phase lead)
@@ -258,12 +259,13 @@ fun FieryWavySeeker(
                     phase = phase,
                     phaseOffset = piOver4,
                     isCosine = false,
-                    frequencyMultiplier = 1.15f,
-                    waveCycles = 6.2f,
+                    frequencyMultiplier = 1.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
-                    flux = if (shouldAnimate) animatedFlux else 0f,
-                    turbulence = if (shouldAnimate) 0.25f else 0f
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // Populate Wave 1: Foundational tier (base amplitude)
@@ -279,11 +281,12 @@ fun FieryWavySeeker(
                     phaseOffset = 0f,
                     isCosine = false,
                     frequencyMultiplier = 1.0f,
-                    waveCycles = 6.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
-                    flux = if (shouldAnimate) animatedFlux else 0f,
-                    turbulence = if (shouldAnimate) 0.20f else 0f
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // Active Played Zone (0 to progressX horizontally)
