@@ -152,6 +152,9 @@ fun CoverScreenLibraryMenu(
     val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
     val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
     val selectedTab by libraryViewModel.selectedTab.collectAsStateWithLifecycle()
+    val artistGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val albumGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val songListState = androidx.compose.foundation.lazy.rememberLazyListState()
     var showSettings by remember { mutableStateOf(false) }
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
@@ -620,6 +623,7 @@ fun CoverScreenLibraryMenu(
                                         albums = filteredLocalAlbums,
                                         tracks = playerState.allTracks,
                                         playlists = playlists,
+                                        state = artistGridState,
                                         onArtistSelected = { artist ->
                                             selectedArtist = artist
                                         },
@@ -671,6 +675,7 @@ fun CoverScreenLibraryMenu(
 
                             CoverScreenLibraryTab.ALBUMS -> AlbumPicker(
                                 albums = filteredLocalAlbums,
+                                state = albumGridState,
                                 onAlbumSelected = { selectedAlbum = it }
                             )
 
@@ -679,6 +684,7 @@ fun CoverScreenLibraryMenu(
                                 playlists = playlists,
                                 currentTrackId = playerState.currentTrack?.id,
                                 isPlaying = playerState.isPlaying,
+                                state = songListState,
                                 onPlayTrack = { track ->
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     playerViewModel.playTrack(track)
