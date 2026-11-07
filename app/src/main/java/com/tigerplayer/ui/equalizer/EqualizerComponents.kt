@@ -136,14 +136,15 @@ fun StudioFaderStrip(
     isSelected: Boolean,
     onSelected: () -> Unit,
     onGainChanged: (Float) -> Unit,
-    onToggleEnabled: () -> Unit
+    onToggleEnabled: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val currentGain by rememberUpdatedState(band.gainDb)
     val currentOnGainChanged by rememberUpdatedState(onGainChanged)
 
     Box(
-        modifier = Modifier
-            .width(62.dp)
+        modifier = modifier
+            .then(if (modifier == Modifier) Modifier.width(62.dp) else Modifier)
             .fillMaxHeight()
             .glassEffect(RoundedCornerShape(12.dp))
             .border(if (isSelected) 1.5.dp else 0.5.dp, if (isSelected) TigerCyberCyan else Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
