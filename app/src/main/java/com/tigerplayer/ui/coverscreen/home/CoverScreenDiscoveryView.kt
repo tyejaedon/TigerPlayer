@@ -426,17 +426,10 @@ fun CoverScreenDaylistDetailView(
             ?: "Unknown"
     }
 
-    val chronoGradient = remember(dayPhase) {
-        Brush.linearGradient(
-            listOf(dayPhase.accent.copy(alpha = 0.45f), dayPhase.mist, Color.Transparent)
-        )
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF090B12))
-            .background(chronoGradient)
+            .background(Color.Black)
     ) {
         Column(
             modifier = Modifier
@@ -779,13 +772,7 @@ fun CoverScreenDiscoverWeeklyDetailView(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF061111))
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0xFF1B3C2E), Color.Transparent),
-                    radius = 500f
-                )
-            )
+            .background(Color.Black)
     ) {
         Column(
             modifier = Modifier

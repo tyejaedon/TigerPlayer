@@ -4,6 +4,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -59,8 +60,8 @@ internal class TapGestureClassifier(
 }
 
 /**
- * Custom pointer input modifier handling cover-screen swipe and tap gestures while respecting
- * edge exclusion zones for device shell navigation (e.g., Samsung Galaxy Z Flip edge gestures).
+ * Custom pointer input modifier handling cover-screen swipe, tap, and press-and-hold gestures while
+ * respecting edge exclusion zones for device shell navigation (e.g., Samsung Galaxy Z Flip edge gestures).
  */
 internal fun Modifier.coverScreenGestures(
     swipeThresholdPx: Float,
@@ -71,8 +72,9 @@ internal fun Modifier.coverScreenGestures(
     onSwipeRight: () -> Unit,
     onSwipeUp: () -> Unit,
     onSwipeDown: () -> Unit,
-    onDoubleTap: (() -> Unit)? = null
-): Modifier = pointerInput(swipeThresholdPx, tapSlopPx, onDoubleTap) {
+    onDoubleTap: (() -> Unit)? = null,
+    onLongPress: (() -> Unit)? = null
+): Modifier = pointerInput(swipeThresholdPx, tapSlopPx, onDoubleTap, onLongPress) {
     coroutineScope {
         val classifier = TapGestureClassifier(doubleTapTimeoutMs = 300L, maxDoubleTapDistancePx = 60f)
         var pendingTapJob: Job? = null
@@ -93,19 +95,68 @@ internal fun Modifier.coverScreenGestures(
             var pointerId: PointerId = down.id
             var totalX = 0f
             var totalY = 0f
+            var isReleased = false
+            var longPressTriggered = false
 
-            while (true) {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull { it.id == pointerId }
-                    ?: event.changes.firstOrNull()
-                    ?: break
+            if (onLongPress != null && !ignoreGesture) {
+                try {
+                    withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId }
+                                ?: event.changes.firstOrNull()
+                                ?: break
 
-                if (!change.pressed) break
+                            val delta = change.positionChange()
+                            totalX += delta.x
+                            totalY += delta.y
+                            pointerId = change.id
 
-                val delta = change.positionChange()
-                totalX += delta.x
-                totalY += delta.y
-                pointerId = change.id
+                            if (!change.pressed) {
+                                isReleased = true
+                                break
+                            }
+
+                            if (abs(totalX) > tapSlopPx || abs(totalY) > tapSlopPx) {
+                                break
+                            }
+                        }
+                    }
+                } catch (_: PointerEventTimeoutCancellationException) {
+                    longPressTriggered = true
+                    pendingTapJob?.cancel()
+                    pendingTapJob = null
+                    classifier.reset()
+                    onLongPress.invoke()
+                }
+            }
+
+            if (longPressTriggered) {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == pointerId }
+                        ?: event.changes.firstOrNull()
+                        ?: break
+                    change.consume()
+                    if (!change.pressed) break
+                }
+                return@awaitEachGesture
+            }
+
+            if (!isReleased) {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == pointerId }
+                        ?: event.changes.firstOrNull()
+                        ?: break
+
+                    val delta = change.positionChange()
+                    totalX += delta.x
+                    totalY += delta.y
+                    pointerId = change.id
+
+                    if (!change.pressed) break
+                }
             }
 
             val absX = abs(totalX)

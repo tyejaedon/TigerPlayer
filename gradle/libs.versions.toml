@@ -4,7 +4,7 @@ auth = "5.0.0"
 benchmarkMacroJunit4 = "1.5.0"
 datastorePreferences = "1.2.1"
 documentfile = "1.1.0"
-gson = "2.14.0"
+gson = "2.15.0"
 jtransforms = "3.2"
 kotlin = "2.4.21"
 ksp = "2.3.12"
@@ -61,6 +61,7 @@ youtubeextractor = "1.5.1"
 foundationLayout = "1.11.2"
 browser = "1.10.0"
 glancePreview = "1.2.0"
+foundationLayoutVersion = "1.12.1"
 
 [libraries]
 # Core & Lifecycle
@@ -154,6 +155,7 @@ youtubePlayer = { module = "com.pierfrancescosoffritti.androidyoutubeplayer:core
 androidx-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 androidx-glance-preview = { group = "androidx.glance", name = "glance-preview", version.ref = "glancePreview" }
+foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayoutVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

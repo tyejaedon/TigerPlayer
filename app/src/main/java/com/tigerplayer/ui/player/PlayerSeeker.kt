@@ -78,7 +78,8 @@ fun FieryWavySeeker(
     artworkUri: Any? = track.artworkUri,
     energy: Float = uiState.audioReactiveFrame.energy,
     bass: Float = uiState.audioReactiveFrame.bass,
-    baseWaveAmplitude: Dp = 8.dp
+    flux: Float = uiState.audioReactiveFrame.flux,
+    baseWaveAmplitude: Dp = (8 * uiState.waveformSensitivity).dp
 ) {
     val context = LocalContext.current
     val isInspection = LocalInspectionMode.current
@@ -115,7 +116,7 @@ fun FieryWavySeeker(
         }
     }
 
-    val (phase, animatedEnergy) = if (shouldAnimate) {
+    val (phase, animatedEnergy, animatedFlux) = if (shouldAnimate) {
         val transition = rememberInfiniteTransition(label = "WaveformTransition")
         val animatedPhase by transition.animateFloat(
             initialValue = 0f,
@@ -128,9 +129,14 @@ fun FieryWavySeeker(
             animationSpec = tween(120),
             label = "WaveEnergy"
         )
-        Pair(animatedPhase, energyState)
+        val fluxState by animateFloatAsState(
+            targetValue = flux.coerceIn(0f, 1f),
+            animationSpec = tween(60),
+            label = "WaveFlux"
+        )
+        Triple(animatedPhase, energyState, fluxState)
     } else {
-        Pair(0f, 0.2f)
+        Triple(0f, (0.2f + energy * 0.9f).coerceIn(0.2f, 1.2f), 0f)
     }
 
     val points = remember(uiState.currentWaveform) {
@@ -208,8 +214,8 @@ fun FieryWavySeeker(
                 val effectiveBaselineY = trackTop + overlapPx
 
                 val wave1Amplitude = baseWaveAmplitude.toPx()
-                val wave2Amplitude = wave1Amplitude * 4f
-                val wave3Amplitude = wave2Amplitude * 3f
+                val wave2Amplitude = wave1Amplitude * 2f
+                val wave3Amplitude = wave2Amplitude * 1.5f
                 val piOver4 = (Math.PI / 4.0).toFloat()
 
                 // Base track background
@@ -220,7 +226,7 @@ fun FieryWavySeeker(
                     cornerRadius = CornerRadius(trackRadius, trackRadius)
                 )
 
-                // Populate Wave 3: Cosine unconfined apex tier (12x Wave 1)
+                // Populate Wave 3: Cosine apex tier (harmonized 3x Wave 1)
                 populatePositiveWaveformPath(
                     path = wavePath3,
                     fillPath = fillPath3,
@@ -233,11 +239,15 @@ fun FieryWavySeeker(
                     phaseOffset = 0f,
                     isCosine = true,
                     frequencyMultiplier = 1.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
-                    energy = animatedEnergy
+                    energy = animatedEnergy,
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
-                // Populate Wave 2: Middle tier (4x Wave 1, PI/4 phase lead)
+                // Populate Wave 2: Middle tier (harmonized 2x Wave 1, PI/4 phase lead)
                 populatePositiveWaveformPath(
                     path = wavePath2,
                     fillPath = fillPath2,
@@ -250,8 +260,12 @@ fun FieryWavySeeker(
                     phaseOffset = piOver4,
                     isCosine = false,
                     frequencyMultiplier = 1.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
-                    energy = animatedEnergy
+                    energy = animatedEnergy,
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // Populate Wave 1: Foundational tier (base amplitude)
@@ -267,8 +281,12 @@ fun FieryWavySeeker(
                     phaseOffset = 0f,
                     isCosine = false,
                     frequencyMultiplier = 1.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
-                    energy = animatedEnergy
+                    energy = animatedEnergy,
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // Active Played Zone (0 to progressX horizontally)

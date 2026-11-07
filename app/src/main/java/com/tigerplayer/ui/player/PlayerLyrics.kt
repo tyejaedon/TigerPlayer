@@ -1,10 +1,13 @@
 package com.tigerplayer.ui.player
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -34,8 +39,10 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tigerplayer.data.model.Lyrics
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import java.util.Locale
 import kotlin.math.abs
+import kotlinx.coroutines.isActive
 
 /**
  * Centralized Compose test tags for the lyrics screen, following the PrismTestTags convention
@@ -58,13 +65,14 @@ fun LyricsDisplay(
     lyrics: Lyrics,
     currentPosition: Long,
     textColor: Color,
-    activeColor: Color = Color.Red,
     activeFontSize: TextUnit = 24.sp,
     inactiveFontSize: TextUnit = 20.sp,
     plainLyricsFontSize: TextUnit = 24.sp,
     lineVerticalPadding: Dp = 12.dp,
     manualOffsetMs: Long = 0L,
     showOffsetControls: Boolean = false,
+    cyclicProjection: Boolean = true,
+    leadWindowMs: Long = LyricsViewportCoordinator.DEFAULT_LEAD_WINDOW_MS,
     onLineClick: ((Long) -> Unit)? = null,
     onOffsetAdjust: ((Long) -> Unit)? = null,
     onOffsetReset: (() -> Unit)? = null
@@ -114,37 +122,87 @@ fun LyricsDisplay(
                 }
             } else {
                 val listState = rememberLazyListState()
-                val totalOffsetMs = lyrics.offsetMs + manualOffsetMs
-                val adjustedPosition = currentPosition + totalOffsetMs
-                val activeIndex = remember(adjustedPosition, parsed) {
-                    parsed.indexOfLast { it.timeMs <= adjustedPosition }
-                }
-
+                val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
                 val density = LocalDensity.current
 
-                LaunchedEffect(activeIndex) {
-                    if (activeIndex >= 0 && activeIndex < parsed.size && !listState.isScrollInProgress) {
-                        val layoutInfo = listState.layoutInfo
-                        val activeItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIndex }
+                val totalOffsetMs = lyrics.offsetMs + manualOffsetMs
+                val rawAdjustedPosition = currentPosition + totalOffsetMs
 
-                        if (activeItem != null) {
-                            // Active item is already rendered/visible: perform single unified glide to exact center
-                            val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
-                            val itemCenter = activeItem.offset + (activeItem.size / 2)
+                // Sub-frame monotonic time tracker to extrapolate 250ms playback ticks smoothly
+                var lastAnchorPos by remember { mutableLongStateOf(rawAdjustedPosition) }
+                var lastAnchorMonoTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+
+                if (rawAdjustedPosition != lastAnchorPos) {
+                    lastAnchorPos = rawAdjustedPosition
+                    lastAnchorMonoTime = android.os.SystemClock.elapsedRealtime()
+                }
+
+                var frameMonotonicTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+                LaunchedEffect(lyrics, currentPosition) {
+                    while (isActive) {
+                        withFrameMillis {
+                            frameMonotonicTime = android.os.SystemClock.elapsedRealtime()
+                        }
+                    }
+                }
+
+                val smoothPosition = remember(lastAnchorPos, lastAnchorMonoTime, frameMonotonicTime) {
+                    LyricsViewportCoordinator.extrapolatePosition(
+                        reportedPositionMs = lastAnchorPos,
+                        lastAnchorMonotonicMs = lastAnchorMonoTime,
+                        currentMonotonicMs = frameMonotonicTime,
+                        isPlaying = true
+                    )
+                }
+
+                val anticipatoryState = remember(parsed, smoothPosition, leadWindowMs) {
+                    LyricsViewportCoordinator.calculateAnticipatoryState(
+                        lines = parsed,
+                        currentPositionMs = smoothPosition,
+                        leadWindowMs = leadWindowMs
+                    )
+                }
+
+                val activeIndex = anticipatoryState.activeIndex
+                val targetScrollIndex = anticipatoryState.targetScrollIndex
+                val focalIndex = anticipatoryState.focalIndex
+                val itemHeights = remember { mutableStateMapOf<Int, Int>() }
+
+                var previousTargetIndex by remember { mutableIntStateOf(targetScrollIndex) }
+
+                LaunchedEffect(targetScrollIndex, isUserDragging) {
+                    if (targetScrollIndex in parsed.indices && !isUserDragging) {
+                        val isLargeJump = abs(targetScrollIndex - previousTargetIndex) > 1
+                        previousTargetIndex = targetScrollIndex
+
+                        val layoutInfo = listState.layoutInfo
+                        val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetScrollIndex }
+
+                        if (targetItem != null && !isLargeJump) {
+                            val viewportCenter = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
+                            val itemCenter = targetItem.offset + (targetItem.size / 2)
                             val delta = (itemCenter - viewportCenter).toFloat()
+
                             if (abs(delta) > 1f) {
                                 listState.animateScrollBy(
                                     value = delta,
-                                    animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(
+                                        durationMillis = anticipatoryState.effectiveLeadWindowMs.toInt(),
+                                        easing = FastOutSlowInEasing
+                                    )
                                 )
                             }
                         } else {
-                            // Active item is off-screen (e.g. initial track start or seek):
-                            // Center in one single scroll pass
                             val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                            val approxItemHeightPx = with(density) { (lineVerticalPadding * 2 + activeFontSize.toDp()).toPx() }.toInt()
-                            val centerOffset = -(viewportHeight / 2 - approxItemHeightPx / 2)
-                            listState.animateScrollToItem(activeIndex, scrollOffset = centerOffset)
+                            val approxItemHeightPx = itemHeights[targetScrollIndex] ?: with(density) {
+                                (lineVerticalPadding * 2 + activeFontSize.toDp()).toPx()
+                            }.toInt()
+                            val centerOffset = LyricsViewportCoordinator.calculateCenterOffset(viewportHeight, approxItemHeightPx)
+                            if (isLargeJump) {
+                                listState.scrollToItem(targetScrollIndex, scrollOffset = centerOffset)
+                            } else {
+                                listState.animateScrollToItem(targetScrollIndex, scrollOffset = centerOffset)
+                            }
                         }
                     }
                 }
@@ -162,40 +220,23 @@ fun LyricsDisplay(
                             items = parsed,
                             key = { index, line -> "lyric_${line.timeMs}_$index" }
                         ) { index, line ->
-                            val isActive = (index == activeIndex && activeIndex >= 0)
+                            val isActive = index == activeIndex
                             val inactiveScale = (inactiveFontSize.value / activeFontSize.value).coerceIn(0.75f, 1f)
-                            val scale by animateFloatAsState(
-                                targetValue = if (isActive) 1.05f else inactiveScale,
-                                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                                label = "LyricScale"
-                            )
-                            val alpha by animateFloatAsState(
-                                targetValue = if (isActive) 1f else 0.45f,
-                                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                                label = "LyricAlpha"
-                            )
 
-                            Text(
-                                text = line.text.ifBlank { "•••" },
-                                color = if (isActive) activeColor else textColor,
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = activeFontSize
-                                ),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("${LyricsTestTags.LYRIC_LINE_PREFIX}$index")
-                                    .clickable(
-                                        enabled = onLineClick != null,
-                                        onClick = { onLineClick?.invoke(line.timeMs) }
-                                    )
-                                    .padding(vertical = lineVerticalPadding, horizontal = 24.dp)
-                                    .graphicsLayer {
-                                        scaleX = scale
-                                        scaleY = scale
-                                        this.alpha = alpha
-                                    }
+                            LyricRow(
+                                text = line.text,
+                                isActive = isActive,
+                                index = index,
+                                lineTimeMs = line.timeMs,
+                                focalIndex = focalIndex,
+                                cyclicProjection = cyclicProjection,
+                                activeColor = TigerNeonOrange,
+                                textColor = textColor,
+                                activeFontSize = activeFontSize,
+                                inactiveScale = inactiveScale,
+                                lineVerticalPadding = lineVerticalPadding,
+                                onHeightMeasured = { measuredHeight -> itemHeights[index] = measuredHeight },
+                                onLineClick = onLineClick
                             )
                         }
                     }
@@ -276,4 +317,77 @@ private fun LyricsOffsetControls(
             }
         }
     }
+}
+@Composable
+private fun LyricRow(
+    text: String,
+    isActive: Boolean,
+    index: Int,
+    lineTimeMs: Long,
+    focalIndex: Float,
+    cyclicProjection: Boolean,
+    activeColor: Color,
+    textColor: Color,
+    activeFontSize: TextUnit,
+    inactiveScale: Float,
+    lineVerticalPadding: Dp,
+    onHeightMeasured: ((Int) -> Unit)? = null,
+    onLineClick: ((Long) -> Unit)?
+) {
+    val projection = remember(index, focalIndex, inactiveScale, cyclicProjection) {
+        LyricsViewportCoordinator.calculateProjection(
+            itemIndex = index,
+            focalIndex = focalIndex,
+            inactiveScale = inactiveScale,
+            enabled = cyclicProjection
+        )
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = projection.scale,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "LyricScale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = projection.alpha,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "LyricAlpha"
+    )
+
+    val colorFraction = (1f - abs(index - focalIndex)).coerceIn(0f, 1f)
+    val color = lerp(textColor, activeColor, colorFraction)
+
+    Text(
+        text = text.ifBlank { "•••" },
+        color = color,
+        style = MaterialTheme.typography.headlineMedium.copy(
+            fontWeight = FontWeight.Black,
+            fontSize = activeFontSize
+        ),
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("${LyricsTestTags.LYRIC_LINE_PREFIX}$index")
+            .onSizeChanged { onHeightMeasured?.invoke(it.height) }
+            .clickable(
+                enabled = onLineClick != null,
+                onClick = { onLineClick?.invoke(lineTimeMs) }
+            )
+            .padding(vertical = lineVerticalPadding, horizontal = 24.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+                if (cyclicProjection) {
+                    rotationX = projection.rotationX
+                    cameraDistance = 16f * density
+                }
+            }
+    )
 }

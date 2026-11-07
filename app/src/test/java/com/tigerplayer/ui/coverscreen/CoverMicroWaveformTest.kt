@@ -15,6 +15,8 @@ import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerNeonRed
 import com.tigerplayer.ui.theme.TigerSpectralViolet
 import com.tigerplayer.ui.theme.TigerToxicLime
+import com.tigerplayer.ui.coverscreen.calculateWaveformY
+import com.tigerplayer.ui.coverscreen.calculateWaveformYWithEffectiveHeight
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -146,8 +148,8 @@ class CoverMicroWaveformTest {
         val width = 200f
         val baseAmplitude = 6.5f
         val wave1Amp = baseAmplitude
-        val wave2Amp = wave1Amp * 4f
-        val wave3Amp = wave2Amp * 3f
+        val wave2Amp = wave1Amp * 2f
+        val wave3Amp = wave2Amp * 1.5f
         val baselineY = 40f
         val overlapPx = 3f
         val piOver4 = (Math.PI / 4.0).toFloat()
@@ -168,7 +170,7 @@ class CoverMicroWaveformTest {
             frequencyMultiplier = 1.0f
         )
 
-        // Wave 2: Sine Wave starting at PI / 4 radians (4x larger than Wave 1)
+        // Wave 2: Sine Wave starting at PI / 4 radians (2x larger than Wave 1)
         populatePositiveWaveformPath(
             path = path2,
             fillPath = fill2,
@@ -183,7 +185,7 @@ class CoverMicroWaveformTest {
             frequencyMultiplier = 1.0f
         )
 
-        // Wave 3: Cosine Wave (3x larger than Wave 2 = 12x Wave 1)
+        // Wave 3: Cosine Wave (1.5x larger than Wave 2 = 3x Wave 1)
         populatePositiveWaveformPath(
             path = path3,
             fillPath = fill3,
@@ -199,9 +201,9 @@ class CoverMicroWaveformTest {
         )
 
         // Verify exact relative amplitude factor scaling
-        assertEquals(4f, wave2Amp / wave1Amp, 0.001f)
-        assertEquals(3f, wave3Amp / wave2Amp, 0.001f)
-        assertEquals(12f, wave3Amp / wave1Amp, 0.001f)
+        assertEquals(2f, wave2Amp / wave1Amp, 0.001f)
+        assertEquals(1.5f, wave3Amp / wave2Amp, 0.001f)
+        assertEquals(3f, wave3Amp / wave1Amp, 0.001f)
 
         // Verify paths are non-empty
         assertTrue("Wave 1 path must not be empty", !path1.isEmpty)
@@ -300,7 +302,7 @@ class CoverMicroWaveformTest {
     }
 
     @Test
-    fun `populatePositiveWaveformPath smoothly tapers to baseline at horizontal boundaries`() {
+    fun `populatePositiveWaveformPath maintains natural sinusoidal curvature across entire width without boundary flattening`() {
         val path = Path()
         val fillPath = Path()
         val width = 200f
@@ -309,7 +311,7 @@ class CoverMicroWaveformTest {
         val overlapPx = 2f
         val effectiveBaselineY = baselineY + overlapPx
 
-        // Test with cosine wave and phase offset which would normally start at peak height at x=0
+        // Test with cosine wave with phase = 0f: cosine is 1 at x=0, so the curve smoothly starts at apex peak without flattening to baseline
         populatePositiveWaveformPath(
             path = path,
             fillPath = fillPath,
@@ -318,18 +320,47 @@ class CoverMicroWaveformTest {
             maxHeight = maxHeight,
             baselineY = baselineY,
             overlapPx = overlapPx,
-            phase = 1.2f,
-            phaseOffset = 0.5f,
+            phase = 0f,
+            phaseOffset = 0f,
             isCosine = true,
-            waveCycles = 0.8f
+            waveCycles = 2.0f,
+            edgeTaper = 0f
         )
 
         val androidPath = path.asAndroidPath()
         val bounds = RectF()
         androidPath.computeBounds(bounds, true)
 
-        // At endpoints x=0 and x=width, boundaryEnvelope tapers amplitude to zero, anchoring bottom at effectiveBaselineY
+        // Bottom rests at baseline and top curves up to peak height smoothly
         assertEquals(effectiveBaselineY, bounds.bottom, 0.1f)
+        assertTrue("Wave bounds top must curve up near peak height", bounds.top <= effectiveBaselineY - (maxHeight * 0.85f))
+    }
+
+    @Test
+    fun `calculateWaveformY maintains natural curved elevation at origin when edgeTaper is zero`() {
+        val width = 200f
+        val maxHeight = 40f
+        val baselineY = 20f
+        val overlapPx = 2f
+        val effectiveBaselineY = baselineY + overlapPx
+
+        val y0 = calculateWaveformY(
+            x = 0f,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0f,
+            phaseOffset = 0f,
+            isCosine = true,
+            waveCycles = 2.0f,
+            edgeTaper = 0f
+        )
+
+        // With cosine and phase 0, cos(0) = 1, so rawTrig = 1, smoothOscillation = 1.0
+        // Elevation at origin should retain natural crest height, NOT flattened to baseline
+        assertTrue("Wave at origin must retain natural curved elevation above baseline", y0 < effectiveBaselineY)
+        assertEquals("Wave at origin reaches apex height without edge flattening", effectiveBaselineY - (maxHeight * 0.90f), y0, maxHeight * 0.15f)
     }
 
     @Test
@@ -360,5 +391,280 @@ class CoverMicroWaveformTest {
             CoverScreenTestTags.MICRO_WAVEFORM_SLIDER
         )
         assertEquals("All test tags must be unique", 4, tags.size)
+    }
+
+    // --- 5. ENERGETIC MULTI-HARMONIC & FLUX SURGE TESTS ---
+
+    @Test
+    fun `populatePositiveWaveformPath surges aggressively with high bass and flux transients`() {
+        val points = floatArrayOf(0.4f, 0.8f, 0.3f, 0.9f)
+        val pathQuiet = Path()
+        val pathSurge = Path()
+        val width = 300f
+        val maxHeight = 50f
+        val baselineY = 40f
+        val overlapPx = 2f
+
+        populatePositiveWaveformPath(
+            path = pathQuiet,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0f,
+            bass = 0.1f,
+            energy = 0.2f,
+            flux = 0f
+        )
+
+        populatePositiveWaveformPath(
+            path = pathSurge,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0f,
+            bass = 0.95f,
+            energy = 1.1f,
+            flux = 0.90f
+        )
+
+        val boundsQuiet = RectF()
+        pathQuiet.asAndroidPath().computeBounds(boundsQuiet, true)
+        val boundsSurge = RectF()
+        pathSurge.asAndroidPath().computeBounds(boundsSurge, true)
+
+        assertTrue(
+            "Surge wave height (${boundsSurge.height()}) must be significantly larger than quiet wave (${boundsQuiet.height()})",
+            boundsSurge.height() > boundsQuiet.height() * 1.15f
+        )
+    }
+
+    @Test
+    fun `populatePositiveWaveformPath produces rich harmonic ripples when turbulence is active`() {
+        val points = floatArrayOf(0.5f, 0.5f, 0.5f, 0.5f)
+        val smoothPath = Path()
+        val turbulentPath = Path()
+        val width = 300f
+        val maxHeight = 40f
+        val baselineY = 30f
+        val overlapPx = 2f
+
+        populatePositiveWaveformPath(
+            path = smoothPath,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            turbulence = 0f
+        )
+
+        populatePositiveWaveformPath(
+            path = turbulentPath,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            turbulence = 0.40f
+        )
+
+        val smoothBounds = RectF()
+        smoothPath.asAndroidPath().computeBounds(smoothBounds, true)
+        val turbulentBounds = RectF()
+        turbulentPath.asAndroidPath().computeBounds(turbulentBounds, true)
+
+        assertTrue("Both smooth and turbulent paths must develop non-empty curves", !smoothPath.isEmpty && !turbulentPath.isEmpty)
+        assertTrue("Turbulent path bounds must develop rich crests", turbulentBounds.height() > 0f)
+    }
+
+    // --- 6. BOUNDARY ANCHOR & ENDPOINT INTERCEPT TESTS ---
+
+    @Test
+    fun `populatePositiveWaveformPath anchors all wave curves to baseline with shift 0 at origin x 0`() {
+        val width = 400f
+        val maxHeight = 50f
+        val baselineY = 30f
+        val overlapPx = 2.5f
+        val effectiveBaselineY = baselineY + overlapPx
+        val piOver4 = (Math.PI / 4.0).toFloat()
+
+        val phases = floatArrayOf(0f, 0.5f, 1.2f, (Math.PI).toFloat(), 5.5f)
+
+        for (phase in phases) {
+            // Wave 1: Standard Sine wave
+            val y1 = calculateWaveformY(
+                x = 0f,
+                width = width,
+                maxHeight = maxHeight,
+                baselineY = baselineY,
+                overlapPx = overlapPx,
+                phase = phase,
+                phaseOffset = 0f,
+                isCosine = false,
+                waveCycles = 2.0f
+            )
+            assertEquals("Wave 1 must start anchored at baseline with shift 0 at x=0 for phase $phase", effectiveBaselineY, y1, 0.001f)
+
+            // Wave 2: Sine with PI/4 phase lead
+            val y2 = calculateWaveformY(
+                x = 0f,
+                width = width,
+                maxHeight = maxHeight * 2f,
+                baselineY = baselineY,
+                overlapPx = overlapPx,
+                phase = phase,
+                phaseOffset = piOver4,
+                isCosine = false,
+                waveCycles = 2.2f
+            )
+            assertEquals("Wave 2 must start anchored at baseline with shift 0 at x=0 for phase $phase", effectiveBaselineY, y2, 0.001f)
+
+            // Wave 3: Cosine formulation
+            val y3 = calculateWaveformY(
+                x = 0f,
+                width = width,
+                maxHeight = maxHeight * 3f,
+                baselineY = baselineY,
+                overlapPx = overlapPx,
+                phase = phase,
+                phaseOffset = 0f,
+                isCosine = true,
+                waveCycles = 2.4f
+            )
+            assertEquals("Wave 3 must start anchored at baseline with shift 0 at x=0 for phase $phase", effectiveBaselineY, y3, 0.001f)
+        }
+    }
+
+    @Test
+    fun `populatePositiveWaveformPath intercepts baseline x-axis at endpoint x width for all waves`() {
+        val width = 500f
+        val maxHeight = 45f
+        val baselineY = 25f
+        val overlapPx = 3f
+        val effectiveBaselineY = baselineY + overlapPx
+        val piOver4 = (Math.PI / 4.0).toFloat()
+
+        val phases = floatArrayOf(0f, 0.7f, 2.1f, (Math.PI * 1.5).toFloat(), 6.0f)
+
+        for (phase in phases) {
+            // Wave 1: 2.0 cycles
+            val y1 = calculateWaveformY(
+                x = width,
+                width = width,
+                maxHeight = maxHeight,
+                baselineY = baselineY,
+                overlapPx = overlapPx,
+                phase = phase,
+                phaseOffset = 0f,
+                isCosine = false,
+                waveCycles = 2.0f
+            )
+            assertEquals("Wave 1 must intercept baseline at x=width for phase $phase", effectiveBaselineY, y1, 0.001f)
+
+            // Wave 2: 2.2 cycles (fractional cycle)
+            val y2 = calculateWaveformY(
+                x = width,
+                width = width,
+                maxHeight = maxHeight * 2f,
+                baselineY = baselineY,
+                overlapPx = overlapPx,
+                phase = phase,
+                phaseOffset = piOver4,
+                isCosine = false,
+                waveCycles = 2.2f
+            )
+            assertEquals("Wave 2 must intercept baseline at x=width for phase $phase", effectiveBaselineY, y2, 0.001f)
+
+            // Wave 3: 2.4 cycles (fractional cycle, cosine)
+            val y3 = calculateWaveformY(
+                x = width,
+                width = width,
+                maxHeight = maxHeight * 3f,
+                baselineY = baselineY,
+                overlapPx = overlapPx,
+                phase = phase,
+                phaseOffset = 0f,
+                isCosine = true,
+                waveCycles = 2.4f
+            )
+            assertEquals("Wave 3 must intercept baseline at x=width for phase $phase", effectiveBaselineY, y3, 0.001f)
+        }
+    }
+
+    @Test
+    fun `populatePositiveWaveformPath smooth boundary envelope anchors endpoints and preserves body crests`() {
+        val width = 1000f
+        val maxHeight = 50f
+        val baselineY = 30f
+        val overlapPx = 2f
+        val effectiveBaselineY = baselineY + overlapPx
+
+        // 1. At boundaries, elevation must be strictly 0 (shift 0 anchor at start, baseline intercept at end)
+        val yStart = calculateWaveformY(
+            x = 0f,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            phaseOffset = (Math.PI / 4.0).toFloat(),
+            isCosine = true
+        )
+        assertEquals("Elevation at origin must be 0", effectiveBaselineY, yStart, 0.001f)
+
+        val yEnd = calculateWaveformY(
+            x = width,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            phaseOffset = (Math.PI / 4.0).toFloat(),
+            isCosine = true
+        )
+        assertEquals("Elevation at endpoint must be 0", effectiveBaselineY, yEnd, 0.001f)
+
+        // 2. Throughout the taper region (0 < x < 12% width), elevation is positive and bounded
+        for (step in 1..10) {
+            val x = (width * 0.12f) * (step.toFloat() / 10f)
+            val y = calculateWaveformY(
+                x = x,
+                width = width,
+                maxHeight = maxHeight,
+                baselineY = baselineY,
+                overlapPx = overlapPx,
+                phase = 0f,
+                phaseOffset = 0f,
+                isCosine = true
+            )
+            val elevation = effectiveBaselineY - y
+            assertTrue("Elevation in taper zone must be non-negative (elevation=$elevation)", elevation >= 0f)
+            assertTrue("Elevation must not exceed peak height (elevation=$elevation)", elevation <= maxHeight * 1.5f)
+        }
+
+        // 3. In the wave body (outside taper zone), wave reaches full dynamic amplitude
+        val path = Path()
+        populatePositiveWaveformPath(
+            path = path,
+            points = floatArrayOf(0.5f, 0.5f),
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0f,
+            waveCycles = 2.0f
+        )
+        val bounds = RectF()
+        path.asAndroidPath().computeBounds(bounds, true)
+        assertEquals("Path bounds bottom rests at baseline", effectiveBaselineY, bounds.bottom, 0.1f)
+        assertEquals("Path bounds left starts at 0", 0f, bounds.left, 0.1f)
+        assertEquals("Path bounds right ends at width", width, bounds.right, 0.1f)
+        assertTrue("Wave body reaches full peak height", bounds.top <= effectiveBaselineY - (maxHeight * 0.85f))
     }
 }

@@ -24,19 +24,27 @@ object M3uParser {
 
     private const val HEADER_EXTM3U = "#EXTM3U"
     private const val DIRECTIVE_EXTINF = "#EXTINF:"
+    private const val DIRECTIVE_PLAYLIST = "#PLAYLIST:"
     private const val UTF8_BOM = "\uFEFF"
 
     /**
-     * Parses an M3U / M3U8 string content into an [M3uPlaylist].
-     *
-     * @param content Raw string content of the playlist.
-     * @param defaultName Default name if playlist header does not specify one.
+     * Parses an M3U / M3U8 string content into an [M3uPlaylist] following industry standard specifications:
+     * - Handles standard `#EXTM3U` and `#EXTINF:<seconds>,<title>` directives.
+     * - Extracts playlist name if `#PLAYLIST:<name>` is present, else defaults to [defaultName].
+     * - Tolerates inline attributes after duration (e.g. `#EXTINF:123 tvg-id="1" tvg-name="Foo",Artist - Title`).
+     * - Trims optional surrounding quotation marks around paths/URIs.
+     * - Handles standard Windows (`\r\n`), Unix (`\n`), and legacy Mac (`\r`) line breaks.
+     * - Treats leading `#` directives other than recognized commands as standard comments.
+     * - Preserves empty line separation and UTF-8 non-ASCII characters losslessly.
      */
     fun parse(content: String, defaultName: String = "Imported Playlist"): M3uPlaylist {
         val cleanContent = if (content.startsWith(UTF8_BOM)) content.substring(1) else content
-        val lines = cleanContent.lines()
+        // Standardize line endings (\r\n and \r -> \n)
+        val normalizedContent = cleanContent.replace("\r\n", "\n").replace('\r', '\n')
+        val lines = normalizedContent.lines()
 
         val entries = mutableListOf<M3uEntry>()
+        var playlistName = defaultName
         var currentDuration: Long = -1L
         var currentTitle: String? = null
 
@@ -45,27 +53,41 @@ object M3uParser {
             if (line.isEmpty()) continue
 
             if (line.startsWith("#")) {
-                if (line.startsWith(DIRECTIVE_EXTINF, ignoreCase = true)) {
+                if (line.startsWith(DIRECTIVE_PLAYLIST, ignoreCase = true)) {
+                    val customName = line.substring(DIRECTIVE_PLAYLIST.length).trim()
+                    if (customName.isNotEmpty()) {
+                        playlistName = customName
+                    }
+                } else if (line.startsWith(DIRECTIVE_EXTINF, ignoreCase = true)) {
                     val infoContent = line.substring(DIRECTIVE_EXTINF.length).trim()
                     val commaIndex = infoContent.indexOf(',')
                     if (commaIndex != -1) {
-                        val durationStr = infoContent.substring(0, commaIndex).trim()
+                        val durationAndAttrs = infoContent.substring(0, commaIndex).trim()
                         val titleStr = infoContent.substring(commaIndex + 1).trim()
-                        currentDuration = durationStr.toDoubleOrNull()?.toLong() ?: -1L
+                        // Duration is the first token before any attributes
+                        val firstToken = durationAndAttrs.split("\\s+".toRegex(), limit = 2).firstOrNull() ?: ""
+                        currentDuration = firstToken.toDoubleOrNull()?.toLong() ?: -1L
                         currentTitle = titleStr.ifEmpty { null }
                     } else {
-                        currentDuration = infoContent.toDoubleOrNull()?.toLong() ?: -1L
+                        val firstToken = infoContent.split("\\s+".toRegex(), limit = 2).firstOrNull() ?: ""
+                        currentDuration = firstToken.toDoubleOrNull()?.toLong() ?: -1L
                         currentTitle = null
                     }
                 }
-                // Other # directives (e.g. #EXT-X-*, comments) are ignored
+                // Other # directives or comments are ignored per M3U spec
                 continue
             }
 
-            // Normal path / URI entry line
+            // Normal path / URI entry line (strip optional wrapping quotes if present)
+            val cleanPathOrUri = if (line.startsWith("\"") && line.endsWith("\"") && line.length >= 2) {
+                line.substring(1, line.length - 1).trim()
+            } else {
+                line
+            }
+
             entries.add(
                 M3uEntry(
-                    pathOrUri = line,
+                    pathOrUri = cleanPathOrUri,
                     durationSeconds = currentDuration,
                     title = currentTitle
                 )
@@ -77,19 +99,30 @@ object M3uParser {
         }
 
         return M3uPlaylist(
-            name = defaultName,
+            name = playlistName,
             entries = entries
         )
     }
 
     /**
-     * Reads and parses an M3U stream using UTF-8 (falling back to ISO-8859-1 if requested).
+     * Reads and parses an M3U stream using standard UTF-8 (with BOM stripping and ISO-8859-1 fallback).
      */
     fun parseStream(
         inputStream: InputStream,
         defaultName: String = "Imported Playlist"
     ): M3uPlaylist {
-        val text = inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        val bytes = inputStream.readBytes()
+        val text = try {
+            val decodedUtf8 = String(bytes, StandardCharsets.UTF_8)
+            // If UTF-8 contains replacement characters, try ISO-8859-1 fallback
+            if (decodedUtf8.contains('\uFFFD')) {
+                String(bytes, StandardCharsets.ISO_8859_1)
+            } else {
+                decodedUtf8
+            }
+        } catch (_: Exception) {
+            String(bytes, StandardCharsets.ISO_8859_1)
+        }
         return parse(text, defaultName)
     }
 

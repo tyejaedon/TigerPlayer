@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.home
 
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.*
@@ -17,10 +18,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Timeline
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -66,6 +71,7 @@ import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.KeyboardTestTags
 import com.tigerplayer.ui.prism.PrismTestTags
 import com.tigerplayer.ui.prism.PrismViewModel
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerPlayerTheme
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
@@ -97,10 +103,12 @@ fun HomeScreen(
     dashboardViewModel: DashboardViewModel,
     prismViewModel: PrismViewModel,
     onNavigateToSonicPrism: () -> Unit,
+    onNavigateToEqualizer: (() -> Unit)? = null,
     onBottomNavigationVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val homeState by viewModel.homeUiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val artistDetails by viewModel.artistDetails.collectAsStateWithLifecycle()
 
     var isStatsExpanded by remember { mutableStateOf(false) }
@@ -110,6 +118,9 @@ fun HomeScreen(
     var showConstellation by remember { mutableStateOf(false) }
     var showSonicFootprint by remember { mutableStateOf(false) }
     var showAudioDevicesHub by remember { mutableStateOf(false) }
+    var showStudioEqualizer by remember { mutableStateOf(false) }
+    var showSpatialNexus by remember { mutableStateOf(false) }
+    var showAcousticSpace by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     val sonicFootprintOpenRequest by viewModel.sonicFootprintOpenRequest.collectAsStateWithLifecycle()
 
@@ -120,8 +131,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(showConstellation, showSonicFootprint) {
-        onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint)
+    LaunchedEffect(showConstellation, showSonicFootprint, showStudioEqualizer, showSpatialNexus, showAcousticSpace) {
+        onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint || showStudioEqualizer || showSpatialNexus || showAcousticSpace)
     }
 
     DisposableEffect(Unit) {
@@ -144,8 +155,11 @@ fun HomeScreen(
         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub) {
-        if (showAudioDevicesHub) showAudioDevicesHub = false
+    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub || showStudioEqualizer || showSpatialNexus || showAcousticSpace) {
+        if (showStudioEqualizer) showStudioEqualizer = false
+        else if (showSpatialNexus) showSpatialNexus = false
+        else if (showAcousticSpace) showAcousticSpace = false
+        else if (showAudioDevicesHub) showAudioDevicesHub = false
         else if (showSonicFootprint) showSonicFootprint = false
         else if (showConstellation) showConstellation = false
         else if (isStatsExpanded) isStatsExpanded = false
@@ -250,28 +264,75 @@ fun HomeScreen(
 
                 item {
                     SectionTitle("THE NEXUS")
-                    Row(
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        NexusGatewayCard(
-                            modifier = Modifier.weight(1f),
-                            title = "FOOTPRINT",
-                            subtitle = "Listening DNA",
-                            color = SonicCyan,
-                            icon = Icons.Rounded.Timeline,
-                            onClick = { showSonicFootprint = true }
-                        )
-                        NexusGatewayCard(
-                            modifier = Modifier.weight(1f),
-                            title = "COSMOS",
-                            subtitle = "Neural Map",
-                            color = NeuralPurple,
-                            icon = Icons.Rounded.GraphicEq,
-                            onClick = { showConstellation = true }
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "FOOTPRINT",
+                                subtitle = "Listening DNA",
+                                color = SonicCyan,
+                                icon = Icons.Rounded.Timeline,
+                                onClick = { showSonicFootprint = true }
+                            )
+
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "COSMOS",
+                                subtitle = "Neural Map",
+                                color = NeuralPurple,
+                                icon = Icons.Rounded.GraphicEq,
+                                onClick = { showConstellation = true }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "EQUALIZER",
+                                subtitle = "PEQ & AutoEq",
+                                color = TigerNeonOrange,
+                                icon = Icons.Rounded.Tune,
+                                onClick = {
+                                    if (onNavigateToEqualizer != null) onNavigateToEqualizer()
+                                    else showStudioEqualizer = true
+                                }
+                            )
+
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "SPATIAL NEXUS",
+                                subtitle = "Audio Positioning",
+                                color = AardBlue,
+                                icon = Icons.Rounded.GraphicEq,
+                                onClick = { showSpatialNexus = true }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "ACOUSTIC SPACE",
+                                subtitle = "Reverb & Room",
+                                color = SpotifyGreen,
+                                icon = Icons.Default.AutoFixHigh,
+                                onClick = { showAcousticSpace = true }
+                            )
+                        }
                     }
                 }
 
@@ -393,6 +454,37 @@ fun HomeScreen(
                 onClose = { showConstellation = false }
             )
         }
+
+        AnimatedVisibility(
+            visible = showStudioEqualizer,
+            enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(400)),
+            exit = fadeOut(tween(250)) + slideOutVertically(targetOffsetY = { it / 4 }, animationSpec = tween(250))
+        ) {
+            com.tigerplayer.ui.equalizer.EqualizerHubView(
+                isCoverScreen = false,
+                onClose = { showStudioEqualizer = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showSpatialNexus,
+            enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(400)),
+            exit = fadeOut(tween(250)) + slideOutVertically(targetOffsetY = { it / 4 }, animationSpec = tween(250))
+        ) {
+            com.tigerplayer.ui.equalizer.SpatialNexusView(
+                onClose = { showSpatialNexus = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showAcousticSpace,
+            enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(400)),
+            exit = fadeOut(tween(250)) + slideOutVertically(targetOffsetY = { it / 4 }, animationSpec = tween(250))
+        ) {
+            com.tigerplayer.ui.equalizer.AcousticSpaceView(
+                onClose = { showAcousticSpace = false }
+            )
+        }
     }
 
     searchTrackForOptions?.let { selectedTrack ->
@@ -416,6 +508,20 @@ fun HomeScreen(
                 viewModel.clearSearch()
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
+            },
+            onQueueAdded = {
+                Toast.makeText(
+                    context,
+                    "${it.title} added to queue",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onPlaylistAdded = { song, playlist ->
+                Toast.makeText(
+                    context,
+                    "${song.title} added to ${playlist.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         )
     }
@@ -945,6 +1051,105 @@ fun HomeHeader(
                         Icon(WitcherIcons.Settings, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), modifier = Modifier.size(22.dp))
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AutoEqSmartCard(
+    deviceName: String,
+    profileName: String,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = Color(0xFF1B1E28)
+        ),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, com.tigerplayer.ui.theme.TigerCyberCyan.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Headphones,
+                        contentDescription = "Headphones Detected",
+                        tint = com.tigerplayer.ui.theme.TigerCyberCyan,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "NEW DEVICE DETECTED",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = com.tigerplayer.ui.theme.TigerCyberCyan,
+                        letterSpacing = 1.sp
+                    )
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Dismiss",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Connected to $deviceName",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "We found a studio-flat EQ profile for $profileName. Would you like to apply it now?",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f),
+                lineHeight = 18.sp
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            androidx.compose.material3.Button(
+                onClick = onApply,
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = com.tigerplayer.ui.theme.TigerCyberCyan,
+                    contentColor = Color.Black
+                ),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoFixHigh,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Apply Studio Flat Profile",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
             }
         }
     }
