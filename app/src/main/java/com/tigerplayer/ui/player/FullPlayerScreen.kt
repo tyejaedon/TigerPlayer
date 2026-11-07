@@ -10,6 +10,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -203,6 +204,12 @@ fun FullPlayerScreen(
                         dynamicTextColor = resolvedText
                         dynamicAccentColor = resolvedAccent
                         viewModel.updateTrackColor(resolvedAccent)
+
+                        val cVibrant = palette?.vibrantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                        val cDominant = palette?.dominantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                        val cMuted = palette?.mutedSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                        val paletteColors = listOfNotNull(cVibrant, cDominant, cMuted).ifEmpty { null }
+                        viewModel.fluidRenderer.updatePaletteColors(paletteColors)
                     }
                 }
             })
@@ -226,7 +233,7 @@ fun FullPlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val hasModalOverlay = showSleepTimerSheet || showOptionsSheet || uiState.mainViewState != MainViewState.ARTWORK
+    val hasModalOverlay = showSleepTimerSheet || showOptionsSheet || showImmersiveVisualizer || uiState.mainViewState != MainViewState.ARTWORK
     val isRenderingActive = isLifecycleActive && !hasModalOverlay
 
     LaunchedEffect(uiState.audioReactiveFrame, isRenderingActive, uiState.isPlaying) {
@@ -333,7 +340,8 @@ fun FullPlayerScreen(
                 track = currentTrack,
                 sleepTimerActive = sleepTimerState.mode != SleepTimerMode.OFF,
                 onShowSleepTimer = { showSleepTimerSheet = true },
-                onShowVisualizer = { showImmersiveVisualizer = true }
+                isVisualizerActive = showImmersiveVisualizer,
+                onToggleVisualizer = { showImmersiveVisualizer = !showImmersiveVisualizer }
             )
 
             if (uiState.spotifyReauthRequired) {
@@ -452,15 +460,33 @@ fun FullPlayerScreen(
                     },
                     onGoToAlbum = { albumName ->
                         onNavigateToAlbum(albumName)
+                    },
+                    onQueueAdded = {
+                        Toast.makeText(
+                            context,
+                            "${it.title} added to queue",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onPlaylistAdded = { song, playlist ->
+                        Toast.makeText(
+                            context,
+                            "${song.title} added to ${playlist.name}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
             }
+        }
 
-            if (showImmersiveVisualizer) {
-                com.tigerplayer.ui.visualizer.ImmersiveVisualizerScreen(
-                    onClose = { showImmersiveVisualizer = false }
-                )
-            }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showImmersiveVisualizer,
+            enter = fadeIn(animationSpec = tween(300)) + slideInVertically(animationSpec = tween(300)) { it },
+            exit = fadeOut(animationSpec = tween(300)) + slideOutVertically(animationSpec = tween(300)) { it }
+        ) {
+            com.tigerplayer.ui.visualizer.ImmersiveVisualizerScreen(
+                onClose = { showImmersiveVisualizer = false }
+            )
         }
     }
 }
@@ -473,7 +499,7 @@ fun CinematicZoomImage(
         val transition = rememberInfiniteTransition(label = "CinematicZoom")
         transition.animateFloat(
             initialValue = 1.0f,
-            targetValue = 1.1f,
+            targetValue = 1.15f,
             animationSpec = infiniteRepeatable(
                 animation = tween(10000, easing = LinearEasing),
                 repeatMode = RepeatMode.Reverse
@@ -953,7 +979,8 @@ fun HeaderRitual(
     sleepTimerActive: Boolean,
     onShowSleepTimer: () -> Unit,
     track: AudioTrack,
-    onShowVisualizer: () -> Unit = {}
+    isVisualizerActive: Boolean = false,
+    onToggleVisualizer: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = if (isCoverOptimized) 8.dp else 16.dp, bottom = 8.dp),
@@ -1009,8 +1036,8 @@ fun HeaderRitual(
 
                 HeaderButton(
                     icon = Icons.Rounded.GraphicEq,
-                    active = false,
-                    onClick = onShowVisualizer,
+                    active = isVisualizerActive,
+                    onClick = onToggleVisualizer,
                     contentDescription = "Immersive Visualizer",
                     testTag = "header_visualizer_button",
                     isCoverOptimized = isCoverOptimized,

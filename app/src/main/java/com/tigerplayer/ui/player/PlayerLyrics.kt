@@ -140,7 +140,7 @@ fun LyricsDisplay(
                         val activeItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIndex }
 
                         if (activeItem != null) {
-                            val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+                            val viewportCenter = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
                             val itemCenter = activeItem.offset + (activeItem.size / 2)
                             val delta = (itemCenter - viewportCenter).toFloat()
 

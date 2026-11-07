@@ -32,6 +32,7 @@ import com.tigerplayer.ui.equalizer.EqualizerPresets
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 
 private val EmeraldNeon = Color(0xFF67F7B1)
 private val CardBackground = Color(0xFF13141A)
@@ -80,11 +81,10 @@ fun CoverScreenEqHubCardContent(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(CardBackground)
+            .glassEffect(RoundedCornerShape(18.dp))
             .border(
                 BorderStroke(
                     1.dp,
@@ -99,9 +99,7 @@ fun CoverScreenEqHubCardContent(
                 RoundedCornerShape(18.dp)
             )
             .bounceClick(onClick = onClick)
-            .testTag(CoverScreenTestTags.HOME_EQ_HUB_CARD),
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        shape = RoundedCornerShape(18.dp)
+            .testTag(CoverScreenTestTags.HOME_EQ_HUB_CARD)
     ) {
         Column(
             modifier = Modifier
@@ -135,7 +133,7 @@ fun CoverScreenEqHubCardContent(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "EQUALIZER & AUTOEQ",
+                                text = "EQUALIZER",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Black,
                                 color = Color.White,
@@ -179,8 +177,7 @@ fun CoverScreenEqHubCardContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
+                    .glassEffect(RoundedCornerShape(10.dp))
                     .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
             ) {
                 EqualizerFrequencyCurve(

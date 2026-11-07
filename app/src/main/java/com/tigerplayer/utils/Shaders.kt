@@ -422,8 +422,7 @@ object FluidShaders {
     in vec2 vUv;
     out vec4 outColor;
 
-    // Objective: ACES Filmic Tone Mapping: Compresses HDR colors for high-end cinematic displays.
-    // Return: Clamped RGB color in range [0.0, 1.0].
+    // ACES Filmic Tone Mapping: Compresses HDR colors smoothly without color shift.
     vec3 ACESFilm(vec3 x) {
         float a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;
         return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
@@ -436,54 +435,45 @@ object FluidShaders {
 
         float peak = max(max(rawColor.r, rawColor.g), rawColor.b);
         float luma = dot(rawColor, vec3(0.2126, 0.7152, 0.0722));
+
+        // Preserve native fluid density hue identity across full saturation range
         vec3 hue = rawColor / max(peak, 1e-4);
         float neutral = min(min(rawColor.r, rawColor.g), rawColor.b);
         vec3 chroma = max(rawColor - vec3(neutral), vec3(0.0));
 
-        // Keep hue identity even when energy is high so the center does not wash to white.
-        float intensity = 1.0 - exp(-peak * 1.6);
-        vec3 color = chroma * (0.42 + intensity * 1.38) + hue * 0.07;
+        // Boost saturation for vibrant non-white cores
+        float intensity = 1.0 - exp(-peak * 1.2);
+        vec3 color = chroma * (0.85 + intensity * 1.15) + hue * (rawColor * 0.15);
 
-        // Soft highlight rolloff: compress overbright channels while retaining gradients.
-        vec3 compressed = rawColor / (1.0 + rawColor * 0.85);
-        color = mix(color, compressed, 0.48);
+        // Soft highlight compression maintaining hue balance
+        vec3 compressed = rawColor / (1.0 + rawColor * 0.65);
+        color = mix(color, compressed, 0.35);
 
-        // 6-band chromatic steering: low bands pull toward warm core, high bands toward neon edge.
-        vec3 lowTint = vec3(
-            1.00 + uBandsLow.r * 0.95,
-            0.34 + uBandsLow.g * 0.74,
-            0.20 + uBandsLow.b * 0.62
-        );
-        vec3 highTint = vec3(
-            0.24 + uBandsHigh.r * 0.50,
-            0.56 + uBandsHigh.g * 0.88,
-            1.00 + uBandsHigh.b * 1.30
-        );
-        vec3 spectralTint = mix(lowTint, highTint, smoothstep(0.15, 0.92, highEnergy));
-        float chromaDrive = clamp(0.22 + lowEnergy * 0.28 + highEnergy * 0.42, 0.0, 0.85);
-        color = mix(color, color * spectralTint, chromaDrive);
+        // Dynamic audio-reactive spectral glow (additive, non-destructive to hue)
+        vec3 lowGlow = vec3(uBandsLow.r * 0.35, uBandsLow.g * 0.15, uBandsLow.b * 0.05);
+        vec3 highGlow = vec3(uBandsHigh.r * 0.05, uBandsHigh.g * 0.20, uBandsHigh.b * 0.35);
+        vec3 spectralGlow = mix(lowGlow, highGlow, smoothstep(0.2, 0.8, highEnergy));
+        color += spectralGlow * intensity * 0.25;
 
         float dist = distance(vUv, vec2(0.5));
 
-        // Peripheral neon halo to avoid flat fills and keep edge gradients alive.
+        // Edge halo reflecting native fluid hue
         float outerHalo = smoothstep(0.18, 0.62, dist) * (1.0 - smoothstep(0.70, 1.02, dist));
-        vec3 haloTint = vec3(0.22, 0.08, 0.24) * hue.r
-            + vec3(0.06, 0.18, 0.16) * hue.g
-            + vec3(0.08, 0.16, 0.34) * hue.b;
-        color += haloTint * outerHalo * (0.24 + intensity * 0.32);
+        color += color * outerHalo * 0.28;
 
-        // Prevent central overburn while keeping edge gradients vivid.
-        float centerMask = 1.0 - smoothstep(0.04, 0.34, dist);
-        float centerLimiter = mix(1.0, 0.70, centerMask * smoothstep(0.42, 1.0, peak));
+        // Prevent central overburn while keeping vibrant gradients
+        float centerMask = 1.0 - smoothstep(0.04, 0.38, dist);
+        float centerLimiter = mix(1.0, 0.75, centerMask * smoothstep(0.35, 0.95, peak));
         color *= centerLimiter;
 
-        color = ACESFilm(color);
+        color = ACESFilm(color * 1.1);
         color = pow(color, vec3(1.0 / 2.2));
 
-        float vignette = 1.0 - smoothstep(0.40, 0.92, dist);
-        color *= mix(0.64, 1.0, vignette);
+        // Edge-to-edge full screen viewport vignette
+        float vignette = 1.0 - smoothstep(0.65, 1.15, dist);
+        color *= mix(0.85, 1.0, vignette);
 
-        float alpha = clamp(intensity * 0.9 + luma * 0.35, 0.08, 0.95);
+        float alpha = clamp(intensity * 0.92 + luma * 0.35, 0.12, 0.98);
 
         outColor = vec4(color, alpha);
     }

@@ -58,7 +58,7 @@ fun WetPaintingFadeImage(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
     fadeBottomPercent: Float = 0.05f,
-    blurRadius: Float = 14f,
+    blurRadius: Float = 0f,
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     val context = LocalContext.current

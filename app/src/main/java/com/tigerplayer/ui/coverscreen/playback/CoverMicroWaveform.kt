@@ -130,7 +130,7 @@ fun CoverMicroWaveform(
         val animatedPhase by transition.animateFloat(
             initialValue = 0f,
             targetValue = (Math.PI * 2.0).toFloat(),
-            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 620, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 420, easing = LinearEasing)),
             label = "CoverWavePhase"
         )
         val energyState by animateFloatAsState(
@@ -267,7 +267,7 @@ fun CoverMicroWaveform(
                     phaseOffset = 0f,
                     isCosine = true,
                     frequencyMultiplier = 1.35f,
-                    waveCycles = 2.4f,
+                    waveCycles = 6.4f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
                     flux = if (shouldAnimate) animatedFlux else 0f,
@@ -288,7 +288,7 @@ fun CoverMicroWaveform(
                     phaseOffset = piOver4,
                     isCosine = false,
                     frequencyMultiplier = 1.15f,
-                    waveCycles = 2.2f,
+                    waveCycles = 6.2f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
                     flux = if (shouldAnimate) animatedFlux else 0f,
@@ -309,7 +309,7 @@ fun CoverMicroWaveform(
                     phaseOffset = 0f,
                     isCosine = false,
                     frequencyMultiplier = 1.0f,
-                    waveCycles = 2.0f,
+                    waveCycles = 6.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
                     flux = if (shouldAnimate) animatedFlux else 0f,
