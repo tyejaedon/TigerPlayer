@@ -58,8 +58,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.dashboard.CurationFeedMeta
 import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.equalizer.AcousticSpaceView
 import com.tigerplayer.ui.equalizer.EqualizerHubView
 import com.tigerplayer.ui.home.HomeUiState
+import com.tigerplayer.ui.home.SonicFootprintScreen
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerPlayerTheme
@@ -82,7 +84,10 @@ fun CoverScreenHomeView(
     onOpenDaylistDetail: (() -> Unit)? = null,
     onOpenDiscoveryDetail: (() -> Unit)? = null,
     onOpenConstellationDetail: (() -> Unit)? = null,
-    onOpenEqHub: (() -> Unit)? = null
+    onOpenEqHub: (() -> Unit)? = null,
+    onOpenFootprint: (() -> Unit)? = null,
+    onOpenSpatialNexus: (() -> Unit)? = null,
+    onOpenAcousticSpace: (() -> Unit)? = null
 ) {
     val homeState by playerViewModel.homeUiState.collectAsStateWithLifecycle()
     val daylistTracks by dashboardViewModel.daylistTracks.collectAsStateWithLifecycle()
@@ -130,9 +135,29 @@ fun CoverScreenHomeView(
         }
     }
 
-    val handleOpenFootprint = { internalFootprintOpen = true }
-    val handleOpenSpatialNexus = { internalSpatialNexusOpen = true }
-    val handleOpenAcousticSpace = { internalAcousticSpaceOpen = true }
+    val handleOpenFootprint = {
+        if (onOpenFootprint != null) {
+            onOpenFootprint()
+        } else {
+            internalFootprintOpen = true
+        }
+    }
+
+    val handleOpenSpatialNexus = {
+        if (onOpenSpatialNexus != null) {
+            onOpenSpatialNexus()
+        } else {
+            internalSpatialNexusOpen = true
+        }
+    }
+
+    val handleOpenAcousticSpace = {
+        if (onOpenAcousticSpace != null) {
+            onOpenAcousticSpace()
+        } else {
+            internalAcousticSpaceOpen = true
+        }
+    }
 
     CoverScreenHomeContent(
         homeState = homeState,
@@ -267,6 +292,39 @@ fun CoverScreenHomeView(
             EqualizerHubView(
                 isCoverScreen = true,
                 onClose = { internalEqHubOpen = false }
+            )
+        }
+    }
+
+    if (internalFootprintOpen) {
+        Dialog(
+            onDismissRequest = { internalFootprintOpen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            SonicFootprintScreen(
+                onClose = { internalFootprintOpen = false }
+            )
+        }
+    }
+
+    if (internalSpatialNexusOpen) {
+        Dialog(
+            onDismissRequest = { internalSpatialNexusOpen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            CoverScreenNexusView(
+                onClose = { internalSpatialNexusOpen = false }
+            )
+        }
+    }
+
+    if (internalAcousticSpaceOpen) {
+        Dialog(
+            onDismissRequest = { internalAcousticSpaceOpen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            AcousticSpaceView(
+                onClose = { internalAcousticSpaceOpen = false }
             )
         }
     }
@@ -736,7 +794,7 @@ fun CoverSonicFootprintCard(
     val accentColor = Color(0xFF00E5FF) // SonicCyan
 
     CoverCurationCard(
-        modifier = modifier.testTag("CoverSonicFootprintCard"),
+        modifier = modifier.testTag(CoverScreenTestTags.HOME_FOOTPRINT_CARD),
         accentColor = accentColor,
         icon = Icons.Rounded.Timeline,
         category = "LISTENING DNA",
@@ -763,7 +821,7 @@ fun CoverSpatialNexusCard(
     val accentColor = Color(0xFF4FC3F7) // AardBlue
 
     CoverCurationCard(
-        modifier = modifier.testTag("CoverSpatialNexusCard"),
+        modifier = modifier.testTag(CoverScreenTestTags.HOME_SPATIAL_NEXUS_CARD),
         accentColor = accentColor,
         icon = Icons.Rounded.GraphicEq,
         category = "POSITIONING",
@@ -790,7 +848,7 @@ fun CoverAcousticSpaceCard(
     val accentColor = Color(0xFF1DB954) // SpotifyGreen
 
     CoverCurationCard(
-        modifier = modifier.testTag("CoverAcousticSpaceCard"),
+        modifier = modifier.testTag(CoverScreenTestTags.HOME_ACOUSTIC_SPACE_CARD),
         accentColor = accentColor,
         icon = Icons.Default.AutoFixHigh,
         category = "REVERB & ROOM",
