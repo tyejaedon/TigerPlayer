@@ -12,6 +12,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [Unreleased]
 
 ### Added
+- **Application Storage Breakdown & Cache Management**: restored and enhanced the storage management matrix in `SettingScreen.kt` featuring real-time calculation of overall application storage and temporary cache footprint; added a sleek segmented Arcane Glass breakdown progress bar displaying proportions for album/artist artwork, synchronized lyrics, artist biographies, waveform peak analysis, and core database/DataStore records; provided targeted individual "Clear" actions per purgeable subsystem alongside a master "Purge All Temporary Archives" action with confirmation safety dialogs ensuring user playlists and listening history are never deleted. (closes #391)
 - **Restored Curved Waveform Aesthetic & Glassmorphic Motion**: restored the fluid visual aesthetic, sweeping continuous sinusoidal curvature, and glassmorphic 2.5D specular glow to `CoverMicroWaveform` and `FieryWavySeeker`; configured unified 2.0 wave cycles and 1.0x fundamental frequency across tiers; removed artificial edge-pinching boundary tapering and discrete sample-stepped phase kinks; restored calm 820 ms hypnotic phase drift; reinstated static, unblurred stroke widths with crisp specular white cores; tightened vertical energy breathing dynamics; updated `CoverMicroWaveformTest` with natural curvature assertions. (closes #385)
 
 ### Fixed
