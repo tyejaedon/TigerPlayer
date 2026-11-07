@@ -113,7 +113,7 @@ internal fun CoverScreenModalOverlays(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.85f))
+                .background(Color.Black)
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { onDismissQueue() })
                 }
@@ -122,13 +122,12 @@ internal fun CoverScreenModalOverlays(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .glassEffect(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(Color.White.copy(alpha = 0.03f))
-                    .padding(top = 12.dp)
+                    .background(Color.Black)
             ) {
                 // Drag Handle Visual
                 Box(
                     modifier = Modifier
+                        .padding(top = 12.dp)
                         .size(36.dp, 4.dp)
                         .background(Color.White.copy(alpha = 0.3f), CircleShape)
                         .align(Alignment.CenterHorizontally)

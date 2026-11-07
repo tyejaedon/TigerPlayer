@@ -280,6 +280,9 @@ fun CoverScreenMiniHub(
                         setFluidRenderer(playerViewModel.fluidRenderer)
                     }
                 },
+                update = { view ->
+                    view.setRenderingActive(isRenderingActive)
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .blur(vortexBlurRadius)
@@ -326,6 +329,9 @@ fun CoverScreenMiniHub(
                             FluidVortexView(ctx).apply {
                                 setFluidRenderer(playerViewModel.fluidRenderer)
                             }
+                        },
+                        update = { view ->
+                            view.setRenderingActive(isRenderingActive)
                         },
                         modifier = Modifier.fillMaxSize()
                     )

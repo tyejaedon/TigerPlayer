@@ -120,7 +120,7 @@ fun ArtistDetailsScreen(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 fadeBottomPercent = 0.08f,
-                blurRadius = 18f,
+                blurRadius = 4f,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {

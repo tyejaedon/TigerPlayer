@@ -18,9 +18,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +65,7 @@ import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerPlayerTheme
 import com.tigerplayer.ui.theme.TigerSurfaceCharcoal
 import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 
 private val EmeraldNeon = Color(0xFF67F7B1)
 
@@ -91,6 +94,9 @@ fun CoverScreenHomeView(
     var internalDiscoveryOpen by remember { mutableStateOf(false) }
     var internalConstellationOpen by remember { mutableStateOf(false) }
     var internalEqHubOpen by remember { mutableStateOf(false) }
+    var internalFootprintOpen by remember { mutableStateOf(false) }
+    var internalSpatialNexusOpen by remember { mutableStateOf(false) }
+    var internalAcousticSpaceOpen by remember { mutableStateOf(false) }
 
     val handleOpenDaylist = {
         if (onOpenDaylistDetail != null) {
@@ -124,6 +130,10 @@ fun CoverScreenHomeView(
         }
     }
 
+    val handleOpenFootprint = { internalFootprintOpen = true }
+    val handleOpenSpatialNexus = { internalSpatialNexusOpen = true }
+    val handleOpenAcousticSpace = { internalAcousticSpaceOpen = true }
+
     CoverScreenHomeContent(
         homeState = homeState,
         daylistTracks = daylistTracks,
@@ -134,6 +144,9 @@ fun CoverScreenHomeView(
         onDiscoveryClick = handleOpenDiscovery,
         onConstellationClick = handleOpenConstellation,
         onEqHubClick = handleOpenEqHub,
+        onFootprintClick = handleOpenFootprint,
+        onSpatialNexusClick = handleOpenSpatialNexus,
+        onAcousticSpaceClick = handleOpenAcousticSpace,
         modifier = modifier,
         onClose = onClose
     )
@@ -273,13 +286,17 @@ fun CoverScreenHomeContent(
     onDiscoveryClick: () -> Unit,
     onConstellationClick: () -> Unit = {},
     onEqHubClick: () -> Unit = {},
+    onFootprintClick: () -> Unit = {},
+    onSpatialNexusClick: () -> Unit = {},
+    onAcousticSpaceClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(TigerSurfaceCharcoal)
+            // DARK MODE LIGHT MODE
+            .background(Color.Black)
             .testTag(CoverScreenTestTags.HOME_VIEW)
     ) {
         LazyColumn(
@@ -295,7 +312,34 @@ fun CoverScreenHomeContent(
                 )
             }
 
-            // Top Row Section: Equalizer & AutoEq Hub + Constellation Galaxy
+            item {
+                Text(
+                    text = "THE NEXUS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.65f),
+                    letterSpacing = 1.2.sp,
+                    modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 2.dp, top = 4.dp)
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CoverSonicFootprintCard(
+                        modifier = Modifier.weight(1f),
+                        onClick = onFootprintClick
+                    )
+                    CoverConstellationCard(
+                        modifier = Modifier.weight(1f),
+                        nodeCount = homeState.statistics.topArtists.size,
+                        onClick = onConstellationClick
+                    )
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -305,11 +349,21 @@ fun CoverScreenHomeContent(
                         onOpenEqHub = onEqHubClick,
                         modifier = Modifier.weight(1f)
                     )
-
-                    CoverConstellationCard(
+                    CoverSpatialNexusCard(
                         modifier = Modifier.weight(1f),
-                        nodeCount = homeState.statistics.topArtists.size,
-                        onClick = onConstellationClick
+                        onClick = onSpatialNexusClick
+                    )
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CoverAcousticSpaceCard(
+                        modifier = Modifier.weight(1f),
+                        onClick = onAcousticSpaceClick
                     )
                 }
             }
@@ -456,7 +510,6 @@ fun CoverScreenCurationSection(
                     .weight(1f)
                     .testTag(CoverScreenTestTags.HOME_DAYLIST_CARD),
                 accentColor = dayPhase.accent,
-                backgroundColor = Color(0xFF090B14).copy(alpha = 0.90f),
                 icon = Icons.Rounded.Timer,
                 category = dayPhase.label,
                 title = "Daylist",
@@ -479,7 +532,6 @@ fun CoverScreenCurationSection(
                     .weight(1f)
                     .testTag(CoverScreenTestTags.HOME_DISCOVERY_CARD),
                 accentColor = EmeraldNeon,
-                backgroundColor = Color(0xFF061210).copy(alpha = 0.90f),
                 icon = Icons.Rounded.GraphicEq,
                 category = "WEEKLY MIX",
                 title = "Discovery",
@@ -502,7 +554,6 @@ fun CoverScreenCurationSection(
 @Composable
 private fun CoverCurationCard(
     accentColor: Color,
-    backgroundColor: Color,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     category: String,
     title: String,
@@ -514,18 +565,16 @@ private fun CoverCurationCard(
 ) {
     val description = "$title, $category, ${if (trackCount > 0) "$trackCount tracks" else emptyLabel}"
 
-    Surface(
+    Box(
         modifier = modifier
             .height(108.dp)
             .bounceClick { onClick() }
             .semantics {
                 role = Role.Button
                 contentDescription = description
-            },
-        shape = RoundedCornerShape(18.dp),
-        color = backgroundColor,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f)),
-        tonalElevation = 4.dp
+            }
+            .glassEffect(RoundedCornerShape(18.dp))
+            .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
     ) {
         Box(
             modifier = Modifier
@@ -658,7 +707,6 @@ fun CoverConstellationCard(
     CoverCurationCard(
         modifier = modifier.testTag(CoverScreenTestTags.HOME_CONSTELLATION_CARD),
         accentColor = accentColor,
-        backgroundColor = Color(0xFF10091D).copy(alpha = 0.90f),
         icon = Icons.Rounded.AutoAwesome,
         category = category,
         title = title,
@@ -677,3 +725,84 @@ fun CoverConstellationCard(
 }
 
 
+
+@Composable
+fun CoverSonicFootprintCard(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    val isInspection = LocalInspectionMode.current
+    val view = if (!isInspection) LocalView.current else null
+    val accentColor = Color(0xFF00E5FF) // SonicCyan
+
+    CoverCurationCard(
+        modifier = modifier.testTag("CoverSonicFootprintCard"),
+        accentColor = accentColor,
+        icon = Icons.Rounded.Timeline,
+        category = "LISTENING DNA",
+        title = "Footprint",
+        subtitle = "Your listening habits",
+        trackCount = 0,
+        emptyLabel = "STATS",
+        onClick = {
+            if (!isInspection) {
+                try { view?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) } catch (_: Exception) {}
+            }
+            onClick()
+        }
+    )
+}
+
+@Composable
+fun CoverSpatialNexusCard(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    val isInspection = LocalInspectionMode.current
+    val view = if (!isInspection) LocalView.current else null
+    val accentColor = Color(0xFF4FC3F7) // AardBlue
+
+    CoverCurationCard(
+        modifier = modifier.testTag("CoverSpatialNexusCard"),
+        accentColor = accentColor,
+        icon = Icons.Rounded.GraphicEq,
+        category = "POSITIONING",
+        title = "Spatial Nexus",
+        subtitle = "Neural alignments",
+        trackCount = 0,
+        emptyLabel = "ENGINE",
+        onClick = {
+            if (!isInspection) {
+                try { view?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) } catch (_: Exception) {}
+            }
+            onClick()
+        }
+    )
+}
+
+@Composable
+fun CoverAcousticSpaceCard(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    val isInspection = LocalInspectionMode.current
+    val view = if (!isInspection) LocalView.current else null
+    val accentColor = Color(0xFF1DB954) // SpotifyGreen
+
+    CoverCurationCard(
+        modifier = modifier.testTag("CoverAcousticSpaceCard"),
+        accentColor = accentColor,
+        icon = Icons.Default.AutoFixHigh,
+        category = "REVERB & ROOM",
+        title = "Acoustic Space",
+        subtitle = "Environment simulation",
+        trackCount = 0,
+        emptyLabel = "ENGINE",
+        onClick = {
+            if (!isInspection) {
+                try { view?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) } catch (_: Exception) {}
+            }
+            onClick()
+        }
+    )
+}

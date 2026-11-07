@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.sp
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.library.FloatingRitualControlDock
 import com.tigerplayer.ui.coverscreen.CoverScreenAlbum
 import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
 import com.tigerplayer.ui.library.SongOptionsSheet
@@ -115,18 +116,10 @@ fun CoverScreenAlbumsView(
     var revealedTrackId by remember { mutableStateOf<String?>(null) }
     var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
-    val ambientBrush = rememberTigerAmbientGradient(
-        accent = rememberArtworkAccent(
-            imageModel = album.artworkUrl.takeIf { !it.isNullOrBlank() } ?: R.drawable.ic_tiger_logo,
-            fallback = MaterialTheme.aardBlue
-        ),
-        baseTopAlpha = 0.22f
-    )
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ambientBrush)
+            .background(Color.Black)
             .pointerInput(album.id) {
                 var dragDistance = 0f
                 detectHorizontalDragGestures(
@@ -257,11 +250,11 @@ fun CoverScreenAlbumsView(
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.ALBUM_TRACKS),
-                contentPadding = PaddingValues(bottom = 28.dp),
+                contentPadding = PaddingValues(bottom = 90.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
-                // VANGUARD DOSSIER CARD (Album metadata & actions)
+                // VANGUARD DOSSIER CARD (Album metadata)
                 item(key = "album_dossier") {
                     Surface(
                         modifier = Modifier
@@ -321,90 +314,6 @@ fun CoverScreenAlbumsView(
                                     )
                                 }
                             }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            // Play All & Shuffle Dock
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val playAllLabel = stringResource(R.string.coverscreen_action_play_all)
-                                Button(
-                                    onClick = {
-                                        if (tracks.isNotEmpty()) {
-                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                            onPlayAll(tracks)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .defaultMinSize(minHeight = 48.dp)
-                                        .minimumInteractiveComponentSize()
-                                        .semantics {
-                                            role = Role.Button
-                                            onClick(label = playAllLabel) {
-                                                if (tracks.isNotEmpty()) {
-                                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                                    onPlayAll(tracks)
-                                                }
-                                                true
-                                            }
-                                        }
-                                        .testTag(CoverScreenTestTags.PLAY_ALL),
-                                    shape = CircleShape,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.aardBlue,
-                                        contentColor = Color.Black
-                                    )
-                                ) {
-                                    Icon(
-                                        imageVector = WitcherIcons.Play,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = playAllLabel.uppercase(),
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 12.sp,
-                                        letterSpacing = 1.sp
-                                    )
-                                }
-
-                                // Shuffle Glass Button
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .glassEffect(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.08f))
-                                        .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-                                        .clickable(
-                                            role = Role.Button,
-                                            onClickLabel = "Shuffle",
-                                            onClick = {
-                                                if (tracks.isNotEmpty()) {
-                                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                                    onShufflePlay(tracks)
-                                                }
-                                            }
-                                        )
-                                        .semantics {
-                                            role = Role.Button
-                                            contentDescription = "Shuffle Album"
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = WitcherIcons.Shuffle,
-                                        contentDescription = "Shuffle",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
                         }
                     }
                 }
@@ -436,6 +345,29 @@ fun CoverScreenAlbumsView(
                     )
                 }
             }
+        }
+
+        if (tracks.isNotEmpty()) {
+            FloatingRitualControlDock(
+                accentColor = MaterialTheme.aardBlue,
+                onPlayClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    onPlayAll(tracks)
+                },
+                onShuffleClick = {
+                    if (tracks.isNotEmpty()) {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        onShufflePlay(tracks)
+                    }
+                },
+                playButtonText = "START RITUAL",
+                shuffleDescription = "Shuffle Album",
+                playTestTag = CoverScreenTestTags.PLAY_ALL,
+                shuffleTestTag = CoverScreenTestTags.PLAYBACK_SHUFFLE,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+            )
         }
 
         optionsTrack?.let { selectedTrack ->
