@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -107,6 +108,7 @@ fun CoverScreenMiniHub(
     var coverScreenCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var seekerTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var mediaCycleTouchBounds by remember { mutableStateOf<Rect?>(null) }
+    var controlsTouchBounds by remember { mutableStateOf<Rect?>(null) }
     var fullBleedLyricsVisible by remember { mutableStateOf(false) }
     var isVortexImmersive by remember { mutableStateOf(false) }
 
@@ -211,7 +213,19 @@ fun CoverScreenMiniHub(
                     CustomAccessibilityAction(swipeNextLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext(); true },
                     CustomAccessibilityAction(swipePrevLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious(); true },
                     CustomAccessibilityAction(swipeUpQueueLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = true; true },
-                    CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; true },
+                    CustomAccessibilityAction(swipeDownCloseLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        queueVisible = false
+                        playbackSettingsVisible = false
+                        libraryVisible = false
+                        prismVisible = false
+                        nexusVisible = false
+                        settingsVisible = false
+                        discoveryDetailVisible = false
+                        daylistDetailVisible = false
+                        homeVisible = false
+                        true
+                    },
                     CustomAccessibilityAction(longPressSettingsLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = true; true },
                     CustomAccessibilityAction(toggleImmersiveLabel) {
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -225,36 +239,79 @@ fun CoverScreenMiniHub(
                 swipeThresholdPx = swipeThresholdPx,
                 tapSlopPx = tapSlopPx,
                 shouldIgnoreGestureAt = { position ->
-                    if (isVortexImmersive) return@coverScreenGestures false
                     val positionInRoot = coverScreenCoordinates?.localToRoot(position) ?: position
-                    seekerTouchBounds?.contains(positionInRoot) == true
+                    shouldIgnoreCoverScreenGesture(
+                        isVortexImmersive = isVortexImmersive,
+                        hasModalOverlay = hasModalOverlay,
+                        positionInRoot = positionInRoot,
+                        seekerTouchBounds = seekerTouchBounds,
+                        mediaCycleTouchBounds = mediaCycleTouchBounds,
+                        controlsTouchBounds = controlsTouchBounds
+                    )
                 },
                 onTap = {
-                    if (libraryVisible) return@coverScreenGestures
+                    if (hasModalOverlay) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     playerViewModel.togglePlayPause()
                 },
                 onSwipeLeft = {
-                    if (libraryVisible) return@coverScreenGestures
+                    if (hasModalOverlay) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToNext()
                 },
                 onSwipeRight = {
-                    if (libraryVisible) return@coverScreenGestures
+                    if (hasModalOverlay) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     playerViewModel.skipToPrevious()
                 },
                 onSwipeUp = {
-                    if (libraryVisible) return@coverScreenGestures
+                    if (hasModalOverlay) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = true
                 },
                 onSwipeDown = {
-                    if (libraryVisible) return@coverScreenGestures
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                    queueVisible = false
+                    when {
+                        queueVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            queueVisible = false
+                        }
+                        playbackSettingsVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            playbackSettingsVisible = false
+                        }
+                        libraryVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            libraryVisible = false
+                            searchOnLibraryOpen = false
+                        }
+                        prismVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            prismVisible = false
+                        }
+                        nexusVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            nexusVisible = false
+                        }
+                        settingsVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            settingsVisible = false
+                        }
+                        discoveryDetailVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            discoveryDetailVisible = false
+                        }
+                        daylistDetailVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            daylistDetailVisible = false
+                        }
+                        homeVisible -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            homeVisible = false
+                        }
+                    }
                 },
                 onLongPress = {
+                    if (hasModalOverlay) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     isVortexImmersive = !isVortexImmersive
                 }
@@ -449,7 +506,8 @@ fun CoverScreenMiniHub(
                             },
                             onTogglePlayPause = { view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); playerViewModel.togglePlayPause() },
                             onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
-                            onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
+                            onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() },
+                            modifier = Modifier.onGloballyPositioned { controlsTouchBounds = it.boundsInRoot() }
                         )
                     }
                 }
@@ -543,7 +601,8 @@ fun CoverScreenMiniHub(
                         },
                         onTogglePlayPause = { view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); playerViewModel.togglePlayPause() },
                         onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
-                        onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
+                        onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() },
+                        modifier = Modifier.onGloballyPositioned { controlsTouchBounds = it.boundsInRoot() }
                     )
                 }
             }
@@ -657,3 +716,26 @@ internal fun shouldShowCoverWaveform(
     fullBleedLyricsVisible: Boolean,
     isVortexImmersive: Boolean
 ): Boolean = !hasModalOverlay && !fullBleedLyricsVisible && !isVortexImmersive
+
+/**
+ * Pure evaluator determining whether an ambient root cover screen gesture should be suppressed.
+ *
+ * Suppressed when:
+ * 1. A modal overlay (Queue, Settings, Library, Prism, Nexus, Home) is active.
+ * 2. The touch falls within interactive child component bounds (Seeker waveform, MediaCycle viewport, Controls bar).
+ * Not suppressed when in vortex immersive mode (controls are hidden; full screen accepts ambient gestures).
+ */
+internal fun shouldIgnoreCoverScreenGesture(
+    isVortexImmersive: Boolean,
+    hasModalOverlay: Boolean,
+    positionInRoot: Offset,
+    seekerTouchBounds: Rect?,
+    mediaCycleTouchBounds: Rect?,
+    controlsTouchBounds: Rect?
+): Boolean {
+    if (isVortexImmersive) return false
+    if (hasModalOverlay) return true
+    return seekerTouchBounds?.contains(positionInRoot) == true ||
+        mediaCycleTouchBounds?.contains(positionInRoot) == true ||
+        controlsTouchBounds?.contains(positionInRoot) == true
+}

@@ -11,9 +11,13 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -23,15 +27,20 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +53,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -53,8 +63,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.Subject
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -95,6 +105,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -146,6 +157,14 @@ fun FullPlayerScreen(
 
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showImmersiveVisualizer by remember { mutableStateOf(false) }
+    var isVortexImmersive by remember { mutableStateOf(false) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val collapseThresholdPx = remember(density) { with(density) { 100.dp.toPx() } }
+
+    BackHandler(enabled = isVortexImmersive) {
+        isVortexImmersive = false
+    }
     var showTechnicalInfo by remember { mutableStateOf(false) }
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     var useUnifiedFlexLyrics by rememberSaveable { mutableStateOf(true) }
@@ -256,11 +275,26 @@ fun FullPlayerScreen(
         }
     }
 
-    val isVisualizerActive = effectiveVisualMode == PlayerVisualMode.VORTEX && !albumClarityMode
+    val isVisualizerActive = (effectiveVisualMode == PlayerVisualMode.VORTEX || isVortexImmersive) && !albumClarityMode
     val visualizerAlpha by animateFloatAsState(
         targetValue = if (isVisualizerActive && isRenderingActive) 1f else 0f,
         animationSpec = tween(durationMillis = 400),
         label = "BackgroundVisualizerFade"
+    )
+    val vortexBlurRadius by animateDpAsState(
+        targetValue = calculateFullPlayerVortexBlurRadius(isVortexImmersive),
+        animationSpec = tween(durationMillis = 350),
+        label = "VortexBlurRadius"
+    )
+    val vortexScrimAlpha by animateFloatAsState(
+        targetValue = calculateFullPlayerVortexScrimAlpha(isVortexImmersive),
+        animationSpec = tween(durationMillis = 350),
+        label = "VortexScrimAlpha"
+    )
+    val foregroundControlsAlpha by animateFloatAsState(
+        targetValue = calculateFullPlayerControlsAlpha(isVortexImmersive),
+        animationSpec = tween(durationMillis = 350),
+        label = "ForegroundControlsAlpha"
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -282,38 +316,42 @@ fun FullPlayerScreen(
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .blur(8.dp)
+                        .blur(vortexBlurRadius)
                 )
             }
         }
 
         // --- BACKGROUND SCRIM (Visual Anchor) ---
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            if (albumClarityMode) {
-                                if (isLightTheme) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.22f)
-                            } else {
-                                if (isLightTheme) Color.White.copy(alpha = 0.30f) else Color.Black.copy(alpha = 0.45f)
-                            },
-                            if (albumClarityMode) {
-                                if (isLightTheme) Color.Black.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.42f)
-                            } else {
-                                if (isLightTheme) Color.Black.copy(alpha = 0.40f) else Color.Black.copy(alpha = 0.85f)
-                            }
+        if (vortexScrimAlpha > 0.01f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(alpha = vortexScrimAlpha)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                if (albumClarityMode) {
+                                    if (isLightTheme) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.22f)
+                                } else {
+                                    if (isLightTheme) Color.White.copy(alpha = 0.30f) else Color.Black.copy(alpha = 0.45f)
+                                },
+                                if (albumClarityMode) {
+                                    if (isLightTheme) Color.Black.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.42f)
+                                } else {
+                                    if (isLightTheme) Color.Black.copy(alpha = 0.40f) else Color.Black.copy(alpha = 0.85f)
+                                }
+                            )
                         )
                     )
-                )
-        )
-
+            )
+        }
 
         // --- 2. FOREGROUND CORE CONTENT ---
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+                .graphicsLayer(alpha = foregroundControlsAlpha)
                 .padding(horizontal = if (useCoverOptimizedUi) 12.dp else 20.dp)
                 .statusBarsPadding()
                 .navigationBarsPadding()
@@ -340,8 +378,28 @@ fun FullPlayerScreen(
                 track = currentTrack,
                 sleepTimerActive = sleepTimerState.mode != SleepTimerMode.OFF,
                 onShowSleepTimer = { showSleepTimerSheet = true },
+                isVortexImmersive = isVortexImmersive,
+                onToggleVortexImmersive = { isVortexImmersive = !isVortexImmersive },
                 isVisualizerActive = showImmersiveVisualizer,
-                onToggleVisualizer = { showImmersiveVisualizer = !showImmersiveVisualizer }
+                onToggleVisualizer = { showImmersiveVisualizer = !showImmersiveVisualizer },
+                modifier = Modifier.pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (dragOffsetY > collapseThresholdPx) {
+                                onCollapse()
+                            }
+                            dragOffsetY = 0f
+                        },
+                        onDragCancel = {
+                            dragOffsetY = 0f
+                        }
+                    ) { change, dragAmount ->
+                        if (dragAmount > 0f || dragOffsetY > 0f) {
+                            change.consume()
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        }
+                    }
+                }
             )
 
             if (uiState.spotifyReauthRequired) {
@@ -488,6 +546,45 @@ fun FullPlayerScreen(
                 onClose = { showImmersiveVisualizer = false }
             )
         }
+
+        if (isVortexImmersive) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { isVortexImmersive = false }
+                    )
+            )
+        }
+
+        // --- 4. IMMERSIVE HINT PILL ---
+        AnimatedVisibility(
+            visible = isVortexImmersive,
+            enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 2 },
+            exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                    .clickable { isVortexImmersive = false }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("immersive_hint_pill"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Tap anywhere to restore controls",
+                    color = Color.White.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
     }
 }
 @Composable
@@ -535,8 +632,17 @@ private fun PlayerMainContent(
     AnimatedContent(
         targetState = uiState.mainViewState,
         transitionSpec = {
-            (fadeIn(animationSpec = tween(400)) + scaleIn(initialScale = 0.95f)).togetherWith(
-                fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 1.05f)
+            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+            (slideInHorizontally(
+                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+            ) { it * direction } + fadeIn(
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            )).togetherWith(
+                slideOutHorizontally(
+                    animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+                ) { -it * direction } + fadeOut(
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
             )
         },
         label = "MainViewSwitch"
@@ -979,11 +1085,14 @@ fun HeaderRitual(
     sleepTimerActive: Boolean,
     onShowSleepTimer: () -> Unit,
     track: AudioTrack,
+    isVortexImmersive: Boolean = false,
+    onToggleVortexImmersive: () -> Unit = {},
     isVisualizerActive: Boolean = false,
-    onToggleVisualizer: () -> Unit = {}
+    onToggleVisualizer: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = if (isCoverOptimized) 8.dp else 16.dp, bottom = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(top = if (isCoverOptimized) 8.dp else 16.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val buttonBg = if (backgroundColor.luminance() > 0.5f) {
@@ -1035,10 +1144,11 @@ fun HeaderRitual(
                 )
 
                 HeaderButton(
-                    icon = Icons.Rounded.GraphicEq,
-                    active = isVisualizerActive,
-                    onClick = onToggleVisualizer,
-                    contentDescription = "Immersive Visualizer",
+                    icon = Icons.Rounded.Waves,
+                    active = isVortexImmersive,
+                    onClick = onToggleVortexImmersive,
+                    onLongClick = onToggleVisualizer,
+                    contentDescription = "Immersive Fluid Visualizer",
                     testTag = "header_visualizer_button",
                     isCoverOptimized = isCoverOptimized,
                     iconTint = dynamicTextColor
@@ -1194,3 +1304,14 @@ private fun HeaderButton(
         Icon(icon, contentDescription = null, tint = iconTint)
     }
 }
+
+internal fun calculateFullPlayerVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp =
+    if (isVortexImmersive) 0.dp else 8.dp
+
+internal fun calculateFullPlayerVortexScrimAlpha(isVortexImmersive: Boolean): Float =
+    if (isVortexImmersive) 0f else 1f
+
+internal fun calculateFullPlayerControlsAlpha(isVortexImmersive: Boolean): Float =
+    if (isVortexImmersive) 0f else 1f
+
+internal fun shouldShowFullPlayerControls(isVortexImmersive: Boolean): Boolean = !isVortexImmersive
