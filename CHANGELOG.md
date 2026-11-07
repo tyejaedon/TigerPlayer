@@ -11,10 +11,14 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Restored Curved Waveform Aesthetic & Glassmorphic Motion**: restored the fluid visual aesthetic, sweeping continuous sinusoidal curvature, and glassmorphic 2.5D specular glow to `CoverMicroWaveform` and `FieryWavySeeker`; configured unified 2.0 wave cycles and 1.0x fundamental frequency across tiers; removed artificial edge-pinching boundary tapering and discrete sample-stepped phase kinks; restored calm 820 ms hypnotic phase drift; reinstated static, unblurred stroke widths with crisp specular white cores; tightened vertical energy breathing dynamics; updated `CoverMicroWaveformTest` with natural curvature assertions. (closes #385)
+
 ### Refactored
 - **Cover Screen Artist Detail Redesign & Declutter**: removed `CoverScreenArtistHeader` top bar to declutter compact cover screens and maximize vertical content area while retaining horizontal drag swipe gestures; redesigned `CoverScreenArtistHero` into a centered frosted glass card without redundant nested artwork, highlighting artist details and centered Play All / Shuffle buttons with improved spacing and breathing room. (closes #388)
 
 ### Fixed
+- **Cover Screen Album Detail Background & Hero Art Parity**: rectified `CoverScreenAlbumsView` background so the album artwork fills the entire screen with an ambient blurred layer and dark overlay matching `CoverScreenPlaylistDetailView`; added the dynamic 3D floating hero artwork card inside the scrollable list; removed blur (`blurRadius = 0f`) on the floating hero artwork in both `CoverScreenAlbumsView` and `CoverScreenPlaylistDetailView`. (closes #386)
 - **Cover Screen Nexus Card Overlays & Navigation Parity**: mounted modal dialog overlays in `CoverScreenHomeView` for `CoverSonicFootprintCard` (`SonicFootprintScreen`), `CoverSpatialNexusCard` (`CoverScreenNexusView`), and `CoverAcousticSpaceCard` (`AcousticSpaceView`); added navigation callbacks (`onOpenFootprint`, `onOpenSpatialNexus`, `onOpenAcousticSpace`); centralized test tags in `CoverScreenTestTags` and added test coverage in `CoverScreenHomeViewTest`. (closes #383)
 - **MetadataEngine Pre-Seed Timeout on Missing Artwork**: eliminated 5000 ms timeout stalls and repetitive `Pre-seed failed: Timed out waiting for 5000 ms` warnings in `MetadataEngine.preSeedArtistCache()` by taking the first emission from `mediaDataRepository.getArtistDetails(name)` instead of filtering on non-null `imageUrl` against an infinite Room flow; added unit test coverage in `MetadataEngineTest`. (closes #381)
 
