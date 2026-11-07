@@ -2,6 +2,7 @@ package com.tigerplayer.ui.coverscreen
 
 import android.graphics.drawable.BitmapDrawable
 import android.view.HapticFeedbackConstants
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -692,7 +693,21 @@ fun CoverScreenPlaylistDetailView(
             onPlayNext = { onPlayNext(track) },
             onAddToQueue = { onAddToQueue(track) },
             onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, track) },
-            onGoToAlbum = { albumName -> onGoToAlbum(albumName) }
+            onGoToAlbum = { albumName -> onGoToAlbum(albumName) },
+            onQueueAdded = {
+                Toast.makeText(
+                    context,
+                    "${it.title} added to queue",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onPlaylistAdded = { song, playlist ->
+                Toast.makeText(
+                    context,
+                    "${song.title} added to ${playlist.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         )
     }
 }

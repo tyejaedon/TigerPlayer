@@ -178,6 +178,13 @@ fun CoverScreenMiniHub(
     val nowPlayingStatus = stringResource(R.string.coverscreen_status_now_playing)
     val pausedStatus = stringResource(R.string.coverscreen_status_paused)
 
+    // Unified cover-screen gesture contract:
+    // - tap: play/pause
+    // - swipe left/right: previous/next track
+    // - swipe up: open queue
+    // - swipe down: close active overlays only
+    // - long press: toggle immersive mode
+    // Library/settings/open-home remain explicit button actions rather than hidden gesture side-effects.
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -201,7 +208,7 @@ fun CoverScreenMiniHub(
                     CustomAccessibilityAction(swipeNextLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext(); true },
                     CustomAccessibilityAction(swipePrevLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious(); true },
                     CustomAccessibilityAction(swipeUpQueueLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = true; true },
-                    CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; searchOnLibraryOpen = true; libraryVisible = true; true },
+                    CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; true },
                     CustomAccessibilityAction(longPressSettingsLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = true; true },
                     CustomAccessibilityAction(toggleImmersiveLabel) {
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -243,8 +250,6 @@ fun CoverScreenMiniHub(
                     if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = false
-                    searchOnLibraryOpen = true
-                    libraryVisible = true
                 },
                 onLongPress = {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)

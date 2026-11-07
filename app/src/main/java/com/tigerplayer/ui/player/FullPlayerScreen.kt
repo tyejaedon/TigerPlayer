@@ -10,6 +10,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -452,6 +453,20 @@ fun FullPlayerScreen(
                     },
                     onGoToAlbum = { albumName ->
                         onNavigateToAlbum(albumName)
+                    },
+                    onQueueAdded = {
+                        Toast.makeText(
+                            context,
+                            "${it.title} added to queue",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onPlaylistAdded = { song, playlist ->
+                        Toast.makeText(
+                            context,
+                            "${song.title} added to ${playlist.name}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
             }

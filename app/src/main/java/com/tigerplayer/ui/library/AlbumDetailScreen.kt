@@ -454,6 +454,20 @@ fun AlbumDetailsScreen(
                     },
                     onGoToAlbum = { albumName ->
                         Toast.makeText(context, "Album: $albumName", Toast.LENGTH_SHORT).show()
+                    },
+                    onQueueAdded = {
+                        Toast.makeText(
+                            context,
+                            "${it.title} added to queue",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onPlaylistAdded = { song, playlist ->
+                        Toast.makeText(
+                            context,
+                            "${song.title} added to ${playlist.name}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
             }

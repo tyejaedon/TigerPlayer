@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.coverscreen
 
 import android.view.HapticFeedbackConstants
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -79,6 +80,7 @@ import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.platform.LocalContext
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.utils.ArtistUtils
@@ -108,6 +110,7 @@ fun CoverScreenArtistsGrid(
     var selectedArtist by remember { mutableStateOf<Artist?>(null) }
     var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
     val view = LocalView.current
+    val context = LocalContext.current
     val currentArtist = selectedArtist
 
     if (currentArtist == null) {
@@ -472,7 +475,21 @@ fun CoverScreenArtistsGrid(
                 onPlayNext = { onPlayNext(selectedTrack) },
                 onAddToQueue = { onAddToQueue(selectedTrack) },
                 onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, selectedTrack) },
-                onGoToAlbum = { albumName -> onGoToAlbum(albumName) }
+                onGoToAlbum = { albumName -> onGoToAlbum(albumName) },
+                onQueueAdded = {
+                    Toast.makeText(
+                        context,
+                        "${it.title} added to queue",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                onPlaylistAdded = { song, playlist ->
+                    Toast.makeText(
+                        context,
+                        "${song.title} added to ${playlist.name}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             )
         }
     }

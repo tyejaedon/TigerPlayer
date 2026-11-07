@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.home
 
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.*
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -106,6 +108,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val homeState by viewModel.homeUiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val artistDetails by viewModel.artistDetails.collectAsStateWithLifecycle()
 
     var isStatsExpanded by remember { mutableStateOf(false) }
@@ -445,6 +448,20 @@ fun HomeScreen(
                 viewModel.clearSearch()
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
+            },
+            onQueueAdded = {
+                Toast.makeText(
+                    context,
+                    "${it.title} added to queue",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onPlaylistAdded = { song, playlist ->
+                Toast.makeText(
+                    context,
+                    "${song.title} added to ${playlist.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         )
     }
