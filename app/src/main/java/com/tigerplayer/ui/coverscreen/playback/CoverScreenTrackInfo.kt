@@ -11,7 +11,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import com.tigerplayer.ui.theme.TigerNeonRed
+import com.tigerplayer.ui.theme.glassEffect
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -312,8 +312,8 @@ internal fun CoverScreenMediaCycleViewport(
                             modifier = Modifier
                                 .fillMaxHeight(0.98f)
                                 .aspectRatio(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(20.dp))
+                                .glassEffect(RoundedCornerShape(20.dp))
                         )
 
                         if (showLikedHeart) {
@@ -321,7 +321,7 @@ internal fun CoverScreenMediaCycleViewport(
                                 modifier = Modifier
                                     .fillMaxHeight(0.98f)
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .clip(RoundedCornerShape(20.dp))
                                     .background(Color.Black.copy(alpha = 0.2f))
                                     .testTag(CoverScreenTestTags.LIKE_HEART_OVERLAY),
                                 contentAlignment = Alignment.Center
@@ -344,6 +344,9 @@ internal fun CoverScreenMediaCycleViewport(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .clip(RoundedCornerShape(20.dp))
+                            .glassEffect(RoundedCornerShape(20.dp))
+                            .padding(8.dp)
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onDoubleTap = { onDoubleTapLyrics() },
@@ -502,8 +505,7 @@ internal fun TrackInfoText(
                         expanded = showOverflowMenu,
                         onDismissRequest = { showOverflowMenu = false },
                         modifier = Modifier
-                            .background(Color(0xFF17181D))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                            .glassEffect(RoundedCornerShape(18.dp))
                     ) {
                         DropdownMenuItem(
                             text = {
@@ -766,10 +768,12 @@ internal fun CoverScreenAddToPlaylistDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .heightIn(max = 280.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF17181D),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+                .heightIn(max = 280.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .glassEffect(RoundedCornerShape(24.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.Transparent
         ) {
             Column(
                 modifier = Modifier
