@@ -11,11 +11,13 @@ import com.tigerplayer.data.model.M3uImportResult
 import com.tigerplayer.data.model.M3uPathMode
 import com.tigerplayer.data.model.MusicFolder
 import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.data.model.StorageBreakdown
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.data.repository.HistoryRepository
 import com.tigerplayer.data.repository.M3uRepository
 import com.tigerplayer.data.repository.MediaDataRepository
 import com.tigerplayer.data.repository.MusicFolderRepository
+import com.tigerplayer.data.repository.StorageRepository
 import com.tigerplayer.ui.home.HomeUiState
 import com.tigerplayer.ui.home.UserStatistics
 import com.tigerplayer.ui.player.LibraryArtist
@@ -38,7 +40,8 @@ class LibraryEngine @Inject constructor(
     private val audioRepository: AudioRepository,
     private val mediaDataRepository: MediaDataRepository,
     private val musicFolderRepository: MusicFolderRepository,
-    private val m3uRepository: M3uRepository
+    private val m3uRepository: M3uRepository,
+    private val storageRepository: StorageRepository
 ) {
 
     /** Supported sorting criteria for tracks and albums in the library. */
@@ -368,4 +371,27 @@ class LibraryEngine @Inject constructor(
     ): Result<M3uExportResult> {
         return m3uRepository.exportPlaylist(playlistId, destinationUri, pathMode)
     }
+
+    // --- Storage & Cache Operations (issue #391) ---
+
+    suspend fun getStorageBreakdown(): StorageBreakdown =
+        storageRepository.getStorageBreakdown()
+
+    suspend fun clearArtworkCache(): Long =
+        storageRepository.clearArtworkCache()
+
+    suspend fun clearLyricsCache() {
+        storageRepository.clearLyricsCache()
+    }
+
+    suspend fun clearArtistCache() {
+        storageRepository.clearArtistCache()
+    }
+
+    suspend fun clearWaveformCache() {
+        storageRepository.clearWaveformCache()
+    }
+
+    suspend fun clearAllTemporaryCaches(): Long =
+        storageRepository.clearAllTemporaryCaches()
 }

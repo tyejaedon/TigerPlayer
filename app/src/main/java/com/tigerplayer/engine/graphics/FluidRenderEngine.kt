@@ -133,6 +133,15 @@ open class FluidRenderer @Inject constructor(
     private var lastFrameTime = System.nanoTime()
     /** Monotonically accumulated animation seconds for ambient idle breathing. */
     private var ambientTimeSec = 0f
+    /** Consecutive idle / silence frame count for energy decay gating. */
+    private var idleFrameCount = 0
+
+    companion object {
+        /** Fallback RGB color tokens pre-allocated to prevent render-loop GC churn. */
+        private val DEFAULT_C1 = floatArrayOf(0.8f, 0.3f, 0.1f)
+        private val DEFAULT_C2 = floatArrayOf(0.6f, 0.15f, 0.9f)
+        private val DEFAULT_C3 = floatArrayOf(0.1f, 0.7f, 0.8f)
+    }
 
     /** Updates the audio frequency band energies driving fluid forces. */
     fun updateEnergyField(bands: List<Float>) { currentEnergy.set(bands) }
@@ -256,27 +265,29 @@ open class FluidRenderer @Inject constructor(
         val clampedPower = (bass * FluidConfig.BASS_SPLAT_POWER_SCALE).coerceIn(1.5f, 14.0f)
 
         val palette = if (pMode == com.tigerplayer.data.local.VisualizerPaletteMode.ALBUM_ART) customPalette.get() else null
-        val c1 = palette?.getOrNull(0) ?: floatArrayOf(0.8f, 0.3f, 0.1f)
-        val c2 = palette?.getOrNull(1) ?: floatArrayOf(0.6f, 0.15f, 0.9f)
-        val c3 = palette?.getOrNull(2) ?: floatArrayOf(0.1f, 0.7f, 0.8f)
+        val c1 = palette?.getOrNull(0) ?: DEFAULT_C1
+        val c2 = palette?.getOrNull(1) ?: DEFAULT_C2
+        val c3 = palette?.getOrNull(2) ?: DEFAULT_C3
 
         if (bass > 0.02f || mid > 0.02f || treble > 0.02f) {
+            idleFrameCount = 0
+
             // 1. Center-Lower Bass Core
             val bassX = 0.5f + (kotlin.math.cos(orbitalAngleA.toDouble()) * 0.12).toFloat()
             val bassY = 0.5f + (kotlin.math.sin(orbitalAngleA.toDouble()) * 0.12).toFloat()
-            applySplat(bassX, bassY, dynamicRadius, floatArrayOf(c1[0] * clampedPower, c1[1] * clampedPower, c1[2] * clampedPower), true)
+            applySplat(bassX, bassY, dynamicRadius, c1[0] * clampedPower, c1[1] * clampedPower, c1[2] * clampedPower, true)
 
             // 2. Mid Frequency Side Splat
             val midX = 0.5f + (kotlin.math.cos(orbitalAngleB.toDouble()) * 0.28).toFloat()
             val midY = 0.5f + (kotlin.math.sin(orbitalAngleB.toDouble()) * 0.28).toFloat()
             val midPower = (mid * 8f).coerceIn(0.8f, 7.0f)
-            applySplat(midX, midY, dynamicRadius * 0.85f, floatArrayOf(c2[0] * midPower, c2[1] * midPower, c2[2] * midPower), true)
+            applySplat(midX, midY, dynamicRadius * 0.85f, c2[0] * midPower, c2[1] * midPower, c2[2] * midPower, true)
 
             // 3. Treble Edge Splat
             val trebleX = 0.5f + (kotlin.math.cos(orbitalAngleC.toDouble()) * 0.35).toFloat()
             val trebleY = 0.5f + (kotlin.math.sin(orbitalAngleC.toDouble()) * 0.35).toFloat()
             val treblePower = (treble * 6f).coerceIn(0.6f, 5.0f)
-            applySplat(trebleX, trebleY, dynamicRadius * 0.7f, floatArrayOf(c3[0] * treblePower, c3[1] * treblePower, c3[2] * treblePower), true)
+            applySplat(trebleX, trebleY, dynamicRadius * 0.7f, c3[0] * treblePower, c3[1] * treblePower, c3[2] * treblePower, true)
 
             // Centrifugal velocity swirl vectors (angular velocity + radial outward momentum Fc = m*w^2*r)
             val swirlForce = FluidConfig.SWIRL_FORCE_BASE + (mid * FluidConfig.SWIRL_FORCE_SCALE)
@@ -285,29 +296,46 @@ open class FluidRenderer @Inject constructor(
             val radMidX = (midX - 0.5f) * swirlForce * 0.35f
             val radMidY = (midY - 0.5f) * swirlForce * 0.35f
 
-            applySplat(bassX, bassY, dynamicRadius * 1.4f, floatArrayOf(swirlForce + radBassX, -swirlForce + radBassY, 0f), false)
-            applySplat(midX, midY, dynamicRadius * 1.2f, floatArrayOf(-swirlForce * 0.7f + radMidX, swirlForce * 0.7f + radMidY, 0f), false)
+            applySplat(bassX, bassY, dynamicRadius * 1.4f, swirlForce + radBassX, -swirlForce + radBassY, 0f, false)
+            applySplat(midX, midY, dynamicRadius * 1.2f, -swirlForce * 0.7f + radMidX, swirlForce * 0.7f + radMidY, 0f, false)
         } else {
             // Ambient idle breathing swirl distributed across screen
+            idleFrameCount = (idleFrameCount + 1).coerceAtMost(600)
+            // After ~180 frames (~3s at 60fps), smoothly decay idle swirl energy down to 35%
+            val idleDecay = when {
+                idleFrameCount < 180 -> 1.0f
+                idleFrameCount < 360 -> 1.0f - ((idleFrameCount - 180) / 180f) * 0.65f
+                else -> 0.35f
+            }
+
             val ambientCycle = (kotlin.math.sin(timeSec.toDouble() * 0.8) * 0.5 + 0.5).toFloat()
             val ambientX = 0.5f + (kotlin.math.cos(timeSec.toDouble() * 0.5) * 0.25).toFloat()
             val ambientY = 0.5f + (kotlin.math.sin(timeSec.toDouble() * 0.5) * 0.25).toFloat()
             val ambientRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE * (1.2f + ambientCycle * 0.4f)
-            val ambientPower = 1.2f + ambientCycle * 1.5f
+            val ambientPower = (1.2f + ambientCycle * 1.5f) * idleDecay
+            val ambientSwirl = 2.5f * idleDecay
 
-            applySplat(ambientX, ambientY, ambientRadius, floatArrayOf(c1[0] * ambientPower, c1[1] * ambientPower, c1[2] * ambientPower), true)
-            applySplat(1.0f - ambientX, 1.0f - ambientY, ambientRadius * 0.9f, floatArrayOf(c2[0] * ambientPower, c2[1] * ambientPower, c2[2] * ambientPower), true)
-            applySplat(ambientX, ambientY, ambientRadius * 1.3f, floatArrayOf(2.5f, -2.5f, 0f), false)
+            applySplat(ambientX, ambientY, ambientRadius, c1[0] * ambientPower, c1[1] * ambientPower, c1[2] * ambientPower, true)
+            applySplat(1.0f - ambientX, 1.0f - ambientY, ambientRadius * 0.9f, c2[0] * ambientPower, c2[1] * ambientPower, c2[2] * ambientPower, true)
+            applySplat(ambientX, ambientY, ambientRadius * 1.3f, ambientSwirl, -ambientSwirl, 0f, false)
         }
         GLES30.glBindVertexArray(0)
     }
 
     /** Applies a single force or density splat at given normalized coordinates. */
-    private fun applySplat(x: Float, y: Float, r: Float, color: FloatArray, isDensity: Boolean) {
+    private fun applySplat(
+        x: Float,
+        y: Float,
+        r: Float,
+        rVal: Float,
+        gVal: Float,
+        bVal: Float,
+        isDensity: Boolean
+    ) {
         val shader = splatShader ?: return
         shader.use()
         shader.setUniform("uPoint", x, y)
-        shader.setUniform("uColor", color[0], color[1], color[2])
+        shader.setUniform("uColor", rVal, gVal, bVal)
         shader.setUniform("uRadius", r)
 
         val target = if (isDensity) densityRes else velocityRes
