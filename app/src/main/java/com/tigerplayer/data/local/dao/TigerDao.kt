@@ -703,6 +703,15 @@ abstract class TigerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertWaveformCache(waveform: WaveformCacheEntity)
 
+    @Query("SELECT COUNT(*) FROM waveform_cache")
+    abstract suspend fun getWaveformCacheCount(): Int
+
+    @Query("DELETE FROM waveform_cache")
+    abstract suspend fun clearWaveformCache(): Int
+
+    @Query("SELECT COUNT(*) FROM artist_cache")
+    abstract suspend fun getArtistCacheCount(): Int
+
     // --- THE VAULT (Track Caching) ---
 
     @Query("DELETE FROM cached_tracks")
@@ -806,6 +815,9 @@ abstract class TigerDao {
         """
     )
     abstract suspend fun getTracksWithoutLyricsCache(limit: Int): List<CachedTrackEntity>
+
+    @Query("SELECT COUNT(*) FROM lyrics_cache")
+    abstract suspend fun getLyricsCacheCount(): Int
 
     @Query("DELETE FROM lyrics_cache")
     abstract suspend fun clearAllLyrics(): Int

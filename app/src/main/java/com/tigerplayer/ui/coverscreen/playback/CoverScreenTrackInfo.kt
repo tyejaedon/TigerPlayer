@@ -11,7 +11,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,6 +63,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import com.tigerplayer.ui.theme.TigerNeonRed
+import com.tigerplayer.ui.theme.glassEffect
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -152,6 +153,30 @@ internal fun calculateCoverLyricsBoxHeight(
     return adaptiveHeight.coerceAtMost(120.dp).coerceAtLeast(minLineHeight)
 }
 
+/**
+ * Calculates adaptive visual dimensions for album artwork in the cover-screen viewport.
+ *
+ * Expands cover art prominence on compact outer displays (e.g. Motorola Razr, Samsung Galaxy Z Flip)
+ * and flex-mode split views, providing an immersive, high-visibility square artwork presentation
+ * while maintaining proper clearance for controls and waveforms.
+ */
+internal fun calculateCoverArtSize(
+    screenHeightDp: Dp,
+    isLarge: Boolean = false
+): Dp {
+    if (isLarge) {
+        val flexTarget = if (screenHeightDp > 0.dp && screenHeightDp != Dp.Infinity) {
+            (screenHeightDp * 0.45f).coerceIn(160.dp, 220.dp)
+        } else {
+            190.dp
+        }
+        return flexTarget
+    }
+
+    val effectiveHeight = if (screenHeightDp > 0.dp && screenHeightDp != Dp.Infinity) screenHeightDp else 380.dp
+    return (effectiveHeight * 0.48f).coerceIn(150.dp, 220.dp)
+}
+
 internal const val COVER_MEDIA_CYCLE_PAGE_COUNT = 2
 
 /**
@@ -169,6 +194,8 @@ internal fun CoverScreenMediaCycleViewport(
     isLarge: Boolean,
     minLineHeight: Dp,
     targetHeight: Dp,
+    targetArtHeight: Dp = targetHeight,
+    onToggleVortexImmersive: () -> Unit = {},
     onDoubleTapAlbumArt: () -> Unit = {},
     onDoubleTapLyrics: () -> Unit = {},
     onSeek: ((Long) -> Unit)? = null,
@@ -177,10 +204,17 @@ internal fun CoverScreenMediaCycleViewport(
     var totalDragX by remember { mutableFloatStateOf(0f) }
     val swipeThresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
 
+    val effectiveTargetHeight = if (currentViewIndex == 0) targetArtHeight else targetHeight
+    val animatedViewportHeight by animateDpAsState(
+        targetValue = effectiveTargetHeight,
+        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        label = "CoverViewportHeight"
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth(if (isLarge) 0.85f else 0.94f)
-            .heightIn(min = minLineHeight, max = targetHeight)
+            .height(animatedViewportHeight)
             .testTag(CoverScreenTestTags.LYRICS_CONTAINER)
             .pointerInput(currentViewIndex) {
                 detectHorizontalDragGestures(
@@ -232,15 +266,18 @@ internal fun CoverScreenMediaCycleViewport(
                     val heartScale = remember { androidx.compose.animation.core.Animatable(0.4f) }
                     val heartAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
                     val coroutineScope = rememberCoroutineScope()
+                    var heartAnimJob by remember { mutableStateOf<Job?>(null) }
 
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .testTag(CoverScreenTestTags.ALBUM_ART_CONTAINER)
                             .pointerInput(track?.id) {
                                 detectTapGestures(
                                     onDoubleTap = {
                                         onDoubleTapAlbumArt()
-                                        coroutineScope.launch {
+                                        heartAnimJob?.cancel()
+                                        heartAnimJob = coroutineScope.launch {
                                             showLikedHeart = true
                                             heartScale.snapTo(0.4f)
                                             heartAlpha.snapTo(1f)
@@ -259,6 +296,9 @@ internal fun CoverScreenMediaCycleViewport(
                                             )
                                             showLikedHeart = false
                                         }
+                                    },
+                                    onLongPress = {
+                                        onToggleVortexImmersive()
                                     }
                                 )
                             },
@@ -267,22 +307,23 @@ internal fun CoverScreenMediaCycleViewport(
                         AsyncImage(
                             model = track?.artworkUri,
                             contentDescription = track?.title,
-                            contentScale = ContentScale.Fit,
+                            contentScale = ContentScale.Crop,
                             fallback = painterResource(R.drawable.ic_tiger_logo),
                             modifier = Modifier
-                                .fillMaxHeight(0.92f)
+                                .fillMaxHeight(0.98f)
                                 .aspectRatio(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(20.dp))
+                                .glassEffect(RoundedCornerShape(20.dp))
                         )
 
                         if (showLikedHeart) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxHeight(0.95f)
+                                    .fillMaxHeight(0.98f)
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.Black.copy(alpha = 0.15f)),
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color.Black.copy(alpha = 0.2f))
+                                    .testTag(CoverScreenTestTags.LIKE_HEART_OVERLAY),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -290,7 +331,7 @@ internal fun CoverScreenMediaCycleViewport(
                                     contentDescription = stringResource(R.string.coverscreen_action_like),
                                     tint = TigerNeonRed,
                                     modifier = Modifier
-                                        .size(55.dp)
+                                        .size(64.dp)
                                         .scale(heartScale.value)
                                         .alpha(heartAlpha.value)
                                 )
@@ -303,7 +344,15 @@ internal fun CoverScreenMediaCycleViewport(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTapLyrics() }) },
+                            .clip(RoundedCornerShape(20.dp))
+                            .glassEffect(RoundedCornerShape(20.dp))
+                            .padding(8.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = { onDoubleTapLyrics() },
+                                    onLongPress = { onToggleVortexImmersive() }
+                                )
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         LyricsDisplay(
@@ -367,6 +416,11 @@ internal fun TrackInfoText(
         isLarge = isLarge,
         statsVisible = statsVisible
     )
+    val targetArtHeight = calculateCoverArtSize(
+        screenHeightDp = screenHeightDp,
+        isLarge = isLarge
+    )
+    val targetHeight = maxOf(targetLyricsHeight, targetArtHeight)
 
     // View index: 0 = Album (dot 1), 1 = Lyrics (dot 2)
     var currentViewIndex by remember { mutableIntStateOf(0) }
@@ -418,9 +472,7 @@ internal fun TrackInfoText(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onToggleVortexImmersive() }) },
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
@@ -453,8 +505,7 @@ internal fun TrackInfoText(
                         expanded = showOverflowMenu,
                         onDismissRequest = { showOverflowMenu = false },
                         modifier = Modifier
-                            .background(Color(0xFF17181D))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                            .glassEffect(RoundedCornerShape(18.dp))
                     ) {
                         DropdownMenuItem(
                             text = {
@@ -684,9 +735,11 @@ internal fun TrackInfoText(
                 currentPosition = currentPosition,
                 isLarge = isLarge,
                 minLineHeight = minLineHeight,
-                targetHeight = targetLyricsHeight,
+                targetHeight = targetHeight,
+                targetArtHeight = targetHeight,
+                onToggleVortexImmersive = onToggleVortexImmersive,
                 onDoubleTapAlbumArt = onDoubleTapAlbumArt,
-                onDoubleTapLyrics = onToggleVortexImmersive,
+                onDoubleTapLyrics = onDoubleTapAlbumArt,
                 onSeek = onSeek,
                 modifier = Modifier.onGloballyPositioned {
                     onMediaCyclePositioned(it.boundsInRoot())
@@ -715,10 +768,12 @@ internal fun CoverScreenAddToPlaylistDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .heightIn(max = 280.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF17181D),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+                .heightIn(max = 280.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .glassEffect(RoundedCornerShape(24.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.Transparent
         ) {
             Column(
                 modifier = Modifier

@@ -56,7 +56,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.coverscreen.library.formatTrackDuration
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.glassEffect
@@ -64,10 +66,15 @@ import com.tigerplayer.ui.theme.glassEffect
 @Composable
 internal fun SongPicker(
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     currentTrackId: String? = null,
     isPlaying: Boolean = false,
+    state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
     onPlayTrack: (AudioTrack) -> Unit,
-    onAddToQueue: (AudioTrack) -> Unit
+    onPlayNext: (AudioTrack) -> Unit = {},
+    onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
+    onGoToAlbum: (String) -> Unit = {}
 ) {
     if (tracks.isEmpty()) {
         EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_songs))
@@ -76,6 +83,7 @@ internal fun SongPicker(
         var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
         LazyColumn(
+            state = state,
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(CoverScreenTestTags.SONGS_LIST),
@@ -98,6 +106,18 @@ internal fun SongPicker(
                     onDismissOptions = { optionsTrack = null }
                 )
             }
+        }
+
+        optionsTrack?.let { selectedTrack ->
+            SongOptionsSheet(
+                track = selectedTrack,
+                playlists = playlists,
+                onDismiss = { optionsTrack = null },
+                onPlayNext = { onPlayNext(selectedTrack) },
+                onAddToQueue = { onAddToQueue(selectedTrack) },
+                onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, selectedTrack) },
+                onGoToAlbum = { albumName -> onGoToAlbum(albumName) }
+            )
         }
     }
 }
@@ -149,7 +169,6 @@ internal fun SongTrackRow(
                     onLongClickLabel = stringResource(R.string.coverscreen_action_add_to_queue),
                     onClick = onPlay,
                     onLongClick = {
-                        onRevealQueue()
                         onShowOptions()
                     }
                 )

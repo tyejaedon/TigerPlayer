@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.library
 
 import android.os.Build
+import android.widget.Toast
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.tigerplayer.R
@@ -52,6 +54,7 @@ fun ArtistDetailsScreen(
     onAlbumClick: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     val normalizedArtistName = remember(artistName) {
         ArtistUtils.getBaseArtist(artistName).trim()
@@ -117,7 +120,7 @@ fun ArtistDetailsScreen(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 fadeBottomPercent = 0.08f,
-                blurRadius = 18f,
+                blurRadius = 4f,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
@@ -215,6 +218,20 @@ fun ArtistDetailsScreen(
                     onGoToAlbum = { albumName ->
                         trackForOptions = null
                         onAlbumClick(albumName)
+                    },
+                    onQueueAdded = {
+                        Toast.makeText(
+                            context,
+                            "${it.title} added to queue",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onPlaylistAdded = { song, playlist ->
+                        Toast.makeText(
+                            context,
+                            "${song.title} added to ${playlist.name}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
             }

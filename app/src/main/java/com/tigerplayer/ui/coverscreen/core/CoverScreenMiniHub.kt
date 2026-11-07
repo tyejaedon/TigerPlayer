@@ -13,8 +13,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +62,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.ui.platform.LocalContext
 import com.tigerplayer.R
 import com.tigerplayer.engine.FluidVortexView
 import com.tigerplayer.ui.dashboard.DashboardViewModel
@@ -161,9 +175,19 @@ fun CoverScreenMiniHub(
     val swipeUpQueueLabel = stringResource(R.string.coverscreen_gesture_swipe_up_queue)
     val swipeDownCloseLabel = stringResource(R.string.coverscreen_gesture_swipe_down_close)
     val longPressSettingsLabel = stringResource(R.string.coverscreen_gesture_long_press_settings)
+    val hideControlsLabel = stringResource(R.string.coverscreen_action_hide_controls)
+    val showControlsLabel = stringResource(R.string.coverscreen_action_show_controls)
+    val toggleImmersiveLabel = if (isVortexImmersive) showControlsLabel else hideControlsLabel
     val nowPlayingStatus = stringResource(R.string.coverscreen_status_now_playing)
     val pausedStatus = stringResource(R.string.coverscreen_status_paused)
 
+    // Unified cover-screen gesture contract:
+    // - tap: play/pause
+    // - swipe left/right: previous/next track
+    // - swipe up: open queue
+    // - swipe down: close active overlays only
+    // - long press: toggle immersive mode
+    // Library/settings/open-home remain explicit button actions rather than hidden gesture side-effects.
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -177,11 +201,9 @@ fun CoverScreenMiniHub(
                     playerViewModel.togglePlayPause()
                     true
                 }
-                onLongClick(label = longPressSettingsLabel) {
+                onLongClick(label = toggleImmersiveLabel) {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                    queueVisible = false
-                    libraryVisible = false
-                    playbackSettingsVisible = true
+                    isVortexImmersive = !isVortexImmersive
                     true
                 }
                 customActions = listOf(
@@ -189,8 +211,13 @@ fun CoverScreenMiniHub(
                     CustomAccessibilityAction(swipeNextLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext(); true },
                     CustomAccessibilityAction(swipePrevLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious(); true },
                     CustomAccessibilityAction(swipeUpQueueLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = true; true },
-                    CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; searchOnLibraryOpen = true; libraryVisible = true; true },
+                    CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; true },
                     CustomAccessibilityAction(longPressSettingsLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = true; true },
+                    CustomAccessibilityAction(toggleImmersiveLabel) {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        isVortexImmersive = !isVortexImmersive
+                        true
+                    },
                     CustomAccessibilityAction("Open Home") { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = false; homeVisible = true; true }
                 )
             }
@@ -198,9 +225,9 @@ fun CoverScreenMiniHub(
                 swipeThresholdPx = swipeThresholdPx,
                 tapSlopPx = tapSlopPx,
                 shouldIgnoreGestureAt = { position ->
+                    if (isVortexImmersive) return@coverScreenGestures false
                     val positionInRoot = coverScreenCoordinates?.localToRoot(position) ?: position
-                    (seekerTouchBounds?.contains(positionInRoot) == true) ||
-                            (mediaCycleTouchBounds?.contains(positionInRoot) == true)
+                    seekerTouchBounds?.contains(positionInRoot) == true
                 },
                 onTap = {
                     if (libraryVisible) return@coverScreenGestures
@@ -226,26 +253,44 @@ fun CoverScreenMiniHub(
                     if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = false
-                    searchOnLibraryOpen = true
-                    libraryVisible = true
                 },
-                onDoubleTap = if (isVortexImmersive) {
-                    {
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                        isVortexImmersive = false
-                    }
-                } else null
+                onLongPress = {
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    isVortexImmersive = !isVortexImmersive
+                }
             )
     ) {
         val backgroundArtModel = remember(track?.artworkUri, uiState.artistImageUrl) {
             uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: track?.artworkUri
         }
+        val context = LocalContext.current
+        val coverImageRequest = remember(backgroundArtModel) {
+            backgroundArtModel?.let {
+                ImageRequest.Builder(context)
+                    .data(it)
+                    .crossfade(true)
+                    .allowHardware(false)
+                    .listener(onSuccess = { _, result ->
+                        val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                        bitmap?.let { b ->
+                            androidx.palette.graphics.Palette.from(b).generate { palette ->
+                                val cVibrant = palette?.vibrantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                                val cDominant = palette?.dominantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                                val cMuted = palette?.mutedSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                                val paletteColors = listOfNotNull(cVibrant, cDominant, cMuted).ifEmpty { null }
+                                playerViewModel.fluidRenderer.updatePaletteColors(paletteColors)
+                            }
+                        }
+                    })
+                    .build()
+            }
+        }
 
         // BACKGROUND: Fluid Vortex (primary) with Artist/Artwork photo as fallback
         Box(modifier = Modifier.fillMaxSize()) {
-            if (backgroundArtModel != null) {
+            if (coverImageRequest != null) {
                 AsyncImage(
-                    model = backgroundArtModel,
+                    model = coverImageRequest,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -259,6 +304,9 @@ fun CoverScreenMiniHub(
                     FluidVortexView(ctx).apply {
                         setFluidRenderer(playerViewModel.fluidRenderer)
                     }
+                },
+                update = { view ->
+                    view.setRenderingActive(isRenderingActive)
                 },
                 modifier = Modifier
                     .fillMaxSize()
@@ -307,34 +355,138 @@ fun CoverScreenMiniHub(
                                 setFluidRenderer(playerViewModel.fluidRenderer)
                             }
                         },
+                        update = { view ->
+                            view.setRenderingActive(isRenderingActive)
+                        },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
 
                 // Right Panel: Core Player Controls & Lyrics
-                Column(
+                AnimatedVisibility(
+                    visible = !isVortexImmersive,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 350)),
+                    exit = fadeOut(animationSpec = tween(durationMillis = 350)),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(
+                                start = 8.dp,
+                                end = 8.dp,
+                                top = 0.dp,
+                                bottom = waveformBottomClearance
+                            ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        TrackInfoText(
+                            track = track,
+                            subtitle = stringResource(R.string.coverscreen_status_flex_mode_active),
+                            lyrics = uiState.currentLyrics,
+                            currentPosition = uiState.currentPosition,
+                            isLarge = true,
+                            statsVisible = false,
+                            isVortexImmersive = isVortexImmersive,
+                            onToggleVortexImmersive = {
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                isVortexImmersive = !isVortexImmersive
+                            },
+                            onDoubleTapAlbumArt = {
+                                track?.let { currentTrack ->
+                                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                    playerViewModel.likeTrack(currentTrack)
+                                }
+                            },
+                            onOpenQueue = {
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                queueVisible = true
+                            },
+                            onOpenLibrary = {
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                queueVisible = false
+                                searchOnLibraryOpen = false
+                                libraryVisible = true
+                            },
+                            onOpenPlaybackSettings = {
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                playbackSettingsVisible = true
+                            },
+                            playlists = uiState.customPlaylists,
+                            onAddToPlaylist = { playlistId ->
+                                track?.let { currentTrack ->
+                                    playerViewModel.addTrackToPlaylist(playlistId, currentTrack)
+                                }
+                            },
+                            playbackSpeed = uiState.playbackSpeed,
+                            pitchRatio = uiState.pitch,
+                            onSpeedChangeFinished = { playerViewModel.setPlaybackSpeed(it) },
+                            onPitchChangeFinished = { playerViewModel.setPitch(it) },
+                            sleepTimerState = sleepTimerState,
+                            onSetSleepTimerDuration = { playerViewModel.setSleepTimerDuration(it) },
+                            onSetEndOfTrackSleepTimer = { playerViewModel.setSleepTimerEndOfTrack() },
+                            onSetEndOfQueueSleepTimer = { playerViewModel.setSleepTimerEndOfQueue() },
+                            onCancelSleepTimer = { playerViewModel.cancelSleepTimer() },
+                            onMediaCyclePositioned = { mediaCycleTouchBounds = it },
+                            onSeek = { playerViewModel.seekTo(it) },
+                            screenHeightDp = windowState.heightDp.dp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        CoverAccessibleControls(
+                            isPlaying = uiState.isPlaying,
+                            isShuffleEnabled = uiState.isShuffleEnabled,
+                            repeatMode = uiState.repeatMode,
+                            onToggleShuffle = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleShuffle() },
+                            onCycleRepeat = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleRepeat() },
+                            onLongPressPlayPause = {
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                queueVisible = false
+                                libraryVisible = false
+                                playbackSettingsVisible = true
+                            },
+                            onTogglePlayPause = { view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); playerViewModel.togglePlayPause() },
+                            onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
+                            onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
+                        )
+                    }
+                }
+            }
+        } else {
+            // STANDARD / COMPACT COVER DISPLAY
+            val isTightScreen = windowState.heightDp in 1..360
+            val verticalPadding = if (isTightScreen) 4.dp else 8.dp
+
+            AnimatedVisibility(
+                visible = !isVortexImmersive,
+                enter = fadeIn(animationSpec = tween(durationMillis = 350)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 350)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
                         .padding(
-                            start = 8.dp,
-                            end = 8.dp,
-                            top = 0.dp,
-                            bottom = waveformBottomClearance
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = verticalPadding,
+                            bottom = verticalPadding + waveformBottomClearance
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.Center
+                    verticalArrangement = Arrangement.Top
                 ) {
                     TrackInfoText(
                         track = track,
-                        subtitle = stringResource(R.string.coverscreen_status_flex_mode_active),
+                        subtitle = if (uiState.isPlaying) stringResource(R.string.coverscreen_status_now_playing) else stringResource(R.string.coverscreen_status_paused),
                         lyrics = uiState.currentLyrics,
                         currentPosition = uiState.currentPosition,
-                        isLarge = true,
+                        isLarge = false,
                         statsVisible = false,
                         isVortexImmersive = isVortexImmersive,
                         onToggleVortexImmersive = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             isVortexImmersive = !isVortexImmersive
                         },
                         onDoubleTapAlbumArt = {
@@ -376,97 +528,7 @@ fun CoverScreenMiniHub(
                         onSeek = { playerViewModel.seekTo(it) },
                         screenHeightDp = windowState.heightDp.dp
                     )
-                    if (shouldShowCoverControls(isVortexImmersive)) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        CoverAccessibleControls(
-                            isPlaying = uiState.isPlaying,
-                            isShuffleEnabled = uiState.isShuffleEnabled,
-                            repeatMode = uiState.repeatMode,
-                            onToggleShuffle = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleShuffle() },
-                            onCycleRepeat = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.toggleRepeat() },
-                            onLongPressPlayPause = {
-                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                queueVisible = false
-                                libraryVisible = false
-                                playbackSettingsVisible = true
-                            },
-                            onTogglePlayPause = { view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); playerViewModel.togglePlayPause() },
-                            onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious() },
-                            onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext() }
-                        )
-                    }
-                }
-            }
-        } else {
-            // STANDARD / COMPACT COVER DISPLAY
-            val isTightScreen = windowState.heightDp in 1..360
-            val verticalPadding = if (isTightScreen) 4.dp else 8.dp
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        start = 12.dp,
-                        end = 12.dp,
-                        top = verticalPadding,
-                        bottom = verticalPadding + waveformBottomClearance
-                    ),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
-            ) {
-                TrackInfoText(
-                    track = track,
-                    subtitle = if (uiState.isPlaying) stringResource(R.string.coverscreen_status_now_playing) else stringResource(R.string.coverscreen_status_paused),
-                    lyrics = uiState.currentLyrics,
-                    currentPosition = uiState.currentPosition,
-                    isLarge = false,
-                    statsVisible = false,
-                    isVortexImmersive = isVortexImmersive,
-                    onToggleVortexImmersive = {
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                        isVortexImmersive = !isVortexImmersive
-                    },
-                    onDoubleTapAlbumArt = {
-                        track?.let { currentTrack ->
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            playerViewModel.likeTrack(currentTrack)
-                        }
-                    },
-                    onOpenQueue = {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        queueVisible = true
-                    },
-                    onOpenLibrary = {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        queueVisible = false
-                        searchOnLibraryOpen = false
-                        libraryVisible = true
-                    },
-                    onOpenPlaybackSettings = {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        playbackSettingsVisible = true
-                    },
-                    playlists = uiState.customPlaylists,
-                    onAddToPlaylist = { playlistId ->
-                        track?.let { currentTrack ->
-                            playerViewModel.addTrackToPlaylist(playlistId, currentTrack)
-                        }
-                    },
-                    playbackSpeed = uiState.playbackSpeed,
-                    pitchRatio = uiState.pitch,
-                    onSpeedChangeFinished = { playerViewModel.setPlaybackSpeed(it) },
-                    onPitchChangeFinished = { playerViewModel.setPitch(it) },
-                    sleepTimerState = sleepTimerState,
-                    onSetSleepTimerDuration = { playerViewModel.setSleepTimerDuration(it) },
-                    onSetEndOfTrackSleepTimer = { playerViewModel.setSleepTimerEndOfTrack() },
-                    onSetEndOfQueueSleepTimer = { playerViewModel.setSleepTimerEndOfQueue() },
-                    onCancelSleepTimer = { playerViewModel.cancelSleepTimer() },
-                    onMediaCyclePositioned = { mediaCycleTouchBounds = it },
-                    onSeek = { playerViewModel.seekTo(it) },
-                    screenHeightDp = windowState.heightDp.dp
-                )
-                if (shouldShowCoverControls(isVortexImmersive)) {
-                    Spacer(modifier = Modifier.height(if (isTightScreen) 39.dp else 53.dp))
+                    Spacer(modifier = Modifier.height(if (isTightScreen) 8.dp else 14.dp))
                     CoverAccessibleControls(
                         isPlaying = uiState.isPlaying,
                         isShuffleEnabled = uiState.isShuffleEnabled,
@@ -488,7 +550,12 @@ fun CoverScreenMiniHub(
         }
 
         // WAVEFORM (Visual Anchor)
-        if (showWaveform) {
+        AnimatedVisibility(
+            visible = showWaveform,
+            enter = fadeIn(animationSpec = tween(durationMillis = 350)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 350)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
             CoverMicroWaveform(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
@@ -501,13 +568,40 @@ fun CoverScreenMiniHub(
                 onSeek = { playerViewModel.seekTo(it) },
                 artworkUri = track?.artworkUri,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(30.dp)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
                     .onGloballyPositioned { seekerTouchBounds = it.boundsInRoot() }
                     .testTag(CoverScreenTestTags.MICRO_WAVEFORM)
             )
+        }
+
+        // IMMERSIVE HINT PILL
+        AnimatedVisibility(
+            visible = isVortexImmersive,
+            enter = fadeIn(animationSpec = tween(durationMillis = 400)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 300)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp, start = 20.dp, end = 20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .testTag(CoverScreenTestTags.IMMERSIVE_HINT),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.coverscreen_immersive_hint),
+                    color = Color.White.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.5.sp
+                )
+            }
         }
 
         // MODAL OVERLAYS

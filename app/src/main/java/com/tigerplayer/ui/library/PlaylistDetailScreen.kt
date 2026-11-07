@@ -154,8 +154,10 @@ fun PlaylistDetailsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
-                        translationY = -offset * 0.45f
+                        val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                        val scrollOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                        val backgroundTranslationY = (scrollOffset * 0.25f).coerceAtMost(100f)
+                        translationY = -backgroundTranslationY
                         alpha = 0.52f
                     }
             )
@@ -350,7 +352,7 @@ fun PlaylistTopBar(
             }
             TextButton(onClick = onEditClick) { Text(text = if (isEditMode) "Done" else "Edit", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = if (isScrolled) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f) else Color.Transparent),
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         modifier = Modifier.then(if (isScrolled) Modifier.glassEffect(RectangleShape) else Modifier)
     )
 }
@@ -362,11 +364,20 @@ fun PlaylistParallaxHeader(
     accentColor: Color, artworkUri: String?, isEditMode: Boolean,
     onChangeCoverClick: () -> Unit, onPlayAll: () -> Unit
 ) {
-    val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
+    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 700
+    val heroAlpha = (1f - (rawOffset / 600f)).coerceIn(0f, 1f)
+    val heroScale = (1f - (rawOffset / 2000f)).coerceIn(0.88f, 1f)
+    val heroTranslationY = (rawOffset * 0.35f).coerceAtMost(220f)
 
     Box(
         modifier = Modifier.fillMaxWidth().height(440.dp).padding(top = 40.dp)
-            .graphicsLayer { translationY = offset * 0.4f; alpha = (1f - (offset / 700f)).coerceIn(0f, 1f) },
+            .graphicsLayer {
+                translationY = heroTranslationY
+                alpha = heroAlpha
+                scaleX = heroScale
+                scaleY = heroScale
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import kotlin.math.hypot
@@ -39,6 +40,7 @@ fun EqualizerFrequencyCurve(
     selectedBandIndex: Int = 0,
     onNodeDragged: ((bandIndex: Int, newFreqHz: Float, newGainDb: Float) -> Unit)? = null,
     onBandSelected: ((Int) -> Unit)? = null,
+    audioFrame: AudioReactiveFrame? = null,
     modifier: Modifier = Modifier,
     curveColor: Color = TigerCyberCyan,
     showGrid: Boolean = true
@@ -143,6 +145,32 @@ fun EqualizerFrequencyCurve(
         val h = size.height
 
         if (w <= 0f || h <= 0f) return@Canvas
+
+        // 0. Render Real-Time Spectrum Analyzer Bars in Background
+        audioFrame?.let { frame ->
+            val bandsCount = frame.spectralBands.size
+            if (bandsCount > 0) {
+                val barWidth = w / (bandsCount * 2f)
+                frame.spectralBands.forEachIndexed { i, energy ->
+                    val bandCenterPx = ((i + 0.5f) / bandsCount) * w
+                    val barHeight = energy.coerceIn(0f, 1f) * (h * 0.7f)
+                    val left = bandCenterPx - (barWidth / 2f)
+                    val top = h - barHeight
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                curveColor.copy(alpha = 0.25f),
+                                curveColor.copy(alpha = 0.05f)
+                            ),
+                            startY = top,
+                            endY = h
+                        ),
+                        topLeft = Offset(left, top),
+                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
+                    )
+                }
+            }
+        }
 
         // 1. Draw Grid Lines
         if (showGrid) {

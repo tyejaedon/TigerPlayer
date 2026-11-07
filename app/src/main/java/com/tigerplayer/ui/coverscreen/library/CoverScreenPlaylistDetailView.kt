@@ -2,6 +2,7 @@ package com.tigerplayer.ui.coverscreen
 
 import android.graphics.drawable.BitmapDrawable
 import android.view.HapticFeedbackConstants
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -57,6 +58,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -105,6 +107,8 @@ import androidx.palette.graphics.Palette
 import coil.request.ImageRequest
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.ui.library.FloatingRitualControlDock
+import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.WitcherIcons
@@ -118,12 +122,16 @@ import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
 fun CoverScreenPlaylistDetailView(
     playlist: Playlist,
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     isLikedPlaylist: Boolean,
     currentTrackId: String?,
     isPlaying: Boolean,
     onBack: () -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayNext: (AudioTrack) -> Unit = {},
     onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
+    onGoToAlbum: (String) -> Unit = {},
     onPlayAll: (List<AudioTrack>) -> Unit,
     onShufflePlay: (List<AudioTrack>) -> Unit,
     onRenamePlaylist: (String) -> Unit,
@@ -156,14 +164,6 @@ fun CoverScreenPlaylistDetailView(
     val likedHeartColor = Color(0xFFE91E63)
     val accentColor = if (isLikedPlaylist) likedHeartColor else MaterialTheme.aardBlue
 
-    var dominantColor by remember(playlist.id, playlist.artworkUri) { mutableStateOf(TigerNeonOrange) }
-
-    val animatedDominantColor by animateColorAsState(
-        targetValue = dominantColor,
-        animationSpec = tween(1000),
-        label = "AlbumColorAnimation"
-    )
-    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.22f)
     val context = LocalContext.current
 
     val imageModel = remember(playlist.artworkUri) {
@@ -188,7 +188,7 @@ fun CoverScreenPlaylistDetailView(
         modifier = modifier
             .fillMaxSize()
             .testTag(CoverScreenTestTags.PLAYLIST_DETAIL)
-            .background(ambientBrush)
+            .background(Color.Black)
             .pointerInput(playlist.id) {
                 var dragDistance = 0f
                 detectHorizontalDragGestures(
@@ -205,7 +205,7 @@ fun CoverScreenPlaylistDetailView(
             imageModel = imageModel,
             contentDescription = playlist.name,
             fadeBottomPercent = 0.08f,
-            blurRadius = 18f,
+            blurRadius = 4f,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
@@ -223,7 +223,7 @@ fun CoverScreenPlaylistDetailView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .glassEffect(RectangleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
+                    .background(Color.Transparent)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -347,15 +347,95 @@ fun CoverScreenPlaylistDetailView(
                 }
             }
 
+            val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+
             // 2. SCROLLABLE PLAYLIST CONTENT
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(CoverScreenTestTags.PLAYLIST_TRACKS),
-                contentPadding = PaddingValues(bottom = 28.dp),
+                contentPadding = PaddingValues(bottom = 90.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 3D FLOATING HERO ARTWORK & METADATA
+                // 3D FLOATING HERO ARTWORK
+                item(key = "playlist_hero_artwork") {
+                    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                    val heroAlpha = (1f - (rawOffset / 400f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (rawOffset / 1200f)).coerceIn(0.85f, 1f)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 6.dp)
+                            .graphicsLayer {
+                                alpha = heroAlpha
+                                scaleX = heroScale
+                                scaleY = heroScale
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Ambient Backdrop Glow
+                        Box(
+                            modifier = Modifier
+                                .size(136.dp)
+                                .shadow(
+                                    elevation = 20.dp,
+                                    shape = RoundedCornerShape(26.dp),
+                                    spotColor = accentColor.copy(alpha = 0.45f),
+                                    ambientColor = Color.Black
+                                )
+                                .background(
+                                    accentColor.copy(alpha = 0.20f),
+                                    RoundedCornerShape(26.dp)
+                                )
+                        )
+
+                        // 3D Framed Glass Cover
+                        Box(
+                            modifier = Modifier.size(144.dp)
+                        ) {
+                            WetPaintingFadeImage(
+                                imageModel = imageModel,
+                                contentDescription = playlist.name,
+                                fadeBottomPercent = 0.05f,
+                                blurRadius = 0f,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .border(
+                                        width = 1.2.dp,
+                                        brush = Brush.verticalGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.45f),
+                                                accentColor.copy(alpha = 0.25f),
+                                                Color.White.copy(alpha = 0.10f)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(22.dp)
+                                    )
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            )
+
+                            // Specular Light Streak
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.22f),
+                                                Color.White.copy(alpha = 0.04f),
+                                                Color.Transparent
+                                            )
+                                        )
+                                    )
+                            )
+                        }
+                    }
+                }
 
                 // PLAYLIST TITLE & INFO
                 item(key = "playlist_metadata_bar") {
@@ -384,72 +464,6 @@ fun CoverScreenPlaylistDetailView(
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = 1.sp
                         )
-                    }
-                }
-
-                // PLAY & SHUFFLE CONTROLS (Only visible when not reordering)
-                if (!isEditMode && mutableTracks.isNotEmpty()) {
-                    item(key = "playlist_action_controls") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    onPlayAll(mutableTracks)
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp)
-                                    .bounceClick {
-                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                        onPlayAll(mutableTracks)
-                                    }
-                                    .testTag(CoverScreenTestTags.PLAYLIST_PLAY_ALL),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = accentColor,
-                                    contentColor = Color.Black
-                                )
-                            ) {
-                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Play All",
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 12.sp
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    onShufflePlay(mutableTracks)
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp)
-                                    .bounceClick {
-                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                        onShufflePlay(mutableTracks)
-                                    }
-                                    .testTag(CoverScreenTestTags.PLAYLIST_SHUFFLE),
-                                shape = RoundedCornerShape(14.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.7f))
-                            ) {
-                                Icon(Icons.Rounded.Shuffle, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(R.string.coverscreen_action_shuffle),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
                     }
                 }
 
@@ -571,6 +585,29 @@ fun CoverScreenPlaylistDetailView(
                 }
             }
         }
+
+        if (!isEditMode && mutableTracks.isNotEmpty()) {
+            FloatingRitualControlDock(
+                accentColor = accentColor,
+                onPlayClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    onPlayAll(mutableTracks)
+                },
+                onShuffleClick = {
+                    if (mutableTracks.isNotEmpty()) {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        onShufflePlay(mutableTracks)
+                    }
+                },
+                playButtonText = "START RITUAL",
+                shuffleDescription = "Shuffle Playlist",
+                playTestTag = CoverScreenTestTags.PLAYLIST_PLAY_ALL,
+                shuffleTestTag = CoverScreenTestTags.PLAYLIST_SHUFFLE,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+            )
+        }
     }
 
     // 3. DIALOGS
@@ -599,68 +636,29 @@ fun CoverScreenPlaylistDetailView(
 
     // Track options bottom sheet
     trackForOptions?.let { track ->
-        ModalBottomSheet(
-            onDismissRequest = { trackForOptions = null },
-            containerColor = Color(0xFF1B1F2A)
-        ) {
-            Column(modifier = Modifier.padding(bottom = 24.dp, start = 16.dp, end = 16.dp)) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-                Text(
-                    text = track.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onAddToQueue(track)
-                            trackForOptions = null
-                        }
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = null, tint = accentColor)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("Add to Queue", color = Color.White, fontWeight = FontWeight.Medium)
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onRemoveTrack(track)
-                            mutableTracks = mutableTracks.filter { it.id != track.id }
-                            trackForOptions = null
-                        }
-                        .padding(vertical = 12.dp, horizontal = 8.dp)
-                        .testTag(CoverScreenTestTags.playlistTrackRemove(track.id)),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = stringResource(R.string.coverscreen_action_remove_from_playlist),
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+        SongOptionsSheet(
+            track = track,
+            playlists = playlists,
+            onDismiss = { trackForOptions = null },
+            onPlayNext = { onPlayNext(track) },
+            onAddToQueue = { onAddToQueue(track) },
+            onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, track) },
+            onGoToAlbum = { albumName -> onGoToAlbum(albumName) },
+            onQueueAdded = {
+                Toast.makeText(
+                    context,
+                    "${it.title} added to queue",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onPlaylistAdded = { song, playlist ->
+                Toast.makeText(
+                    context,
+                    "${song.title} added to ${playlist.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
-        }
+        )
     }
 }
 
@@ -686,7 +684,7 @@ private fun CoverScreenPlaylistTrackRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp)
-            .bounceClick { onClick() }
+            .bounceClick(onClick = onClick, onLongClick = onOptionsClick)
             .testTag(CoverScreenTestTags.playlistTrack(track.id)),
         shape = RoundedCornerShape(14.dp),
         color = if (isCurrent) accentColor.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f)

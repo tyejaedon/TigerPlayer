@@ -83,7 +83,7 @@ fun CoverScreenPlaybackSettings(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.76f))
+            .background(Color.Black)
             .clickable(onClick = onClose)
             .testTag(CoverScreenTestTags.PLAYBACK_SETTINGS)
     ) {
