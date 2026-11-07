@@ -13,6 +13,10 @@
     <string name="coverscreen_gesture_long_press_settings">Mantener presionado para ajustes de reproducción</string>
     <string name="coverscreen_gesture_instructions">Minirreproductor de pantalla externa. Toca para reproducir o pausar. Desliza a la izquierda para siguiente, a la derecha para anterior, arriba para cola y abajo para cerrar.</string>
     <string name="coverscreen_talkback_gesture_instructions">Minirreproductor de pantalla externa. Toca para reproducir o pausar. Desliza a la izquierda para siguiente, a la derecha para anterior, arriba para cola y abajo para cerrar.</string>
+    <string name="coverscreen_immersive_hint">Mantén presionado en cualquier lugar para mostrar los controles</string>
+    <string name="coverscreen_action_hide_controls">Ocultar controles</string>
+    <string name="coverscreen_action_show_controls">Mostrar controles</string>
+    <string name="coverscreen_action_toggle_immersive">Alternar modo inmersivo</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Pista anterior</string>
@@ -33,6 +37,28 @@
 
     <string name="coverscreen_action_like">Marcar como me gusta</string>
     <string name="coverscreen_action_edit_playlist_photo">Cambiar foto de la lista</string>
+    <string name="coverscreen_action_import_playlist">Importar lista</string>
+    <string name="coverscreen_import_playlist_success">Lista \"%1$s\" importada (%2$d pistas)</string>
+    <string name="coverscreen_import_playlist_failure">Error al importar lista: %1$s</string>
+    <string name="coverscreen_action_new_playlist">Nueva lista</string>
+    <string name="coverscreen_action_create_playlist">Crear lista</string>
+    <string name="coverscreen_action_rename_playlist">Renombrar lista</string>
+    <string name="coverscreen_action_delete_playlist">Eliminar lista</string>
+    <string name="coverscreen_action_reorder_tracks">Reordenar pistas</string>
+    <string name="coverscreen_action_back_to_playlists">Volver a listas</string>
+    <string name="coverscreen_dialog_create_playlist_title">NUEVA LISTA</string>
+    <string name="coverscreen_dialog_rename_playlist_title">RENOMBRAR LISTA</string>
+    <string name="coverscreen_dialog_delete_playlist_title">ELIMINAR LISTA</string>
+    <string name="coverscreen_dialog_delete_playlist_message">¿Seguro que deseas eliminar \"%1$s\"?</string>
+    <string name="coverscreen_dialog_playlist_name_label">Nombre de la lista</string>
+    <string name="coverscreen_action_save">Guardar</string>
+    <string name="coverscreen_action_cancel">Cancelar</string>
+    <string name="coverscreen_action_delete">Eliminar</string>
+    <string name="coverscreen_action_done">Listo</string>
+    <string name="coverscreen_action_edit">Editar</string>
+    <string name="coverscreen_action_shuffle">Aleatorio</string>
+    <string name="coverscreen_empty_playlist_tracks">Esta lista está vacía</string>
+    <string name="coverscreen_action_remove_from_playlist">Quitar de la lista</string>
 
     <!-- Cover Screen Status Subtitles -->
     <string name="coverscreen_status_now_playing">EN REPRODUCCIÓN</string>

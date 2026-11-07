@@ -6,12 +6,15 @@ import com.tigerplayer.data.local.entity.AudioDeviceEntity
 import com.tigerplayer.data.local.entity.DevicePresetEntity
 import com.tigerplayer.data.model.AudioDeviceType
 import com.tigerplayer.data.model.AudioOutputDevice
+import com.tigerplayer.di.IoDispatcher
+import com.tigerplayer.utils.BluetoothDeviceInfo
 import com.tigerplayer.utils.BluetoothDeviceManager
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,10 +45,11 @@ class AudioDeviceRepositoryImpl @Inject constructor(
     private val audioDeviceDao: AudioDeviceDao,
     private val bluetoothDeviceManager: BluetoothDeviceManager,
     private val autoEqRepository: AutoEqRepository,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : AudioDeviceRepository {
 
-    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val repositoryScope = CoroutineScope(ioDispatcher + SupervisorJob())
 
     private val defaultSpeakerDevice = AudioOutputDevice(
         deviceId = AudioOutputDevice.DEVICE_ID_SPEAKER,
@@ -85,7 +89,7 @@ class AudioDeviceRepositoryImpl @Inject constructor(
                 )
             }
         }
-        .flowOn(Dispatchers.IO)
+        .flowOn(ioDispatcher)
 
     init {
         repositoryScope.launch {
@@ -124,17 +128,21 @@ class AudioDeviceRepositoryImpl @Inject constructor(
 
     private fun observeBluetoothConnections() {
         repositoryScope.launch {
-            bluetoothDeviceManager.connectedDevice.collect { btInfo ->
-                if (btInfo.isConnected && btInfo.address.isNotBlank()) {
+            var previousBtInfo: BluetoothDeviceInfo? = null
+            bluetoothDeviceManager.connectedDevice.collect { currentBtInfo ->
+                val prev = previousBtInfo
+                previousBtInfo = currentBtInfo
+                if (currentBtInfo.isConnected && currentBtInfo.address.isNotBlank()) {
                     recordDeviceConnected(
-                        deviceId = btInfo.address,
-                        displayName = btInfo.name,
+                        deviceId = currentBtInfo.address,
+                        displayName = currentBtInfo.name,
                         type = AudioDeviceType.BLUETOOTH,
-                        codec = btInfo.codec,
-                        batteryLevel = btInfo.batteryLevel
+                        codec = currentBtInfo.codec,
+                        batteryLevel = currentBtInfo.batteryLevel
                     )
-                } else if (!btInfo.isConnected && _currentActiveDevice.value.type == AudioDeviceType.BLUETOOTH) {
-                    recordDeviceDisconnected(_currentActiveDevice.value.deviceId)
+                } else if (prev != null && prev.isConnected && !currentBtInfo.isConnected) {
+                    val addressToDisconnect = prev.address.ifBlank { _currentActiveDevice.value.deviceId }
+                    recordDeviceDisconnected(addressToDisconnect)
                 }
             }
         }
@@ -168,7 +176,7 @@ class AudioDeviceRepositoryImpl @Inject constructor(
         type: AudioDeviceType,
         codec: String?,
         batteryLevel: Int
-    ) = withContext(Dispatchers.IO) {
+    ) = withContext(ioDispatcher) {
         val now = System.currentTimeMillis()
         val settings = settingsDataStore.settingsFlow.first()
         val existing = audioDeviceDao.getDeviceById(deviceId)
@@ -253,7 +261,7 @@ class AudioDeviceRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun recordDeviceDisconnected(deviceId: String) = withContext(Dispatchers.IO) {
+    override suspend fun recordDeviceDisconnected(deviceId: String) = withContext(ioDispatcher) {
         if (_currentActiveDevice.value.deviceId == deviceId) {
             _currentActiveDevice.value = defaultSpeakerDevice
             val settings = settingsDataStore.settingsFlow.first()
@@ -266,7 +274,7 @@ class AudioDeviceRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun assignPresetToDevice(deviceId: String, presetId: String?) = withContext(Dispatchers.IO) {
+    override suspend fun assignPresetToDevice(deviceId: String, presetId: String?) = withContext(ioDispatcher) {
         audioDeviceDao.updateAssignedPreset(deviceId, presetId)
         if (_currentActiveDevice.value.deviceId == deviceId) {
             _currentActiveDevice.value = _currentActiveDevice.value.copy(assignedPresetId = presetId)
@@ -286,7 +294,7 @@ class AudioDeviceRepositoryImpl @Inject constructor(
         targetCurve: String,
         formFactor: String,
         presetId: String
-    ) = withContext(Dispatchers.IO) {
+    ) = withContext(ioDispatcher) {
         val existing = audioDeviceDao.getDeviceById(deviceId) ?: return@withContext
         val updated = existing.copy(
             matchedAutoEqModel = modelName,
@@ -317,7 +325,7 @@ class AudioDeviceRepositoryImpl @Inject constructor(
         matchedAutoEqModel: String?,
         targetCurve: String?,
         formFactor: String?
-    ): AudioDeviceEntity = withContext(Dispatchers.IO) {
+    ): AudioDeviceEntity = withContext(ioDispatcher) {
         val slug = profileName.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
         val deviceId = "wired:$slug"
         val now = System.currentTimeMillis()
@@ -337,22 +345,22 @@ class AudioDeviceRepositoryImpl @Inject constructor(
     }
 
     override fun getPresetsForDeviceFlow(deviceId: String): Flow<List<DevicePresetEntity>> {
-        return audioDeviceDao.getPresetsForDeviceFlow(deviceId).flowOn(Dispatchers.IO)
+        return audioDeviceDao.getPresetsForDeviceFlow(deviceId).flowOn(ioDispatcher)
     }
 
     override fun getAllPresetsFlow(): Flow<List<DevicePresetEntity>> {
-        return audioDeviceDao.getAllPresetsFlow().flowOn(Dispatchers.IO)
+        return audioDeviceDao.getAllPresetsFlow().flowOn(ioDispatcher)
     }
 
-    override suspend fun savePreset(preset: DevicePresetEntity) = withContext(Dispatchers.IO) {
+    override suspend fun savePreset(preset: DevicePresetEntity) = withContext(ioDispatcher) {
         audioDeviceDao.upsertPreset(preset)
     }
 
-    override suspend fun deletePreset(presetId: String) = withContext(Dispatchers.IO) {
+    override suspend fun deletePreset(presetId: String) = withContext(ioDispatcher) {
         audioDeviceDao.deletePreset(presetId)
     }
 
-    override suspend fun deleteDevice(deviceId: String) = withContext(Dispatchers.IO) {
+    override suspend fun deleteDevice(deviceId: String) = withContext(ioDispatcher) {
         audioDeviceDao.deleteDevice(deviceId)
     }
 }

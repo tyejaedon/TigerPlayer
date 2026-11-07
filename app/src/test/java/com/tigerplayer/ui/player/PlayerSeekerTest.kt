@@ -14,6 +14,8 @@ import com.tigerplayer.engine.WaveformEngine
 import com.tigerplayer.service.MediaControllerManager
 import com.tigerplayer.utils.BluetoothDeviceManager
 import com.tigerplayer.ui.coverscreen.populatePositiveWaveformPath
+import com.tigerplayer.ui.coverscreen.calculateWaveformY
+import com.tigerplayer.ui.coverscreen.calculateWaveformYWithEffectiveHeight
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,8 +60,8 @@ class PlayerSeekerTest {
         val points = floatArrayOf(0.2f, 0.5f, 0.8f, 0.4f, 0.9f, 0.3f)
         val width = 1000f
         val wave1Amp = 20f
-        val wave2Amp = wave1Amp * 4f
-        val wave3Amp = wave2Amp * 3f
+        val wave2Amp = wave1Amp * 2f
+        val wave3Amp = wave2Amp * 1.5f
         val baselineY = 100f
         val overlapPx = 4f
 
@@ -185,5 +187,140 @@ class PlayerSeekerTest {
         // Second tap: VORTEX -> ARTWORK (Background Visualizer disabled, clean artist backdrop)
         stateManager.toggleVisualMode()
         assertEquals(PlayerVisualMode.ARTWORK, stateManager.playbackState.value.visualMode)
+    }
+
+    // --- 4. BOUNDARY ANCHOR & ENDPOINT INTERCEPT TESTS ---
+
+    @Test
+    fun `FieryWavySeeker waveform paths anchor to baseline with shift 0 at x 0 for Wave 1, 2, and 3`() {
+        val width = 600f
+        val maxHeight = 60f
+        val baselineY = 50f
+        val overlapPx = 3f
+        val effectiveBaselineY = baselineY + overlapPx
+        val piOver4 = (Math.PI / 4.0).toFloat()
+
+        // Wave 1: Base Sine
+        val y1 = calculateWaveformY(
+            x = 0f,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0.5f,
+            phaseOffset = 0f,
+            isCosine = false
+        )
+        assertEquals("Wave 1 must start at baseline with shift 0", effectiveBaselineY, y1, 0.001f)
+
+        // Wave 2: Sine with PI/4 phase lead
+        val y2 = calculateWaveformY(
+            x = 0f,
+            width = width,
+            maxHeight = maxHeight * 4f,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0.5f,
+            phaseOffset = piOver4,
+            isCosine = false
+        )
+        assertEquals("Wave 2 must start at baseline with shift 0", effectiveBaselineY, y2, 0.001f)
+
+        // Wave 3: Cosine Apex
+        val y3 = calculateWaveformY(
+            x = 0f,
+            width = width,
+            maxHeight = maxHeight * 12f,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0.5f,
+            phaseOffset = 0f,
+            isCosine = true
+        )
+        assertEquals("Wave 3 must start at baseline with shift 0", effectiveBaselineY, y3, 0.001f)
+    }
+
+    @Test
+    fun `FieryWavySeeker waveform paths intercept baseline at x width for Wave 1, 2, and 3`() {
+        val width = 600f
+        val maxHeight = 60f
+        val baselineY = 50f
+        val overlapPx = 3f
+        val effectiveBaselineY = baselineY + overlapPx
+        val piOver4 = (Math.PI / 4.0).toFloat()
+
+        // Wave 1: Endpoint
+        val y1 = calculateWaveformY(
+            x = width,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            phaseOffset = 0f,
+            isCosine = false,
+            waveCycles = 2.0f
+        )
+        assertEquals("Wave 1 must intercept baseline at endpoint", effectiveBaselineY, y1, 0.001f)
+
+        // Wave 2: Endpoint (2.2 waveCycles)
+        val y2 = calculateWaveformY(
+            x = width,
+            width = width,
+            maxHeight = maxHeight * 4f,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            phaseOffset = piOver4,
+            isCosine = false,
+            waveCycles = 2.2f
+        )
+        assertEquals("Wave 2 must intercept baseline at endpoint", effectiveBaselineY, y2, 0.001f)
+
+        // Wave 3: Endpoint (2.4 waveCycles, cosine)
+        val y3 = calculateWaveformY(
+            x = width,
+            width = width,
+            maxHeight = maxHeight * 12f,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 1.0f,
+            phaseOffset = 0f,
+            isCosine = true,
+            waveCycles = 2.4f
+        )
+        assertEquals("Wave 3 must intercept baseline at endpoint", effectiveBaselineY, y3, 0.001f)
+    }
+
+    @Test
+    fun `FieryWavySeeker populated paths anchor to baseline at bounds`() {
+        val path = Path()
+        val fillPath = Path()
+        val width = 800f
+        val maxHeight = 40f
+        val baselineY = 60f
+        val overlapPx = 2f
+        val effectiveBaselineY = baselineY + overlapPx
+
+        populatePositiveWaveformPath(
+            path = path,
+            fillPath = fillPath,
+            points = floatArrayOf(0.3f, 0.7f),
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = 0.8f,
+            phaseOffset = (Math.PI / 4.0).toFloat(),
+            isCosine = true,
+            waveCycles = 2.4f
+        )
+
+        val bounds = RectF()
+        path.asAndroidPath().computeBounds(bounds, true)
+
+        assertEquals("Path left must be 0", 0f, bounds.left, 0.1f)
+        assertEquals("Path right must be width", width, bounds.right, 0.1f)
+        assertEquals("Path bottom must touch baseline", effectiveBaselineY, bounds.bottom, 0.1f)
     }
 }

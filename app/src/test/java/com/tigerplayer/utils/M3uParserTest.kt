@@ -211,4 +211,43 @@ class M3uParserTest {
         val match = M3uParser.resolveTrack("DifferentSong.mp3", null, tracks)
         assertNull(match)
     }
+
+    @Test
+    fun `parse conforms to industry standard with PLAYLIST header, inline attributes, quotes and mixed line endings`() {
+        val standardM3u = "#EXTM3U\r\n" +
+            "#PLAYLIST:Classic Rock Archive\r\n" +
+            "#EXTINF:245 tvg-id=\"rock1\" group-title=\"Rock\",Led Zeppelin - Stairway to Heaven\r\n" +
+            "\"/storage/emulated/0/Music/Led Zeppelin/Stairway to Heaven.mp3\"\r" +
+            "# Unknown comment line that should be safely ignored\r\n" +
+            "#EXTINF:180,Queen - Bohemian Rhapsody\n" +
+            "Music/Queen/Bohemian Rhapsody.mp3\n"
+
+        val playlist = M3uParser.parse(standardM3u, "Fallback Name")
+        assertEquals("Classic Rock Archive", playlist.name)
+        assertEquals(2, playlist.entries.size)
+
+        val entry1 = playlist.entries[0]
+        assertEquals("/storage/emulated/0/Music/Led Zeppelin/Stairway to Heaven.mp3", entry1.pathOrUri)
+        assertEquals(245L, entry1.durationSeconds)
+        assertEquals("Led Zeppelin - Stairway to Heaven", entry1.title)
+
+        val entry2 = playlist.entries[1]
+        assertEquals("Music/Queen/Bohemian Rhapsody.mp3", entry2.pathOrUri)
+        assertEquals(180L, entry2.durationSeconds)
+        assertEquals("Queen - Bohemian Rhapsody", entry2.title)
+    }
+
+    @Test
+    fun `parseStream falls back to ISO-8859-1 gracefully when bytes contain invalid UTF-8 sequences`() {
+        // Construct bytes with an ISO-8859-1 accented character (e.g. 0xE9 for 'é' in René)
+        val isoHeader = "#EXTM3U\n#EXTINF:120,Ren".toByteArray(StandardCharsets.ISO_8859_1)
+        val accentedE = byteArrayOf(0xE9.toByte())
+        val isoRest = " - Song\n/path/song.mp3\n".toByteArray(StandardCharsets.ISO_8859_1)
+        val rawBytes = isoHeader + accentedE + isoRest
+
+        val playlist = M3uParser.parseStream(ByteArrayInputStream(rawBytes), "ISO Fallback")
+        assertEquals(1, playlist.entries.size)
+        assertEquals("/path/song.mp3", playlist.entries[0].pathOrUri)
+        assertEquals("René - Song", playlist.entries[0].title)
+    }
 }

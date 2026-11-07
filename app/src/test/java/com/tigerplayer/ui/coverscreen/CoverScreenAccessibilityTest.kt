@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.coverscreen
 
 import androidx.compose.ui.unit.dp
+import com.tigerplayer.ui.coverscreen.library.formatTrackDuration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -73,6 +74,10 @@ class CoverScreenAccessibilityTest {
             "coverscreen_gesture_swipe_down_close",
             "coverscreen_gesture_long_press_settings",
             "coverscreen_gesture_instructions",
+            "coverscreen_immersive_hint",
+            "coverscreen_action_hide_controls",
+            "coverscreen_action_show_controls",
+            "coverscreen_action_toggle_immersive",
 
             // Playback controls
             "coverscreen_action_previous",

@@ -40,7 +40,25 @@ data class AudioTrack(
     val artworkLookupFailedAt: Long = 0L,
     val artworkLookupAttempts: Int = 0,
     val hasEmbeddedArtwork: Boolean? = null
-)
+) {
+    constructor(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        artworkUri: Uri?
+    ) : this(
+        id = id,
+        title = title,
+        artist = artist,
+        album = album,
+        uri = Uri.EMPTY,
+        artworkUri = artworkUri ?: Uri.EMPTY,
+        durationMs = durationMs,
+        mimeType = "audio/mpeg"
+    )
+}
 
 /**
  * THE PLAYLIST MANIFEST:

@@ -33,7 +33,8 @@ data class ArtistSummary(
     val trackCount: Int,
     val albumCount: Int,
     val genres: String?,
-    val imageUrl: String?
+    val imageUrl: String?,
+    val bio: String?
 )
 
 data class SonicFootprintStats(
@@ -498,6 +499,7 @@ abstract class TigerDao {
             grouped_artists.trackCount AS trackCount,
             grouped_artists.albumCount AS albumCount,
             artist_cache.genres AS genres,
+            artist_cache.bio AS bio,
             (
                 SELECT cached_tracks.artworkUriString
                 FROM cached_tracks
@@ -701,6 +703,15 @@ abstract class TigerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertWaveformCache(waveform: WaveformCacheEntity)
 
+    @Query("SELECT COUNT(*) FROM waveform_cache")
+    abstract suspend fun getWaveformCacheCount(): Int
+
+    @Query("DELETE FROM waveform_cache")
+    abstract suspend fun clearWaveformCache(): Int
+
+    @Query("SELECT COUNT(*) FROM artist_cache")
+    abstract suspend fun getArtistCacheCount(): Int
+
     // --- THE VAULT (Track Caching) ---
 
     @Query("DELETE FROM cached_tracks")
@@ -804,6 +815,9 @@ abstract class TigerDao {
         """
     )
     abstract suspend fun getTracksWithoutLyricsCache(limit: Int): List<CachedTrackEntity>
+
+    @Query("SELECT COUNT(*) FROM lyrics_cache")
+    abstract suspend fun getLyricsCacheCount(): Int
 
     @Query("DELETE FROM lyrics_cache")
     abstract suspend fun clearAllLyrics(): Int

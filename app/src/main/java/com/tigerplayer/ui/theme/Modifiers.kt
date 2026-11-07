@@ -21,7 +21,9 @@ import androidx.compose.ui.unit.dp
 // ------------------------------
 // SAMSUNG-STYLE CLICK DEPTH
 // ------------------------------
-fun Modifier.bounceClick(onClick: () -> Unit) = composed {
+fun Modifier.bounceClick(onClick: () -> Unit): Modifier = bounceClick(onClick = onClick, onLongClick = null)
+
+fun Modifier.bounceClick(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modifier = composed {
     var isPressed by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
@@ -49,6 +51,9 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
                 },
                 onTap = {
                     onClick()
+                },
+                onLongPress = {
+                    onLongClick?.invoke()
                 }
             )
         }
@@ -60,7 +65,7 @@ fun Modifier.bounceClick(onClick: () -> Unit) = composed {
 fun Modifier.glassEffect(shape: Shape) = this.composed {
     val isSystemDark = isSystemInDarkTheme()
     val tint = if (isSystemDark) Color.White else Color.Black
-    
+
     this
         .clip(shape)
         .background(

@@ -42,14 +42,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
-import androidx.palette.graphics.Palette
-import coil.ImageLoader
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.request.SuccessResult
+import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.M3uPathMode
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import com.tigerplayer.ui.player.PlayerViewModel
+import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
@@ -79,17 +79,6 @@ fun PlaylistDetailsScreen(
 
     val scrollState = rememberLazyListState()
     val context = LocalContext.current
-
-    // Generate a consistent "hash" color based on the playlist name for fallbacks
-    val fallbackColors = listOf(
-        Color(0xFFE53935), Color(0xFF8E24AA), Color(0xFF3949AB),
-        Color(0xFF00897B), Color(0xFFF4511E), Color(0xFF546E7A)
-    )
-    val nameHashColor = remember(playlistName) {
-        fallbackColors[kotlin.math.abs(playlistName.hashCode()) % fallbackColors.size]
-    }
-
-    var dominantColor by remember { mutableStateOf(nameHashColor) }
 
     // Export options dialog state
     var showExportDialog by remember { mutableStateOf(false) }
@@ -126,52 +115,52 @@ fun PlaylistDetailsScreen(
 
     // Determine the art to display.
     val displayArt = playlistArtworkUri
-
-    LaunchedEffect(displayArt) {
-        if (displayArt != null) {
-            val loader = ImageLoader(context)
-            val request = ImageRequest.Builder(context).data(displayArt).allowHardware(false).build()
-            val result = (loader.execute(request) as? SuccessResult)?.drawable
-            val bitmap = (result as? BitmapDrawable)?.bitmap
-            bitmap?.let { b ->
-                Palette.from(b).generate { palette ->
-                    val swatch = palette?.vibrantSwatch ?: palette?.dominantSwatch
-                    swatch?.rgb?.let { dominantColor = Color(it) }
-                }
-            }
+    val heroArtwork = remember(displayArt, playlistId) {
+        displayArt?.toString()?.takeIf { it.isNotBlank() } ?: R.drawable.ic_tiger_logo
+    }
+    val artworkAccent = rememberArtworkAccent(
+        imageModel = heroArtwork,
+        fallback = TigerNeonOrange
+    )
+    val ambientBrush = rememberTigerAmbientGradient(artworkAccent, baseTopAlpha = 0.22f)
+    val accentColor = remember(artworkAccent) {
+        val hsl = FloatArray(3)
+        androidx.core.graphics.ColorUtils.colorToHSL(artworkAccent.toArgb(), hsl)
+        if (hsl[2] < 0.5f) {
+            hsl[2] = 0.75f
+            hsl[1] = (hsl[1] + 0.15f).coerceAtMost(1f)
+            Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
         } else {
-            dominantColor = nameHashColor
+            artworkAccent
         }
     }
-
-    val ambientBrush = rememberTigerAmbientGradient(dominantColor, baseTopAlpha = 0.25f)
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { viewModel.updatePlaylistImage(context, playlistId, it) }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // 1. DYNAMIC PARALLAX BACKGROUND
+    Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(ambientBrush)
         ) {
-            if (displayArt != null) {
-                AsyncImage(
-                    model = displayArt,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
-                            translationY = -offset * 0.45f
-                            alpha = 0.4f
-                        }
-                        .blur(64.dp)
-                )
-            }
+            WetPaintingFadeImage(
+                imageModel = heroArtwork,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                fadeBottomPercent = 0.08f,
+                blurRadius = 18f,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                        val scrollOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                        val backgroundTranslationY = (scrollOffset * 0.25f).coerceAtMost(100f)
+                        translationY = -backgroundTranslationY
+                        alpha = 0.52f
+                    }
+            )
         }
 
         LazyColumn(
@@ -185,7 +174,7 @@ fun PlaylistDetailsScreen(
                     playlistId = playlistId,
                     playlistName = playlistName,
                     trackCount = mutableTracks.size,
-                    accentColor = dominantColor,
+                    accentColor = accentColor,
                     artworkUri = displayArt,
                     isEditMode = isEditMode,
                     onChangeCoverClick = { imagePickerLauncher.launch("image/*") },
@@ -363,7 +352,7 @@ fun PlaylistTopBar(
             }
             TextButton(onClick = onEditClick) { Text(text = if (isEditMode) "Done" else "Edit", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = if (isScrolled) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f) else Color.Transparent),
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         modifier = Modifier.then(if (isScrolled) Modifier.glassEffect(RectangleShape) else Modifier)
     )
 }
@@ -375,11 +364,20 @@ fun PlaylistParallaxHeader(
     accentColor: Color, artworkUri: String?, isEditMode: Boolean,
     onChangeCoverClick: () -> Unit, onPlayAll: () -> Unit
 ) {
-    val offset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 1000
+    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 700
+    val heroAlpha = (1f - (rawOffset / 600f)).coerceIn(0f, 1f)
+    val heroScale = (1f - (rawOffset / 2000f)).coerceIn(0.88f, 1f)
+    val heroTranslationY = (rawOffset * 0.35f).coerceAtMost(220f)
 
     Box(
         modifier = Modifier.fillMaxWidth().height(440.dp).padding(top = 40.dp)
-            .graphicsLayer { translationY = offset * 0.4f; alpha = (1f - (offset / 700f)).coerceIn(0f, 1f) },
+            .graphicsLayer {
+                translationY = heroTranslationY
+                alpha = heroAlpha
+                scaleX = heroScale
+                scaleY = heroScale
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

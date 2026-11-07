@@ -28,6 +28,11 @@ enum class DefaultPlayerView {
     SONIC_PRISM
 }
 
+enum class VisualizerPaletteMode {
+    ALBUM_ART,
+    DEFAULT_NEON
+}
+
 enum class SkipShortAudio {
     OFF,
     BELOW_30_SECONDS,
@@ -95,7 +100,10 @@ data class TigerSettingsState(
     val autoApplyDeviceEq: Boolean = true,
     val autoDetectAutoEq: Boolean = true,
     val preferredTargetCurve: String = "Harman Over-Ear 2018",
-    val autoDownloadLyrics: Boolean = false
+    val autoDownloadLyrics: Boolean = false,
+    val visualizerSensitivity: Float = 1f,
+    val visualizerPaletteMode: VisualizerPaletteMode = VisualizerPaletteMode.ALBUM_ART,
+    val waveformSensitivity: Float = 1f
 )
 
 @Singleton
@@ -142,7 +150,10 @@ class SettingsDataStore @Inject constructor(
             autoApplyDeviceEq = prefs[AUTO_APPLY_DEVICE_EQ] ?: true,
             autoDetectAutoEq = prefs[AUTO_DETECT_AUTOEQ] ?: true,
             preferredTargetCurve = prefs[PREFERRED_TARGET_CURVE] ?: "Harman Over-Ear 2018",
-            autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false
+            autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false,
+            visualizerSensitivity = (prefs[VISUALIZER_SENSITIVITY] ?: 1f).coerceIn(0.5f, 2.0f),
+            visualizerPaletteMode = enumOrDefault(prefs[VISUALIZER_PALETTE_MODE], VisualizerPaletteMode.ALBUM_ART),
+            waveformSensitivity = (prefs[WAVEFORM_SENSITIVITY] ?: 1f).coerceIn(0.5f, 2.0f)
         )
     }
 
@@ -262,6 +273,18 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[AUTO_DOWNLOAD_LYRICS] = enabled }
     }
 
+    suspend fun setVisualizerSensitivity(sensitivity: Float) {
+        dataStore.edit { it[VISUALIZER_SENSITIVITY] = sensitivity.coerceIn(0.5f, 2.0f) }
+    }
+
+    suspend fun setVisualizerPaletteMode(mode: VisualizerPaletteMode) {
+        dataStore.edit { it[VISUALIZER_PALETTE_MODE] = mode.name }
+    }
+
+    suspend fun setWaveformSensitivity(sensitivity: Float) {
+        dataStore.edit { it[WAVEFORM_SENSITIVITY] = sensitivity.coerceIn(0.5f, 2.0f) }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -301,5 +324,8 @@ class SettingsDataStore @Inject constructor(
         val AUTO_DETECT_AUTOEQ = booleanPreferencesKey("auto_detect_autoeq")
         val PREFERRED_TARGET_CURVE = stringPreferencesKey("preferred_target_curve")
         val AUTO_DOWNLOAD_LYRICS = booleanPreferencesKey("auto_download_lyrics")
+        val VISUALIZER_SENSITIVITY = floatPreferencesKey("visualizer_sensitivity")
+        val VISUALIZER_PALETTE_MODE = stringPreferencesKey("visualizer_palette_mode")
+        val WAVEFORM_SENSITIVITY = floatPreferencesKey("waveform_sensitivity")
     }
 }
