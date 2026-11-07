@@ -130,12 +130,12 @@ fun CoverMicroWaveform(
         val animatedPhase by transition.animateFloat(
             initialValue = 0f,
             targetValue = (Math.PI * 2.0).toFloat(),
-            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 420, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 820, easing = LinearEasing)),
             label = "CoverWavePhase"
         )
         val energyState by animateFloatAsState(
             targetValue = (0.2f + energy * 0.9f).coerceIn(0.2f, 1.2f),
-            animationSpec = tween(90),
+            animationSpec = tween(120),
             label = "CoverWaveEnergy"
         )
         val fluxState by animateFloatAsState(
@@ -254,7 +254,7 @@ fun CoverMicroWaveform(
                 )
 
                 // 1. Populate Wave 3: 1.5x larger than Wave 2 (3x Wave 1) - crowning cyan apex tier
-                // Cosine wave with 1.4x frequency multiplier and 2.5 cycles: dances across crests
+                // Cosine wave with 1.0x frequency multiplier and 2.0 cycles: serene fluid ribbon
                 populatePositiveWaveformPath(
                     path = wavePath3,
                     fillPath = fillPath3,
@@ -266,16 +266,17 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = 0f,
                     isCosine = true,
-                    frequencyMultiplier = 1.35f,
-                    waveCycles = 6.4f,
+                    frequencyMultiplier = 1.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
-                    flux = if (shouldAnimate) animatedFlux else 0f,
-                    turbulence = if (shouldAnimate) 0.35f else 0f
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // 2. Populate Wave 2: 2x larger than Wave 1 - intermediate middle tier (PI / 4 phase lead)
-                // Distinct 1.15x frequency ratio and counter-harmonic undulation
+                // Harmonized 1.0x frequency and 2.0 cycles with 45-degree phase offset
                 populatePositiveWaveformPath(
                     path = wavePath2,
                     fillPath = fillPath2,
@@ -287,16 +288,17 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = piOver4,
                     isCosine = false,
-                    frequencyMultiplier = 1.15f,
-                    waveCycles = 6.2f,
+                    frequencyMultiplier = 1.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
-                    flux = if (shouldAnimate) animatedFlux else 0f,
-                    turbulence = if (shouldAnimate) 0.25f else 0f
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // 3. Populate Wave 1: Base amplitude - foundational red foreground tier
-                // Drives the punchy bass anchor at standard 1.0x frequency
+                // Drives the punchy bass anchor at standard 1.0x frequency and 2.0 cycles
                 populatePositiveWaveformPath(
                     path = wavePath1,
                     fillPath = fillPath1,
@@ -309,11 +311,12 @@ fun CoverMicroWaveform(
                     phaseOffset = 0f,
                     isCosine = false,
                     frequencyMultiplier = 1.0f,
-                    waveCycles = 6.0f,
+                    waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
-                    flux = if (shouldAnimate) animatedFlux else 0f,
-                    turbulence = if (shouldAnimate) 0.20f else 0f
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0f
                 )
 
                 // Active Played Zone (0 to progressX horizontally, unconfined vertically by parent bounds)
@@ -326,15 +329,11 @@ fun CoverMicroWaveform(
                         cornerRadius = CornerRadius(trackRadius, trackRadius)
                     )
 
-                    // Audio-reactive dynamic flare factors
-                    val kickAlphaMod = if (shouldAnimate) (bass * 0.18f + animatedFlux * 0.12f).coerceIn(0f, 0.25f) else 0f
-                    val kickStrokeMod = if (shouldAnimate) (1f + bass * 0.22f + animatedFlux * 0.18f).coerceIn(1f, 1.45f) else 1f
-
                     // Optimal transparency for 2.5D volumetric glassmorphic depth
-                    val activeFillAlphaTop = (0.38f + kickAlphaMod).coerceIn(0.2f, 0.7f)
+                    val activeFillAlphaTop = 0.38f
                     val activeFillAlphaBottom = 0.12f
-                    val activeGlowAlpha = (0.55f + kickAlphaMod).coerceIn(0.3f, 0.85f)
-                    val activeStrokeAlpha = 0.95f
+                    val activeGlowAlpha = 0.55f
+                    val activeStrokeAlpha = 0.92f
 
                     // 2.5D depth shadow offsets and occlusion tones
                     val shadowOffset3 = 2.dp.toPx()
@@ -370,18 +369,18 @@ fun CoverMicroWaveform(
                     // Wave 3 pronounced glitter glow: wide atmospheric bloom + inner neon glow + crisp stroke + white glitter core
                     drawPath(
                         path = wavePath3,
-                        color = neonPalette.tertiary.copy(alpha = (0.28f + kickAlphaMod).coerceIn(0f, 0.6f)),
-                        style = Stroke(width = 7.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        color = neonPalette.tertiary.copy(alpha = 0.28f),
+                        style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath3,
                         color = neonPalette.tertiary.copy(alpha = activeGlowAlpha),
-                        style = Stroke(width = 3.5.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath3,
                         color = neonPalette.tertiary.copy(alpha = activeStrokeAlpha),
-                        style = Stroke(width = 1.5.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath3,
@@ -415,13 +414,13 @@ fun CoverMicroWaveform(
                     // Wave 2 balanced neon glow halo
                     drawPath(
                         path = wavePath2,
-                        color = neonPalette.secondary.copy(alpha = (activeGlowAlpha * 0.75f).coerceIn(0f, 0.8f)),
-                        style = Stroke(width = 4.5.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        color = neonPalette.secondary.copy(alpha = activeGlowAlpha * 0.75f),
+                        style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath2,
                         color = neonPalette.secondary.copy(alpha = activeStrokeAlpha * 0.90f),
-                        style = Stroke(width = 1.8.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
                     )
 
                     // Wave 1 (Sine Wave): Primary Neon Color (Base amplitude - vibrant red foundation glow & solid)
@@ -450,18 +449,18 @@ fun CoverMicroWaveform(
                     // Wave 1 pronounced glitter glow: wide atmospheric bloom + inner neon glow + crisp stroke + white glitter core
                     drawPath(
                         path = wavePath1,
-                        color = neonPalette.primary.copy(alpha = (0.32f + kickAlphaMod).coerceIn(0f, 0.7f)),
-                        style = Stroke(width = 8.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        color = neonPalette.primary.copy(alpha = 0.32f),
+                        style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath1,
                         color = neonPalette.primary.copy(alpha = activeGlowAlpha),
-                        style = Stroke(width = 4.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath1,
                         color = neonPalette.primary.copy(alpha = activeStrokeAlpha),
-                        style = Stroke(width = 2.dp.toPx() * kickStrokeMod, cap = StrokeCap.Round)
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                     )
                     drawPath(
                         path = wavePath1,
@@ -641,7 +640,7 @@ fun calculateWaveformYWithEffectiveHeight(
     isCosine: Boolean = false,
     frequencyMultiplier: Float = 1f,
     waveCycles: Float = 2.0f,
-    turbulence: Float = 0.28f,
+    turbulence: Float = 0f,
     edgeTaper: Float = 0.12f,
     points: FloatArray? = null
 ): Float {
@@ -649,7 +648,7 @@ fun calculateWaveformYWithEffectiveHeight(
         return effectiveBaselineY
     }
     val normalizedX = (x / width).coerceIn(0f, 1f)
-    if (normalizedX <= 0f || normalizedX >= 1f) {
+    if (edgeTaper > 0f && (normalizedX <= 0f || normalizedX >= 1f)) {
         return effectiveBaselineY
     }
 
@@ -658,8 +657,7 @@ fun calculateWaveformYWithEffectiveHeight(
     val rawTrig = if (isCosine) cos(angle.toDouble()).toFloat() else sin(angle.toDouble()).toFloat()
 
     val baseOscillation = 0.5f * (1f + rawTrig)
-    // Multi-harmonic overtone ripples for lively, energetic, organic liquid vibration:
-    // Scaled by baseOscillation so that troughs naturally touch the baseline smoothly
+    // Multi-harmonic overtone ripples for lively, organic vibration (active only when turbulence > 0)
     val harmonicRipple = if (turbulence > 0f) {
         val ripple2 = sin((angle * 2.0f + safePhase * 0.7f).toDouble()).toFloat() * (0.18f * turbulence)
         val ripple3 = cos((angle * 3.0f - safePhase * 1.1f).toDouble()).toFloat() * (0.09f * turbulence)
@@ -668,42 +666,36 @@ fun calculateWaveformYWithEffectiveHeight(
         0f
     }
 
-    // Data-driven phase warp from WaveformEngine & WaveformCaptureProcessor for organic wavy motion
-    val sampleAmp = if (points != null && points.isNotEmpty()) {
-        val ptIdx = (normalizedX * (points.size - 1)).toInt().coerceIn(0, points.size - 1)
-        points[ptIdx].coerceIn(0f, 1f)
-    } else {
-        0.5f
-    }
-    val dataPhaseWarp = sampleAmp * 0.35f
-    val adjustedAngle = angle + dataPhaseWarp
-    val adjustedRawTrig = if (isCosine) cos(adjustedAngle.toDouble()).toFloat() else sin(adjustedAngle.toDouble()).toFloat()
-    val adjustedOscillation = (0.5f * (1f + adjustedRawTrig) + harmonicRipple).coerceAtLeast(0f)
+    val smoothOscillation = (baseOscillation + harmonicRipple).coerceAtLeast(0f)
 
     // Smooth boundary envelope W(x): continuous raised-cosine tapering that anchors to the baseline
-    // at x = 0 (shift 0) and x = width (intercepting effectiveBaselineY), derivative-continuous into the body
-    val safeEdgeTaper = edgeTaper.coerceIn(0.01f, 0.5f)
-    val envelope = when {
-        normalizedX < safeEdgeTaper -> {
-            val t = normalizedX / safeEdgeTaper
-            0.5f * (1f - cos(Math.PI * t.toDouble()).toFloat())
+    // at x = 0 (shift 0) and x = width (intercepting effectiveBaselineY), applied only when edgeTaper > 0f
+    val envelope = if (edgeTaper > 0f) {
+        val safeEdgeTaper = edgeTaper.coerceIn(0.01f, 0.5f)
+        when {
+            normalizedX < safeEdgeTaper -> {
+                val t = normalizedX / safeEdgeTaper
+                0.5f * (1f - cos(Math.PI * t.toDouble()).toFloat())
+            }
+            normalizedX > 1f - safeEdgeTaper -> {
+                val t = (1f - normalizedX) / safeEdgeTaper
+                0.5f * (1f - cos(Math.PI * t.toDouble()).toFloat())
+            }
+            else -> 1f
         }
-        normalizedX > 1f - safeEdgeTaper -> {
-            val t = (1f - normalizedX) / safeEdgeTaper
-            0.5f * (1f - cos(Math.PI * t.toDouble()).toFloat())
-        }
-        else -> 1f
+    } else {
+        1f
     }
 
-    val peakHeight = adjustedOscillation * effectiveHeight * envelope
+    val peakHeight = smoothOscillation * effectiveHeight * envelope
     return effectiveBaselineY - peakHeight
 }
 
 /**
  * Calculates the waveform Y coordinate at any horizontal pixel position [x].
  *
- * Guarantees zero shift at the origin (x = 0) and baseline intercept at the endpoint (x = width)
- * via a smooth raised-cosine boundary envelope W(x).
+ * Supports smooth raised-cosine boundary envelope W(x) when [edgeTaper] > 0,
+ * and pure continuous unwindowed sinusoidal curvature when [edgeTaper] <= 0.
  */
 fun calculateWaveformY(
     x: Float,
@@ -719,7 +711,7 @@ fun calculateWaveformY(
     bass: Float = 0f,
     energy: Float = 1f,
     flux: Float = 0f,
-    turbulence: Float = 0.28f,
+    turbulence: Float = 0f,
     edgeTaper: Float = 0.12f,
     points: FloatArray? = null
 ): Float {
@@ -733,9 +725,9 @@ fun calculateWaveformY(
     val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
     val safeFlux = if (flux.isFinite()) flux.coerceIn(0f, 1f) else 0f
 
-    val transientKick = (safeBass * safeBass * 0.30f) + (safeFlux * 0.25f)
+    val transientKick = (safeBass * safeBass * 0.10f) + (safeFlux * 0.08f)
     val baseEnergyFactor = (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
-    val energyModulation = (0.92f + 0.08f * baseEnergyFactor + transientKick).coerceIn(0.5f, 1.15f)
+    val energyModulation = 0.90f + 0.10f * baseEnergyFactor + transientKick
     val effectiveHeight = maxHeight * energyModulation
 
     return calculateWaveformYWithEffectiveHeight(
@@ -770,8 +762,8 @@ fun populatePositiveWaveformPath(
     bass: Float = 0f,
     energy: Float = 1f,
     flux: Float = 0f,
-    turbulence: Float = 0.28f,
-    edgeTaper: Float = 0.12f
+    turbulence: Float = 0f,
+    edgeTaper: Float = 0f
 ): Path {
     path.reset()
     fillPath?.reset()
@@ -785,10 +777,9 @@ fun populatePositiveWaveformPath(
     val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
     val safeFlux = if (flux.isFinite()) flux.coerceIn(0f, 1f) else 0f
 
-    // Enhanced audio energy breathing with snappy transient attack kicks and DspEngine telemetry:
-    val transientKick = (safeBass * safeBass * 0.30f) + (safeFlux * 0.25f)
+    val transientKick = (safeBass * safeBass * 0.10f) + (safeFlux * 0.08f)
     val baseEnergyFactor = (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
-    val energyModulation = (0.92f + 0.08f * baseEnergyFactor + transientKick).coerceIn(0.5f, 1.15f)
+    val energyModulation = 0.90f + 0.10f * baseEnergyFactor + transientKick
     val effectiveHeight = maxHeight * energyModulation
 
     val sampleCount = max(64, points.size)
