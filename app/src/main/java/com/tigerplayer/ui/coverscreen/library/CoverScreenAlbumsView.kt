@@ -116,6 +116,12 @@ fun CoverScreenAlbumsView(
     var revealedTrackId by remember { mutableStateOf<String?>(null) }
     var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
+    val imageModel = remember(album.artworkUrl, tracks) {
+        album.artworkUrl?.takeIf { it.isNotBlank() }
+            ?: tracks.firstOrNull()?.artworkUri?.toString()?.takeIf { it.isNotBlank() }
+            ?: R.drawable.ic_tiger_logo
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -132,72 +138,25 @@ fun CoverScreenAlbumsView(
                 )
             }
     ) {
-        //BACKGROUND ARTWORK LAYER
+        // Fullscreen Ambient Background Artwork Layer
+        WetPaintingFadeImage(
+            imageModel = imageModel,
+            contentDescription = stringResource(
+                R.string.coverscreen_artwork_album_description,
+                album.name
+            ),
+            fadeBottomPercent = 0.08f,
+            blurRadius = 4f,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 16.dp),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(136.dp)
-                    .shadow(
-                        elevation = 20.dp,
-                        shape = RoundedCornerShape(26.dp),
-                        spotColor = MaterialTheme.aardBlue.copy(alpha = 0.45f),
-                        ambientColor = Color.Black
-                    )
-                    .background(
-                        MaterialTheme.aardBlue.copy(alpha = 0.20f),
-                        RoundedCornerShape(26.dp)
-                    )
-            )
+                .background(Color.Black.copy(alpha = 0.18f))
+        )
 
-            Box(
-                modifier = Modifier.size(144.dp)
-            ) {
-                WetPaintingFadeImage(
-                    imageModel = album.artworkUrl.takeIf { !it.isNullOrBlank() } ?: R.drawable.ic_tiger_logo,
-                    contentDescription = stringResource(
-                        R.string.coverscreen_artwork_album_description,
-                        album.name
-                    ),
-                    fadeBottomPercent = 0.05f,
-                    blurRadius = 0f,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(22.dp))
-                        .border(
-                            width = 1.2.dp,
-                            brush = Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.45f),
-                                    MaterialTheme.aardBlue.copy(alpha = 0.25f),
-                                    Color.White.copy(alpha = 0.10f)
-                                )
-                            ),
-                            shape = RoundedCornerShape(22.dp)
-                        )
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.22f),
-                                    Color.White.copy(alpha = 0.04f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-            }
-        }
         Column(modifier = Modifier.fillMaxSize()) {
             // 1. TOP BAR NAVIGATION
             val backToAlbumsText = stringResource(R.string.coverscreen_action_back_to_albums)
@@ -253,6 +212,88 @@ fun CoverScreenAlbumsView(
                 contentPadding = PaddingValues(bottom = 90.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+
+                // 3D FLOATING HERO ARTWORK
+                item(key = "album_hero_artwork") {
+                    val firstVisibleIndex = scrollState.firstVisibleItemIndex
+                    val rawOffset = if (firstVisibleIndex == 0) scrollState.firstVisibleItemScrollOffset else 400
+                    val heroAlpha = (1f - (rawOffset / 400f)).coerceIn(0f, 1f)
+                    val heroScale = (1f - (rawOffset / 1200f)).coerceIn(0.85f, 1f)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 6.dp)
+                            .graphicsLayer {
+                                alpha = heroAlpha
+                                scaleX = heroScale
+                                scaleY = heroScale
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Ambient Backdrop Glow
+                        Box(
+                            modifier = Modifier
+                                .size(136.dp)
+                                .shadow(
+                                    elevation = 20.dp,
+                                    shape = RoundedCornerShape(26.dp),
+                                    spotColor = MaterialTheme.aardBlue.copy(alpha = 0.45f),
+                                    ambientColor = Color.Black
+                                )
+                                .background(
+                                    MaterialTheme.aardBlue.copy(alpha = 0.20f),
+                                    RoundedCornerShape(26.dp)
+                                )
+                        )
+
+                        // 3D Framed Glass Cover
+                        Box(
+                            modifier = Modifier.size(144.dp)
+                        ) {
+                            WetPaintingFadeImage(
+                                imageModel = imageModel,
+                                contentDescription = stringResource(
+                                    R.string.coverscreen_artwork_album_description,
+                                    album.name
+                                ),
+                                fadeBottomPercent = 0.05f,
+                                blurRadius = 0f,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .border(
+                                        width = 1.2.dp,
+                                        brush = Brush.verticalGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.45f),
+                                                MaterialTheme.aardBlue.copy(alpha = 0.25f),
+                                                Color.White.copy(alpha = 0.10f)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(22.dp)
+                                    )
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            )
+
+                            // Glass Specular Sheen
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.22f),
+                                                Color.White.copy(alpha = 0.04f),
+                                                Color.Transparent
+                                            )
+                                        )
+                                    )
+                            )
+                        }
+                    }
+                }
 
                 // VANGUARD DOSSIER CARD (Album metadata)
                 item(key = "album_dossier") {
