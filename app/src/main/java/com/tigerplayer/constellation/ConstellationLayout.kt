@@ -73,11 +73,11 @@ class OrbitalLayoutEngine @Inject constructor() {
         ----------------------------------- */
         val artists = graph.nodes.filter { it.type == NodeType.ARTIST }
         val goldenAngle = PI * (3.0 - sqrt(5.0))
-        val baseRadius = 680f // Reeled-in galaxy scale for dense, legible rendering
+        val baseRadius = 950f // Expanded physical galaxy scale for clear node separation
 
         artists.forEachIndexed { i, artist ->
             val spiralFactor = i.toFloat() * 0.45f
-            val radius = baseRadius * sqrt(i + 1f) * 0.75f + random.nextFloat() * 140f
+            val radius = baseRadius * sqrt(i + 1f) * 0.65f + random.nextFloat() * 160f
             val angle = (i * goldenAngle + spiralFactor).toFloat()
             val color = palette.random(random)
             val eccentricity = 0.08f + random.nextFloat() * 0.22f
@@ -122,7 +122,7 @@ class OrbitalLayoutEngine @Inject constructor() {
             val orbitStep = (2 * PI) / group.size.coerceAtLeast(1)
 
             group.forEachIndexed { i, album ->
-                val radius = 180f + (i * 80f) + (random.nextFloat() * 40f)
+                val radius = 260f + (i * 110f) + (random.nextFloat() * 50f)
                 val eccentricity = 0.10f + random.nextFloat() * 0.20f
                 val phaseOffset = (i * 0.5f + random.nextFloat() * 0.5f).toFloat()
 
@@ -163,7 +163,7 @@ class OrbitalLayoutEngine @Inject constructor() {
             val step = (2 * PI) / group.size.coerceAtLeast(1)
 
             group.forEachIndexed { i, track ->
-                val radius = 70f + (i * 30f) + random.nextFloat() * 20f
+                val radius = 110f + (i * 45f) + random.nextFloat() * 25f
                 val eccentricity = 0.05f + random.nextFloat() * 0.15f
                 val phaseOffset = (random.nextFloat() * 2 * PI).toFloat()
 
