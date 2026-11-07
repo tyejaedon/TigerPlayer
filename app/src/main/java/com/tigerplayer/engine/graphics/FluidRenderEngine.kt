@@ -78,6 +78,7 @@ class FluidRenderer @Inject constructor(
     private val currentEnergy = AtomicReference<List<Float>>(List(6) { 0f })
     private val currentNodes = AtomicReference<List<NodeField>>(emptyList())
     private val currentTimeline = AtomicReference(Pair(0f, 0f))
+    private val customPalette = AtomicReference<List<FloatArray>?>(null)
 
     // Simulation ping-pong and FBO resources
     private var velocityRes: PingPongBuffer? = null
@@ -120,6 +121,8 @@ class FluidRenderer @Inject constructor(
     fun updateNodeField(nodes: List<NodeField>) { currentNodes.set(nodes) }
     /** Updates timeline progress and amplitude metrics. */
     fun updateTimelineEnergy(progress: Float, amp: Float) { currentTimeline.set(Pair(progress, amp)) }
+    /** Updates custom RGB palette colors extracted from album artwork or themes. */
+    fun updatePaletteColors(colors: List<FloatArray>?) { customPalette.set(colors) }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         val glContextHash = gl.hashCode()
@@ -227,23 +230,28 @@ class FluidRenderer @Inject constructor(
         val dynamicRadius = (FluidConfig.BASS_SPLAT_RADIUS_BASE + bass * FluidConfig.BASS_SPLAT_RADIUS_SCALE).coerceIn(0.20f, 0.55f)
         val clampedPower = (bass * FluidConfig.BASS_SPLAT_POWER_SCALE).coerceIn(1.5f, 14.0f)
 
+        val palette = customPalette.get()
+        val c1 = palette?.getOrNull(0) ?: floatArrayOf(0.8f, 0.3f, 0.1f)
+        val c2 = palette?.getOrNull(1) ?: floatArrayOf(0.6f, 0.15f, 0.9f)
+        val c3 = palette?.getOrNull(2) ?: floatArrayOf(0.1f, 0.7f, 0.8f)
+
         if (bass > 0.02f || mid > 0.02f || treble > 0.02f) {
-            // 1. Center-Lower Bass Core (Warm vibrant orange/red)
+            // 1. Center-Lower Bass Core
             val bassX = 0.5f + (kotlin.math.cos(orbitalAngleA.toDouble()) * 0.12).toFloat()
             val bassY = 0.5f + (kotlin.math.sin(orbitalAngleA.toDouble()) * 0.12).toFloat()
-            applySplat(bassX, bassY, dynamicRadius, floatArrayOf(clampedPower * 0.8f, clampedPower * 0.3f, clampedPower * 0.1f), true)
+            applySplat(bassX, bassY, dynamicRadius, floatArrayOf(c1[0] * clampedPower, c1[1] * clampedPower, c1[2] * clampedPower), true)
 
-            // 2. Mid Frequency Side Splat (Neon purple / magenta)
+            // 2. Mid Frequency Side Splat
             val midX = 0.5f + (kotlin.math.cos(orbitalAngleB.toDouble()) * 0.28).toFloat()
             val midY = 0.5f + (kotlin.math.sin(orbitalAngleB.toDouble()) * 0.28).toFloat()
-            val midPower = (mid * 10f).coerceIn(0.8f, 8.0f)
-            applySplat(midX, midY, dynamicRadius * 0.85f, floatArrayOf(midPower * 0.6f, midPower * 0.15f, midPower * 0.9f), true)
+            val midPower = (mid * 8f).coerceIn(0.8f, 7.0f)
+            applySplat(midX, midY, dynamicRadius * 0.85f, floatArrayOf(c2[0] * midPower, c2[1] * midPower, c2[2] * midPower), true)
 
-            // 3. Treble Edge Splat (Electric Cyan / Gold)
+            // 3. Treble Edge Splat
             val trebleX = 0.5f + (kotlin.math.cos(orbitalAngleC.toDouble()) * 0.35).toFloat()
             val trebleY = 0.5f + (kotlin.math.sin(orbitalAngleC.toDouble()) * 0.35).toFloat()
-            val treblePower = (treble * 8f).coerceIn(0.6f, 6.0f)
-            applySplat(trebleX, trebleY, dynamicRadius * 0.7f, floatArrayOf(treblePower * 0.1f, treblePower * 0.7f, treblePower * 0.8f), true)
+            val treblePower = (treble * 6f).coerceIn(0.6f, 5.0f)
+            applySplat(trebleX, trebleY, dynamicRadius * 0.7f, floatArrayOf(c3[0] * treblePower, c3[1] * treblePower, c3[2] * treblePower), true)
 
             // Inject rotational velocity swirl spread across viewport
             val swirlForce = FluidConfig.SWIRL_FORCE_BASE + (mid * FluidConfig.SWIRL_FORCE_SCALE)
@@ -257,8 +265,8 @@ class FluidRenderer @Inject constructor(
             val ambientRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE * (1.2f + ambientCycle * 0.4f)
             val ambientPower = 1.2f + ambientCycle * 1.5f
 
-            applySplat(ambientX, ambientY, ambientRadius, floatArrayOf(ambientPower * 0.5f, ambientPower * 0.2f, ambientPower * 0.7f), true)
-            applySplat(1.0f - ambientX, 1.0f - ambientY, ambientRadius * 0.9f, floatArrayOf(ambientPower * 0.7f, ambientPower * 0.4f, ambientPower * 0.1f), true)
+            applySplat(ambientX, ambientY, ambientRadius, floatArrayOf(c1[0] * ambientPower, c1[1] * ambientPower, c1[2] * ambientPower), true)
+            applySplat(1.0f - ambientX, 1.0f - ambientY, ambientRadius * 0.9f, floatArrayOf(c2[0] * ambientPower, c2[1] * ambientPower, c2[2] * ambientPower), true)
             applySplat(ambientX, ambientY, ambientRadius * 1.3f, floatArrayOf(2.5f, -2.5f, 0f), false)
         }
         GLES30.glBindVertexArray(0)

@@ -204,6 +204,12 @@ fun FullPlayerScreen(
                         dynamicTextColor = resolvedText
                         dynamicAccentColor = resolvedAccent
                         viewModel.updateTrackColor(resolvedAccent)
+
+                        val cVibrant = palette?.vibrantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                        val cDominant = palette?.dominantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                        val cMuted = palette?.mutedSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                        val paletteColors = listOfNotNull(cVibrant, cDominant, cMuted).ifEmpty { null }
+                        viewModel.fluidRenderer.updatePaletteColors(paletteColors)
                     }
                 }
             })
