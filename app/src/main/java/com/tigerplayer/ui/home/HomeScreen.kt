@@ -1,6 +1,7 @@
 package com.tigerplayer.ui.home
 
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresExtension
 import androidx.compose.animation.*
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -106,6 +108,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val homeState by viewModel.homeUiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val artistDetails by viewModel.artistDetails.collectAsStateWithLifecycle()
 
     var isStatsExpanded by remember { mutableStateOf(false) }
@@ -116,6 +119,8 @@ fun HomeScreen(
     var showSonicFootprint by remember { mutableStateOf(false) }
     var showAudioDevicesHub by remember { mutableStateOf(false) }
     var showStudioEqualizer by remember { mutableStateOf(false) }
+    var showSpatialNexus by remember { mutableStateOf(false) }
+    var showAcousticSpace by remember { mutableStateOf(false) }
     var searchTrackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
     val sonicFootprintOpenRequest by viewModel.sonicFootprintOpenRequest.collectAsStateWithLifecycle()
 
@@ -126,8 +131,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(showConstellation, showSonicFootprint, showStudioEqualizer) {
-        onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint || showStudioEqualizer)
+    LaunchedEffect(showConstellation, showSonicFootprint, showStudioEqualizer, showSpatialNexus, showAcousticSpace) {
+        onBottomNavigationVisibilityChanged(showConstellation || showSonicFootprint || showStudioEqualizer || showSpatialNexus || showAcousticSpace)
     }
 
     DisposableEffect(Unit) {
@@ -150,8 +155,10 @@ fun HomeScreen(
         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub || showStudioEqualizer) {
+    BackHandler(enabled = isStatsExpanded || isSearchActive || showConstellation || showSonicFootprint || showAudioDevicesHub || showStudioEqualizer || showSpatialNexus || showAcousticSpace) {
         if (showStudioEqualizer) showStudioEqualizer = false
+        else if (showSpatialNexus) showSpatialNexus = false
+        else if (showAcousticSpace) showAcousticSpace = false
         else if (showAudioDevicesHub) showAudioDevicesHub = false
         else if (showSonicFootprint) showSonicFootprint = false
         else if (showConstellation) showConstellation = false
@@ -257,39 +264,75 @@ fun HomeScreen(
 
                 item {
                     SectionTitle("THE NEXUS")
-                    Row(
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        NexusGatewayCard(
-                            modifier = Modifier.weight(1f),
-                            title = "FOOTPRINT",
-                            subtitle = "Listening DNA",
-                            color = SonicCyan,
-                            icon = Icons.Rounded.Timeline,
-                            onClick = { showSonicFootprint = true }
-                        )
-                        NexusGatewayCard(
-                            modifier = Modifier.weight(1f),
-                            title = "COSMOS",
-                            subtitle = "Neural Map",
-                            color = NeuralPurple,
-                            icon = Icons.Rounded.GraphicEq,
-                            onClick = { showConstellation = true }
-                        )
-                        NexusGatewayCard(
-                            modifier = Modifier.weight(1f),
-                            title = "EQUALIZER",
-                            subtitle = "PEQ & AutoEq",
-                            color = TigerNeonOrange,
-                            icon = Icons.Rounded.Tune,
-                            onClick = {
-                                if (onNavigateToEqualizer != null) onNavigateToEqualizer()
-                                else showStudioEqualizer = true
-                            }
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "FOOTPRINT",
+                                subtitle = "Listening DNA",
+                                color = SonicCyan,
+                                icon = Icons.Rounded.Timeline,
+                                onClick = { showSonicFootprint = true }
+                            )
+
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "COSMOS",
+                                subtitle = "Neural Map",
+                                color = NeuralPurple,
+                                icon = Icons.Rounded.GraphicEq,
+                                onClick = { showConstellation = true }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "EQUALIZER",
+                                subtitle = "PEQ & AutoEq",
+                                color = TigerNeonOrange,
+                                icon = Icons.Rounded.Tune,
+                                onClick = {
+                                    if (onNavigateToEqualizer != null) onNavigateToEqualizer()
+                                    else showStudioEqualizer = true
+                                }
+                            )
+
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "SPATIAL NEXUS",
+                                subtitle = "Audio Positioning",
+                                color = AardBlue,
+                                icon = Icons.Rounded.GraphicEq,
+                                onClick = { showSpatialNexus = true }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NexusGatewayCard(
+                                modifier = Modifier.weight(1f),
+                                title = "ACOUSTIC SPACE",
+                                subtitle = "Reverb & Room",
+                                color = SpotifyGreen,
+                                icon = Icons.Default.AutoFixHigh,
+                                onClick = { showAcousticSpace = true }
+                            )
+                        }
                     }
                 }
 
@@ -422,6 +465,26 @@ fun HomeScreen(
                 onClose = { showStudioEqualizer = false }
             )
         }
+
+        AnimatedVisibility(
+            visible = showSpatialNexus,
+            enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(400)),
+            exit = fadeOut(tween(250)) + slideOutVertically(targetOffsetY = { it / 4 }, animationSpec = tween(250))
+        ) {
+            com.tigerplayer.ui.equalizer.SpatialNexusView(
+                onClose = { showSpatialNexus = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showAcousticSpace,
+            enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(400)),
+            exit = fadeOut(tween(250)) + slideOutVertically(targetOffsetY = { it / 4 }, animationSpec = tween(250))
+        ) {
+            com.tigerplayer.ui.equalizer.AcousticSpaceView(
+                onClose = { showAcousticSpace = false }
+            )
+        }
     }
 
     searchTrackForOptions?.let { selectedTrack ->
@@ -445,6 +508,20 @@ fun HomeScreen(
                 viewModel.clearSearch()
                 onNavigateToAlbum(albumName)
                 searchTrackForOptions = null
+            },
+            onQueueAdded = {
+                Toast.makeText(
+                    context,
+                    "${it.title} added to queue",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onPlaylistAdded = { song, playlist ->
+                Toast.makeText(
+                    context,
+                    "${song.title} added to ${playlist.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         )
     }

@@ -49,7 +49,7 @@ fun CoverScreenNexusView(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f))
+            .background(Color.Black)
             .clickable(onClick = onClose)
             .testTag("CoverScreenNexusView")
     ) {

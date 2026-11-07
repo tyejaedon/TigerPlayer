@@ -252,15 +252,10 @@ fun CoverScreenSettingsView(
         mutableFloatStateOf(settingsState.crossfadeDurationSec.toFloat())
     }
 
-    val ambientBrush = rememberTigerAmbientGradient(
-        accent = accent,
-        baseTopAlpha = 0.22f
-    )
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ambientBrush)
+            .background(Color.Black)
             .testTag(CoverScreenTestTags.SETTINGS_VIEW)
             .pointerInput(Unit) {
                 var dragDistance = 0f

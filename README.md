@@ -69,7 +69,9 @@ The **v2.2 Parity & Audiophile Milestone** preview builds are available for expe
 
 ### 🌊 Harmonized Waveform Seeker & Cinematic Fluid Vortex
 - **Harmonized Wave Seeker (`FieryWavySeeker`):** 3-tier harmonic wave hierarchy with unconfined apex amplitude, tabular monospace timestamps, and non-destructive drag seeking.
-- **Cinematic Fluid Vortex:** Tap the album artwork card to toggle between pristine artist artwork and a real-time GPU fluid vortex visualizer with a smooth 400ms crossfade.
+- **Cinematic Fluid Vortex & Dynamic Album Art Palette Binding:** Real-time GPU fluid visualizer dynamically colors forces using extracted AndroidX `Palette` swatches (vibrant, dominant, muted) or Default Neon mode.
+- **Centrifugal Vortex Physics:** Spiraling outward radial momentum combined with angular velocity produces organic, flowing eddy ribbons without center whiteout.
+- **Visualizer & Waveform Settings:** Dedicated settings menu to calibrate fluid reaction sensitivity (0.5x–2.0x), palette mode, and waveform sensitivity in real time.
 - **Zero-Allocation 120 FPS Loop:** Optimized OpenGL ES rendering with pre-allocated uniform caches and half-float (FP16) textures to conserve battery and eliminate frame drops.
 - **Ambient Breathing Swirl:** Subtle dynamic motion keeps the visualizer alive even when idle or paused.
 

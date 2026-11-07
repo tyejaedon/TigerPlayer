@@ -298,6 +298,68 @@ fun SettingsScreen(
                 )
             }
 
+            // --- VISUALIZER & WAVEFORM SECTION ---
+            MatrixSection(title = "Visualizer & Waveform", icon = Icons.Rounded.GraphicEq, accent = accent) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("PALETTE COLOR MODE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.tigerplayer.data.local.VisualizerPaletteMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = settings.visualizerPaletteMode == mode,
+                                onClick = { viewModel.setVisualizerPaletteMode(mode) },
+                                label = { Text(if (mode == com.tigerplayer.data.local.VisualizerPaletteMode.ALBUM_ART) "ALBUM ART" else "DEFAULT NEON") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("FLUID SENSITIVITY", fontWeight = FontWeight.Bold)
+                        Text(String.format(java.util.Locale.US, "%.1fx", settings.visualizerSensitivity), color = accent, fontWeight = FontWeight.Black)
+                    }
+                    Slider(
+                        value = settings.visualizerSensitivity,
+                        onValueChange = { viewModel.setVisualizerSensitivity(it) },
+                        valueRange = 0.5f..2.0f,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("WAVEFORM SENSITIVITY", fontWeight = FontWeight.Bold)
+                        Text(String.format(java.util.Locale.US, "%.1fx", settings.waveformSensitivity), color = accent, fontWeight = FontWeight.Black)
+                    }
+                    Slider(
+                        value = settings.waveformSensitivity,
+                        onValueChange = { viewModel.setWaveformSensitivity(it) },
+                        valueRange = 0.5f..2.0f,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+
             // --- AUDIO ENGINE SECTION ---
             MatrixSection(title = "Neural DSP", icon = Icons.Rounded.GraphicEq, accent = accent) {
                 Column(modifier = Modifier.padding(16.dp)) {

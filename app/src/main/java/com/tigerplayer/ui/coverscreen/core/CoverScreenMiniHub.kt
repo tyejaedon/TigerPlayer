@@ -62,6 +62,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.ui.platform.LocalContext
 import com.tigerplayer.R
 import com.tigerplayer.engine.FluidVortexView
 import com.tigerplayer.ui.dashboard.DashboardViewModel
@@ -178,6 +181,13 @@ fun CoverScreenMiniHub(
     val nowPlayingStatus = stringResource(R.string.coverscreen_status_now_playing)
     val pausedStatus = stringResource(R.string.coverscreen_status_paused)
 
+    // Unified cover-screen gesture contract:
+    // - tap: play/pause
+    // - swipe left/right: previous/next track
+    // - swipe up: open queue
+    // - swipe down: close active overlays only
+    // - long press: toggle immersive mode
+    // Library/settings/open-home remain explicit button actions rather than hidden gesture side-effects.
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -201,7 +211,7 @@ fun CoverScreenMiniHub(
                     CustomAccessibilityAction(swipeNextLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToNext(); true },
                     CustomAccessibilityAction(swipePrevLabel) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); playerViewModel.skipToPrevious(); true },
                     CustomAccessibilityAction(swipeUpQueueLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = true; true },
-                    CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; searchOnLibraryOpen = true; libraryVisible = true; true },
+                    CustomAccessibilityAction(swipeDownCloseLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; true },
                     CustomAccessibilityAction(longPressSettingsLabel) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); queueVisible = false; libraryVisible = false; playbackSettingsVisible = true; true },
                     CustomAccessibilityAction(toggleImmersiveLabel) {
                         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -243,8 +253,6 @@ fun CoverScreenMiniHub(
                     if (libraryVisible) return@coverScreenGestures
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     queueVisible = false
-                    searchOnLibraryOpen = true
-                    libraryVisible = true
                 },
                 onLongPress = {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -255,12 +263,34 @@ fun CoverScreenMiniHub(
         val backgroundArtModel = remember(track?.artworkUri, uiState.artistImageUrl) {
             uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: track?.artworkUri
         }
+        val context = LocalContext.current
+        val coverImageRequest = remember(backgroundArtModel) {
+            backgroundArtModel?.let {
+                ImageRequest.Builder(context)
+                    .data(it)
+                    .crossfade(true)
+                    .allowHardware(false)
+                    .listener(onSuccess = { _, result ->
+                        val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                        bitmap?.let { b ->
+                            androidx.palette.graphics.Palette.from(b).generate { palette ->
+                                val cVibrant = palette?.vibrantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                                val cDominant = palette?.dominantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                                val cMuted = palette?.mutedSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
+                                val paletteColors = listOfNotNull(cVibrant, cDominant, cMuted).ifEmpty { null }
+                                playerViewModel.fluidRenderer.updatePaletteColors(paletteColors)
+                            }
+                        }
+                    })
+                    .build()
+            }
+        }
 
         // BACKGROUND: Fluid Vortex (primary) with Artist/Artwork photo as fallback
         Box(modifier = Modifier.fillMaxSize()) {
-            if (backgroundArtModel != null) {
+            if (coverImageRequest != null) {
                 AsyncImage(
-                    model = backgroundArtModel,
+                    model = coverImageRequest,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -274,6 +304,9 @@ fun CoverScreenMiniHub(
                     FluidVortexView(ctx).apply {
                         setFluidRenderer(playerViewModel.fluidRenderer)
                     }
+                },
+                update = { view ->
+                    view.setRenderingActive(isRenderingActive)
                 },
                 modifier = Modifier
                     .fillMaxSize()
@@ -321,6 +354,9 @@ fun CoverScreenMiniHub(
                             FluidVortexView(ctx).apply {
                                 setFluidRenderer(playerViewModel.fluidRenderer)
                             }
+                        },
+                        update = { view ->
+                            view.setRenderingActive(isRenderingActive)
                         },
                         modifier = Modifier.fillMaxSize()
                     )

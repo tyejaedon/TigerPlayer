@@ -41,6 +41,17 @@ class FluidVortexView @JvmOverloads constructor(
         renderMode = RENDERMODE_CONTINUOUSLY
     }
 
+    /**
+     * Toggles whether the physics advection runs continuously or is paused to save GPU resources.
+     */
+    fun setRenderingActive(active: Boolean) {
+        renderMode = if (active) {
+            RENDERMODE_CONTINUOUSLY
+        } else {
+            RENDERMODE_WHEN_DIRTY
+        }
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         // Re-enforce translucent surface format in case Android resets it on attach

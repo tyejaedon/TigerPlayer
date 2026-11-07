@@ -252,6 +252,18 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setAutoDownloadLyrics(enabled) }
     }
 
+    fun setVisualizerSensitivity(sensitivity: Float) {
+        viewModelScope.launch { settingsDataStore.setVisualizerSensitivity(sensitivity) }
+    }
+
+    fun setVisualizerPaletteMode(mode: com.tigerplayer.data.local.VisualizerPaletteMode) {
+        viewModelScope.launch { settingsDataStore.setVisualizerPaletteMode(mode) }
+    }
+
+    fun setWaveformSensitivity(sensitivity: Float) {
+        viewModelScope.launch { settingsDataStore.setWaveformSensitivity(sensitivity) }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             settingsDataStore.resetToDefaults()

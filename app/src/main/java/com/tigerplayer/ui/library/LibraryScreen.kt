@@ -102,6 +102,7 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsState()
     // 🔥 NEW: Pull pre-seeded artist profiles from the VM vault
     val artistDetails by viewModel.artistDetails.collectAsState()
+    val context = LocalContext.current
 
     val tabs = listOf("Songs", "Albums", "Artists", "Playlists", "Folders")
     val pagerState = rememberPagerState(pageCount = { tabs.size })
@@ -482,6 +483,7 @@ fun SortRow(
 @Composable
 fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val currentTrack = uiState.currentTrack
     val tracks = uiState.tracks
     val listState = rememberLazyListState()
@@ -574,7 +576,7 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                         isPlaying = uiState.isPlaying && isActive,
                         onClick = { viewModel.playTrack(track) },
                         onOptionsClick = { trackForOptions = track }
-                        
+
                     )
 
 
@@ -594,6 +596,20 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                 },
                 onGoToAlbum = { albumName ->
                     onNavigateToAlbum(albumName)
+                },
+                onQueueAdded = {
+                    Toast.makeText(
+                        context,
+                        "${it.title} added to queue",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                onPlaylistAdded = { song, playlist ->
+                    Toast.makeText(
+                        context,
+                        "${song.title} added to ${playlist.name}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             )
         }
