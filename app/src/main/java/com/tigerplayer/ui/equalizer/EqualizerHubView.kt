@@ -33,6 +33,8 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -41,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.data.model.HeadphoneSearchResult
@@ -212,7 +215,7 @@ private fun CoverScreenEqualizerLayout(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(96.dp)
+                .height(170.dp)
                 .glassEffect(RoundedCornerShape(14.dp))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -451,6 +454,8 @@ private fun MainAppStudioEqualizerLayout(
     onOpenImport: () -> Unit,
     onClose: (() -> Unit)?
 ) {
+    var showFaderOverlay by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -479,30 +484,28 @@ private fun MainAppStudioEqualizerLayout(
                         letterSpacing = 1.2.sp
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "TARGET: ${state.connectedDeviceName.ifBlank { "SPEAKER / WIRED" }.uppercase(Locale.US)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.5f),
+                    letterSpacing = 0.8.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (state.connectedDeviceName.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "TARGET: ${state.connectedDeviceName.ifBlank { "SPEAKER / WIRED" }.uppercase(Locale.US)}",
+                        text = "AUTO-MATCH",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.5f),
-                        letterSpacing = 0.8.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        fontWeight = FontWeight.Bold,
+                        color = TigerCyberCyan,
+                        fontSize = 10.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(TigerCyberCyan.copy(alpha = 0.14f))
+                            .clickable { viewModel.autoMatchConnectedDevice() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                    if (state.connectedDeviceName.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "AUTO-MATCH",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TigerCyberCyan,
-                            fontSize = 10.sp,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(TigerCyberCyan.copy(alpha = 0.14f))
-                                .clickable { viewModel.autoMatchConnectedDevice() }
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
                 }
             }
 
@@ -537,103 +540,101 @@ private fun MainAppStudioEqualizerLayout(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        EngineSourceToggle(
+            title = "PARAMETRIC EQ ENGINE",
+            isActive = state.activeEngineSource == EqualizerEngineSource.PARAMETRIC_BANDS,
+            onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
+        )
 
-            Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-            EngineSourceToggle(
-                title = "PARAMETRIC EQ ENGINE",
-                isActive = state.activeEngineSource == EqualizerEngineSource.PARAMETRIC_BANDS,
-                onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 2. Mode Selector & Actions Bar (TigerPlayer Command Palette Style)
-            Box(
+        // 2. Mode Selector & Actions Bar (TigerPlayer Command Palette Style)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassEffect(RoundedCornerShape(12.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .glassEffect(RoundedCornerShape(12.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Band Mode Toggle Group
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Band Mode Toggle Group
-                    Row(
-                        modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                            .padding(4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        EqualizerBandMode.entries.forEach { mode ->
-                            val selected = state.bandMode == mode
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (selected) TigerNeonOrange else Color.Transparent)
-                                    .clickable { viewModel.setBandMode(mode) }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = mode.title,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selected) Color.White else Color.White.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
-                    // AutoEq and Import Tools
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    EqualizerBandMode.entries.forEach { mode ->
+                        val selected = state.bandMode == mode
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(TigerCyberCyan)
-                                .clickable { onOpenAutoEq() }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selected) TigerNeonOrange else Color.Transparent)
+                                .clickable { viewModel.setBandMode(mode) }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Headphones,
-                                    contentDescription = null,
-                                    tint = Color.Black,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "AutoEq",
-                                    color = Color.Black,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
-                        }
-
-                        IconButton(
-                            onClick = onOpenImport,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                                .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentPaste,
-                                contentDescription = "Import AutoEq Text",
-                                tint = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.size(16.dp)
+                            Text(
+                                text = mode.title,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) Color.White else Color.White.copy(alpha = 0.6f)
                             )
                         }
                     }
                 }
+
+                // AutoEq & Import Tools
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(TigerCyberCyan)
+                            .clickable { onOpenAutoEq() }
+                            .padding(horizontal = 10.dp, vertical = 7.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "AutoEq",
+                                color = Color.Black,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onOpenImport,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+                            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = "Import AutoEq Text",
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
             }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -757,29 +758,55 @@ private fun MainAppStudioEqualizerLayout(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 5. Vertical Studio Precision Fader Bank
-        LazyRow(
+        // 5. Glowing Capsule "TUNE FREQUENCY BANDS" Action Button (Same Width as Preamp)
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .height(52.dp)
+                .shadow(16.dp, RoundedCornerShape(26.dp), spotColor = TigerCyberCyan)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            TigerCyberCyan.copy(alpha = 0.25f),
+                            TigerNeonOrange.copy(alpha = 0.2f),
+                            TigerCyberCyan.copy(alpha = 0.25f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(26.dp)
+                )
+                .border(
+                    width = 1.5.dp,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(TigerCyberCyan, TigerNeonOrange, TigerCyberCyan)
+                    ),
+                    shape = RoundedCornerShape(26.dp)
+                )
+                .bounceClick { showFaderOverlay = true }
+                .testTag("TuneFrequencyBandsButton"),
+            contentAlignment = Alignment.Center
         ) {
-            itemsIndexed(
-                items = state.bands,
-                key = { index, band -> "${band.id}_$index" }
-            ) { index, band ->
-                val isSelected = index == state.selectedBandIndex
-                StudioFaderStrip(
-                    band = band,
-                    isSelected = isSelected,
-                    onSelected = { viewModel.setSelectedBand(index) },
-                    onGainChanged = { viewModel.updateBandGain(index, it) },
-                    onToggleEnabled = { viewModel.toggleBandEnabled(index) }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = null,
+                    tint = TigerCyberCyan,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "TUNE FREQUENCY BANDS",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 1.2.sp
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // 6. Preset Selector Bar
         LazyRow(
@@ -813,6 +840,193 @@ private fun MainAppStudioEqualizerLayout(
                         labelColor = Color.White.copy(alpha = 0.8f)
                     )
                 )
+            }
+        }
+    }
+
+    if (showFaderOverlay) {
+        FrequencyBandsTuningOverlay(
+            state = state,
+            viewModel = viewModel,
+            onDismiss = { showFaderOverlay = false }
+        )
+    }
+}
+
+/**
+ * Dedicated Opaque Overlay Sheet hosting optimal-width side-scrollable precision faders.
+ */
+@Composable
+private fun FrequencyBandsTuningOverlay(
+    state: EqualizerHubUiState,
+    viewModel: EqualizerHubViewModel,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF090B10))
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Overlay Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(TigerCyberCyan.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = TigerCyberCyan,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "FREQUENCY BAND PRECISION TUNING",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "MODE: ${state.bandMode.title} • ${state.bands.size} BANDS",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TigerCyberCyan,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                            .testTag("CloseFaderOverlayButton")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Done",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Precision Frequency Response Curve Preview
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .glassEffect(RoundedCornerShape(14.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                ) {
+                    EqualizerFrequencyCurve(
+                        points = state.frequencyCurvePoints,
+                        bands = state.bands,
+                        isInteractive = true,
+                        selectedBandIndex = state.selectedBandIndex,
+                        audioFrame = state.audioReactiveFrame,
+                        onNodeDragged = { idx, newFreq, newGain ->
+                            if (state.bandMode == EqualizerBandMode.AUTOEQ_PARAMETRIC) {
+                                viewModel.updateBandFrequency(idx, newFreq)
+                            }
+                            viewModel.updateBandGain(idx, newGain)
+                        },
+                        onBandSelected = viewModel::setSelectedBand,
+                        modifier = Modifier.fillMaxSize(),
+                        curveColor = if (state.isEqEnabled) TigerCyberCyan else Color.Gray
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Precision Faders Header
+                Text(
+                    text = "PRECISION FADERS (SIDE-SCROLLABLE)",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.5f),
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Side-Scrollable Studio Fader Bank with Optimal Width per Fader
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) {
+                    itemsIndexed(
+                        items = state.bands,
+                        key = { index, band -> "${band.id}_$index" }
+                    ) { index, band ->
+                        val isSelected = index == state.selectedBandIndex
+                        StudioFaderStrip(
+                            band = band,
+                            isSelected = isSelected,
+                            onSelected = { viewModel.setSelectedBand(index) },
+                            onGainChanged = { viewModel.updateBandGain(index, it) },
+                            onToggleEnabled = { viewModel.toggleBandEnabled(index) },
+                            modifier = Modifier.width(76.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Overlay Footer Action Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = viewModel::resetToFlat,
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Reset Flat", color = Color.White, fontSize = 12.sp)
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = TigerNeonOrange),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Done Tuning", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
             }
         }
     }

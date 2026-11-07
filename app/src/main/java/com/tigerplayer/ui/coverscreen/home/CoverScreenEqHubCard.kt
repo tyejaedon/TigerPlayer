@@ -180,18 +180,11 @@ fun CoverScreenEqHubCardContent(
                     .glassEffect(RoundedCornerShape(10.dp))
                     .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
             ) {
-                EqualizerFrequencyCurve(
-                    points = curvePoints,
-                    bands = bands,
-                    isInteractive = false,
-                    showGrid = false,
-                    modifier = Modifier.fillMaxSize(),
-                    curveColor = if (isEqEnabled) TigerCyberCyan else Color.Gray
-                )
+
 
                 // Headroom Badge
                 Text(
-                    text = if (isEqEnabled) "PK ${String.format("%.1f", compositePeakDb)} dB" else "BYPASS",
+                    text = if (isEqEnabled) """PK ${String.format("%.1f", compositePeakDb)} dB""" else "BYPASS",
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isEqEnabled) EmeraldNeon else Color.Gray,
