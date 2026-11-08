@@ -132,7 +132,8 @@ class ConstellationDataEngine @Inject constructor(
                         imageUrl = tracks.firstOrNull()?.artworkUri?.toString(),
                         parentId = artist.id,
                         importance = albumMass,
-                        audioEnergyBias = albumMass * 0.4f
+                        audioEnergyBias = albumMass * 0.4f,
+                        artistName = artist.label
                     ))
 
                     edges.add(GraphEdge(sourceId = artist.id, targetId = albumId, strength = albumMass))
@@ -140,19 +141,8 @@ class ConstellationDataEngine @Inject constructor(
             }
 
         /* -----------------------------------
-           ☄️ 4. TRACK DEBRIS FIELD
+           ☄️ 4. TRACK DEBRIS FIELD (ASTEROID BELT)
         ----------------------------------- */
-            val rogueCoreId = "core_rogue"
-            nodes.add(GraphNode(
-                id = rogueCoreId,
-                label = "LIFETIME CHANTS",
-                type = NodeType.GALAXY_CORE,
-                playCount = globalTracks.sumOf { it.playCount },
-                imageUrl = null,
-                importance = 0.3f,
-                audioEnergyBias = 0.8f
-            ))
-
             topTracks.take(15).forEach { track ->
                 val mass = log10(max(1f, track.playCount.toFloat() + 1f)) * 0.5f
                 val trackNodeId = safeId("track", track.trackId)
@@ -163,13 +153,13 @@ class ConstellationDataEngine @Inject constructor(
                     type = NodeType.TRACK,
                     playCount = track.playCount,
                     imageUrl = track.imageUrl,
-                    parentId = rogueCoreId,
+                    parentId = coreId, // Direct parent: primary core_galaxy (Asteroid Belt)
                     importance = mass,
                     audioEnergyBias = mass * 0.8f,
                     artistName = track.artist
                 ))
 
-                edges.add(GraphEdge(sourceId = rogueCoreId, targetId = trackNodeId, strength = mass))
+                edges.add(GraphEdge(sourceId = coreId, targetId = trackNodeId, strength = mass))
             }
 
         // Normalization
