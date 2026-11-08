@@ -44,7 +44,7 @@ roomTesting = "2.8.5"
 # whatever version those transitive artifacts resolve to; do not assume it tracks roomVersion.
 sqlite = "2.6.2"
 uiautomator = "2.4.0"
-youtubePlayer = "13.0.0"
+youtubePlayer = "13.1.0"
 
 # Testing
 junit = "4.13.2"
