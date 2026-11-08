@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -143,6 +144,7 @@ private fun CoverScreenEqualizerLayout(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         // 1. Top Header Bar
@@ -211,11 +213,17 @@ private fun CoverScreenEqualizerLayout(
             }
         }
 
+        TwoWayEngineSourceSwitcher(
+            activeSource = state.activeEngineSource,
+            onSelectSource = viewModel::setActiveEngineSource,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+
         // 2. Frequency Response Curve Preview
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(170.dp)
+                .height(260.dp)
                 .glassEffect(RoundedCornerShape(14.dp))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -540,10 +548,9 @@ private fun MainAppStudioEqualizerLayout(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        EngineSourceToggle(
-            title = "PARAMETRIC EQ ENGINE",
-            isActive = state.activeEngineSource == EqualizerEngineSource.PARAMETRIC_BANDS,
-            onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
+        TwoWayEngineSourceSwitcher(
+            activeSource = state.activeEngineSource,
+            onSelectSource = viewModel::setActiveEngineSource
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -642,7 +649,7 @@ private fun MainAppStudioEqualizerLayout(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(280.dp)
                 .glassEffect(RoundedCornerShape(16.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
         ) {
@@ -945,7 +952,7 @@ private fun FrequencyBandsTuningOverlay(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
+                        .height(180.dp)
                         .glassEffect(RoundedCornerShape(14.dp))
                         .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
                 ) {

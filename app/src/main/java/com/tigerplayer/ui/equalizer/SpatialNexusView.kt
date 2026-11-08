@@ -73,10 +73,9 @@ fun SpatialNexusView(
             DspSignalChainPill(state = uiState)
             Spacer(modifier = Modifier.height(10.dp))
 
-            EngineSourceToggle(
-                title = "SPATIAL NEXUS",
-                isActive = uiState.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES,
-                onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.SPATIAL_NODES) }
+            TwoWayEngineSourceSwitcher(
+                activeSource = uiState.activeEngineSource,
+                onSelectSource = viewModel::setActiveEngineSource
             )
             Spacer(modifier = Modifier.height(10.dp))
             NexusSpatialCanvas(

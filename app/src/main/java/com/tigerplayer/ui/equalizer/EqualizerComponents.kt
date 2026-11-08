@@ -612,11 +612,31 @@ fun DspSignalChainPill(state: EqualizerHubUiState) {
         SignalChainArrow()
 
         val isSpatial = state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES
+        val isEqActive = state.isEqEnabled
+        val dspLabel = when {
+            !isEqActive -> "DSP Bypassed"
+            isSpatial -> "Spatial Nexus"
+            state.autoEqModel != null -> "AutoEq Profile"
+            else -> "PEQ Studio"
+        }
+        val dspBadge = when {
+            !isEqActive -> "BYPASSED"
+            isSpatial -> "2D MATRIX"
+            state.autoEqModel != null -> "AUTOEQ LIVE"
+            else -> "LIVE PEQ"
+        }
+        val dspColor = when {
+            !isEqActive -> Color.Gray
+            isSpatial -> TigerNeonOrange
+            else -> TigerCyberCyan
+        }
+
         SignalChainBlock(
             icon = if (isSpatial) Icons.Default.AutoFixHigh else Icons.Default.GraphicEq,
-            label = if (isSpatial) "Spatial" else "PEQ",
-            isActive = state.isEqEnabled,
-            color = if (state.isEqEnabled) TigerCyberCyan else Color.Gray
+            label = dspLabel,
+            badge = dspBadge,
+            isActive = isEqActive,
+            color = dspColor
         )
 
         SignalChainArrow()
@@ -635,6 +655,7 @@ fun DspSignalChainPill(state: EqualizerHubUiState) {
 fun SignalChainBlock(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    badge: String? = null,
     isActive: Boolean,
     color: Color = TigerCyberCyan
 ) {
@@ -644,8 +665,22 @@ fun SignalChainBlock(
             .clip(RoundedCornerShape(6.dp))
             .glassEffect(RoundedCornerShape(6.dp))
             .background(if (isActive) color.copy(alpha = 0.15f) else Color.Transparent)
+            .border(
+                if (isActive) 1.dp else 0.5.dp,
+                if (isActive) color.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.08f),
+                RoundedCornerShape(6.dp)
+            )
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
+        if (isActive) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+        }
         Icon(
             imageVector = icon,
             contentDescription = null,
@@ -653,12 +688,23 @@ fun SignalChainBlock(
             modifier = Modifier.size(12.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = if (isActive) label else "Bypassed",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isActive) color else Color.Gray
-        )
+        Column {
+            Text(
+                text = if (isActive) label else "Bypassed",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isActive) color else Color.Gray
+            )
+            if (badge != null && isActive) {
+                Text(
+                    text = badge,
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.Black,
+                    color = color.copy(alpha = 0.85f),
+                    letterSpacing = 0.5.sp
+                )
+            }
+        }
     }
 }
 
@@ -725,6 +771,89 @@ fun EngineSourceToggle(
                 color = Color.White.copy(alpha = 0.4f),
                 fontSize = 10.sp
             )
+        }
+    }
+}
+
+@Composable
+fun TwoWayEngineSourceSwitcher(
+    activeSource: EqualizerEngineSource,
+    onSelectSource: (EqualizerEngineSource) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .glassEffect(RoundedCornerShape(12.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        val isPeq = activeSource == EqualizerEngineSource.PARAMETRIC_BANDS
+        val isSpatial = activeSource == EqualizerEngineSource.SPATIAL_NODES
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (isPeq) TigerCyberCyan.copy(alpha = 0.22f) else Color.Transparent)
+                .border(
+                    if (isPeq) 1.dp else 0.dp,
+                    if (isPeq) TigerCyberCyan else Color.Transparent,
+                    RoundedCornerShape(9.dp)
+                )
+                .clickable { onSelectSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = null,
+                    tint = if (isPeq) TigerCyberCyan else Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "PEQ Studio",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPeq) TigerCyberCyan else Color.White.copy(alpha = 0.65f),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (isSpatial) TigerNeonOrange.copy(alpha = 0.22f) else Color.Transparent)
+                .border(
+                    if (isSpatial) 1.dp else 0.dp,
+                    if (isSpatial) TigerNeonOrange else Color.Transparent,
+                    RoundedCornerShape(9.dp)
+                )
+                .clickable { onSelectSource(EqualizerEngineSource.SPATIAL_NODES) }
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AutoFixHigh,
+                    contentDescription = null,
+                    tint = if (isSpatial) TigerNeonOrange else Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Spatial Nexus",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSpatial) TigerNeonOrange else Color.White.copy(alpha = 0.65f),
+                    fontSize = 11.sp
+                )
+            }
         }
     }
 }

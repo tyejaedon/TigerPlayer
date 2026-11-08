@@ -21,7 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tigerplayer.ui.equalizer.EqualizerEngineSource
 import com.tigerplayer.ui.equalizer.EqualizerHubViewModel
+import com.tigerplayer.ui.equalizer.TwoWayEngineSourceSwitcher
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.glassEffect
 import kotlin.math.hypot
@@ -101,7 +103,14 @@ fun CoverScreenNexusView(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                TwoWayEngineSourceSwitcher(
+                    activeSource = state.activeEngineSource,
+                    onSelectSource = viewModel::setActiveEngineSource
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Spatial Touch Pad for EQ Nodes
                 Box(
