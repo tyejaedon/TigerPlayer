@@ -43,8 +43,11 @@ roomTesting = "2.8.5"
 # 2.6.2 via sqlite-android/sqlite-framework-android at roomVersion 2.8.5). Keep in sync with
 # whatever version those transitive artifacts resolve to; do not assume it tracks roomVersion.
 sqlite = "2.6.2"
+
+youtubePlayer = "13.1.0"
+
 uiautomator = "2.4.1"
-youtubePlayer = "13.0.0"
+
 
 # Testing
 junit = "4.13.2"
