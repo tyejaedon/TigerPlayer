@@ -40,6 +40,52 @@ import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import java.util.Locale
 import kotlin.math.abs
+import kotlinx.coroutines.delay
+
+const val DEFAULT_LYRICS_ACTIVE_POSITION_RATIO = 0.30f
+const val DEFAULT_LYRICS_MANUAL_SCROLL_COOLDOWN_MS = 3500L
+
+/**
+ * Calculates the target vertical offset in pixels for docking the active lyric line
+ * within the scrollable viewport.
+ *
+ * Defaults to [DEFAULT_LYRICS_ACTIVE_POSITION_RATIO] (0.30f) to elevate active lyrics
+ * into the upper portion of the view, leaving ample clearance below for upcoming lyrics.
+ */
+internal fun calculateLyricsTargetY(
+    viewportHeight: Float,
+    activePositionRatio: Float = DEFAULT_LYRICS_ACTIVE_POSITION_RATIO
+): Float {
+    return viewportHeight * activePositionRatio.coerceIn(0.1f, 0.9f)
+}
+
+/**
+ * Calculates adaptive vertical content padding for [LazyColumn] so both the first and last
+ * items can align with the elevated active target position.
+ */
+internal fun calculateLyricsContentPadding(
+    maxHeight: Dp,
+    activePositionRatio: Float = DEFAULT_LYRICS_ACTIVE_POSITION_RATIO
+): Pair<Dp, Dp> {
+    val ratio = activePositionRatio.coerceIn(0.1f, 0.9f)
+    val topPadding = maxHeight * ratio
+    val bottomPadding = maxHeight * (1f - ratio)
+    return Pair(topPadding, bottomPadding)
+}
+
+/**
+ * Calculates the non-negative scroll offset passed to [LazyListState.animateScrollToItem]
+ * to ensure that off-screen items dock accurately at the elevated target position
+ * without overshooting or being thrown to the bottom of the viewport.
+ */
+internal fun calculateLyricsScrollOffset(
+    topPaddingPx: Float,
+    targetY: Float,
+    itemHeightPx: Float
+): Int {
+    val offset = topPaddingPx - targetY + (itemHeightPx / 2f)
+    return offset.toInt().coerceAtLeast(0)
+}
 
 /**
  * Centralized Compose test tags for the lyrics screen, following the PrismTestTags convention
@@ -68,6 +114,8 @@ fun LyricsDisplay(
     lineVerticalPadding: Dp = 12.dp,
     manualOffsetMs: Long = 0L,
     showOffsetControls: Boolean = false,
+    activePositionRatio: Float = DEFAULT_LYRICS_ACTIVE_POSITION_RATIO,
+    manualScrollCooldownMs: Long = DEFAULT_LYRICS_MANUAL_SCROLL_COOLDOWN_MS,
     onLineClick: ((Long) -> Unit)? = null,
     onOffsetAdjust: ((Long) -> Unit)? = null,
     onOffsetReset: (() -> Unit)? = null
@@ -127,6 +175,23 @@ fun LyricsDisplay(
                 val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
                 val density = LocalDensity.current
 
+                var isManualScrollActive by remember { mutableStateOf(false) }
+
+                // Reset manual scroll override when track changes
+                LaunchedEffect(lyrics) {
+                    isManualScrollActive = false
+                }
+
+                // Handle manual scrolling pause and inactivity cooldown
+                LaunchedEffect(isUserDragging) {
+                    if (isUserDragging) {
+                        isManualScrollActive = true
+                    } else if (isManualScrollActive) {
+                        delay(manualScrollCooldownMs)
+                        isManualScrollActive = false
+                    }
+                }
+
                 val totalOffsetMs = lyrics.offsetMs + manualOffsetMs
                 val adjustedPosition = currentPosition + totalOffsetMs
                 val activeIndex = remember(lyrics, manualOffsetMs, adjustedPosition) {
@@ -134,40 +199,50 @@ fun LyricsDisplay(
                     if (index == -1 && parsed.isNotEmpty()) 0 else index
                 }
 
-                LaunchedEffect(activeIndex, isUserDragging) {
-                    if (activeIndex in parsed.indices && !isUserDragging) {
-                        val layoutInfo = listState.layoutInfo
-                        val activeItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIndex }
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val (edgePaddingTop, edgePaddingBottom) = calculateLyricsContentPadding(
+                        maxHeight = maxHeight,
+                        activePositionRatio = activePositionRatio
+                    )
+                    val viewportHeightPx = with(density) { maxHeight.toPx() }
 
-                        if (activeItem != null) {
-                            val viewportCenter = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
-                            val itemCenter = activeItem.offset + (activeItem.size / 2)
-                            val delta = (itemCenter - viewportCenter).toFloat()
+                    LaunchedEffect(activeIndex, isManualScrollActive, maxHeight) {
+                        if (activeIndex in parsed.indices && !isManualScrollActive) {
+                            val layoutInfo = listState.layoutInfo
+                            val measuredHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+                            val effectiveViewportHeight = if (measuredHeight > 0f) measuredHeight else viewportHeightPx
+                            val targetY = calculateLyricsTargetY(effectiveViewportHeight, activePositionRatio)
+                            val activeItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIndex }
 
-                            if (abs(delta) > 1f) {
-                                listState.animateScrollBy(
-                                    value = delta,
-                                    animationSpec = lyricScrollSpec
+                            if (activeItem != null) {
+                                val itemCenter = activeItem.offset + (activeItem.size / 2)
+                                val delta = itemCenter - targetY
+
+                                if (abs(delta) > 1f) {
+                                    listState.animateScrollBy(
+                                        value = delta,
+                                        animationSpec = lyricScrollSpec
+                                    )
+                                }
+                            } else {
+                                val approxItemHeightPx = with(density) {
+                                    (lineVerticalPadding * 2 + activeFontSize.toDp()).toPx()
+                                }
+                                val topPaddingPx = with(density) { edgePaddingTop.toPx() }
+                                val targetScrollOffset = calculateLyricsScrollOffset(
+                                    topPaddingPx = topPaddingPx,
+                                    targetY = targetY,
+                                    itemHeightPx = approxItemHeightPx
                                 )
+                                listState.animateScrollToItem(activeIndex, scrollOffset = targetScrollOffset)
                             }
-                        } else {
-                            val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                            val approxItemHeightPx = with(density) {
-                                (lineVerticalPadding * 2 + activeFontSize.toDp()).toPx()
-                            }.toInt()
-                            val centerOffset = -((viewportHeight / 2) - (approxItemHeightPx / 2))
-                            listState.animateScrollToItem(activeIndex, scrollOffset = centerOffset)
                         }
                     }
-                }
-
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val edgePadding = maxHeight / 2
 
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().testTag(LyricsTestTags.SYNCED_LYRICS_LIST),
-                        contentPadding = PaddingValues(vertical = edgePadding),
+                        contentPadding = PaddingValues(top = edgePaddingTop, bottom = edgePaddingBottom),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         itemsIndexed(
@@ -187,7 +262,12 @@ fun LyricsDisplay(
                                 activeFontSize = activeFontSize,
                                 inactiveScale = inactiveScale,
                                 lineVerticalPadding = lineVerticalPadding,
-                                onLineClick = onLineClick
+                                onLineClick = onLineClick?.let { onClick ->
+                                    { timeMs ->
+                                        isManualScrollActive = false
+                                        onClick(timeMs)
+                                    }
+                                }
                             )
                         }
                     }
@@ -285,7 +365,7 @@ private fun LyricRow(
     val scale by animateFloatAsState(
         targetValue = if (isActive) 1.05f else inactiveScale,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "LyricScale"
