@@ -1,19 +1,18 @@
 package com.tigerplayer.ui.coverscreen
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -23,10 +22,11 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.ui.equalizer.EqualizerEngineSource
 import com.tigerplayer.ui.equalizer.EqualizerHubViewModel
+import com.tigerplayer.ui.equalizer.NexusMoodPresetSelector
+import com.tigerplayer.ui.equalizer.NexusSpatialCanvas
 import com.tigerplayer.ui.equalizer.TwoWayEngineSourceSwitcher
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.glassEffect
-import kotlin.math.hypot
 
 @Composable
 fun CoverScreenNexusView(
@@ -46,7 +46,6 @@ fun CoverScreenNexusView(
     }
 
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var selectedNodeId by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = modifier
@@ -69,6 +68,7 @@ fun CoverScreenNexusView(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -107,103 +107,31 @@ fun CoverScreenNexusView(
 
                 TwoWayEngineSourceSwitcher(
                     activeSource = state.activeEngineSource,
-                    onSelectSource = viewModel::setActiveEngineSource
+                    onSelectSource = viewModel::setActiveEngineSource,
+                    allowToggleOff = true,
+                    onToggleOff = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Spatial Touch Pad for EQ Nodes
-                Box(
+                // Reactive 2D Spatial Canvas with Magnification Lens
+                NexusSpatialCanvas(
+                    nodes = state.spatialNodes,
+                    curvePoints = state.frequencyCurvePoints,
+                    audioFrame = state.audioReactiveFrame,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
-                        .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(16.dp))
-                        .pointerInput(state.spatialNodes) {
-                            detectDragGestures(
-                                onDragStart = { offset ->
-                                    val canvasWidth = size.width.toFloat()
-                                    val canvasHeight = size.height.toFloat()
-                                    if (canvasWidth > 0f && canvasHeight > 0f) {
-                                        val clicked = state.spatialNodes.minByOrNull { node ->
-                                            val nx = (node.spatialPos.x + 1f) / 2f * canvasWidth
-                                            val ny = (1f - (node.spatialPos.y + 1f) / 2f) * canvasHeight
-                                            hypot(nx - offset.x, ny - offset.y)
-                                        }
-                                        if (clicked != null) {
-                                            val nx = (clicked.spatialPos.x + 1f) / 2f * canvasWidth
-                                            val ny = (1f - (clicked.spatialPos.y + 1f) / 2f) * canvasHeight
-                                            if (hypot(nx - offset.x, ny - offset.y) < 50f) {
-                                                selectedNodeId = clicked.id
-                                            }
-                                        }
-                                    }
-                                },
-                                onDrag = { change, dragAmount ->
-                                    val id = selectedNodeId
-                                    if (id != null) {
-                                        val canvasWidth = size.width.toFloat()
-                                        val canvasHeight = size.height.toFloat()
-                                        if (canvasWidth > 0f && canvasHeight > 0f) {
-                                            val node = state.spatialNodes.find { it.id == id }
-                                            if (node != null) {
-                                                val newX = (node.spatialPos.x + (dragAmount.x / (canvasWidth / 2f))).coerceIn(-1f, 1f)
-                                                val newY = (node.spatialPos.y - (dragAmount.y / (canvasHeight / 2f))).coerceIn(-1f, 1f)
-                                                viewModel.moveSpatialNode(id, Offset(newX, newY))
-                                                change.consume()
-                                            }
-                                        }
-                                    }
-                                },
-                                onDragEnd = { selectedNodeId = null },
-                                onDragCancel = { selectedNodeId = null }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val canvasWidth = size.width
-                        val canvasHeight = size.height
+                        .height(220.dp),
+                    onNodeDragged = viewModel::moveSpatialNode
+                )
 
-                        // Draw guidelines
-                        drawLine(
-                            color = Color.White.copy(alpha = 0.1f),
-                            start = Offset(0f, canvasHeight / 2f),
-                            end = Offset(canvasWidth, canvasHeight / 2f),
-                            strokeWidth = 1f
-                        )
-                        drawLine(
-                            color = Color.White.copy(alpha = 0.1f),
-                            start = Offset(canvasWidth / 2f, 0f),
-                            end = Offset(canvasWidth / 2f, canvasHeight),
-                            strokeWidth = 1f
-                        )
+                Spacer(modifier = Modifier.height(12.dp))
 
-                        // Draw Nodes
-                        state.spatialNodes.forEach { node ->
-                            val nx = (node.spatialPos.x + 1f) / 2f * canvasWidth
-                            val ny = (1f - (node.spatialPos.y + 1f) / 2f) * canvasHeight
-
-                            drawCircle(
-                                color = node.color,
-                                radius = 14f,
-                                center = Offset(nx, ny)
-                            )
-                            drawCircle(
-                                color = Color.White,
-                                radius = 6f,
-                                center = Offset(nx, ny)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Active Preset / Mood Label
-                Text(
-                    text = "Active EQ Preset: ${state.spatialMood}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f)
+                // Interactive Mood Selector
+                NexusMoodPresetSelector(
+                    presets = listOf("Neural Adaptive", "Night Drive", "Pure Vocal", "Studio Flat"),
+                    selected = state.spatialMood,
+                    onSelectMood = viewModel::setSpatialMoodPreset
                 )
             }
         }

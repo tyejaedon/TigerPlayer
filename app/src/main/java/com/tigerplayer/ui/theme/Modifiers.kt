@@ -64,6 +64,7 @@ fun Modifier.bounceClick(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modif
 // ------------------------------
 fun Modifier.glassEffect(shape: Shape) = this.composed {
     val isSystemDark = isSystemInDarkTheme()
+    val glassBg = if (isSystemDark) Color(0xFF13141C) else Color(0xFFEBF0F5)
     val tint = if (isSystemDark) Color.White else Color.Black
 
     this
@@ -71,8 +72,16 @@ fun Modifier.glassEffect(shape: Shape) = this.composed {
         .background(
             Brush.verticalGradient(
                 listOf(
-                    tint.copy(alpha = if (isSystemDark) 0.08f else 0.04f),
-                    tint.copy(alpha = if (isSystemDark) 0.02f else 0.01f)
+                    glassBg.copy(alpha = if (isSystemDark) 0.94f else 0.90f),
+                    glassBg.copy(alpha = if (isSystemDark) 0.88f else 0.84f)
+                )
+            )
+        )
+        .background(
+            Brush.verticalGradient(
+                listOf(
+                    tint.copy(alpha = if (isSystemDark) 0.06f else 0.03f),
+                    Color.Transparent
                 )
             )
         )

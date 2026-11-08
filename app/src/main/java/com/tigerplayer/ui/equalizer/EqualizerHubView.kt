@@ -69,7 +69,6 @@ fun EqualizerHubView(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAutoEqDialog by remember { mutableStateOf(false) }
-    var showImportDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier
@@ -90,14 +89,13 @@ fun EqualizerHubView(
                     state = uiState,
                     viewModel = viewModel,
                     onOpenAutoEq = { showAutoEqDialog = true },
-                    onOpenImport = { showImportDialog = true },
                     onClose = onClose
                 )
             }
         }
     }
 
-    // AutoEq Headphone Catalog Dialog / Sheet
+    // AutoEq Headphone Catalog & Importer Sheet
     if (showAutoEqDialog) {
         AutoEqSelectorSheet(
             query = uiState.autoEqQuery,
@@ -115,18 +113,10 @@ fun EqualizerHubView(
                 viewModel.applyAutoEqProfile(item, forceParametric = forceParametric)
                 showAutoEqDialog = false
             },
-            onDismiss = { showAutoEqDialog = false }
-        )
-    }
-
-    // Raw AutoEq Text Importer Dialog
-    if (showImportDialog) {
-        AutoEqImportDialog(
-            onImport = { rawText, name ->
-                viewModel.importRawAutoEq(rawText, name)
-                showImportDialog = false
+            onImportRawText = { rawText, profileName ->
+                viewModel.importRawAutoEq(rawText, profileName)
             },
-            onDismiss = { showImportDialog = false }
+            onDismiss = { showAutoEqDialog = false }
         )
     }
 }
@@ -216,6 +206,14 @@ private fun CoverScreenEqualizerLayout(
         TwoWayEngineSourceSwitcher(
             activeSource = state.activeEngineSource,
             onSelectSource = viewModel::setActiveEngineSource,
+            allowToggleOff = true,
+            onToggleOff = {
+                if (state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES) {
+                    viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS)
+                } else {
+                    viewModel.resetToFlat()
+                }
+            },
             modifier = Modifier.padding(bottom = 6.dp)
         )
 
@@ -459,7 +457,6 @@ private fun MainAppStudioEqualizerLayout(
     state: EqualizerHubUiState,
     viewModel: EqualizerHubViewModel,
     onOpenAutoEq: () -> Unit,
-    onOpenImport: () -> Unit,
     onClose: (() -> Unit)?
 ) {
     var showFaderOverlay by remember { mutableStateOf(false) }
@@ -550,7 +547,15 @@ private fun MainAppStudioEqualizerLayout(
 
         TwoWayEngineSourceSwitcher(
             activeSource = state.activeEngineSource,
-            onSelectSource = viewModel::setActiveEngineSource
+            onSelectSource = viewModel::setActiveEngineSource,
+            allowToggleOff = true,
+            onToggleOff = {
+                if (state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES) {
+                    viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS)
+                } else {
+                    viewModel.resetToFlat()
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -623,21 +628,6 @@ private fun MainAppStudioEqualizerLayout(
                                 fontWeight = FontWeight.Black
                             )
                         }
-                    }
-
-                    IconButton(
-                        onClick = onOpenImport,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = "Import AutoEq Text",
-                            tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(15.dp)
-                        )
                     }
                 }
             }

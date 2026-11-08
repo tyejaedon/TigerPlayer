@@ -75,7 +75,9 @@ fun SpatialNexusView(
 
             TwoWayEngineSourceSwitcher(
                 activeSource = uiState.activeEngineSource,
-                onSelectSource = viewModel::setActiveEngineSource
+                onSelectSource = viewModel::setActiveEngineSource,
+                allowToggleOff = true,
+                onToggleOff = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
             )
             Spacer(modifier = Modifier.height(10.dp))
             NexusSpatialCanvas(
