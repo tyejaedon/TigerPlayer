@@ -422,7 +422,7 @@ fun SettingsScreen(
 
                 ListItem(
                     headlineContent = { Text("SYSTEM DECODER / DSP", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("Route audio through Android offload path") },
+                    supportingContent = { Text("Route audio through Android offload path (saves battery)") },
                     leadingContent = { Icon(Icons.Rounded.BluetoothAudio, null, tint = accent) },
                     trailingContent = {
                         Switch(

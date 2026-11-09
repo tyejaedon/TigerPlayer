@@ -11,6 +11,14 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Optimized
+- **Audio Pipeline CPU & Battery Optimization**:
+  - Gated FFT and real-time spectral analysis in `AdaptiveDspEngine` based on screen visibility and active visualizer presence; bypassed `FftSpectralAnalyzer.pushSample()` and paused `audioReactiveFrame` emissions when backgrounded or visualizers are inactive.
+  - Decommissioned redundant `FftProcessor` from ExoPlayer's `DefaultAudioSink` chain in `AudioPlayerService`.
+  - Introduced lifecycle-aware capture gating in `WaveformCaptureProcessor` to bypass buffer duplication and sample analysis when waveform UI is inactive or the app is backgrounded.
+  - Transitioned `audioReactiveFrame` StateFlow subscriptions in `PlaybackStateManager`, `EqualizerHubViewModel`, and `PrismViewModel` to lifecycle-managed collections that pause when backgrounded.
+  - Added "(saves battery)" indicator to the System Decoder / Hardware Offload DSP toggle in `SettingScreen` and `CoverScreenSettingsView`. (closes #416)
+
 ## [2.1.8] - 2026-11-08
 
 ### Added

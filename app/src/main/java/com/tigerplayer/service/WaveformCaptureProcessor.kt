@@ -1,12 +1,16 @@
 package com.tigerplayer.service
 
 import androidx.annotation.OptIn
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.abs
 
 /**
@@ -14,7 +18,9 @@ import kotlin.math.abs
  *
  * Passes audio through unmodified while exposing live playback waveform levels (64 buckets)
  * at a 40 ms cadence for dynamic scrubbers and audio-reactive UI animations.
+ * Waveform capture is paused when no waveform UI is actively rendered or when the app is backgrounded.
  */
+@Singleton
 @OptIn(UnstableApi::class)
 class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
 
@@ -23,6 +29,52 @@ class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
 
     private var lastUpdateTime = 0L
     private val UPDATE_INTERVAL_MS = 40L
+
+    @Volatile private var isAppInForeground = true
+    @Volatile private var hasActiveConsumer = false
+    @Volatile private var isWaveformCaptureActive = false
+
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            isAppInForeground = true
+            updateCaptureState()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            isAppInForeground = false
+            updateCaptureState()
+        }
+    }
+
+    init {
+        try {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+        } catch (_: Exception) {
+            // JVM unit test fallback
+        }
+    }
+
+    /**
+     * Toggles whether live waveform capturing is actively consumed by UI.
+     * When false or when the app is backgrounded, waveform processing is paused to save CPU and battery.
+     */
+    fun setWaveformCaptureActive(active: Boolean) {
+        hasActiveConsumer = active
+        updateCaptureState()
+    }
+
+    fun isWaveformCaptureActive(): Boolean = isWaveformCaptureActive
+
+    private fun updateCaptureState() {
+        val shouldCapture = isAppInForeground && hasActiveConsumer
+        if (isWaveformCaptureActive != shouldCapture) {
+            isWaveformCaptureActive = shouldCapture
+            if (!shouldCapture) {
+                lastUpdateTime = 0L
+                _waveform.value = List(64) { 0f }
+            }
+        }
+    }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         // We accept the input format as is and return it as the output format (passthrough)
@@ -38,7 +90,7 @@ class WaveformCaptureProcessor @Inject constructor() : BaseAudioProcessor() {
         val buffer = replaceOutputBuffer(remaining)
 
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
+        if (isWaveformCaptureActive && (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS)) {
             // 2. ANALYZE a duplicate to avoid moving the original buffer's position
             val analysisBuffer = inputBuffer.duplicate().order(java.nio.ByteOrder.nativeOrder())
             processWaveform(analysisBuffer)
