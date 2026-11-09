@@ -1,6 +1,10 @@
 package com.tigerplayer.ui.player
 
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.CoverScreenEqPreset
@@ -105,6 +109,23 @@ class PlaybackStateManager(
 
     private val _playbackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
+
+    private var audioReactiveJob: Job? = null
+
+    private fun startAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = scope.launch {
+            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
+                _playbackState.update { it.copy(audioReactiveFrame = frame) }
+            }
+        }
+    }
+
+    private fun stopAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = null
+        _playbackState.update { it.copy(audioReactiveFrame = AudioReactiveFrame()) }
+    }
 
     private val _activeSource = MutableStateFlow(MediaSource.LOCAL)
     val activeSource: StateFlow<MediaSource> = _activeSource.asStateFlow()
@@ -261,11 +282,22 @@ class PlaybackStateManager(
             }
         }
 
-        // 9. Audio reactive frame
-        scope.launch {
-            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
-                _playbackState.update { it.copy(audioReactiveFrame = frame) }
+        // 9. Audio reactive frame (Lifecycle-aware: paused when app is backgrounded to save CPU and battery)
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    startAudioReactiveCollection()
+                }
+
+                override fun onStop(owner: LifecycleOwner) {
+                    stopAudioReactiveCollection()
+                }
+            })
+            if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                startAudioReactiveCollection()
             }
+        }.onFailure {
+            startAudioReactiveCollection()
         }
 
         // 10. Bluetooth connected device

@@ -3,6 +3,10 @@ package com.tigerplayer.ui.equalizer
 import androidx.annotation.OptIn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
@@ -15,6 +19,7 @@ import com.tigerplayer.data.repository.AutoEqRepository
 import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.AudioDeviceEngine
+import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.engine.FilterType
 import com.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -70,6 +75,36 @@ class EqualizerHubViewModel(
     private var curveComputationJob: Job? = null
     private var searchJob: Job? = null
     private var activeAutoEqItem: HeadphoneSearchResult? = null
+    private var audioReactiveJob: Job? = null
+
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            startAudioReactiveCollection()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            stopAudioReactiveCollection()
+        }
+    }
+
+    private fun startAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = viewModelScope.launch {
+            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
+                _uiState.update { it.copy(audioReactiveFrame = frame) }
+            }
+        }
+    }
+
+    private fun stopAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = null
+        _uiState.update { it.copy(audioReactiveFrame = AudioReactiveFrame()) }
+    }
+
+    fun setVisualizerActive(active: Boolean) {
+        adaptiveDspEngine.setVisualizerActive(active)
+    }
 
     init {
         // 1. Observe active connected device & check for AutoEq match
@@ -110,11 +145,14 @@ class EqualizerHubViewModel(
             }
         }
 
-        // 4. Observe real-time audio reactive frame for spatial and studio visualizer dynamics
-        viewModelScope.launch {
-            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
-                _uiState.update { it.copy(audioReactiveFrame = frame) }
+        // 4. Observe real-time audio reactive frame (Lifecycle-aware: paused when backgrounded)
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+            if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                startAudioReactiveCollection()
             }
+        }.onFailure {
+            startAudioReactiveCollection()
         }
 
         // 5. Load saved cover screen / spatial EQ mood preset
@@ -663,6 +701,14 @@ class EqualizerHubViewModel(
                 )
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
+        }
+        stopAudioReactiveCollection()
     }
 
     companion object {

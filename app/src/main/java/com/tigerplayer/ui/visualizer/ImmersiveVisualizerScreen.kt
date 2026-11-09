@@ -56,9 +56,11 @@ fun ImmersiveVisualizerScreen(
     }
 
     DisposableEffect(Unit) {
+        viewModel.setVisualizerActive(true)
         // We ensure Spatial Nexus Engine is ON when we open the view
         viewModel.setActiveEngineSource(com.tigerplayer.ui.equalizer.EqualizerEngineSource.SPATIAL_NODES)
         onDispose {
+            viewModel.setVisualizerActive(false)
             // Revert to Parametric EQ when closing to not leave the nodes active (or leave it active if the user wanted it, but let's let the Hub manage it)
             viewModel.setActiveEngineSource(com.tigerplayer.ui.equalizer.EqualizerEngineSource.PARAMETRIC_BANDS)
         }

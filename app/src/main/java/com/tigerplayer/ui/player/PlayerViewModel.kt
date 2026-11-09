@@ -634,6 +634,10 @@ class PlayerViewModel @Inject constructor(
         playbackStateManager.setFullPlayerActive(active)
     }
 
+    fun setVisualizerActive(active: Boolean) {
+        adaptiveDspEngine.setVisualizerActive(active)
+    }
+
     fun onSearchQueryChanged(query: String) {
         _rawSearchQuery.value = query
     }
