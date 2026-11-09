@@ -300,7 +300,7 @@ fun AutoEqSelectorSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(if (isCoverScreen) 0.95f else 0.85f)
-                .glassEffect(RoundedCornerShape(20.dp))
+                .glassEffect(RoundedCornerShape(20.dp), isOpaque = true)
         ) {
             Column(
                 modifier = Modifier

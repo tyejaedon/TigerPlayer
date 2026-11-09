@@ -915,8 +915,7 @@ internal fun PlaybackRateDialog(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(dialogShape)
-                .background(Color(0xFF121212).copy(alpha = 0.94f))
-                .glassEffect(dialogShape)
+                .glassEffect(dialogShape, isOpaque = true)
                 .border(1.dp, Color.White.copy(alpha = 0.14f), dialogShape)
                 .padding(20.dp)
         ) {

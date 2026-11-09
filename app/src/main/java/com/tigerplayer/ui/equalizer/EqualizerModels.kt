@@ -49,8 +49,7 @@ data class ParametricBand(
  */
 enum class EqualizerBandMode(val title: String) {
     FIVE_BAND("5-Band"),
-    TEN_BAND("10-Band ISO"),
-    AUTOEQ_PARAMETRIC("AutoEq PEQ")
+    TEN_BAND("10-Band ISO")
 }
 
 /**
@@ -242,6 +241,9 @@ data class EqualizerHubUiState(
     val autoEqModel: String? = null,
     val autoEqSource: String? = null,
     val targetCurve: String? = null,
+    val isAutoEqModified: Boolean = false,
+    val originalAutoEqBands: List<ParametricBand> = emptyList(),
+    val originalPreampDb: Float = 0f,
     val connectedDeviceName: String = "Internal Speaker",
     val environmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.STUDIO,
     val studioTab: EqualizerStudioTab = EqualizerStudioTab.STUDIO_EQ,

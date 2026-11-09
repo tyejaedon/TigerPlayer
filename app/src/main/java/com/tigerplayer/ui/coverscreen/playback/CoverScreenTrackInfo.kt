@@ -770,7 +770,7 @@ internal fun CoverScreenAddToPlaylistDialog(
                 .fillMaxWidth(0.95f)
                 .heightIn(max = 280.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .glassEffect(RoundedCornerShape(24.dp))
+                .glassEffect(RoundedCornerShape(24.dp), isOpaque = true)
                 .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
             shape = RoundedCornerShape(24.dp),
             color = Color.Transparent
