@@ -12,6 +12,7 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 ## [Unreleased]
 
 ### Added
+- **MediaLibraryService Migration & Android Auto / Wear OS Browse Tree**: migrated `AudioPlayerService` from `MediaSessionService` to `MediaLibraryService` (`MediaLibrarySession`), unlocking full browse tree integration for Android Auto, Wear OS, and voice commands ("Play X on TigerPlayer"); added `MediaBrowseTree` domain engine exposing structured two-tier navigation (`Albums`, `Artists`, `Playlists`, `Folders`, `Heavy Rotation`, and `Day List`) with full pagination, search, and container-to-track resolution; unified track-to-media-item serialization in `MediaItemConverter` with full queue preservation across IPC; registered `automotive_app_desc.xml` manifest descriptor and `MEDIA_PLAY_FROM_SEARCH` intent filters; added comprehensive unit test suites in `MediaBrowseTreeTest` and `MediaItemConverterTest`. (closes #60)
 - **Curated Feeds Save Parity on Cover Screen**: added quick-action save-to-playlist button (`Icons.AutoMirrored.Rounded.PlaylistAdd`) and `SaveCuratedPlaylistDialog` in `CoverScreenDaylistDetailView` and `CoverScreenDiscoverWeeklyDetailView` with delegation to `playerViewModel.saveCuratedPlaylist`, establishing full feature parity with main app curation views; increased quick-action button heights to 42dp for accessible touch targets on compact cover displays. (closes #329)
 
 ### Improved

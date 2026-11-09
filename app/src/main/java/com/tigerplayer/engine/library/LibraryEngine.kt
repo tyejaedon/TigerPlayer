@@ -18,6 +18,7 @@ import com.tigerplayer.data.repository.M3uRepository
 import com.tigerplayer.data.repository.MediaDataRepository
 import com.tigerplayer.data.repository.MusicFolderRepository
 import com.tigerplayer.data.repository.StorageRepository
+import com.tigerplayer.engine.library.MediaBrowseTree
 import com.tigerplayer.ui.home.HomeUiState
 import com.tigerplayer.ui.home.UserStatistics
 import com.tigerplayer.ui.player.LibraryArtist
@@ -41,7 +42,8 @@ class LibraryEngine @Inject constructor(
     private val mediaDataRepository: MediaDataRepository,
     private val musicFolderRepository: MusicFolderRepository,
     private val m3uRepository: M3uRepository,
-    private val storageRepository: StorageRepository
+    private val storageRepository: StorageRepository,
+    val mediaBrowseTree: MediaBrowseTree
 ) {
 
     /** Supported sorting criteria for tracks and albums in the library. */

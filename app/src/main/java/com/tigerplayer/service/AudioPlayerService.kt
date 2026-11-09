@@ -28,11 +28,17 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.session.CommandButton
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import coil.imageLoader
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.SettableFuture
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.tigerplayer.data.local.PlaybackPrefs
@@ -86,9 +92,9 @@ data class PeqProfile(val name: String, val preamp: Float, val bands: List<PeqBa
 @Suppress("DEPRECATION")
 @UnstableApi
 @AndroidEntryPoint
-class AudioPlayerService : MediaSessionService() {
+class AudioPlayerService : MediaLibraryService() {
 
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
 
     @Inject lateinit var adaptiveDspEngine: AdaptiveDspEngine
@@ -98,6 +104,7 @@ class AudioPlayerService : MediaSessionService() {
     @Inject lateinit var settingsDataStore: SettingsDataStore
     @Inject lateinit var hapticsDebugMonitor: HapticsDebugMonitor
     @Inject lateinit var navidromeUrlSigner: NavidromeUrlSigner
+    @Inject lateinit var mediaBrowseTree: com.tigerplayer.engine.library.MediaBrowseTree
 
     private var isBitPerfectMode = false // Initial state to ensure first call triggers
     private var lastReplayGainMode = ReplayGainMode.OFF
@@ -349,8 +356,7 @@ class AudioPlayerService : MediaSessionService() {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
-        mediaSession = MediaSession.Builder(this, player)
-            .setCallback(CustomMediaSessionCallback())
+        mediaSession = MediaLibrarySession.Builder(this, player, CustomMediaLibrarySessionCallback())
             .setSessionActivity(pendingIntent)
             .build()
 
@@ -892,7 +898,7 @@ class AudioPlayerService : MediaSessionService() {
         return nextMatches || prevMatches
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onDestroy() {
         // Must precede release(): an in-flight offload transition is suspended in a delay(), and
@@ -912,16 +918,32 @@ class AudioPlayerService : MediaSessionService() {
         super.onDestroy()
     }
 
-    private inner class CustomMediaSessionCallback : MediaSession.Callback {
+    private fun <T> runAsyncFuture(block: suspend () -> T): ListenableFuture<T> {
+        val future = SettableFuture.create<T>()
+        serviceScope.launch {
+            try {
+                future.set(block())
+            } catch (e: Throwable) {
+                future.setException(e)
+            }
+        }
+        return future
+    }
+
+    private inner class CustomMediaLibrarySessionCallback : MediaLibrarySession.Callback {
         @OptIn(UnstableApi::class)
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
-                .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY)).add(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+                .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
+                .add(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_LOAD_PEQ, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_SET_ACOUSTIC_ENV, Bundle.EMPTY))
                 .build()
-            return MediaSession.ConnectionResult.AcceptedResultBuilder(session).setAvailableSessionCommands(sessionCommands).setCustomLayout(createCustomLayoutList()).build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(sessionCommands)
+                .setCustomLayout(createCustomLayoutList())
+                .build()
         }
 
         override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
@@ -960,6 +982,132 @@ class AudioPlayerService : MediaSessionService() {
                 }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val rootItem = mediaBrowseTree.getRootItem()
+            return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
+        }
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            return runAsyncFuture {
+                val children = mediaBrowseTree.getChildren(parentId, page, pageSize)
+                LibraryResult.ofItemList(ImmutableList.copyOf(children), params)
+            }
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            return runAsyncFuture {
+                val item = mediaBrowseTree.getItem(mediaId)
+                if (item != null) {
+                    LibraryResult.ofItem(item, null)
+                } else {
+                    LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+                }
+            }
+        }
+
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<Void>> {
+            return runAsyncFuture {
+                val count = mediaBrowseTree.searchCount(query)
+                session.notifySearchResultChanged(browser, query, count, params)
+                LibraryResult.ofVoid(params)
+            }
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            return runAsyncFuture {
+                val results = mediaBrowseTree.search(query, page, pageSize)
+                LibraryResult.ofItemList(ImmutableList.copyOf(results), params)
+            }
+        }
+
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>
+        ): ListenableFuture<List<MediaItem>> {
+            return runAsyncFuture {
+                val voiceQuery = mediaItems.firstOrNull()?.requestMetadata?.searchQuery
+                if (!voiceQuery.isNullOrBlank()) {
+                    return@runAsyncFuture mediaBrowseTree.resolveVoiceQuery(voiceQuery)
+                }
+
+                val resolvedList = mutableListOf<MediaItem>()
+                for (item in mediaItems) {
+                    val expanded = mediaBrowseTree.expandItemToTracks(item)
+                    if (expanded.isNotEmpty()) {
+                        resolvedList.addAll(expanded)
+                    } else if (item.localConfiguration?.uri != null) {
+                        resolvedList.add(item)
+                    } else if (item.requestMetadata.mediaUri != null) {
+                        resolvedList.add(item.buildUpon().setUri(item.requestMetadata.mediaUri).build())
+                    } else {
+                        resolvedList.add(item)
+                    }
+                }
+                resolvedList
+            }
+        }
+
+        @Suppress("OVERRIDE_DEPRECATION")
+        @Deprecated("Deprecated in Java", ReplaceWith("onPlaybackResumption(mediaSession, controller)"))
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            return runAsyncFuture {
+                if (player.mediaItemCount > 0) {
+                    MediaSession.MediaItemsWithStartPosition(
+                        emptyList(),
+                        player.currentMediaItemIndex,
+                        player.currentPosition
+                    )
+                } else {
+                    val defaultTracks = mediaBrowseTree.resolveVoiceQuery("")
+                    MediaSession.MediaItemsWithStartPosition(
+                        defaultTracks,
+                        0,
+                        0L
+                    )
+                }
+            }
+        }
+
+        override fun onSubscribe(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<Void>> {
+            return Futures.immediateFuture(LibraryResult.ofVoid(params))
         }
     }
 }
