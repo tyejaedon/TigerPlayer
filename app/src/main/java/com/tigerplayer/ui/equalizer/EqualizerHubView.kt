@@ -551,6 +551,7 @@ private fun MainAppStudioEqualizerLayout(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         // 1. Studio Header
@@ -647,106 +648,122 @@ private fun MainAppStudioEqualizerLayout(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // AutoEq Headphone Catalog & Restore Button Bar (Placed above frequency bands button)
+        // 2. Nested Studio Controls Tier: AutoEq Catalog/Restore + Band Mode Selector
         val isModified = state.isAutoEqModified && state.autoEqModel != null
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassEffect(RoundedCornerShape(12.dp))
-                .border(
-                    1.dp,
-                    if (isModified) TigerNeonOrange.copy(alpha = 0.6f)
-                    else if (state.autoEqModel != null) TigerCyberCyan.copy(alpha = 0.5f)
-                    else Color.White.copy(alpha = 0.08f),
-                    RoundedCornerShape(12.dp)
-                )
-                .clickable {
-                    if (isModified) {
-                        viewModel.restoreAutoEqProfile()
-                    } else {
-                        onOpenAutoEq()
-                    }
-                }
-                .padding(vertical = 10.dp, horizontal = 12.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (isModified) Icons.Default.RestartAlt else Icons.Default.Headphones,
-                        contentDescription = null,
-                        tint = if (isModified) TigerNeonOrange else TigerCyberCyan,
-                        modifier = Modifier.size(16.dp)
+            // AutoEq Headphone Catalog & Restore Pill
+            Box(
+                modifier = Modifier
+                    .weight(1.15f)
+                    .height(48.dp)
+                    .glassEffect(RoundedCornerShape(12.dp))
+                    .border(
+                        1.dp,
+                        if (isModified) TigerNeonOrange.copy(alpha = 0.6f)
+                        else if (state.autoEqModel != null) TigerCyberCyan.copy(alpha = 0.5f)
+                        else Color.White.copy(alpha = 0.08f),
+                        RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = if (isModified) "Restore AutoEq" else "AutoEq Headphone Catalog",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = when {
-                                isModified -> "Revert manual edits back to ${state.autoEqModel}"
-                                state.autoEqModel != null -> "Active Profile: ${state.autoEqModel}"
-                                else -> "Calibrate headphones to Harman target"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isModified) TigerNeonOrange else if (state.autoEqModel != null) TigerCyberCyan else Color.White.copy(alpha = 0.5f),
-                            fontSize = 10.sp
-                        )
+                    .clickable {
+                        if (isModified) {
+                            viewModel.restoreAutoEqProfile()
+                        } else {
+                            onOpenAutoEq()
+                        }
                     }
-                }
-
-                Text(
-                    text = when {
-                        isModified -> "RESTORE ➔"
-                        state.autoEqModel != null -> "ACTIVE ➔"
-                        else -> "BROWSE ➔"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Black,
-                    color = if (isModified) TigerNeonOrange else TigerCyberCyan,
-                    fontSize = 10.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Frequency Bands Mode Selector Bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassEffect(RoundedCornerShape(12.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                .padding(4.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                EqualizerBandMode.entries.forEach { mode ->
-                    val selected = state.bandMode == mode
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (selected) TigerNeonOrange else Color.Transparent)
-                            .clickable { viewModel.setBandMode(mode) }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = mode.title,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selected) Color.White else Color.White.copy(alpha = 0.6f)
+                        Icon(
+                            imageVector = if (isModified) Icons.Default.RestartAlt else Icons.Default.Headphones,
+                            contentDescription = null,
+                            tint = if (isModified) TigerNeonOrange else TigerCyberCyan,
+                            modifier = Modifier.size(16.dp)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Text(
+                                text = if (isModified) "Restore AutoEq" else "AutoEq Catalog",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = when {
+                                    isModified -> "Revert edits"
+                                    state.autoEqModel != null -> state.autoEqModel
+                                    else -> "Harman Target"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isModified) TigerNeonOrange else if (state.autoEqModel != null) TigerCyberCyan else Color.White.copy(alpha = 0.5f),
+                                fontSize = 9.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = when {
+                            isModified -> "RESTORE ➔"
+                            state.autoEqModel != null -> "ACTIVE"
+                            else -> "CALIBRATE"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = if (isModified) TigerNeonOrange else TigerCyberCyan,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+
+            // Frequency Bands Mode Selector Pill
+            Box(
+                modifier = Modifier
+                    .weight(0.85f)
+                    .height(48.dp)
+                    .glassEffect(RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .padding(3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    EqualizerBandMode.entries.forEach { mode ->
+                        val selected = state.bandMode == mode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) TigerNeonOrange else Color.Transparent)
+                                .clickable { viewModel.setBandMode(mode) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = mode.title,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) Color.White else Color.White.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
             }

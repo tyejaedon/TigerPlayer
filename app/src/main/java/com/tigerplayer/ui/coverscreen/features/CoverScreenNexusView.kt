@@ -39,7 +39,7 @@ fun CoverScreenNexusView(
     if (isHubMode) {
         com.tigerplayer.ui.equalizer.EqualizerHubView(
             isCoverScreen = true,
-            onClose = onClose,
+            onClose = { isHubMode = false },
             modifier = modifier
         )
         return

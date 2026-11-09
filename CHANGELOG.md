@@ -11,6 +11,12 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Curated Feeds Save Parity on Cover Screen**: added quick-action save-to-playlist button (`Icons.AutoMirrored.Rounded.PlaylistAdd`) and `SaveCuratedPlaylistDialog` in `CoverScreenDaylistDetailView` and `CoverScreenDiscoverWeeklyDetailView` with delegation to `playerViewModel.saveCuratedPlaylist`, establishing full feature parity with main app curation views; increased quick-action button heights to 42dp for accessible touch targets on compact cover displays. (closes #329)
+
+### Improved
+- **Cover Screen Home & Equalizer Card and Button Layout Optimization**: promoted `CoverScreenEqHubCard` to a full-width studio hero banner card on `CoverScreenHomeContent`, eliminating device and preset label truncation against the master toggle switch; re-balanced visual/audio engine cards into an aligned 2×2 grid (`SpatialNexus` + `AcousticSpace` and `SonicFootprint` + `Constellation`), removing the orphaned full-width card; added `.verticalScroll(rememberScrollState())` to `MainAppStudioEqualizerLayout` to avoid screen cutoff on smaller displays; nested the AutoEq catalog/restore trigger and band mode selector into a compact side-by-side studio tier; restored translucent `glassEffect` default styling while supporting explicit `isOpaque` overrides on overlays/sheets; fixed `CoverScreenNexusView` navigation return from PEQ Hub mode. (closes #329)
+
 ## [2.1.8] - 2026-11-08
 
 ### Added
