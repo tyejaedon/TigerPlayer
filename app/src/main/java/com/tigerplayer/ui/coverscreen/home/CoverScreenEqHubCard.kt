@@ -171,33 +171,6 @@ fun CoverScreenEqHubCardContent(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Mini Frequency Curve Visualizer Canvas
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .glassEffect(RoundedCornerShape(10.dp))
-                    .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
-            ) {
-
-
-                // Headroom Badge
-                Text(
-                    text = if (isEqEnabled) """PK ${String.format("%.1f", compositePeakDb)} dB""" else "BYPASS",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isEqEnabled) EmeraldNeon else Color.Gray,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Active Preset & Tweak Action Row
             Row(
                 modifier = Modifier.fillMaxWidth(),

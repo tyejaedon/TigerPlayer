@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tigerplayer.ui.theme.TigerCyberCyan
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.engine.AudioReactiveFrame
@@ -321,7 +323,7 @@ internal fun NexusSpatialCanvas(
                                 val snapped = Offset(snapX, snapY)
                                 onNodeDragged(node.id, snapped)
 
-                                if (snapY == 0f) {
+                                if (snapY == 0f || snapX == 0f) {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 }
                             },
@@ -377,36 +379,67 @@ internal fun NexusSpatialCanvas(
                         String.format(Locale.US, "%.0f Hz", currentFreq)
                     }
                     val gainText = String.format(Locale.US, "%+.1f dB", safeGain)
-                    val tooltipText = "$freqText | $gainText"
+                    val isZeroGainSnap = abs(clampedY) < 0.07f
 
-                    val isNearTop = animatedPos.y < -0.7f
+                    val isNearTop = animatedPos.y < -0.6f
                     val tooltipOffsetX = when {
-                        animatedPos.x < -0.7f -> 16.dp
-                        animatedPos.x > 0.7f -> (-16).dp
+                        animatedPos.x < -0.7f -> 24.dp
+                        animatedPos.x > 0.7f -> (-24).dp
                         else -> 0.dp
                     }
 
-                    Box(
+                    Surface(
                         modifier = Modifier
                             .align(if (isNearTop) Alignment.BottomCenter else Alignment.TopCenter)
                             .offset(
                                 x = tooltipOffsetX,
-                                y = if (isNearTop) 28.dp else (-26).dp
+                                y = if (isNearTop) 36.dp else (-38).dp
                             )
-                            .background(Color(0xEE080810), RoundedCornerShape(8.dp))
-                            .border(1.dp, node.color.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                            .testTag("nexus_tooltip_${node.id}")
+                            .glassEffect(RoundedCornerShape(12.dp))
+                            .border(1.5.dp, node.color, RoundedCornerShape(12.dp))
+                            .testTag("nexus_tooltip_${node.id}"),
+                        color = Color(0xEE0B0C10),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(
-                            text = tooltipText,
-                            color = NeonWhite,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            letterSpacing = 0.5.sp,
-                            maxLines = 1
-                        )
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(node.color)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = node.label.uppercase(Locale.US),
+                                    color = node.color,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.8.sp
+                                )
+                            }
+                            Text(
+                                text = "$freqText | $gainText",
+                                color = NeonWhite,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                letterSpacing = 0.5.sp,
+                                maxLines = 1
+                            )
+                            if (isZeroGainSnap) {
+                                Text(
+                                    text = "0 dB FLAT SNAP",
+                                    color = TigerCyberCyan,
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
                     }
                 }
             }

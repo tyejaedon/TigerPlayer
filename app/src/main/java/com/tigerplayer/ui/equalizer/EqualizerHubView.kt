@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -68,7 +69,6 @@ fun EqualizerHubView(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAutoEqDialog by remember { mutableStateOf(false) }
-    var showImportDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier
@@ -89,14 +89,13 @@ fun EqualizerHubView(
                     state = uiState,
                     viewModel = viewModel,
                     onOpenAutoEq = { showAutoEqDialog = true },
-                    onOpenImport = { showImportDialog = true },
                     onClose = onClose
                 )
             }
         }
     }
 
-    // AutoEq Headphone Catalog Dialog / Sheet
+    // AutoEq Headphone Catalog & Importer Sheet
     if (showAutoEqDialog) {
         AutoEqSelectorSheet(
             query = uiState.autoEqQuery,
@@ -114,18 +113,10 @@ fun EqualizerHubView(
                 viewModel.applyAutoEqProfile(item, forceParametric = forceParametric)
                 showAutoEqDialog = false
             },
-            onDismiss = { showAutoEqDialog = false }
-        )
-    }
-
-    // Raw AutoEq Text Importer Dialog
-    if (showImportDialog) {
-        AutoEqImportDialog(
-            onImport = { rawText, name ->
-                viewModel.importRawAutoEq(rawText, name)
-                showImportDialog = false
+            onImportRawText = { rawText, profileName ->
+                viewModel.importRawAutoEq(rawText, profileName)
             },
-            onDismiss = { showImportDialog = false }
+            onDismiss = { showAutoEqDialog = false }
         )
     }
 }
@@ -143,6 +134,7 @@ private fun CoverScreenEqualizerLayout(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         // 1. Top Header Bar
@@ -211,11 +203,25 @@ private fun CoverScreenEqualizerLayout(
             }
         }
 
+        TwoWayEngineSourceSwitcher(
+            activeSource = state.activeEngineSource,
+            onSelectSource = viewModel::setActiveEngineSource,
+            allowToggleOff = true,
+            onToggleOff = {
+                if (state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES) {
+                    viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS)
+                } else {
+                    viewModel.resetToFlat()
+                }
+            },
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+
         // 2. Frequency Response Curve Preview
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(170.dp)
+                .height(260.dp)
                 .glassEffect(RoundedCornerShape(14.dp))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -265,6 +271,75 @@ private fun CoverScreenEqualizerLayout(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(6.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // AutoEq Headphone Catalog & Restore Button Bar (Placed above frequency band cards)
+        val isCoverAutoEqModified = state.isAutoEqModified && state.autoEqModel != null
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassEffect(RoundedCornerShape(12.dp))
+                .border(
+                    1.dp,
+                    if (isCoverAutoEqModified) TigerNeonOrange.copy(alpha = 0.6f)
+                    else if (state.autoEqModel != null) TigerCyberCyan.copy(alpha = 0.5f)
+                    else Color.White.copy(alpha = 0.08f),
+                    RoundedCornerShape(12.dp)
+                )
+                .clickable {
+                    if (isCoverAutoEqModified) {
+                        viewModel.restoreAutoEqProfile()
+                    } else {
+                        onOpenAutoEq()
+                    }
+                }
+                .padding(vertical = 8.dp, horizontal = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = if (isCoverAutoEqModified) Icons.Default.RestartAlt else Icons.Default.Headphones,
+                        contentDescription = null,
+                        tint = if (isCoverAutoEqModified) TigerNeonOrange else TigerCyberCyan,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = when {
+                            isCoverAutoEqModified -> "Restore AutoEq (${state.autoEqModel})"
+                            state.autoEqModel != null -> "AutoEq: ${state.autoEqModel}"
+                            else -> "AutoEq Headphone Catalog"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isCoverAutoEqModified) TigerNeonOrange else if (state.autoEqModel != null) TigerCyberCyan else Color.White,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Text(
+                    text = when {
+                        isCoverAutoEqModified -> "RESTORE ➔"
+                        state.autoEqModel != null -> "ACTIVE ➔"
+                        else -> "CATALOG ➔"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    color = if (isCoverAutoEqModified) TigerNeonOrange else TigerCyberCyan,
+                    fontSize = 10.sp
                 )
             }
         }
@@ -363,22 +438,40 @@ private fun CoverScreenEqualizerLayout(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(
-                onClick = onOpenAutoEq,
-                colors = ButtonDefaults.buttonColors(containerColor = TigerCyberCyan),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                modifier = Modifier
-                    .height(30.dp)
-                    .testTag("EqAutoEqButton")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Headphones,
-                    contentDescription = null,
-                    tint = Color.Black,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("AutoEq", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            if (isCoverAutoEqModified) {
+                Button(
+                    onClick = viewModel::restoreAutoEqProfile,
+                    colors = ButtonDefaults.buttonColors(containerColor = TigerNeonOrange),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RestartAlt,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Restore", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = onOpenAutoEq,
+                    colors = ButtonDefaults.buttonColors(containerColor = TigerCyberCyan),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .height(30.dp)
+                        .testTag("EqAutoEqButton")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Headphones,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("AutoEq", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
             if (state.connectedDeviceName.isNotBlank()) {
@@ -451,7 +544,6 @@ private fun MainAppStudioEqualizerLayout(
     state: EqualizerHubUiState,
     viewModel: EqualizerHubViewModel,
     onOpenAutoEq: () -> Unit,
-    onOpenImport: () -> Unit,
     onClose: (() -> Unit)?
 ) {
     var showFaderOverlay by remember { mutableStateOf(false) }
@@ -459,6 +551,7 @@ private fun MainAppStudioEqualizerLayout(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         // 1. Studio Header
@@ -540,43 +633,128 @@ private fun MainAppStudioEqualizerLayout(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        EngineSourceToggle(
-            title = "PARAMETRIC EQ ENGINE",
-            isActive = state.activeEngineSource == EqualizerEngineSource.PARAMETRIC_BANDS,
-            onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
+        TwoWayEngineSourceSwitcher(
+            activeSource = state.activeEngineSource,
+            onSelectSource = viewModel::setActiveEngineSource,
+            allowToggleOff = true,
+            onToggleOff = {
+                if (state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES) {
+                    viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS)
+                } else {
+                    viewModel.resetToFlat()
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // 2. Mode Selector & Actions Bar (TigerPlayer Command Palette Style)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassEffect(RoundedCornerShape(12.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+        // 2. Nested Studio Controls Tier: AutoEq Catalog/Restore + Band Mode Selector
+        val isModified = state.isAutoEqModified && state.autoEqModel != null
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
+            // AutoEq Headphone Catalog & Restore Pill
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .weight(1.15f)
+                    .height(48.dp)
+                    .glassEffect(RoundedCornerShape(12.dp))
+                    .border(
+                        1.dp,
+                        if (isModified) TigerNeonOrange.copy(alpha = 0.6f)
+                        else if (state.autoEqModel != null) TigerCyberCyan.copy(alpha = 0.5f)
+                        else Color.White.copy(alpha = 0.08f),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .clickable {
+                        if (isModified) {
+                            viewModel.restoreAutoEqProfile()
+                        } else {
+                            onOpenAutoEq()
+                        }
+                    }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                // Band Mode Toggle Group
                 Row(
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isModified) Icons.Default.RestartAlt else Icons.Default.Headphones,
+                            contentDescription = null,
+                            tint = if (isModified) TigerNeonOrange else TigerCyberCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Text(
+                                text = if (isModified) "Restore AutoEq" else "AutoEq Catalog",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = when {
+                                    isModified -> "Revert edits"
+                                    state.autoEqModel != null -> state.autoEqModel
+                                    else -> "Harman Target"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isModified) TigerNeonOrange else if (state.autoEqModel != null) TigerCyberCyan else Color.White.copy(alpha = 0.5f),
+                                fontSize = 9.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = when {
+                            isModified -> "RESTORE ➔"
+                            state.autoEqModel != null -> "ACTIVE"
+                            else -> "CALIBRATE"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = if (isModified) TigerNeonOrange else TigerCyberCyan,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+
+            // Frequency Bands Mode Selector Pill
+            Box(
+                modifier = Modifier
+                    .weight(0.85f)
+                    .height(48.dp)
+                    .glassEffect(RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .padding(3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     EqualizerBandMode.entries.forEach { mode ->
                         val selected = state.bandMode == mode
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(if (selected) TigerNeonOrange else Color.Transparent)
-                                .clickable { viewModel.setBandMode(mode) }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                                .clickable { viewModel.setBandMode(mode) },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -588,51 +766,6 @@ private fun MainAppStudioEqualizerLayout(
                         }
                     }
                 }
-
-                // AutoEq & Import Tools
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(TigerCyberCyan)
-                            .clickable { onOpenAutoEq() }
-                            .padding(horizontal = 10.dp, vertical = 7.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Headphones,
-                                contentDescription = null,
-                                tint = Color.Black,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "AutoEq",
-                                color = Color.Black,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = onOpenImport,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = "Import AutoEq Text",
-                            tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-                }
             }
         }
 
@@ -642,7 +775,7 @@ private fun MainAppStudioEqualizerLayout(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(280.dp)
                 .glassEffect(RoundedCornerShape(16.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
         ) {
@@ -654,7 +787,7 @@ private fun MainAppStudioEqualizerLayout(
                     selectedBandIndex = state.selectedBandIndex,
                     audioFrame = state.audioReactiveFrame,
                     onNodeDragged = { idx, newFreq, newGain ->
-                        if (state.bandMode == EqualizerBandMode.AUTOEQ_PARAMETRIC) {
+                        if (state.autoEqModel != null) {
                             viewModel.updateBandFrequency(idx, newFreq)
                         }
                         viewModel.updateBandGain(idx, newGain)
@@ -945,7 +1078,7 @@ private fun FrequencyBandsTuningOverlay(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
+                        .height(180.dp)
                         .glassEffect(RoundedCornerShape(14.dp))
                         .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
                 ) {
@@ -956,7 +1089,7 @@ private fun FrequencyBandsTuningOverlay(
                         selectedBandIndex = state.selectedBandIndex,
                         audioFrame = state.audioReactiveFrame,
                         onNodeDragged = { idx, newFreq, newGain ->
-                            if (state.bandMode == EqualizerBandMode.AUTOEQ_PARAMETRIC) {
+                            if (state.autoEqModel != null) {
                                 viewModel.updateBandFrequency(idx, newFreq)
                             }
                             viewModel.updateBandGain(idx, newGain)

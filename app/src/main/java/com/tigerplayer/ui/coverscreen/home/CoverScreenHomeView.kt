@@ -210,6 +210,9 @@ fun CoverScreenHomeView(
                     }
                 },
                 onRefresh = dashboardViewModel::refreshForYou,
+                onSavePlaylist = { name ->
+                    playerViewModel.saveCuratedPlaylist(name, daylistTracks)
+                },
                 onClose = { internalDaylistOpen = false }
             )
         }
@@ -249,6 +252,9 @@ fun CoverScreenHomeView(
                     }
                 },
                 onRefresh = dashboardViewModel::refreshForYou,
+                onSavePlaylist = { name ->
+                    playerViewModel.saveCuratedPlaylist(name, discoveryWeeklyTracks)
+                },
                 onClose = { internalDiscoveryOpen = false }
             )
         }
@@ -383,6 +389,32 @@ fun CoverScreenHomeContent(
                 )
             }
 
+            // Featured Equalizer Hub Studio Card (Full-width hero banner)
+            item {
+                CoverScreenEqHubCard(
+                    onOpenEqHub = onEqHubClick,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // DSP & 3D Spatial Engines Row
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CoverSpatialNexusCard(
+                        modifier = Modifier.weight(1f),
+                        onClick = onSpatialNexusClick
+                    )
+                    CoverAcousticSpaceCard(
+                        modifier = Modifier.weight(1f),
+                        onClick = onAcousticSpaceClick
+                    )
+                }
+            }
+
+            // Listening DNA & Galaxy Constellation Row
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -396,34 +428,6 @@ fun CoverScreenHomeContent(
                         modifier = Modifier.weight(1f),
                         nodeCount = homeState.statistics.topArtists.size,
                         onClick = onConstellationClick
-                    )
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CoverScreenEqHubCard(
-                        onOpenEqHub = onEqHubClick,
-                        modifier = Modifier.weight(1f)
-                    )
-                    CoverSpatialNexusCard(
-                        modifier = Modifier.weight(1f),
-                        onClick = onSpatialNexusClick
-                    )
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CoverAcousticSpaceCard(
-                        modifier = Modifier.weight(1f),
-                        onClick = onAcousticSpaceClick
                     )
                 }
             }

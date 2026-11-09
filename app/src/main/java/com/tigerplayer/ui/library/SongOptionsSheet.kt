@@ -69,7 +69,7 @@ fun SongOptionsSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 8.dp, end = 8.dp, bottom = 12.dp)
-                .glassEffect(RoundedCornerShape(32.dp)),
+                .glassEffect(RoundedCornerShape(32.dp), isOpaque = true),
             color = MaterialTheme.elevatedSurface.copy(alpha = 0.72f),
             shape = RoundedCornerShape(32.dp),
             border = BorderStroke(
@@ -176,7 +176,7 @@ fun SongOptionsSheet(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
                     .fillMaxHeight(0.5f)
-                    .glassEffect(MaterialTheme.shapes.extraLarge),
+                    .glassEffect(MaterialTheme.shapes.extraLarge, isOpaque = true),
                 color = Color.Transparent,
                 shape = MaterialTheme.shapes.extraLarge,
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))

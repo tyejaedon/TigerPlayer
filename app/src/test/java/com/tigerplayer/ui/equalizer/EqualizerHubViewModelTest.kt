@@ -184,14 +184,25 @@ class EqualizerHubViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(EqualizerBandMode.AUTOEQ_PARAMETRIC, state.bandMode)
+        assertEquals(EqualizerBandMode.TEN_BAND, state.bandMode)
         assertEquals(3, state.bands.size)
         assertEquals(-4.5f, state.preampDb, 0.01f)
         assertEquals("Sennheiser HD 650", state.autoEqModel)
+        assertFalse(state.isAutoEqModified)
 
         assertEquals(28f, state.bands[0].frequencyHz, 0.01f)
         assertEquals(6.2f, state.bands[0].gainDb, 0.01f)
         assertEquals(FilterType.PEAKING, state.bands[0].filterType)
+
+        // Test manual edit detection and restore
+        viewModel.updateBandGain(0, 10.0f)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isAutoEqModified)
+
+        viewModel.restoreAutoEqProfile()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isAutoEqModified)
+        assertEquals(6.2f, viewModel.uiState.value.bands[0].gainDb, 0.01f)
 
         assertEquals(105f, state.bands[1].frequencyHz, 0.01f)
         assertEquals(-2.0f, state.bands[1].gainDb, 0.01f)
