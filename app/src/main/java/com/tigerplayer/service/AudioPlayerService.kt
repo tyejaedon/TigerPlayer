@@ -77,7 +77,7 @@ data class PeqProfile(val name: String, val preamp: Float, val bands: List<PeqBa
  * Responsibilities:
  * - Manages MediaSession lifecycle and foreground notification with MediaStyle.
  * - Configures ExoPlayer DefaultAudioSink with custom AudioProcessor chain:
- *   [AdaptiveDspEngine] -> [FftProcessor] -> [WaveformCaptureProcessor].
+ *   [AdaptiveDspEngine] -> [WaveformCaptureProcessor].
  * - Handles OEM-specific hardware quirks (e.g. disabling float output on Samsung to avoid HAL buffer crashes).
  * - Manages hardware offload state transitions with volume ramp fading ([offloadTransitionMutex]).
  * - Resolves dynamic Navidrome streaming credentials at request time via [ResolvingDataSource].
@@ -195,7 +195,6 @@ class AudioPlayerService : MediaSessionService() {
         val audioSink: AudioSink = DefaultAudioSink.Builder(this)
             .setAudioProcessors(arrayOf(
                 adaptiveDspEngine,
-                fftProcessor,
                 waveformCaptureProcessor
             ))
             .setEnableFloatOutput(enableFloatOutput)

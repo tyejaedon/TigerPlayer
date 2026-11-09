@@ -3,6 +3,10 @@ package com.tigerplayer.engine
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
@@ -135,6 +139,64 @@ class AdaptiveDspEngine @Inject constructor(
     private var analysisFrameCounter = 0
     private var energyAccumulator = 0f
     private var analysisCostMicrosSmoothed = 0f
+
+    @Volatile private var isAppInForeground = true
+    @Volatile private var hasActiveVisualizer = true
+    @Volatile private var isSpectralAnalysisActive = true
+
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            isAppInForeground = true
+            updateSpectralAnalysisState()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            isAppInForeground = false
+            updateSpectralAnalysisState()
+        }
+    }
+
+    init {
+        try {
+            ContextCompat.getMainExecutor(context).execute {
+                ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+            }
+        } catch (_: Exception) {
+            // JVM unit test fallback where ProcessLifecycleOwner is not initialized
+        }
+    }
+
+    /**
+     * Toggles whether audio-reactive visualizers are actively displayed on screen.
+     * When false or when the app is backgrounded, spectral FFT analysis is bypassed to conserve CPU and battery.
+     */
+    fun setVisualizerActive(active: Boolean) {
+        hasActiveVisualizer = active
+        updateSpectralAnalysisState()
+    }
+
+    /**
+     * Directly controls whether spectral FFT analysis and audio-reactive frame emissions are active.
+     */
+    fun setSpectralAnalysisActive(active: Boolean) {
+        if (isSpectralAnalysisActive != active) {
+            isSpectralAnalysisActive = active
+            if (!active) {
+                fftSpectralAnalyzer.reset()
+                analysisFrameCounter = 0
+                energyAccumulator = 0f
+                spectralBandAccumulators.fill(0f)
+                _audioReactiveFrame.value = AudioReactiveFrame()
+            }
+        }
+    }
+
+    fun isSpectralAnalysisActive(): Boolean = isSpectralAnalysisActive
+
+    private fun updateSpectralAnalysisState() {
+        val shouldRun = isAppInForeground && hasActiveVisualizer
+        setSpectralAnalysisActive(shouldRun)
+    }
 
     /**
      * Clamps float value [v] into range [0.0, 1.0].
@@ -747,95 +809,97 @@ class AdaptiveDspEngine @Inject constructor(
             sampleL = (delayedL * reduction).coerceIn(-1.0f, 1.0f)
             sampleR = (delayedR * reduction).coerceIn(-1.0f, 1.0f)
 
-            // 6. REAL-TIME ANALYSIS
-            val mono = (sampleL + sampleR) * 0.5f
-            val energy = abs(mono)
+            // 6. REAL-TIME ANALYSIS (Gated by screen / visualizer visibility to save CPU and battery)
+            if (isSpectralAnalysisActive) {
+                val mono = (sampleL + sampleR) * 0.5f
+                val energy = abs(mono)
 
-            if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
-                for (index in spectralBandFilters.indices) {
-                    val filtered = spectralBandFilters[index].process(mono)
-                    spectralBandAccumulators[index] += abs(filtered)
-                }
-            } else {
-                fftSpectralAnalyzer.pushSample(mono)
-            }
-
-            energyAccumulator += energy
-            analysisFrameCounter += 1
-
-            if (analysisFrameCounter >= 1024) {
-                val analysisStartNs = System.nanoTime()
-                val inv = 1f / analysisFrameCounter.toFloat()
-                val energyAvg = (energyAccumulator * inv * 3.2f)
-
-                var rawSum = 0f
                 if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
-                    for (index in 0 until 6) {
-                        val raw = spectralBandAccumulators[index] * inv
-                        rawBandEnergies[index] = raw
-                        rawSum += raw
+                    for (index in spectralBandFilters.indices) {
+                        val filtered = spectralBandFilters[index].process(mono)
+                        spectralBandAccumulators[index] += abs(filtered)
                     }
                 } else {
-                    val fftBands = fftSpectralAnalyzer.getLatestBandEnergies()
-                    for (index in 0 until 6) {
-                        val raw = fftBands[index]
-                        rawBandEnergies[index] = raw
-                        rawSum += raw
+                    fftSpectralAnalyzer.pushSample(mono)
+                }
+
+                energyAccumulator += energy
+                analysisFrameCounter += 1
+
+                if (analysisFrameCounter >= 1024) {
+                    val analysisStartNs = System.nanoTime()
+                    val inv = 1f / analysisFrameCounter.toFloat()
+                    val energyAvg = (energyAccumulator * inv * 3.2f)
+
+                    var rawSum = 0f
+                    if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
+                        for (index in 0 until 6) {
+                            val raw = spectralBandAccumulators[index] * inv
+                            rawBandEnergies[index] = raw
+                            rawSum += raw
+                        }
+                    } else {
+                        val fftBands = fftSpectralAnalyzer.getLatestBandEnergies()
+                        for (index in 0 until 6) {
+                            val raw = fftBands[index]
+                            rawBandEnergies[index] = raw
+                            rawSum += raw
+                        }
                     }
+
+                    val energyGate = clamp01(energyAvg)
+                    var bandSum = 0f
+                    for (index in 0 until 6) {
+                        val raw = rawBandEnergies[index]
+                        val targetNorm = (raw * 14f).coerceAtLeast(0f)
+                        val currentNorm = spectralBandNormalization[index]
+                        val coeff = if (targetNorm > currentNorm) 0.16f else 0.04f
+                        spectralBandNormalization[index] = currentNorm + (targetNorm - currentNorm) * coeff
+
+                        val ratio = if (rawSum > 1e-6f) raw / rawSum else 0f
+                        val normalized = (ratio * 6f * energyGate).coerceIn(0f, 1f)
+                        val adaptive = (raw / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
+                        val value = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
+                        normalizedBandEnergies[index] = value
+                        bandSum += value
+                    }
+
+                    val bassAvg = (normalizedBandEnergies[0] * 0.72f + normalizedBandEnergies[1] * 0.28f).coerceIn(0f, 1f)
+                    val midAvg = (normalizedBandEnergies[2] * 0.56f + normalizedBandEnergies[3] * 0.44f).coerceIn(0f, 1f)
+                    val trebleAvg = (normalizedBandEnergies[4] * 0.58f + normalizedBandEnergies[5] * 0.42f).coerceIn(0f, 1f)
+
+                    val weightedCentroid =
+                        normalizedBandEnergies[0] * 0.05f +
+                        normalizedBandEnergies[1] * 0.18f +
+                        normalizedBandEnergies[2] * 0.38f +
+                        normalizedBandEnergies[3] * 0.58f +
+                        normalizedBandEnergies[4] * 0.78f +
+                        normalizedBandEnergies[5] * 0.95f
+                    val centroid = if (bandSum > 1e-5f) weightedCentroid / bandSum else 0.5f
+                    val flux = max(0f, energyAvg - prevEnergy) * 2.2f
+                    prevEnergy += (energyAvg - prevEnergy) * 0.2f
+
+                    val elapsedMicros = (System.nanoTime() - analysisStartNs) / 1_000f
+                    val profileSmoothing = if (elapsedMicros > analysisCostMicrosSmoothed) 0.24f else 0.08f
+                    analysisCostMicrosSmoothed +=
+                        (elapsedMicros - analysisCostMicrosSmoothed) * profileSmoothing
+
+                    _audioReactiveFrame.value = AudioReactiveFrame(
+                        bass = clamp01(bassAvg),
+                        mid = clamp01(midAvg),
+                        treble = clamp01(trebleAvg),
+                        energy = clamp01(energyAvg),
+                        centroid = clamp01(centroid),
+                        flux = clamp01(flux),
+                        spectralBands = normalizedBandEnergies.toList(),
+                        analysisMode = localSpectralMode,
+                        analysisCostMicros = analysisCostMicrosSmoothed.coerceAtLeast(0f)
+                    )
+
+                    analysisFrameCounter = 0
+                    spectralBandAccumulators.fill(0f)
+                    energyAccumulator = 0f
                 }
-
-                val energyGate = clamp01(energyAvg)
-                var bandSum = 0f
-                for (index in 0 until 6) {
-                    val raw = rawBandEnergies[index]
-                    val targetNorm = (raw * 14f).coerceAtLeast(0f)
-                    val currentNorm = spectralBandNormalization[index]
-                    val coeff = if (targetNorm > currentNorm) 0.16f else 0.04f
-                    spectralBandNormalization[index] = currentNorm + (targetNorm - currentNorm) * coeff
-
-                    val ratio = if (rawSum > 1e-6f) raw / rawSum else 0f
-                    val normalized = (ratio * 6f * energyGate).coerceIn(0f, 1f)
-                    val adaptive = (raw / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
-                    val value = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
-                    normalizedBandEnergies[index] = value
-                    bandSum += value
-                }
-
-                val bassAvg = (normalizedBandEnergies[0] * 0.72f + normalizedBandEnergies[1] * 0.28f).coerceIn(0f, 1f)
-                val midAvg = (normalizedBandEnergies[2] * 0.56f + normalizedBandEnergies[3] * 0.44f).coerceIn(0f, 1f)
-                val trebleAvg = (normalizedBandEnergies[4] * 0.58f + normalizedBandEnergies[5] * 0.42f).coerceIn(0f, 1f)
-
-                val weightedCentroid =
-                    normalizedBandEnergies[0] * 0.05f +
-                    normalizedBandEnergies[1] * 0.18f +
-                    normalizedBandEnergies[2] * 0.38f +
-                    normalizedBandEnergies[3] * 0.58f +
-                    normalizedBandEnergies[4] * 0.78f +
-                    normalizedBandEnergies[5] * 0.95f
-                val centroid = if (bandSum > 1e-5f) weightedCentroid / bandSum else 0.5f
-                val flux = max(0f, energyAvg - prevEnergy) * 2.2f
-                prevEnergy += (energyAvg - prevEnergy) * 0.2f
-
-                val elapsedMicros = (System.nanoTime() - analysisStartNs) / 1_000f
-                val profileSmoothing = if (elapsedMicros > analysisCostMicrosSmoothed) 0.24f else 0.08f
-                analysisCostMicrosSmoothed +=
-                    (elapsedMicros - analysisCostMicrosSmoothed) * profileSmoothing
-
-                _audioReactiveFrame.value = AudioReactiveFrame(
-                    bass = clamp01(bassAvg),
-                    mid = clamp01(midAvg),
-                    treble = clamp01(trebleAvg),
-                    energy = clamp01(energyAvg),
-                    centroid = clamp01(centroid),
-                    flux = clamp01(flux),
-                    spectralBands = normalizedBandEnergies.toList(),
-                    analysisMode = localSpectralMode,
-                    analysisCostMicros = analysisCostMicrosSmoothed.coerceAtLeast(0f)
-                )
-
-                analysisFrameCounter = 0
-                spectralBandAccumulators.fill(0f)
-                energyAccumulator = 0f
             }
 
             // 7. OUTPUT STAGE: convert float domain back to PCM_16BIT for sink compatibility.

@@ -270,7 +270,9 @@ fun CoverScreenHomeView(
                     viewModel = hiltViewModel(),
                     onArtistSelected = { artistName ->
                         playerViewModel.onSearchQueryChanged(artistName)
-                        internalConstellationOpen = false
+                    },
+                    onTrackSelected = { trackNode ->
+                        playerViewModel.onSearchQueryChanged(trackNode.label)
                     }
                 )
                 IconButton(

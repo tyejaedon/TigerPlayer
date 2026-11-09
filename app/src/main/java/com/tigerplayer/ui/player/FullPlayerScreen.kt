@@ -276,6 +276,15 @@ fun FullPlayerScreen(
     }
 
     val isVisualizerActive = (effectiveVisualMode == PlayerVisualMode.VORTEX || isVortexImmersive) && !albumClarityMode
+    val isVisualizerRendering = isVisualizerActive && isRenderingActive
+
+    DisposableEffect(isVisualizerRendering) {
+        viewModel.setVisualizerActive(isVisualizerRendering)
+        onDispose {
+            viewModel.setVisualizerActive(false)
+        }
+    }
+
     val visualizerAlpha by animateFloatAsState(
         targetValue = if (isVisualizerActive && isRenderingActive) 1f else 0f,
         animationSpec = tween(durationMillis = 400),

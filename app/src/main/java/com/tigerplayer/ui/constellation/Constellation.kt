@@ -308,12 +308,15 @@ fun ConstellationScreen(
                     }
                 }
 
+                val focusedAlbumNode = focusedNode?.takeIf { it.type == NodeType.ALBUM }
+
                 // --- 3. UI OVERLAY ---
                 ConstellationOverlay(
                     insight = state.insight,
                     isSunFocused = isSunFocused,
                     selectedArtistReading = selectedArtistReading,
                     selectedArtistTopTracks = focusedNode?.takeIf { it.type == NodeType.ARTIST }?.topTracks ?: emptyList(),
+                    selectedAlbumNode = focusedAlbumNode,
                     selectedTrackNode = focusedTrackNode,
                     artistNodeCount = artistNodeCount,
                     albumNodeCount = albumNodeCount,
@@ -571,6 +574,7 @@ fun ConstellationOverlay(
     isSunFocused: Boolean,
     selectedArtistReading: ConstellationArtistReading?,
     selectedArtistTopTracks: List<TopTrackEntry>,
+    selectedAlbumNode: PositionedNode? = null,
     selectedTrackNode: PositionedNode?,
     artistNodeCount: Int,
     albumNodeCount: Int,
@@ -584,6 +588,7 @@ fun ConstellationOverlay(
     val panelTitle = when {
         isSunFocused -> "COSMIC INSIGHT"
         selectedArtistReading != null -> "ARTIST SIGNAL"
+        selectedAlbumNode != null -> "ALBUM SIGNAL"
         selectedTrackNode != null -> "TRACK SIGNAL"
         else -> "GALAXY GUIDE"
     }
@@ -592,9 +597,13 @@ fun ConstellationOverlay(
         isSunFocused -> "Cosmic Insight • ${insight.densityPercent}% density"
         selectedArtistReading != null ->
             "${selectedArtistReading.artistName} • ${selectedArtistReading.playCount} plays • ${selectedArtistReading.minutesListened} min"
+        selectedAlbumNode != null -> {
+            val estMinutes = (selectedAlbumNode.playCount * 3.5f).toInt()
+            "${selectedAlbumNode.label} • ${selectedAlbumNode.playCount} plays • ~$estMinutes min"
+        }
         selectedTrackNode != null ->
             "${selectedTrackNode.label} • ${selectedTrackNode.playCount} plays"
-        else -> "Tap the Sun, a star, or a track for details"
+        else -> "Tap the Sun, a star, an album, or a track for details"
     }
 
     Column(
@@ -663,10 +672,11 @@ fun ConstellationOverlay(
                     when {
                         isSunFocused -> GalaxyInsightDetails(insight)
                         selectedArtistReading != null -> ArtistReadingDetails(selectedArtistReading, selectedArtistTopTracks)
+                        selectedAlbumNode != null -> AlbumReadingDetails(selectedAlbumNode)
                         selectedTrackNode != null -> TrackReadingDetails(selectedTrackNode)
                         else -> {
                             Text(
-                                text = "Tap the Sun for cosmic insight, a star for artist stats, or a track for song stats.",
+                                text = "Tap the Sun for cosmic insight, a star for artist stats, an album for album stats, or a track for song stats.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White,
                                 lineHeight = 20.sp
@@ -785,6 +795,32 @@ private fun ArtistReadingDetails(artist: ConstellationArtistReading, topTracks: 
             }
         }
     }
+}
+
+/** Album stats block - shown when an album node is tapped. */
+@Composable
+private fun AlbumReadingDetails(album: PositionedNode) {
+    Text(
+        text = album.label,
+        style = MaterialTheme.typography.titleSmall,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
+    album.artistName?.takeIf { it.isNotBlank() }?.let { artistName ->
+        Text(
+            text = artistName,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.78f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    val estMinutes = (album.playCount * 3.5f).toInt()
+    InsightRow(label = "Total play count", value = "${album.playCount} plays")
+    InsightRow(label = "Estimated listening time", value = "~$estMinutes min")
 }
 
 /** Song stats block - shown when a track node is tapped, including in collapsed mode. */
