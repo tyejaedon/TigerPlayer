@@ -136,23 +136,7 @@ object CoverScreenPerformanceManager {
     fun calculateWaveformPoints(
         amplitudes: List<Float>?,
         pointCount: Int = 32
-    ): FloatArray {
-        val safeCount = pointCount.coerceAtLeast(2)
-        val result = FloatArray(safeCount)
-        if (amplitudes.isNullOrEmpty()) {
-            result.fill(0.2f)
-            return result
-        }
-
-        val lastIdx = (amplitudes.size - 1).coerceAtLeast(0)
-        val divisor = (safeCount - 1).toFloat()
-        for (i in 0 until safeCount) {
-            val sourceIndex = ((i / divisor) * lastIdx).toInt().coerceIn(0, lastIdx)
-            val raw = amplitudes[sourceIndex]
-            result[i] = if (raw.isFinite()) raw.coerceIn(0f, 1f) else 0.2f
-        }
-        return result
-    }
+    ): FloatArray = com.tigerplayer.engine.WaveformComputation.calculateWaveformPoints(amplitudes, pointCount)
 
     /**
      * Generates a waveform path into an existing [Path] object without allocating new Path instances.

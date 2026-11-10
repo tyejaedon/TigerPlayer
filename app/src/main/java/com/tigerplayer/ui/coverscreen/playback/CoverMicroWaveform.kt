@@ -254,7 +254,7 @@ fun CoverMicroWaveform(
                 )
 
                 // 1. Populate Wave 3: 1.5x larger than Wave 2 (3x Wave 1) - crowning cyan apex tier
-                // Cosine wave with 1.0x frequency multiplier and 2.0 cycles: serene fluid ribbon
+                // Cosine wave with 2.0x frequency multiplier and 2.0 cycles: shimmering peak
                 populatePositiveWaveformPath(
                     path = wavePath3,
                     fillPath = fillPath3,
@@ -266,17 +266,17 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = 0f,
                     isCosine = true,
-                    frequencyMultiplier = 1.0f,
+                    frequencyMultiplier = 2.0f,
                     waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
                     flux = 0f,
                     turbulence = 0f,
-                    edgeTaper = 0f
+                    edgeTaper = 0.08f
                 )
 
                 // 2. Populate Wave 2: 2x larger than Wave 1 - intermediate middle tier (PI / 4 phase lead)
-                // Harmonized 1.0x frequency and 2.0 cycles with 45-degree phase offset
+                // Harmonized 1.5x frequency multiplier and 2.0 cycles with 45-degree phase offset: lively flutter
                 populatePositiveWaveformPath(
                     path = wavePath2,
                     fillPath = fillPath2,
@@ -288,17 +288,17 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = piOver4,
                     isCosine = false,
-                    frequencyMultiplier = 1.0f,
+                    frequencyMultiplier = 1.5f,
                     waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
                     flux = 0f,
                     turbulence = 0f,
-                    edgeTaper = 0f
+                    edgeTaper = 0.08f
                 )
 
                 // 3. Populate Wave 1: Base amplitude - foundational red foreground tier
-                // Drives the punchy bass anchor at standard 1.0x frequency and 2.0 cycles
+                // Drives the punchy bass anchor at 1.2x frequency multiplier and 2.0 cycles: steady baseline
                 populatePositiveWaveformPath(
                     path = wavePath1,
                     fillPath = fillPath1,
@@ -310,13 +310,13 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = 0f,
                     isCosine = false,
-                    frequencyMultiplier = 1.0f,
+                    frequencyMultiplier = 1.2f,
                     waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
                     energy = animatedEnergy,
                     flux = 0f,
                     turbulence = 0f,
-                    edgeTaper = 0f
+                    edgeTaper = 0.08f
                 )
 
                 // Active Played Zone (0 to progressX horizontally, unconfined vertically by parent bounds)
@@ -595,40 +595,7 @@ fun formatCoverDuration(ms: Long): String {
 }
 
 /**
- * Modular waveform generator that creates smooth, continuous curved paths containing exclusively
- * positive amplitudes resting directly on top of the slider track with slight overlap for seamless
- * visual continuity.
- *
- * Mathematical details:
- * - Continuous raised sinusoidal wave: 0.5 * (1 + trig(theta)), oscillating smoothly between 0 and maxHeight.
- * - At troughs (trig = -1), the wave gently touches the baseline with a zero horizontal derivative (no flat clipping).
- * - At crests (trig = 1), the wave reaches its apex peak height smoothly.
- * - When [isCosine] is false and [phaseOffset] is 0, generates a standard sine wave.
- * - When [isCosine] is false and [phaseOffset] is PI / 4 radians, generates a phase-shifted wave (45-degree offset).
- * - When [isCosine] is true, generates a cosine wave (equivalent to 90-degree offset).
- * - Anchors smoothly to the baseline x-axis with shift 0 at the start (x = 0) and intercepts the baseline
- *   at the endpoint (x = width) via a raised-cosine boundary envelope W(x), preventing vertical detachment
- *   while preserving dynamic audio-reactivity and harmonic ripples across the slider body.
- * - All waves develop proper continuous curves in all scenarios (including zero audio energy, silence, or paused playback)
- *   without flattening or collapsing into straight lines.
- *
- * @param path Pre-allocated Path for the wave stroke outline.
- * @param fillPath Optional pre-allocated Path for the closed gradient fill geometry.
- * @param points Smoothed amplitude data points along the horizontal axis.
- * @param width Full horizontal drawing width in pixels.
- * @param maxHeight Maximum upward peak height in pixels above the baseline.
- * @param baselineY Baseline Y coordinate (top edge of the slider track).
- * @param overlapPx Overlap distance in pixels into the slider rect for seamless visual continuity.
- * @param phase Dynamic animated phase angle in radians.
- * @param phaseOffset Fixed phase offset in radians (e.g. PI / 4 for the second wave).
- * @param isCosine Whether this wave uses cosine (true) or sine (false).
- * @param frequencyMultiplier Harmonic frequency scaling factor.
- * @param waveCycles Number of complete wave cycles across the width (defaults to 2.0f for consistent sinusoidal wavelength).
- * @param bass Real-time low frequency energy (0..1).
- * @param energy Audio energy scaling factor (0.2..1.2).
- * @param flux Transient frame-to-frame attack flux factor (0..1).
- * @param turbulence Multi-harmonic ripple factor creating rich, vibey, organic undulations.
- * @param edgeTaper Boundary fraction (0..0.5) over which the wave smoothly anchors to the baseline.
+ * Modular waveform calculations delegated to [com.tigerplayer.engine.WaveformComputation].
  */
 fun calculateWaveformYWithEffectiveHeight(
     x: Float,
@@ -643,60 +610,21 @@ fun calculateWaveformYWithEffectiveHeight(
     turbulence: Float = 0f,
     edgeTaper: Float = 0.12f,
     points: FloatArray? = null
-): Float {
-    if (width <= 0f || effectiveHeight <= 0f) {
-        return effectiveBaselineY
-    }
-    val normalizedX = (x / width).coerceIn(0f, 1f)
-    if (edgeTaper > 0f && (normalizedX <= 0f || normalizedX >= 1f)) {
-        return effectiveBaselineY
-    }
+): Float = com.tigerplayer.engine.WaveformComputation.calculateWaveformYWithEffectiveHeight(
+    x = x,
+    width = width,
+    effectiveHeight = effectiveHeight,
+    effectiveBaselineY = effectiveBaselineY,
+    safePhase = safePhase,
+    phaseOffset = phaseOffset,
+    isCosine = isCosine,
+    frequencyMultiplier = frequencyMultiplier,
+    waveCycles = waveCycles,
+    turbulence = turbulence,
+    edgeTaper = edgeTaper,
+    points = points
+)
 
-    val twoPi = (Math.PI * 2.0).toFloat()
-    val angle = (safePhase * frequencyMultiplier) + phaseOffset + (normalizedX * waveCycles * twoPi * frequencyMultiplier)
-    val rawTrig = if (isCosine) cos(angle.toDouble()).toFloat() else sin(angle.toDouble()).toFloat()
-
-    val baseOscillation = 0.5f * (1f + rawTrig)
-    // Multi-harmonic overtone ripples for lively, organic vibration (active only when turbulence > 0)
-    val harmonicRipple = if (turbulence > 0f) {
-        val ripple2 = sin((angle * 2.0f + safePhase * 0.7f).toDouble()).toFloat() * (0.18f * turbulence)
-        val ripple3 = cos((angle * 3.0f - safePhase * 1.1f).toDouble()).toFloat() * (0.09f * turbulence)
-        (ripple2 + ripple3) * baseOscillation
-    } else {
-        0f
-    }
-
-    val smoothOscillation = (baseOscillation + harmonicRipple).coerceAtLeast(0f)
-
-    // Smooth boundary envelope W(x): continuous raised-cosine tapering that anchors to the baseline
-    // at x = 0 (shift 0) and x = width (intercepting effectiveBaselineY), applied only when edgeTaper > 0f
-    val envelope = if (edgeTaper > 0f) {
-        val safeEdgeTaper = edgeTaper.coerceIn(0.01f, 0.5f)
-        when {
-            normalizedX < safeEdgeTaper -> {
-                val t = normalizedX / safeEdgeTaper
-                0.5f * (1f - cos(Math.PI * t.toDouble()).toFloat())
-            }
-            normalizedX > 1f - safeEdgeTaper -> {
-                val t = (1f - normalizedX) / safeEdgeTaper
-                0.5f * (1f - cos(Math.PI * t.toDouble()).toFloat())
-            }
-            else -> 1f
-        }
-    } else {
-        1f
-    }
-
-    val peakHeight = smoothOscillation * effectiveHeight * envelope
-    return effectiveBaselineY - peakHeight
-}
-
-/**
- * Calculates the waveform Y coordinate at any horizontal pixel position [x].
- *
- * Supports smooth raised-cosine boundary envelope W(x) when [edgeTaper] > 0,
- * and pure continuous unwindowed sinusoidal curvature when [edgeTaper] <= 0.
- */
 fun calculateWaveformY(
     x: Float,
     width: Float,
@@ -714,37 +642,24 @@ fun calculateWaveformY(
     turbulence: Float = 0f,
     edgeTaper: Float = 0.12f,
     points: FloatArray? = null
-): Float {
-    if (width <= 0f || maxHeight <= 0f) {
-        return baselineY + overlapPx
-    }
-
-    val effectiveBaselineY = baselineY + overlapPx
-    val safePhase = if (phase.isFinite()) phase else 0f
-    val safeBass = if (bass.isFinite()) bass.coerceIn(0f, 1f) else 0f
-    val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
-    val safeFlux = if (flux.isFinite()) flux.coerceIn(0f, 1f) else 0f
-
-    val transientKick = (safeBass * safeBass * 0.10f) + (safeFlux * 0.08f)
-    val baseEnergyFactor = (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
-    val energyModulation = 0.90f + 0.10f * baseEnergyFactor + transientKick
-    val effectiveHeight = maxHeight * energyModulation
-
-    return calculateWaveformYWithEffectiveHeight(
-        x = x,
-        width = width,
-        effectiveHeight = effectiveHeight,
-        effectiveBaselineY = effectiveBaselineY,
-        safePhase = safePhase,
-        phaseOffset = phaseOffset,
-        isCosine = isCosine,
-        frequencyMultiplier = frequencyMultiplier,
-        waveCycles = waveCycles,
-        turbulence = turbulence,
-        edgeTaper = edgeTaper,
-        points = points
-    )
-}
+): Float = com.tigerplayer.engine.WaveformComputation.calculateWaveformY(
+    x = x,
+    width = width,
+    maxHeight = maxHeight,
+    baselineY = baselineY,
+    overlapPx = overlapPx,
+    phase = phase,
+    phaseOffset = phaseOffset,
+    isCosine = isCosine,
+    frequencyMultiplier = frequencyMultiplier,
+    waveCycles = waveCycles,
+    bass = bass,
+    energy = energy,
+    flux = flux,
+    turbulence = turbulence,
+    edgeTaper = edgeTaper,
+    points = points
+)
 
 fun populatePositiveWaveformPath(
     path: Path,
@@ -764,75 +679,25 @@ fun populatePositiveWaveformPath(
     flux: Float = 0f,
     turbulence: Float = 0f,
     edgeTaper: Float = 0f
-): Path {
-    path.reset()
-    fillPath?.reset()
-    if (width <= 0f || maxHeight <= 0f) {
-        return path
-    }
-
-    val effectiveBaselineY = baselineY + overlapPx
-    val safePhase = if (phase.isFinite()) phase else 0f
-    val safeBass = if (bass.isFinite()) bass.coerceIn(0f, 1f) else 0f
-    val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
-    val safeFlux = if (flux.isFinite()) flux.coerceIn(0f, 1f) else 0f
-
-    val transientKick = (safeBass * safeBass * 0.10f) + (safeFlux * 0.08f)
-    val baseEnergyFactor = (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
-    val energyModulation = 0.90f + 0.10f * baseEnergyFactor + transientKick
-    val effectiveHeight = maxHeight * energyModulation
-
-    val sampleCount = max(64, points.size)
-    val step = width / sampleCount
-
-    val y0 = calculateWaveformYWithEffectiveHeight(
-        x = 0f,
-        width = width,
-        effectiveHeight = effectiveHeight,
-        effectiveBaselineY = effectiveBaselineY,
-        safePhase = safePhase,
-        phaseOffset = phaseOffset,
-        isCosine = isCosine,
-        frequencyMultiplier = frequencyMultiplier,
-        waveCycles = waveCycles,
-        turbulence = turbulence,
-        edgeTaper = edgeTaper,
-        points = points
-    )
-    path.moveTo(0f, y0)
-    fillPath?.let { fill ->
-        fill.moveTo(0f, effectiveBaselineY)
-        fill.lineTo(0f, y0)
-    }
-
-    for (i in 1..sampleCount) {
-        val x = if (i == sampleCount) width else i * step
-        val y = calculateWaveformYWithEffectiveHeight(
-            x = x,
-            width = width,
-            effectiveHeight = effectiveHeight,
-            effectiveBaselineY = effectiveBaselineY,
-            safePhase = safePhase,
-            phaseOffset = phaseOffset,
-            isCosine = isCosine,
-            frequencyMultiplier = frequencyMultiplier,
-            waveCycles = waveCycles,
-            turbulence = turbulence,
-            edgeTaper = edgeTaper,
-            points = points
-        )
-        path.lineTo(x, y)
-        fillPath?.lineTo(x, y)
-    }
-
-    fillPath?.let { fill ->
-        fill.lineTo(width, effectiveBaselineY)
-        fill.lineTo(0f, effectiveBaselineY)
-        fill.close()
-    }
-
-    return path
-}
+): Path = com.tigerplayer.engine.WaveformComputation.populatePositiveWaveformPath(
+    path = path,
+    fillPath = fillPath,
+    points = points,
+    width = width,
+    maxHeight = maxHeight,
+    baselineY = baselineY,
+    overlapPx = overlapPx,
+    phase = phase,
+    phaseOffset = phaseOffset,
+    isCosine = isCosine,
+    frequencyMultiplier = frequencyMultiplier,
+    waveCycles = waveCycles,
+    bass = bass,
+    energy = energy,
+    flux = flux,
+    turbulence = turbulence,
+    edgeTaper = edgeTaper
+)
 
 @Preview(showBackground = true, backgroundColor = 0xFF0E0C0A)
 @Composable
