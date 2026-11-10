@@ -317,6 +317,13 @@ fun FullPlayerScreen(
                     .fillMaxSize()
                     .graphicsLayer(alpha = visualizerAlpha)
             ) {
+                // High-contrast solid black backdrop beneath fluid visualizer
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                )
+
                 AndroidView(
                     factory = { ctx ->
                         FluidVortexView(ctx).apply {
@@ -1313,8 +1320,7 @@ private fun HeaderButton(
     }
 }
 
-internal fun calculateFullPlayerVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp =
-    if (isVortexImmersive) 0.dp else 8.dp
+internal fun calculateFullPlayerVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp = 0.dp
 
 internal fun calculateFullPlayerVortexScrimAlpha(isVortexImmersive: Boolean): Float =
     if (isVortexImmersive) 0f else 1f

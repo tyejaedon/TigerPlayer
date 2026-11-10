@@ -344,18 +344,7 @@ fun CoverScreenMiniHub(
         }
 
         // BACKGROUND: Fluid Vortex (primary) with Artist/Artwork photo as fallback
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (coverImageRequest != null) {
-                AsyncImage(
-                    model = coverImageRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blur(16.dp)
-                )
-            }
-
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             AndroidView(
                 factory = { ctx ->
                     FluidVortexView(ctx).apply {
@@ -703,8 +692,7 @@ fun CoverScreenMiniHub(
     }
 }
 
-internal fun calculateVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp =
-    if (isVortexImmersive) 0.dp else 6.dp
+internal fun calculateVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp = 0.dp
 
 internal fun calculateVortexScrimAlpha(isVortexImmersive: Boolean): Float =
     if (isVortexImmersive) 0f else 0.55f

@@ -28,10 +28,10 @@ object FluidConfig {
     /** Vorticity confinement strength maintaining swirling eddy details. */
     const val VORTICITY_CONFINEMENT = 26.0f
 
-    /** Base radius for bass-reactive fluid splats. */
-    const val BASS_SPLAT_RADIUS_BASE = 0.22f
-    /** Scale factor multiplying bass energy to expand splat radius. */
-    const val BASS_SPLAT_RADIUS_SCALE = 0.35f
+    /** Base radius for bass-reactive fluid splats scaled for screen margin containment. */
+    const val BASS_SPLAT_RADIUS_BASE = 0.11f
+    /** Scale factor multiplying bass energy to expand splat radius within bounded margins. */
+    const val BASS_SPLAT_RADIUS_SCALE = 0.18f
     /** Power scale multiplying bass energy for HDR brightness impact. */
     const val BASS_SPLAT_POWER_SCALE = 12.0f
     /** Base force for rotational swirl injection. */
@@ -261,7 +261,7 @@ open class FluidRenderer @Inject constructor(
         val orbitalAngleB = timeSec * -0.6f + 2.094f
         val orbitalAngleC = timeSec * 0.5f + 4.188f
 
-        val dynamicRadius = (FluidConfig.BASS_SPLAT_RADIUS_BASE + bass * FluidConfig.BASS_SPLAT_RADIUS_SCALE).coerceIn(0.20f, 0.55f)
+        val dynamicRadius = (FluidConfig.BASS_SPLAT_RADIUS_BASE + bass * FluidConfig.BASS_SPLAT_RADIUS_SCALE).coerceIn(0.10f, 0.22f)
         val clampedPower = (bass * FluidConfig.BASS_SPLAT_POWER_SCALE).coerceIn(1.5f, 14.0f)
 
         val palette = if (pMode == com.tigerplayer.data.local.VisualizerPaletteMode.ALBUM_ART) customPalette.get() else null
@@ -272,20 +272,20 @@ open class FluidRenderer @Inject constructor(
         if (bass > 0.02f || mid > 0.02f || treble > 0.02f) {
             idleFrameCount = 0
 
-            // 1. Center-Lower Bass Core
-            val bassX = 0.5f + (kotlin.math.cos(orbitalAngleA.toDouble()) * 0.12).toFloat()
-            val bassY = 0.5f + (kotlin.math.sin(orbitalAngleA.toDouble()) * 0.12).toFloat()
+            // 1. Center-Lower Bass Core (orbital radius 0.07f)
+            val bassX = 0.5f + (kotlin.math.cos(orbitalAngleA.toDouble()) * 0.07).toFloat()
+            val bassY = 0.5f + (kotlin.math.sin(orbitalAngleA.toDouble()) * 0.07).toFloat()
             applySplat(bassX, bassY, dynamicRadius, c1[0] * clampedPower, c1[1] * clampedPower, c1[2] * clampedPower, true)
 
-            // 2. Mid Frequency Side Splat
-            val midX = 0.5f + (kotlin.math.cos(orbitalAngleB.toDouble()) * 0.28).toFloat()
-            val midY = 0.5f + (kotlin.math.sin(orbitalAngleB.toDouble()) * 0.28).toFloat()
+            // 2. Mid Frequency Side Splat (orbital radius 0.15f)
+            val midX = 0.5f + (kotlin.math.cos(orbitalAngleB.toDouble()) * 0.15).toFloat()
+            val midY = 0.5f + (kotlin.math.sin(orbitalAngleB.toDouble()) * 0.15).toFloat()
             val midPower = (mid * 8f).coerceIn(0.8f, 7.0f)
             applySplat(midX, midY, dynamicRadius * 0.85f, c2[0] * midPower, c2[1] * midPower, c2[2] * midPower, true)
 
-            // 3. Treble Edge Splat
-            val trebleX = 0.5f + (kotlin.math.cos(orbitalAngleC.toDouble()) * 0.35).toFloat()
-            val trebleY = 0.5f + (kotlin.math.sin(orbitalAngleC.toDouble()) * 0.35).toFloat()
+            // 3. Treble Edge Splat (orbital radius 0.21f)
+            val trebleX = 0.5f + (kotlin.math.cos(orbitalAngleC.toDouble()) * 0.21).toFloat()
+            val trebleY = 0.5f + (kotlin.math.sin(orbitalAngleC.toDouble()) * 0.21).toFloat()
             val treblePower = (treble * 6f).coerceIn(0.6f, 5.0f)
             applySplat(trebleX, trebleY, dynamicRadius * 0.7f, c3[0] * treblePower, c3[1] * treblePower, c3[2] * treblePower, true)
 
@@ -296,8 +296,8 @@ open class FluidRenderer @Inject constructor(
             val radMidX = (midX - 0.5f) * swirlForce * 0.35f
             val radMidY = (midY - 0.5f) * swirlForce * 0.35f
 
-            applySplat(bassX, bassY, dynamicRadius * 1.4f, swirlForce + radBassX, -swirlForce + radBassY, 0f, false)
-            applySplat(midX, midY, dynamicRadius * 1.2f, -swirlForce * 0.7f + radMidX, swirlForce * 0.7f + radMidY, 0f, false)
+            applySplat(bassX, bassY, dynamicRadius * 1.3f, swirlForce + radBassX, -swirlForce + radBassY, 0f, false)
+            applySplat(midX, midY, dynamicRadius * 1.15f, -swirlForce * 0.7f + radMidX, swirlForce * 0.7f + radMidY, 0f, false)
         } else {
             // Ambient idle breathing swirl distributed across screen
             idleFrameCount = (idleFrameCount + 1).coerceAtMost(600)
@@ -309,15 +309,15 @@ open class FluidRenderer @Inject constructor(
             }
 
             val ambientCycle = (kotlin.math.sin(timeSec.toDouble() * 0.8) * 0.5 + 0.5).toFloat()
-            val ambientX = 0.5f + (kotlin.math.cos(timeSec.toDouble() * 0.5) * 0.25).toFloat()
-            val ambientY = 0.5f + (kotlin.math.sin(timeSec.toDouble() * 0.5) * 0.25).toFloat()
-            val ambientRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE * (1.2f + ambientCycle * 0.4f)
+            val ambientX = 0.5f + (kotlin.math.cos(timeSec.toDouble() * 0.5) * 0.14).toFloat()
+            val ambientY = 0.5f + (kotlin.math.sin(timeSec.toDouble() * 0.5) * 0.14).toFloat()
+            val ambientRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE * (1.1f + ambientCycle * 0.35f)
             val ambientPower = (1.2f + ambientCycle * 1.5f) * idleDecay
             val ambientSwirl = 2.5f * idleDecay
 
             applySplat(ambientX, ambientY, ambientRadius, c1[0] * ambientPower, c1[1] * ambientPower, c1[2] * ambientPower, true)
             applySplat(1.0f - ambientX, 1.0f - ambientY, ambientRadius * 0.9f, c2[0] * ambientPower, c2[1] * ambientPower, c2[2] * ambientPower, true)
-            applySplat(ambientX, ambientY, ambientRadius * 1.3f, ambientSwirl, -ambientSwirl, 0f, false)
+            applySplat(ambientX, ambientY, ambientRadius * 1.25f, ambientSwirl, -ambientSwirl, 0f, false)
         }
         GLES30.glBindVertexArray(0)
     }
