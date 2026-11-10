@@ -437,6 +437,7 @@ class PlaybackStateManager(
     }
 
     fun seekTo(positionMs: Long) {
+        _playbackState.update { it.copy(currentPosition = positionMs) }
         playbackEngine.seekTo(positionMs, _playbackState.value.currentTrack)
     }
 

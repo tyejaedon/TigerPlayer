@@ -400,6 +400,14 @@ class MediaControllerManager @Inject constructor(
                 updateCurrentQueuePointer(controller)
                 _mediaControllerState.tryEmit(Unit)
             }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                _currentPosition.value = newPosition.positionMs
+            }
         })
     }
 
@@ -1025,7 +1033,10 @@ class MediaControllerManager @Inject constructor(
     }
 
     fun pause() = mediaController?.pause()
-    fun seekTo(pos: Long) = mediaController?.seekTo(pos)
+    fun seekTo(pos: Long) {
+        mediaController?.seekTo(pos)
+        _currentPosition.value = pos
+    }
     fun skipToNext() {
         resetFlowStatePipeline(restoreFullVolume = true)
         mediaController?.seekToNext()
