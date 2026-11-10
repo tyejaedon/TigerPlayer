@@ -56,4 +56,15 @@ class FluidRendererTest {
         val renderer = FluidRenderer(context)
         renderer.updatePaletteColors(null)
     }
+
+    @Test
+    fun fluidConfig_splatRadiiEnsureSafeMarginContainment() {
+        // Base splat radius and scale must be bounded so maximum splat radius remains <= 0.25f,
+        // guaranteeing that orbital reaches (max orbit ~0.21f + max splat ~0.22f = 0.43f)
+        // never reach the normalized screen edges at 0.50f.
+        org.junit.Assert.assertTrue(FluidConfig.BASS_SPLAT_RADIUS_BASE <= 0.15f)
+        org.junit.Assert.assertTrue(FluidConfig.BASS_SPLAT_RADIUS_SCALE <= 0.20f)
+        val maxComputedRadius = FluidConfig.BASS_SPLAT_RADIUS_BASE + FluidConfig.BASS_SPLAT_RADIUS_SCALE
+        org.junit.Assert.assertTrue(maxComputedRadius < 0.35f)
+    }
 }
