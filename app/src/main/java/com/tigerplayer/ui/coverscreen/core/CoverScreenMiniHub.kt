@@ -317,34 +317,9 @@ fun CoverScreenMiniHub(
                 }
             )
     ) {
-        val backgroundArtModel = remember(track?.artworkUri, uiState.artistImageUrl) {
-            uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: track?.artworkUri
-        }
-        val context = LocalContext.current
-        val coverImageRequest = remember(backgroundArtModel) {
-            backgroundArtModel?.let {
-                ImageRequest.Builder(context)
-                    .data(it)
-                    .crossfade(true)
-                    .allowHardware(false)
-                    .listener(onSuccess = { _, result ->
-                        val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                        bitmap?.let { b ->
-                            androidx.palette.graphics.Palette.from(b).generate { palette ->
-                                val cVibrant = palette?.vibrantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
-                                val cDominant = palette?.dominantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
-                                val cMuted = palette?.mutedSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
-                                val paletteColors = listOfNotNull(cVibrant, cDominant, cMuted).ifEmpty { null }
-                                playerViewModel.fluidRenderer.updatePaletteColors(paletteColors)
-                            }
-                        }
-                    })
-                    .build()
-            }
-        }
 
         // BACKGROUND: Fluid Vortex (primary) with Artist/Artwork photo as fallback
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray)) {
             AndroidView(
                 factory = { ctx ->
                     FluidVortexView(ctx).apply {
@@ -356,7 +331,7 @@ fun CoverScreenMiniHub(
                 },
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(vortexBlurRadius)
+
             )
 
             // SOFT SCRIM OVERLAY (animates to clear in immersive mode)
