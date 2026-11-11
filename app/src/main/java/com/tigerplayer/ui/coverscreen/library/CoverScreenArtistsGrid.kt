@@ -97,6 +97,7 @@ fun CoverScreenArtistsGrid(
     artists: List<Artist>,
     albums: List<CoverScreenAlbum>,
     modifier: Modifier = Modifier,
+    state: androidx.compose.foundation.lazy.grid.LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
     tracks: List<AudioTrack> = emptyList(),
     playlists: List<Playlist> = emptyList(),
     onArtistSelected: (Artist) -> Unit = {},
@@ -131,6 +132,7 @@ fun CoverScreenArtistsGrid(
 
     val tabTitle = stringResource(R.string.coverscreen_tab_artists)
     LazyVerticalGrid(
+        state = state,
         columns = GridCells.Adaptive(minSize = 144.dp),
         modifier = modifier
             .fillMaxSize()

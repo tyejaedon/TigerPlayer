@@ -34,7 +34,7 @@ configure<ApplicationExtension> {
         val resolvedVersionName = project.findProperty("VERSION_NAME")?.toString()
             ?: System.getenv("BETA_VERSION_NAME")
             ?: System.getenv("VERSION_NAME")
-            ?: "2.1.7"
+            ?: "2.1.8"
 
         // SemVer multiplier formula: MAJOR * 1_000_000 + MINOR * 10_000 + PATCH * 100 + BUILD_INDEX
         // For stable production releases, BUILD_INDEX defaults to 99 so it supersedes candidate betas (1..98).

@@ -441,39 +441,42 @@ object FluidShaders {
         float neutral = min(min(rawColor.r, rawColor.g), rawColor.b);
         vec3 chroma = max(rawColor - vec3(neutral), vec3(0.0));
 
-        // Boost saturation for vibrant non-white cores
+        // Boost saturation for vibrant, radiant color show
         float intensity = 1.0 - exp(-peak * 1.2);
-        vec3 color = chroma * (0.85 + intensity * 1.15) + hue * (rawColor * 0.15);
+        float vibranceDrive = 1.30 + lowEnergy * 0.45 + highEnergy * 0.35;
+        vec3 color = chroma * (0.95 + intensity * 1.35) * vibranceDrive + hue * (rawColor * 0.18);
 
         // Soft highlight compression maintaining hue balance
         vec3 compressed = rawColor / (1.0 + rawColor * 0.65);
         color = mix(color, compressed, 0.35);
 
-        // Dynamic audio-reactive spectral glow (additive, non-destructive to hue)
-        vec3 lowGlow = vec3(uBandsLow.r * 0.35, uBandsLow.g * 0.15, uBandsLow.b * 0.05);
-        vec3 highGlow = vec3(uBandsHigh.r * 0.05, uBandsHigh.g * 0.20, uBandsHigh.b * 0.35);
+        // Dynamic audio-reactive spectral glow (amplified for high-contrast color show)
+        vec3 lowGlow = vec3(uBandsLow.r * 0.55, uBandsLow.g * 0.25, uBandsLow.b * 0.08);
+        vec3 highGlow = vec3(uBandsHigh.r * 0.08, uBandsHigh.g * 0.35, uBandsHigh.b * 0.60);
         vec3 spectralGlow = mix(lowGlow, highGlow, smoothstep(0.2, 0.8, highEnergy));
-        color += spectralGlow * intensity * 0.25;
+        color += spectralGlow * intensity * 0.40;
 
         float dist = distance(vUv, vec2(0.5));
 
-        // Edge halo reflecting native fluid hue
-        float outerHalo = smoothstep(0.18, 0.62, dist) * (1.0 - smoothstep(0.70, 1.02, dist));
-        color += color * outerHalo * 0.28;
+        // Edge halo reflecting native fluid hue along outer curl boundary
+        float outerHalo = smoothstep(0.12, 0.34, dist) * (1.0 - smoothstep(0.36, 0.44, dist));
+        color += color * outerHalo * 0.45;
 
         // Prevent central overburn while keeping vibrant gradients
-        float centerMask = 1.0 - smoothstep(0.04, 0.38, dist);
-        float centerLimiter = mix(1.0, 0.75, centerMask * smoothstep(0.35, 0.95, peak));
+        float centerMask = 1.0 - smoothstep(0.03, 0.28, dist);
+        float centerLimiter = mix(1.0, 0.78, centerMask * smoothstep(0.35, 0.95, peak));
         color *= centerLimiter;
 
-        color = ACESFilm(color * 1.1);
+        color = ACESFilm(color * 1.15);
         color = pow(color, vec3(1.0 / 2.2));
 
-        // Edge-to-edge full screen viewport vignette
-        float vignette = 1.0 - smoothstep(0.65, 1.15, dist);
-        color *= mix(0.85, 1.0, vignette);
+        // Screen boundary margin containment: ensures fluid never touches the screen edges,
+        // leaving untouched real estate as pure high-contrast black (#000000).
+        vec2 boxOffset = max(abs(vUv - vec2(0.5)) - vec2(0.46), vec2(0.0));
+        float containment = 1.0 - smoothstep(0.0, 0.08, length(boxOffset));
+        color *= containment;
 
-        float alpha = clamp(intensity * 0.92 + luma * 0.35, 0.12, 0.98);
+        float alpha = clamp(intensity * 0.95 + luma * 0.35, 0.0, 1.0) * containment;
 
         outColor = vec4(color, alpha);
     }
@@ -611,7 +614,9 @@ object FluidShaders {
         void main() {
             vec3 scene = texture(uScene, vUv).rgb;
             vec3 bloom = texture(uBloom, vUv).rgb * max(uBloomStrength, 0.0);
-            vec3 color = scene + bloom;
+            vec2 boxOffset = max(abs(vUv - vec2(0.5)) - vec2(0.46), vec2(0.0));
+            float containment = 1.0 - smoothstep(0.0, 0.08, length(boxOffset));
+            vec3 color = (scene + bloom) * containment;
             outColor = vec4(color, 1.0);
         }
     """

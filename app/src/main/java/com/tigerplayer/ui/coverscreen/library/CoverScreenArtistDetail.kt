@@ -27,10 +27,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,7 +44,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -60,18 +57,22 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.Artist
+import com.tigerplayer.data.model.ArtistSource
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
 import com.tigerplayer.ui.coverscreen.library.formatTrackDuration
 import com.tigerplayer.ui.library.SongOptionsSheet
 import com.tigerplayer.ui.theme.TigerNeonOrange
+import com.tigerplayer.ui.theme.TigerPlayerTheme
 import com.tigerplayer.ui.theme.TigerTextHigh
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.glassEffect
@@ -165,20 +166,12 @@ internal fun CoverScreenArtistView(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 32.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                CoverScreenArtistHeader(
-                    artist = artist,
-                    onBack = onBack
-                )
-            }
-
-            item {
                 CoverScreenArtistHero(
                     artist = artist,
-                    heroImage = heroImage,
                     albumCount = artistAlbums.size,
                     trackCount = artistTracks.size,
                     artistTracks = artistTracks,
@@ -262,190 +255,128 @@ internal fun CoverScreenArtistView(
 }
 
 @Composable
-private fun CoverScreenArtistHeader(
-    artist: Artist,
-    onBack: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassEffect(RectangleShape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val backDesc = stringResource(R.string.coverscreen_tab_artists)
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                .minimumInteractiveComponentSize()
-                .semantics {
-                    role = Role.Button
-                    onClick(label = backDesc) {
-                        onBack()
-                        true
-                    }
-                    contentDescription = backDesc
-                }.testTag(CoverScreenTestTags.ARTIST_BACK)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = backDesc,
-                tint = MaterialTheme.colorScheme.onSurface
-            )
-        }
-        Text(
-            text = artist.name.uppercase(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 4.dp)
-        )
-    }
-}
-
-@Composable
 private fun CoverScreenArtistHero(
     artist: Artist,
-    heroImage: String?,
     albumCount: Int,
     trackCount: Int,
     artistTracks: List<AudioTrack> = emptyList(),
+    modifier: Modifier = Modifier,
     onPlayAll: (List<AudioTrack>) -> Unit = {},
     onShufflePlay: (List<AudioTrack>) -> Unit = {}
 ) {
-    Box(
-        modifier = Modifier
+    val heroShape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 180.dp)
             .padding(horizontal = 12.dp)
             .shadow(
-                12.dp,
-                RoundedCornerShape(20.dp),
+                elevation = 8.dp,
+                shape = heroShape,
                 ambientColor = Color.Transparent,
-                spotColor = MaterialTheme.aardBlue.copy(alpha = 0.2f)
+                spotColor = MaterialTheme.aardBlue.copy(alpha = 0.25f)
             )
-            .clip(RoundedCornerShape(20.dp))
-            .glassEffect(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clip(heroShape)
+            .glassEffect(heroShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .border(
+                BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                heroShape
+            )
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        AsyncImage(
-            model = heroImage,
-            contentDescription = "Image of ${artist.name}",
-            fallback = painterResource(R.drawable.ic_tiger_logo),
-            error = painterResource(R.drawable.ic_tiger_logo),
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.matchParentSize()
+        Text(
+            text = artist.name,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.4f to Color.Black.copy(alpha = 0.35f),
-                        1.0f to Color.Black.copy(alpha = 0.88f)
-                    )
-                )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "$albumCount ALBUMS • ${if (trackCount > 0) "$trackCount TRACKS" else "${artist.albumCount} RELEASES"}",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.aardBlue,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.Center
         )
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(14.dp)
-        ) {
-            Text(
-                text = artist.name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "$albumCount ALBUMS • ${if (trackCount > 0) "$trackCount TRACKS" else "${artist.albumCount} RELEASES"}",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.aardBlue,
-                letterSpacing = 1.sp
-            )
-            if (artistTracks.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+        if (artistTracks.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(14.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    onClick = { onPlayAll(artistTracks) },
+                    shape = CircleShape,
+                    color = MaterialTheme.aardBlue,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .semantics {
+                            role = Role.Button
+                            onClick(label = "Play all tracks by ${artist.name}") {
+                                onPlayAll(artistTracks)
+                                true
+                            }
+                        }
+                        .testTag(CoverScreenTestTags.PLAY_ALL)
                 ) {
-                    Surface(
-                        onClick = { onPlayAll(artistTracks) },
-                        shape = CircleShape,
-                        color = MaterialTheme.aardBlue,
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .semantics {
-                                role = Role.Button
-                                onClick(label = "Play all tracks by ${artist.name}") {
-                                    onPlayAll(artistTracks)
-                                    true
-                                }
-                            }
-                            .testTag(CoverScreenTestTags.PLAY_ALL)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = Color.Black,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "PLAY ALL",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black,
-                                color = Color.Black
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "PLAY ALL",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = Color.Black
+                        )
                     }
+                }
 
-                    Surface(
-                        onClick = { onShufflePlay(artistTracks) },
-                        shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.2f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .semantics {
-                                role = Role.Button
-                                onClick(label = "Shuffle play tracks by ${artist.name}") {
-                                    onShufflePlay(artistTracks)
-                                    true
-                                }
+                Surface(
+                    onClick = { onShufflePlay(artistTracks) },
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .semantics {
+                            role = Role.Button
+                            onClick(label = "Shuffle play tracks by ${artist.name}") {
+                                onShufflePlay(artistTracks)
+                                true
                             }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Shuffle,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "SHUFFLE",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White
-                            )
                         }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shuffle,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "SHUFFLE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
                     }
                 }
             }
@@ -768,4 +699,21 @@ fun CoverScreenArtistDetail(
         onPlayAll = onPlayAll,
         onShufflePlay = onShufflePlay
     )
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun CoverScreenArtistDetailPreview() {
+    TigerPlayerTheme {
+        CoverScreenArtistDetail(
+            artist = Artist(
+                id = "artist-preview",
+                name = "Tiger Artist",
+                source = ArtistSource.LOCAL,
+                albumCount = 3
+            ),
+            albums = emptyList(),
+            tracks = emptyList()
+        )
+    }
 }

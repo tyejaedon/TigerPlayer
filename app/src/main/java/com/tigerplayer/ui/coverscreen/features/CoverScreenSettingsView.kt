@@ -641,7 +641,7 @@ fun CoverScreenSettingsView(
                         // System Decoder / DSP
                         CoverSettingsSwitchRow(
                             headline = "System Decoder / DSP",
-                            supporting = "Route audio through Android offload path",
+                            supporting = "Route audio through Android offload path (saves battery)",
                             icon = Icons.Rounded.BluetoothAudio,
                             checked = settingsState.routeToSystemDecoderDsp,
                             onCheckedChange = { viewModel.setRouteToSystemDecoderDsp(it) },

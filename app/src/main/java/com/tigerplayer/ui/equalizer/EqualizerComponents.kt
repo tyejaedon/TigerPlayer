@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Remove
@@ -136,14 +137,15 @@ fun StudioFaderStrip(
     isSelected: Boolean,
     onSelected: () -> Unit,
     onGainChanged: (Float) -> Unit,
-    onToggleEnabled: () -> Unit
+    onToggleEnabled: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val currentGain by rememberUpdatedState(band.gainDb)
     val currentOnGainChanged by rememberUpdatedState(onGainChanged)
 
     Box(
-        modifier = Modifier
-            .width(62.dp)
+        modifier = modifier
+            .then(if (modifier == Modifier) Modifier.width(62.dp) else Modifier)
             .fillMaxHeight()
             .glassEffect(RoundedCornerShape(12.dp))
             .border(if (isSelected) 1.5.dp else 0.5.dp, if (isSelected) TigerCyberCyan else Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
@@ -286,24 +288,26 @@ fun AutoEqSelectorSheet(
     onQueryChanged: (String) -> Unit,
     onAutoMatchDevice: () -> Unit,
     onSelect: (item: HeadphoneSearchResult, forceParametric: Boolean) -> Unit,
+    onImportRawText: ((rawText: String, profileName: String) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
-    var applyAsParametric by remember {
-        mutableStateOf(currentBandMode == EqualizerBandMode.AUTOEQ_PARAMETRIC)
-    }
+    var activeTab by remember { mutableIntStateOf(0) } // 0 = Catalog, 1 = Import
+    var rawText by remember { mutableStateOf("") }
+    var profileName by remember { mutableStateOf("Imported AutoEq") }
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(if (isCoverScreen) 0.95f else 0.85f)
-                .glassEffect(RoundedCornerShape(20.dp))
+                .glassEffect(RoundedCornerShape(20.dp), isOpaque = true)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(14.dp)
             ) {
+                // Header Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -318,7 +322,7 @@ fun AutoEqSelectorSheet(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "AutoEq",
+                            text = "AutoEq Hub",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -331,249 +335,276 @@ fun AutoEqSelectorSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (connectedDeviceName.isNotBlank()) {
-                    Surface(
+                // Tab Switcher Row: [ Catalog | Import ]
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassEffect(RoundedCornerShape(10.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onAutoMatchDevice),
-                        color = TigerCyberCyan.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, TigerCyberCyan.copy(alpha = 0.4f))
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (activeTab == 0) TigerCyberCyan.copy(alpha = 0.25f) else Color.Transparent)
+                            .border(
+                                if (activeTab == 0) 1.dp else 0.dp,
+                                if (activeTab == 0) TigerCyberCyan else Color.Transparent,
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable { activeTab = 0 }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = null,
+                                tint = if (activeTab == 0) TigerCyberCyan else Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Catalog",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (activeTab == 0) TigerCyberCyan else Color.White.copy(alpha = 0.65f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (activeTab == 1) TigerNeonOrange.copy(alpha = 0.25f) else Color.Transparent)
+                            .border(
+                                if (activeTab == 1) 1.dp else 0.dp,
+                                if (activeTab == 1) TigerNeonOrange else Color.Transparent,
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable { activeTab = 1 }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.ContentPaste,
+                                contentDescription = null,
+                                tint = if (activeTab == 1) TigerNeonOrange else Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Import Text",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (activeTab == 1) TigerNeonOrange else Color.White.copy(alpha = 0.65f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (activeTab == 0) {
+                    // TAB 0: CATALOG SEARCH & AUTO-MATCH
+                    if (connectedDeviceName.isNotBlank()) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onAutoMatchDevice),
+                            color = TigerCyberCyan.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, TigerCyberCyan.copy(alpha = 0.4f))
                         ) {
                             Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoFixHigh,
-                                    contentDescription = null,
-                                    tint = TigerCyberCyan,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = connectedDeviceName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Text(
-                                text = "APPLY",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TigerCyberCyan,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                if (!isCoverScreen) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilterChip(
-                            selected = !applyAsParametric,
-                            onClick = { applyAsParametric = false },
-                            label = { Text("Sliders", fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TigerNeonOrange,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                        FilterChip(
-                            selected = applyAsParametric,
-                            onClick = { applyAsParametric = true },
-                            label = { Text("Parametric", fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TigerNeonOrange,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
-
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = onQueryChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search brand or model...", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = TigerCyberCyan)
-                    },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { onQueryChanged("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = TigerCyberCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (isSearching) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = TigerCyberCyan, modifier = Modifier.size(24.dp))
-                    }
-                } else if (searchResults.isEmpty()) {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "No matches found.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.5f)
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(
-                            items = searchResults,
-                            key = { it.id }
-                        ) { item ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .glassEffect(RoundedCornerShape(10.dp))
-                                    .clickable { onSelect(item, applyAsParametric) }
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoFixHigh,
+                                        contentDescription = null,
+                                        tint = TigerCyberCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = connectedDeviceName,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    text = "APPLY",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TigerCyberCyan,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = onQueryChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search brand or model...", fontSize = 12.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = TigerCyberCyan)
+                        },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { onQueryChanged("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = TigerCyberCyan,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (isSearching) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = TigerCyberCyan, modifier = Modifier.size(24.dp))
+                        }
+                    } else if (searchResults.isEmpty()) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "No matches found.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(
+                                items = searchResults,
+                                key = { it.id }
+                            ) { item ->
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                        .glassEffect(RoundedCornerShape(10.dp))
+                                        .clickable { onSelect(item, true) } // Always default to parametric PEQ
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.modelName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "${item.source} • ${item.targetCurve}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = TigerCyberCyan,
+                                                fontSize = 10.sp
+                                            )
+                                        }
                                         Text(
-                                            text = item.modelName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = "${item.source} • ${item.targetCurve}",
+                                            text = item.formFactor,
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = TigerCyberCyan,
-                                            fontSize = 10.sp
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            fontSize = 9.sp
                                         )
                                     }
-                                    Text(
-                                        text = item.formFactor,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        fontSize = 9.sp
-                                    )
                                 }
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AutoEqImportDialog(
-    onImport: (rawText: String, profileName: String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var rawText by remember { mutableStateOf("") }
-    var profileName by remember { mutableStateOf("Imported AutoEq") }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.75f)
-                .glassEffect(RoundedCornerShape(20.dp))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "Import AutoEq",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = profileName,
-                    onValueChange = { profileName = it },
-                    label = { Text("Profile Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = rawText,
-                    onValueChange = { rawText = it },
-                    label = { Text("Paste EQ text") },
-                    placeholder = {
-                        Text(
-                            "Preamp: -4.5 dB\nFilter 1: ON PK Fc 28 Hz Gain 4.8 dB Q 1.41",
-                            fontSize = 11.sp
+                } else {
+                    // TAB 1: RAW TEXT IMPORTER
+                    Column(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = profileName,
+                            onValueChange = { profileName = it },
+                            label = { Text("Profile Name") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = TigerNeonOrange,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                            )
                         )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel", color = Color.Gray)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { onImport(rawText, profileName) },
-                        colors = ButtonDefaults.buttonColors(containerColor = TigerNeonOrange),
-                        enabled = rawText.isNotBlank()
-                    ) {
-                        Text("Apply EQ", color = Color.White)
+                        OutlinedTextField(
+                            value = rawText,
+                            onValueChange = { rawText = it },
+                            label = { Text("Paste AutoEq / Squig.link text") },
+                            placeholder = {
+                                Text(
+                                    "Preamp: -4.5 dB\nFilter 1: ON PK Fc 28 Hz Gain 4.8 dB Q 1.41",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = TigerNeonOrange,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                onImportRawText?.invoke(rawText, profileName)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = TigerNeonOrange),
+                            enabled = rawText.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().height(42.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentPaste,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Apply Imported EQ", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -611,11 +642,31 @@ fun DspSignalChainPill(state: EqualizerHubUiState) {
         SignalChainArrow()
 
         val isSpatial = state.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES
+        val isEqActive = state.isEqEnabled
+        val dspLabel = when {
+            !isEqActive -> "DSP Bypassed"
+            isSpatial -> "Spatial Nexus"
+            state.autoEqModel != null -> "AutoEq Profile"
+            else -> "PEQ Studio"
+        }
+        val dspBadge = when {
+            !isEqActive -> "BYPASSED"
+            isSpatial -> "2D MATRIX"
+            state.autoEqModel != null -> "AUTOEQ LIVE"
+            else -> "LIVE PEQ"
+        }
+        val dspColor = when {
+            !isEqActive -> Color.Gray
+            isSpatial -> TigerNeonOrange
+            else -> TigerCyberCyan
+        }
+
         SignalChainBlock(
             icon = if (isSpatial) Icons.Default.AutoFixHigh else Icons.Default.GraphicEq,
-            label = if (isSpatial) "Spatial" else "PEQ",
-            isActive = state.isEqEnabled,
-            color = if (state.isEqEnabled) TigerCyberCyan else Color.Gray
+            label = dspLabel,
+            badge = dspBadge,
+            isActive = isEqActive,
+            color = dspColor
         )
 
         SignalChainArrow()
@@ -634,6 +685,7 @@ fun DspSignalChainPill(state: EqualizerHubUiState) {
 fun SignalChainBlock(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    badge: String? = null,
     isActive: Boolean,
     color: Color = TigerCyberCyan
 ) {
@@ -643,8 +695,22 @@ fun SignalChainBlock(
             .clip(RoundedCornerShape(6.dp))
             .glassEffect(RoundedCornerShape(6.dp))
             .background(if (isActive) color.copy(alpha = 0.15f) else Color.Transparent)
+            .border(
+                if (isActive) 1.dp else 0.5.dp,
+                if (isActive) color.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.08f),
+                RoundedCornerShape(6.dp)
+            )
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
+        if (isActive) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+        }
         Icon(
             imageVector = icon,
             contentDescription = null,
@@ -652,12 +718,23 @@ fun SignalChainBlock(
             modifier = Modifier.size(12.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = if (isActive) label else "Bypassed",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isActive) color else Color.Gray
-        )
+        Column {
+            Text(
+                text = if (isActive) label else "Bypassed",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isActive) color else Color.Gray
+            )
+            if (badge != null && isActive) {
+                Text(
+                    text = badge,
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.Black,
+                    color = color.copy(alpha = 0.85f),
+                    letterSpacing = 0.5.sp
+                )
+            }
+        }
     }
 }
 
@@ -724,6 +801,105 @@ fun EngineSourceToggle(
                 color = Color.White.copy(alpha = 0.4f),
                 fontSize = 10.sp
             )
+        }
+    }
+}
+
+@Composable
+fun TwoWayEngineSourceSwitcher(
+    activeSource: EqualizerEngineSource,
+    onSelectSource: (EqualizerEngineSource) -> Unit,
+    modifier: Modifier = Modifier,
+    allowToggleOff: Boolean = true,
+    onToggleOff: (() -> Unit)? = null
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .glassEffect(RoundedCornerShape(12.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        val isPeq = activeSource == EqualizerEngineSource.PARAMETRIC_BANDS
+        val isSpatial = activeSource == EqualizerEngineSource.SPATIAL_NODES
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (isPeq) TigerCyberCyan.copy(alpha = 0.22f) else Color.Transparent)
+                .border(
+                    if (isPeq) 1.dp else 0.dp,
+                    if (isPeq) TigerCyberCyan else Color.Transparent,
+                    RoundedCornerShape(9.dp)
+                )
+                .clickable {
+                    if (isPeq && allowToggleOff) {
+                        if (onToggleOff != null) onToggleOff()
+                        else onSelectSource(EqualizerEngineSource.PARAMETRIC_BANDS)
+                    } else {
+                        onSelectSource(EqualizerEngineSource.PARAMETRIC_BANDS)
+                    }
+                }
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = null,
+                    tint = if (isPeq) TigerCyberCyan else Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "PEQ Studio",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPeq) TigerCyberCyan else Color.White.copy(alpha = 0.65f),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (isSpatial) TigerNeonOrange.copy(alpha = 0.22f) else Color.Transparent)
+                .border(
+                    if (isSpatial) 1.dp else 0.dp,
+                    if (isSpatial) TigerNeonOrange else Color.Transparent,
+                    RoundedCornerShape(9.dp)
+                )
+                .clickable {
+                    if (isSpatial && allowToggleOff) {
+                        if (onToggleOff != null) onToggleOff()
+                        else onSelectSource(EqualizerEngineSource.PARAMETRIC_BANDS)
+                    } else {
+                        onSelectSource(EqualizerEngineSource.SPATIAL_NODES)
+                    }
+                }
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AutoFixHigh,
+                    contentDescription = null,
+                    tint = if (isSpatial) TigerNeonOrange else Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Spatial Nexus",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSpatial) TigerNeonOrange else Color.White.copy(alpha = 0.65f),
+                    fontSize = 11.sp
+                )
+            }
         }
     }
 }

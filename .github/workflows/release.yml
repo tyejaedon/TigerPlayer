@@ -64,7 +64,7 @@ jobs:
               VERSION_CODE=2020020
             fi
           else
-            VERSION_NAME="2.1.7"
+            VERSION_NAME="2.1.8"
             VERSION_CODE=2020020
           fi
 

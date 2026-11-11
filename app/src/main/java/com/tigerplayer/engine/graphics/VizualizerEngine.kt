@@ -59,8 +59,14 @@ class FluidVortexView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
-        // Release GPU textures and FBO resources when the player view is detached
-        renderer?.release()
+        // Release GPU textures and FBO resources on the EGL render thread context
+        val r = renderer
+        if (r != null) {
+            queueEvent {
+                r.release()
+            }
+            renderer = null
+        }
         super.onDetachedFromWindow()
     }
 }

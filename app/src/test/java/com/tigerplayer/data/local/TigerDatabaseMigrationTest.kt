@@ -330,4 +330,49 @@ class TigerDatabaseMigrationTest {
         }
         connection.close()
     }
+
+    @Test
+    fun migrate16To17_preservesHistoryAndTracks_andCreatesIndices() {
+        // Arrange: create DB at version 16 and insert history & cached track rows.
+        var connection: SQLiteConnection = helper.createDatabase(16)
+        connection.execSQL(
+            """
+            INSERT INTO playback_history
+                (trackId, title, artist, album, imageUrl, durationListenedMs, timestamp, source)
+            VALUES
+                ('local_track_005', 'Index Test Track', 'Tiger Unit', 'Midnight Circuit', NULL,
+                 200000, 1719374600000, 'LOCAL')
+            """.trimIndent()
+        )
+        connection.execSQL(
+            """
+            INSERT INTO cached_tracks
+                (id, title, artist, album, uriString, artworkUriString, durationMs, mimeType,
+                 bitrate, sampleRate, trackNumber, year, dateAdded, isLiked, path,
+                 replayGainTrackDb, replayGainAlbumDb, replayGainTrackPeak, replayGainAlbumPeak,
+                 dateModified, artworkLookupFailedAt, artworkLookupAttempts, hasEmbeddedArtwork)
+            VALUES
+                ('local_track_005', 'Index Test Track', 'Tiger Unit', 'Midnight Circuit',
+                 'content://media/external/audio/media/46', 'content://media/external/audio/albumart/11',
+                 200000, 'audio/flac', 960000, 48000, 8, '2026', 1719374400, 1,
+                 '/storage/emulated/0/Music/Tiger/Index Test Track.flac', NULL, NULL, NULL, NULL,
+                 1719374400, 0, 0, NULL)
+            """.trimIndent()
+        )
+        connection.close()
+
+        // Act: run migration 16 -> 17.
+        connection = helper.runMigrationsAndValidate(17)
+
+        // Assert: rows survive intact.
+        connection.prepare("SELECT * FROM playback_history WHERE trackId = 'local_track_005'").use { stmt ->
+            assertTrue("playback_history row must survive migration to 17", stmt.step())
+            assertEquals("Index Test Track", stmt.getText(stmt.columnIndex("title")))
+        }
+        connection.prepare("SELECT * FROM cached_tracks WHERE id = 'local_track_005'").use { stmt ->
+            assertTrue("cached_tracks row must survive migration to 17", stmt.step())
+            assertEquals("Tiger Unit", stmt.getText(stmt.columnIndex("artist")))
+        }
+        connection.close()
+    }
 }

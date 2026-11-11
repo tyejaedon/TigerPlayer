@@ -13,11 +13,11 @@ import org.junit.Test
 class CoverScreenVortexVisualizerTest {
 
     @Test
-    fun `vortex blur targets minimal blur in normal mode and zero in immersive mode`() {
+    fun `vortex blur maintains crisp 0dp across normal and immersive modes for sharp fluid boundaries`() {
         val normalBlur = calculateVortexBlurRadius(isVortexImmersive = false)
         val immersiveBlur = calculateVortexBlurRadius(isVortexImmersive = true)
 
-        assertEquals(6.dp, normalBlur)
+        assertEquals(0.dp, normalBlur)
         assertEquals(0.dp, immersiveBlur)
     }
 
@@ -114,7 +114,7 @@ class CoverScreenVortexVisualizerTest {
         toggle()
         assertFalse("Cycle 2: must exit immersive mode", isVortexImmersive)
         assertTrue("Cycle 2: controls must be restored", shouldShowCoverControls(isVortexImmersive))
-        assertEquals(6.dp, calculateVortexBlurRadius(isVortexImmersive))
+        assertEquals(0.dp, calculateVortexBlurRadius(isVortexImmersive))
         assertEquals(0.55f, calculateVortexScrimAlpha(isVortexImmersive), 0.001f)
 
         // Cycle 3: Press down again -> enters immersive mode again

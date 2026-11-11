@@ -3,6 +3,10 @@ package com.tigerplayer.ui.equalizer
 import androidx.annotation.OptIn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
@@ -15,6 +19,7 @@ import com.tigerplayer.data.repository.AutoEqRepository
 import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.AudioDeviceEngine
+import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.engine.FilterType
 import com.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -70,6 +75,36 @@ class EqualizerHubViewModel(
     private var curveComputationJob: Job? = null
     private var searchJob: Job? = null
     private var activeAutoEqItem: HeadphoneSearchResult? = null
+    private var audioReactiveJob: Job? = null
+
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            startAudioReactiveCollection()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            stopAudioReactiveCollection()
+        }
+    }
+
+    private fun startAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = viewModelScope.launch {
+            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
+                _uiState.update { it.copy(audioReactiveFrame = frame) }
+            }
+        }
+    }
+
+    private fun stopAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = null
+        _uiState.update { it.copy(audioReactiveFrame = AudioReactiveFrame()) }
+    }
+
+    fun setVisualizerActive(active: Boolean) {
+        adaptiveDspEngine.setVisualizerActive(active)
+    }
 
     init {
         // 1. Observe active connected device & check for AutoEq match
@@ -110,11 +145,14 @@ class EqualizerHubViewModel(
             }
         }
 
-        // 4. Observe real-time audio reactive frame for spatial and studio visualizer dynamics
-        viewModelScope.launch {
-            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
-                _uiState.update { it.copy(audioReactiveFrame = frame) }
+        // 4. Observe real-time audio reactive frame (Lifecycle-aware: paused when backgrounded)
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+            if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                startAudioReactiveCollection()
             }
+        }.onFailure {
+            startAudioReactiveCollection()
         }
 
         // 5. Load saved cover screen / spatial EQ mood preset
@@ -141,9 +179,8 @@ class EqualizerHubViewModel(
 
         val currentAutoEq = activeAutoEqItem
         if (currentAutoEq != null) {
-            // Re-apply the active headphone profile in the newly chosen mode
+            // Re-apply the active headphone profile in the newly chosen graphic mode
             when (mode) {
-                EqualizerBandMode.AUTOEQ_PARAMETRIC -> applyAutoEqProfile(currentAutoEq, forceParametric = true)
                 EqualizerBandMode.TEN_BAND -> applyAutoEqAsGraphic(currentAutoEq, EqualizerBandMode.TEN_BAND)
                 EqualizerBandMode.FIVE_BAND -> applyAutoEqAsGraphic(currentAutoEq, EqualizerBandMode.FIVE_BAND)
             }
@@ -153,7 +190,6 @@ class EqualizerHubViewModel(
         val newBands = when (mode) {
             EqualizerBandMode.FIVE_BAND -> COMPACT_5_BANDS
             EqualizerBandMode.TEN_BAND -> ISO_10_BANDS
-            EqualizerBandMode.AUTOEQ_PARAMETRIC -> _uiState.value.bands
         }
 
         _uiState.update {
@@ -255,7 +291,8 @@ class EqualizerHubViewModel(
         _uiState.update {
             it.copy(
                 bands = currentBands,
-                activePresetName = "Custom"
+                activePresetName = if (it.autoEqModel != null) "${it.autoEqModel} (Modified)" else "Custom",
+                isAutoEqModified = (it.autoEqModel != null)
             )
         }
         recomputeCurveAndTelemetry()
@@ -288,7 +325,8 @@ class EqualizerHubViewModel(
         _uiState.update {
             it.copy(
                 bands = currentBands,
-                activePresetName = "Custom"
+                activePresetName = if (it.autoEqModel != null) "${it.autoEqModel} (Modified)" else "Custom",
+                isAutoEqModified = (it.autoEqModel != null)
             )
         }
         recomputeCurveAndTelemetry()
@@ -305,7 +343,8 @@ class EqualizerHubViewModel(
         _uiState.update {
             it.copy(
                 bands = currentBands,
-                activePresetName = "Custom"
+                activePresetName = if (it.autoEqModel != null) "${it.autoEqModel} (Modified)" else "Custom",
+                isAutoEqModified = (it.autoEqModel != null)
             )
         }
         recomputeCurveAndTelemetry()
@@ -321,7 +360,8 @@ class EqualizerHubViewModel(
         _uiState.update {
             it.copy(
                 bands = currentBands,
-                activePresetName = "Custom"
+                activePresetName = if (it.autoEqModel != null) "${it.autoEqModel} (Modified)" else "Custom",
+                isAutoEqModified = (it.autoEqModel != null)
             )
         }
         recomputeCurveAndTelemetry()
@@ -335,14 +375,24 @@ class EqualizerHubViewModel(
         val band = currentBands[bandIndex]
         currentBands[bandIndex] = band.copy(isEnabled = !band.isEnabled)
 
-        _uiState.update { it.copy(bands = currentBands) }
+        _uiState.update {
+            it.copy(
+                bands = currentBands,
+                isAutoEqModified = (it.autoEqModel != null)
+            )
+        }
         recomputeCurveAndTelemetry()
         dispatchDspNodes()
     }
 
     fun setPreamp(preampDb: Float) {
         val clamped = preampDb.coerceIn(-15f, 6f)
-        _uiState.update { it.copy(preampDb = clamped) }
+        _uiState.update {
+            it.copy(
+                preampDb = clamped,
+                isAutoEqModified = (it.autoEqModel != null)
+            )
+        }
         recomputeCurveAndTelemetry()
         dispatchDspNodes()
     }
@@ -364,21 +414,18 @@ class EqualizerHubViewModel(
                     band.copy(gainDb = gains.getOrElse(idx) { 0f })
                 }
             }
-            EqualizerBandMode.AUTOEQ_PARAMETRIC -> {
-                val gains = EqualizerPresets.TEN_BAND_GAINS[presetName] ?: return
-                ISO_10_BANDS.mapIndexed { idx, band ->
-                    band.copy(gainDb = gains.getOrElse(idx) { 0f })
-                }
-            }
         }
 
         _uiState.update {
             it.copy(
-                bandMode = if (it.bandMode == EqualizerBandMode.AUTOEQ_PARAMETRIC) EqualizerBandMode.TEN_BAND else it.bandMode,
+                bandMode = it.bandMode,
                 bands = newBands,
                 activePresetName = presetName,
                 autoEqModel = null,
-                autoEqSource = null
+                autoEqSource = null,
+                isAutoEqModified = false,
+                originalAutoEqBands = emptyList(),
+                originalPreampDb = 0f
             )
         }
         recomputeCurveAndTelemetry()
@@ -387,6 +434,23 @@ class EqualizerHubViewModel(
 
     fun resetToFlat() {
         applyPreset(EqualizerPresets.FLAT)
+    }
+
+    fun restoreAutoEqProfile() {
+        val state = _uiState.value
+        if (state.autoEqModel == null || state.originalAutoEqBands.isEmpty()) return
+
+        _uiState.update {
+            it.copy(
+                bands = it.originalAutoEqBands,
+                preampDb = it.originalPreampDb,
+                isAutoEqModified = false,
+                activePresetName = "${it.autoEqModel} (${it.autoEqSource ?: "AutoEq"})",
+                statusMessage = "Restored original calibration for ${it.autoEqModel}"
+            )
+        }
+        recomputeCurveAndTelemetry()
+        dispatchDspNodes()
     }
 
     // --- AutoEq Integration (Local Bundled Asset Index) ---
@@ -451,15 +515,19 @@ class EqualizerHubViewModel(
                     )
                 }
 
+                val clampedPreamp = preampDb.coerceIn(-15f, 6f)
                 _uiState.update {
                     it.copy(
                         bandMode = targetMode,
                         bands = mappedBands,
                         selectedBandIndex = 0,
-                        preampDb = preampDb.coerceIn(-15f, 6f),
+                        preampDb = clampedPreamp,
                         activePresetName = "${item.modelName} (${item.source})",
                         autoEqModel = item.modelName,
                         autoEqSource = item.source,
+                        isAutoEqModified = false,
+                        originalAutoEqBands = mappedBands,
+                        originalPreampDb = clampedPreamp,
                         statusMessage = "Applied ${targetBandsLabel(targetMode)} AutoEq: ${item.modelName}"
                     )
                 }
@@ -475,7 +543,6 @@ class EqualizerHubViewModel(
     private fun targetBandsLabel(mode: EqualizerBandMode): String = when (mode) {
         EqualizerBandMode.FIVE_BAND -> "5-Band"
         EqualizerBandMode.TEN_BAND -> "10-Band"
-        EqualizerBandMode.AUTOEQ_PARAMETRIC -> "Parametric"
     }
     fun autoMatchConnectedDevice() {
         val currentDevice = _uiState.value.connectedDeviceName
@@ -541,16 +608,20 @@ class EqualizerHubViewModel(
             )
         }
 
+        val clampedPreamp = specs.preampDb.coerceIn(-15f, 6f)
         _uiState.update {
             it.copy(
-                bandMode = EqualizerBandMode.AUTOEQ_PARAMETRIC,
+                bandMode = EqualizerBandMode.TEN_BAND,
                 bands = parametricBands,
                 selectedBandIndex = 0,
-                preampDb = specs.preampDb.coerceIn(-15f, 6f),
+                preampDb = clampedPreamp,
                 activePresetName = "${specs.modelName} (${specs.source})",
                 autoEqModel = specs.modelName,
                 autoEqSource = specs.source,
                 targetCurve = specs.targetCurve,
+                isAutoEqModified = false,
+                originalAutoEqBands = parametricBands,
+                originalPreampDb = clampedPreamp,
                 statusMessage = "Applied AutoEq: ${specs.modelName}"
             )
         }
@@ -663,6 +734,14 @@ class EqualizerHubViewModel(
                 )
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
+        }
+        stopAudioReactiveCollection()
     }
 
     companion object {

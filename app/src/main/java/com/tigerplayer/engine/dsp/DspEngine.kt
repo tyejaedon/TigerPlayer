@@ -3,6 +3,10 @@ package com.tigerplayer.engine
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
@@ -103,19 +107,23 @@ class AdaptiveDspEngine @Inject constructor(
     /** StateFlow emitting real-time audio spectral dynamics for visualizer consumption. */
     val audioReactiveFrame: StateFlow<AudioReactiveFrame> = _audioReactiveFrame.asStateFlow()
 
-    private var vinylNoiseSeed = 0x13579BDF
-    private var vinylNoiseDc = 0f
+    private var vinylNoiseSeedL = 0x13579BDF
+    private var vinylNoiseSeedR = 0x2468ACE0
+    private var vinylNoiseLpL = 0f
+    private var vinylNoiseLpR = 0f
+    private var vinylRumblePhase = 0f
+    private var vinylSignalEnvelope = 0f
     private val hallProcessor = SchroederHallProcessor()
 
-    // VINYL WOW LFO
+    // VINYL WOW LFO (~0.55 Hz rotation, ~33 1/3 RPM)
     private var vinylWowPhase = 0f
-    private val vinylWowFreq = 0.5f // 0.5 Hz Wow
+    private val vinylWowFreq = 0.55f
     private val vinylWowBufferL = FloatArray(1024)
     private val vinylWowBufferR = FloatArray(1024)
     private var vinylWowIndex = 0
 
     // VINYL RIAA SHELF (SVF)
-    private var vinylShelf: StateVariableFilter? = null
+    private val vinylShelf = StateVariableFilter(FilterType.LOW_SHELF, 44100, 350f, 2.5f, 0.5f)
 
     // Real-time 6-band analyzer (band-pass filter bank).
     private val spectralBandCenters = floatArrayOf(60f, 250f, 1_000f, 2_500f, 6_000f, 12_000f)
@@ -132,6 +140,64 @@ class AdaptiveDspEngine @Inject constructor(
     private var energyAccumulator = 0f
     private var analysisCostMicrosSmoothed = 0f
 
+    @Volatile private var isAppInForeground = true
+    @Volatile private var hasActiveVisualizer = true
+    @Volatile private var isSpectralAnalysisActive = true
+
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            isAppInForeground = true
+            updateSpectralAnalysisState()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            isAppInForeground = false
+            updateSpectralAnalysisState()
+        }
+    }
+
+    init {
+        try {
+            ContextCompat.getMainExecutor(context).execute {
+                ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+            }
+        } catch (_: Exception) {
+            // JVM unit test fallback where ProcessLifecycleOwner is not initialized
+        }
+    }
+
+    /**
+     * Toggles whether audio-reactive visualizers are actively displayed on screen.
+     * When false or when the app is backgrounded, spectral FFT analysis is bypassed to conserve CPU and battery.
+     */
+    fun setVisualizerActive(active: Boolean) {
+        hasActiveVisualizer = active
+        updateSpectralAnalysisState()
+    }
+
+    /**
+     * Directly controls whether spectral FFT analysis and audio-reactive frame emissions are active.
+     */
+    fun setSpectralAnalysisActive(active: Boolean) {
+        if (isSpectralAnalysisActive != active) {
+            isSpectralAnalysisActive = active
+            if (!active) {
+                fftSpectralAnalyzer.reset()
+                analysisFrameCounter = 0
+                energyAccumulator = 0f
+                spectralBandAccumulators.fill(0f)
+                _audioReactiveFrame.value = AudioReactiveFrame()
+            }
+        }
+    }
+
+    fun isSpectralAnalysisActive(): Boolean = isSpectralAnalysisActive
+
+    private fun updateSpectralAnalysisState() {
+        val shouldRun = isAppInForeground && hasActiveVisualizer
+        setSpectralAnalysisActive(shouldRun)
+    }
+
     /**
      * Clamps float value [v] into range [0.0, 1.0].
      *
@@ -141,19 +207,46 @@ class AdaptiveDspEngine @Inject constructor(
     private fun clamp01(v: Float): Float = v.coerceIn(0f, 1f)
 
     /**
-     * Generates white noise sample using a fast linear congruential pseudo-random generator.
+     * Generates white noise sample for Left channel using a fast linear congruential pseudo-random generator.
      *
      * @return Pseudo-random float sample in range [-1.0, 1.0].
      */
-    private fun nextNoise(): Float {
-        vinylNoiseSeed = vinylNoiseSeed * 1664525 + 1013904223
-        val normalized = ((vinylNoiseSeed ushr 8) and 0x00FFFFFF) / 16777215f
+    private fun nextNoiseL(): Float {
+        vinylNoiseSeedL = vinylNoiseSeedL * 1664525 + 1013904223
+        val normalized = ((vinylNoiseSeedL ushr 8) and 0x00FFFFFF) / 16777215f
         return normalized * 2f - 1f
     }
 
     /**
-     * Applies analog vinyl record characteristics (0.5Hz Pitch Wow LFO, soft polynomial saturation,
-     * low-level vinyl hiss, and RIAA warmth low-shelf filter).
+     * Generates white noise sample for Right channel using a separate PRNG seed for stereo decorrelation.
+     *
+     * @return Pseudo-random float sample in range [-1.0, 1.0].
+     */
+    private fun nextNoiseR(): Float {
+        vinylNoiseSeedR = vinylNoiseSeedR * 1664525 + 1013904223
+        val normalized = ((vinylNoiseSeedR ushr 8) and 0x00FFFFFF) / 16777215f
+        return normalized * 2f - 1f
+    }
+
+    /**
+     * Smooth, continuous cubic soft saturator with continuous first derivative:
+     * f(x) = x - x^3 / 6.75 for |x| <= 1.5, smoothly saturated to sgn(x) * 1.0.
+     * Guaranteed zero foldback and no step discontinuities at the saturation boundary.
+     *
+     * @param x Input drive sample.
+     * @return Saturated output sample.
+     */
+    private fun softSaturate(x: Float): Float {
+        val clamped = x.coerceIn(-1.5f, 1.5f)
+        return clamped - (clamped * clamped * clamped) / 6.75f
+    }
+
+    /**
+     * Applies analog vinyl record characteristics:
+     * 1. 0.55 Hz wow LFO (sample-rate aware ~2-3 cents pitch modulation with glitch-free fractional interpolation).
+     * 2. Continuous soft saturation non-linearity adding subtle 2nd and 3rd harmonics.
+     * 3. Spatially decorrelated vinyl surface noise, low-frequency rumble, and dynamic silence gating.
+     * 4. RIAA low-shelf warmth filter (+2.5 dB at 350 Hz) with -2.5 dB pre-attenuation auto-headroom.
      *
      * @param sampleL Left channel input sample.
      * @param sampleR Right channel input sample.
@@ -162,55 +255,64 @@ class AdaptiveDspEngine @Inject constructor(
      * @return [StereoFrame] containing processed warm vinyl stereo samples.
      */
     private fun applyVinylWarmth(sampleL: Float, sampleR: Float, channels: Int, sampleRate: Int): StereoFrame {
-        // 1. WOW LFO (Pitch Modulation)
+        // 1. WOW LFO (Continuous Fractional Delay Pitch Modulation)
         vinylWowPhase += (2f * PI.toFloat() * vinylWowFreq) / sampleRate.toFloat()
         if (vinylWowPhase > 2f * PI.toFloat()) vinylWowPhase -= 2f * PI.toFloat()
 
-        val modulation = sin(vinylWowPhase) * 1.5f + 2.0f // 0.5 to 3.5 samples delay
+        // Scaled to produce ~2-3 cents of authentic analog wow (~0.15% frequency shift)
+        val wowExcursion = (sampleRate * 0.000433f).coerceIn(8f, 32f)
+        val delay = 48.0f + sin(vinylWowPhase) * wowExcursion
 
         vinylWowBufferL[vinylWowIndex] = sampleL
-        vinylWowBufferR[vinylWowIndex] = sampleR
+        vinylWowBufferR[vinylWowIndex] = if (channels == 2) sampleR else sampleL
 
-        val readIdx = (vinylWowIndex - modulation.toInt() + 1024) % 1024
-        val frac = modulation - modulation.toInt()
-        val nextIdx = (readIdx + 1) % 1024
+        val delayInt = delay.toInt()
+        val frac = delay - delayInt.toFloat()
 
-        val wowL = vinylWowBufferL[readIdx] * (1f - frac) + vinylWowBufferL[nextIdx] * frac
-        val wowR = vinylWowBufferR[readIdx] * (1f - frac) + vinylWowBufferR[nextIdx] * frac
-        vinylWowIndex = (vinylWowIndex + 1) % 1024
+        val idx0 = (vinylWowIndex - delayInt + 1024) and 1023
+        val idx1 = (idx0 - 1 + 1024) and 1023
 
-        // 2. SATURATION (Non-linear)
+        val wowL = vinylWowBufferL[idx0] * (1f - frac) + vinylWowBufferL[idx1] * frac
+        val wowR = if (channels == 2) {
+            vinylWowBufferR[idx0] * (1f - frac) + vinylWowBufferR[idx1] * frac
+        } else {
+            wowL
+        }
+        vinylWowIndex = (vinylWowIndex + 1) and 1023
+
+        // 2. ANALOG SATURATION (Continuous 2nd/3rd Harmonic Warmth)
         val drive = 1.08f
         val drivenL = wowL * drive
         val drivenR = wowR * drive
+        // Slight quadratic bias introduces musical 2nd harmonic warmth alongside cubic 3rd harmonic
+        val satL = softSaturate(drivenL + 0.03f * drivenL * drivenL)
+        val satR = softSaturate(drivenR + 0.03f * drivenR * drivenR)
 
-        val softL = if (abs(drivenL) <= 1.25f) {
-            drivenL - ((drivenL * drivenL * drivenL) / 4.5f)
-        } else {
-            sign(drivenL) * 0.83f // Smoothly flattens at the peak of the curve
-        }
+        // 3. STEREO DECORRELATED SURFACE NOISE & RUMBLE WITH SILENCE GATING
+        val inMag = max(abs(sampleL), abs(sampleR))
+        vinylSignalEnvelope += (inMag - vinylSignalEnvelope) * 0.002f
+        val gate = (vinylSignalEnvelope * 30f).coerceIn(0f, 1f)
 
-        val softR = if (abs(drivenR) <= 1.25f) {
-            drivenR - ((drivenR * drivenR * drivenR) / 4.5f)
-        } else {
-            sign(drivenR) * 0.83f
-        }
+        // Low-pass filtered surface texture (soft broadband warmth instead of harsh static)
+        vinylNoiseLpL += (nextNoiseL() * 0.0006f - vinylNoiseLpL) * 0.15f
+        vinylNoiseLpR += (nextNoiseR() * 0.0006f - vinylNoiseLpR) * 0.15f
 
-        // 3. NOISE & HISS
-        val rawNoise = nextNoise() * 0.0012f
-        vinylNoiseDc += (rawNoise - vinylNoiseDc) * 0.004f
-        val hiss = rawNoise - vinylNoiseDc
+        // Turntable platter rumble (~28 Hz)
+        vinylRumblePhase += (2f * PI.toFloat() * 28f) / sampleRate.toFloat()
+        if (vinylRumblePhase > 2f * PI.toFloat()) vinylRumblePhase -= 2f * PI.toFloat()
+        val rumble = sin(vinylRumblePhase) * 0.0003f
 
-        // 4. RIAA / WARMTH SHELF
-        if (vinylShelf == null || vinylShelf?.sampleRate != sampleRate) {
-            vinylShelf = StateVariableFilter(FilterType.LOW_SHELF, sampleRate, 350f, 2.5f, 0.5f)
-        }
+        val noiseL = (vinylNoiseLpL + rumble) * gate
+        val noiseR = (vinylNoiseLpR - rumble * 0.5f) * gate
 
-        var outL = (wowL * 0.86f + softL * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
-        var outR = (wowR * 0.86f + softR * 0.12f + hiss).coerceIn(-1.02f, 1.02f)
+        // 4. MIX & RIAA LOW-SHELF WITH HEADROOM PRE-ATTENUATION
+        // Pre-attenuate by -2.5 dB (~0.75f) to accommodate the +2.5 dB shelf boost without clipping
+        val headroom = 0.75f
+        val mixL = (wowL * 0.85f + satL * 0.15f + noiseL) * headroom
+        val mixR = (wowR * 0.85f + satR * 0.15f + noiseR) * headroom
 
-        outL = vinylShelf!!.process(outL, 0)
-        if (channels == 2) outR = vinylShelf!!.process(outR, 1)
+        val outL = vinylShelf.process(mixL, 0)
+        val outR = if (channels == 2) vinylShelf.process(mixR, 1) else outL
 
         return StereoFrame(outL, outR)
     }
@@ -507,8 +609,10 @@ class AdaptiveDspEngine @Inject constructor(
         lookAheadDelaySamples = (inputAudioFormat.sampleRate * 0.0045f)
             .roundToInt()
             .coerceIn(24, LOOK_AHEAD_BUFFER_SIZE - 1)
-        hallProcessor.configure(inputAudioFormat.sampleRate.coerceAtLeast(8000))
-        prismIsolator.configure(inputAudioFormat.sampleRate.coerceAtLeast(8000))
+        val safeRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
+        hallProcessor.configure(safeRate)
+        prismIsolator.configure(safeRate)
+        vinylShelf.updateParameters(350f, 2.5f, 0.5f, safeRate)
         configureSpectralAnalyzer(inputAudioFormat.sampleRate)
 
         // FIXED: Re-apply current EQ nodes if track changes sample rates
@@ -705,95 +809,97 @@ class AdaptiveDspEngine @Inject constructor(
             sampleL = (delayedL * reduction).coerceIn(-1.0f, 1.0f)
             sampleR = (delayedR * reduction).coerceIn(-1.0f, 1.0f)
 
-            // 6. REAL-TIME ANALYSIS
-            val mono = (sampleL + sampleR) * 0.5f
-            val energy = abs(mono)
+            // 6. REAL-TIME ANALYSIS (Gated by screen / visualizer visibility to save CPU and battery)
+            if (isSpectralAnalysisActive) {
+                val mono = (sampleL + sampleR) * 0.5f
+                val energy = abs(mono)
 
-            if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
-                for (index in spectralBandFilters.indices) {
-                    val filtered = spectralBandFilters[index].process(mono)
-                    spectralBandAccumulators[index] += abs(filtered)
-                }
-            } else {
-                fftSpectralAnalyzer.pushSample(mono)
-            }
-
-            energyAccumulator += energy
-            analysisFrameCounter += 1
-
-            if (analysisFrameCounter >= 1024) {
-                val analysisStartNs = System.nanoTime()
-                val inv = 1f / analysisFrameCounter.toFloat()
-                val energyAvg = (energyAccumulator * inv * 3.2f)
-
-                var rawSum = 0f
                 if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
-                    for (index in 0 until 6) {
-                        val raw = spectralBandAccumulators[index] * inv
-                        rawBandEnergies[index] = raw
-                        rawSum += raw
+                    for (index in spectralBandFilters.indices) {
+                        val filtered = spectralBandFilters[index].process(mono)
+                        spectralBandAccumulators[index] += abs(filtered)
                     }
                 } else {
-                    val fftBands = fftSpectralAnalyzer.getLatestBandEnergies()
-                    for (index in 0 until 6) {
-                        val raw = fftBands[index]
-                        rawBandEnergies[index] = raw
-                        rawSum += raw
+                    fftSpectralAnalyzer.pushSample(mono)
+                }
+
+                energyAccumulator += energy
+                analysisFrameCounter += 1
+
+                if (analysisFrameCounter >= 1024) {
+                    val analysisStartNs = System.nanoTime()
+                    val inv = 1f / analysisFrameCounter.toFloat()
+                    val energyAvg = (energyAccumulator * inv * 3.2f)
+
+                    var rawSum = 0f
+                    if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
+                        for (index in 0 until 6) {
+                            val raw = spectralBandAccumulators[index] * inv
+                            rawBandEnergies[index] = raw
+                            rawSum += raw
+                        }
+                    } else {
+                        val fftBands = fftSpectralAnalyzer.getLatestBandEnergies()
+                        for (index in 0 until 6) {
+                            val raw = fftBands[index]
+                            rawBandEnergies[index] = raw
+                            rawSum += raw
+                        }
                     }
+
+                    val energyGate = clamp01(energyAvg)
+                    var bandSum = 0f
+                    for (index in 0 until 6) {
+                        val raw = rawBandEnergies[index]
+                        val targetNorm = (raw * 14f).coerceAtLeast(0f)
+                        val currentNorm = spectralBandNormalization[index]
+                        val coeff = if (targetNorm > currentNorm) 0.16f else 0.04f
+                        spectralBandNormalization[index] = currentNorm + (targetNorm - currentNorm) * coeff
+
+                        val ratio = if (rawSum > 1e-6f) raw / rawSum else 0f
+                        val normalized = (ratio * 6f * energyGate).coerceIn(0f, 1f)
+                        val adaptive = (raw / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
+                        val value = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
+                        normalizedBandEnergies[index] = value
+                        bandSum += value
+                    }
+
+                    val bassAvg = (normalizedBandEnergies[0] * 0.72f + normalizedBandEnergies[1] * 0.28f).coerceIn(0f, 1f)
+                    val midAvg = (normalizedBandEnergies[2] * 0.56f + normalizedBandEnergies[3] * 0.44f).coerceIn(0f, 1f)
+                    val trebleAvg = (normalizedBandEnergies[4] * 0.58f + normalizedBandEnergies[5] * 0.42f).coerceIn(0f, 1f)
+
+                    val weightedCentroid =
+                        normalizedBandEnergies[0] * 0.05f +
+                        normalizedBandEnergies[1] * 0.18f +
+                        normalizedBandEnergies[2] * 0.38f +
+                        normalizedBandEnergies[3] * 0.58f +
+                        normalizedBandEnergies[4] * 0.78f +
+                        normalizedBandEnergies[5] * 0.95f
+                    val centroid = if (bandSum > 1e-5f) weightedCentroid / bandSum else 0.5f
+                    val flux = max(0f, energyAvg - prevEnergy) * 2.2f
+                    prevEnergy += (energyAvg - prevEnergy) * 0.2f
+
+                    val elapsedMicros = (System.nanoTime() - analysisStartNs) / 1_000f
+                    val profileSmoothing = if (elapsedMicros > analysisCostMicrosSmoothed) 0.24f else 0.08f
+                    analysisCostMicrosSmoothed +=
+                        (elapsedMicros - analysisCostMicrosSmoothed) * profileSmoothing
+
+                    _audioReactiveFrame.value = AudioReactiveFrame(
+                        bass = clamp01(bassAvg),
+                        mid = clamp01(midAvg),
+                        treble = clamp01(trebleAvg),
+                        energy = clamp01(energyAvg),
+                        centroid = clamp01(centroid),
+                        flux = clamp01(flux),
+                        spectralBands = normalizedBandEnergies.toList(),
+                        analysisMode = localSpectralMode,
+                        analysisCostMicros = analysisCostMicrosSmoothed.coerceAtLeast(0f)
+                    )
+
+                    analysisFrameCounter = 0
+                    spectralBandAccumulators.fill(0f)
+                    energyAccumulator = 0f
                 }
-
-                val energyGate = clamp01(energyAvg)
-                var bandSum = 0f
-                for (index in 0 until 6) {
-                    val raw = rawBandEnergies[index]
-                    val targetNorm = (raw * 14f).coerceAtLeast(0f)
-                    val currentNorm = spectralBandNormalization[index]
-                    val coeff = if (targetNorm > currentNorm) 0.16f else 0.04f
-                    spectralBandNormalization[index] = currentNorm + (targetNorm - currentNorm) * coeff
-
-                    val ratio = if (rawSum > 1e-6f) raw / rawSum else 0f
-                    val normalized = (ratio * 6f * energyGate).coerceIn(0f, 1f)
-                    val adaptive = (raw / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
-                    val value = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
-                    normalizedBandEnergies[index] = value
-                    bandSum += value
-                }
-
-                val bassAvg = (normalizedBandEnergies[0] * 0.72f + normalizedBandEnergies[1] * 0.28f).coerceIn(0f, 1f)
-                val midAvg = (normalizedBandEnergies[2] * 0.56f + normalizedBandEnergies[3] * 0.44f).coerceIn(0f, 1f)
-                val trebleAvg = (normalizedBandEnergies[4] * 0.58f + normalizedBandEnergies[5] * 0.42f).coerceIn(0f, 1f)
-
-                val weightedCentroid =
-                    normalizedBandEnergies[0] * 0.05f +
-                    normalizedBandEnergies[1] * 0.18f +
-                    normalizedBandEnergies[2] * 0.38f +
-                    normalizedBandEnergies[3] * 0.58f +
-                    normalizedBandEnergies[4] * 0.78f +
-                    normalizedBandEnergies[5] * 0.95f
-                val centroid = if (bandSum > 1e-5f) weightedCentroid / bandSum else 0.5f
-                val flux = max(0f, energyAvg - prevEnergy) * 2.2f
-                prevEnergy += (energyAvg - prevEnergy) * 0.2f
-
-                val elapsedMicros = (System.nanoTime() - analysisStartNs) / 1_000f
-                val profileSmoothing = if (elapsedMicros > analysisCostMicrosSmoothed) 0.24f else 0.08f
-                analysisCostMicrosSmoothed +=
-                    (elapsedMicros - analysisCostMicrosSmoothed) * profileSmoothing
-
-                _audioReactiveFrame.value = AudioReactiveFrame(
-                    bass = clamp01(bassAvg),
-                    mid = clamp01(midAvg),
-                    treble = clamp01(trebleAvg),
-                    energy = clamp01(energyAvg),
-                    centroid = clamp01(centroid),
-                    flux = clamp01(flux),
-                    spectralBands = normalizedBandEnergies.toList(),
-                    analysisMode = localSpectralMode,
-                    analysisCostMicros = analysisCostMicrosSmoothed.coerceAtLeast(0f)
-                )
-
-                analysisFrameCounter = 0
-                spectralBandAccumulators.fill(0f)
-                energyAccumulator = 0f
             }
 
             // 7. OUTPUT STAGE: convert float domain back to PCM_16BIT for sink compatibility.
@@ -851,8 +957,13 @@ class AdaptiveDspEngine @Inject constructor(
         lookAheadBufferL.fill(0f)
         lookAheadBufferR.fill(0f)
         lookAheadIndex = 0
-        vinylNoiseSeed = 0x13579BDF.toInt()
-        vinylNoiseDc = 0f
+        vinylNoiseSeedL = 0x13579BDF
+        vinylNoiseSeedR = 0x2468ACE0
+        vinylNoiseLpL = 0f
+        vinylNoiseLpR = 0f
+        vinylRumblePhase = 0f
+        vinylSignalEnvelope = 0f
+        vinylShelf.reset()
         hallProcessor.reset()
         prismIsolator.reset()
         prismCurrentVocals = prismTargetMix.vocals

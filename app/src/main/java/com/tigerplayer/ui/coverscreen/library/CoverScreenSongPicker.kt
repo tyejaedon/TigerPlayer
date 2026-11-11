@@ -69,6 +69,7 @@ internal fun SongPicker(
     playlists: List<Playlist> = emptyList(),
     currentTrackId: String? = null,
     isPlaying: Boolean = false,
+    state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
     onPlayTrack: (AudioTrack) -> Unit,
     onPlayNext: (AudioTrack) -> Unit = {},
     onAddToQueue: (AudioTrack) -> Unit,
@@ -82,6 +83,7 @@ internal fun SongPicker(
         var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
         LazyColumn(
+            state = state,
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(CoverScreenTestTags.SONGS_LIST),

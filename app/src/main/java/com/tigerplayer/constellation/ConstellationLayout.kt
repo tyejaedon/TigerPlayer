@@ -55,11 +55,11 @@ class OrbitalLayoutEngine @Inject constructor() {
                     color = Color.White,
                     depth = VisualDepth.CORE,
                     scale = 1.5f + (core.importance * 0.5f),
-                    glow = 1.0f,
+                    glow = 3.0f,
                     orbitMode = OrbitMode.STATIC,
                     gravityInfluence = 10f,
                     mass = core.importance * 1000f,
-                    fluidInfluence = 0.5f,
+                    fluidInfluence = 0.8f,
                     energy = core.audioEnergyBias,
                     trailLength = 0f,
                     eccentricity = 0f,
@@ -69,15 +69,15 @@ class OrbitalLayoutEngine @Inject constructor() {
         }
 
         /* -----------------------------------
-           🌠 2. ARTIST LAYER (Reeled-In Solar System & Spiral Arms)
+           🌠 2. ARTIST LAYER (Solar System & Spiral Arms)
         ----------------------------------- */
         val artists = graph.nodes.filter { it.type == NodeType.ARTIST }
         val goldenAngle = PI * (3.0 - sqrt(5.0))
-        val baseRadius = 680f // Reeled-in galaxy scale for dense, legible rendering
+        val baseRadius = 950f // Expanded physical galaxy scale for clear node separation
 
         artists.forEachIndexed { i, artist ->
             val spiralFactor = i.toFloat() * 0.45f
-            val radius = baseRadius * sqrt(i + 1f) * 0.75f + random.nextFloat() * 140f
+            val radius = baseRadius * sqrt(i + 1f) * 1.10f + random.nextFloat() * 200f
             val angle = (i * goldenAngle + spiralFactor).toFloat()
             val color = palette.random(random)
             val eccentricity = 0.08f + random.nextFloat() * 0.22f
@@ -90,12 +90,12 @@ class OrbitalLayoutEngine @Inject constructor() {
                     type = artist.type,
                     playCount = artist.playCount,
                     imageUrl = artist.imageUrl,
-                    weight = artist.importance * 100f,
+                    weight = artist.importance * 85f,
                     orbitCenterId = null,
                     baseOrbitCenter = galaxyCenter,
                     orbitRadius = radius,
                     baseAngle = angle,
-                    orbitSpeed = (0.0004f + random.nextFloat() * 0.0004f),
+                    orbitSpeed = (0.035f + random.nextFloat() * 0.015f),
                     color = color,
                     depth = VisualDepth.CORE,
                     scale = 1.0f + (artist.importance * 0.8f),
@@ -105,7 +105,7 @@ class OrbitalLayoutEngine @Inject constructor() {
                     mass = artist.importance * 100f,
                     fluidInfluence = 0.8f,
                     energy = artist.audioEnergyBias,
-                    trailLength = 0.8f,
+                    trailLength = 0.65f,
                     eccentricity = eccentricity,
                     phaseOffset = phaseOffset,
                     topTracks = artist.topTracks
@@ -122,9 +122,9 @@ class OrbitalLayoutEngine @Inject constructor() {
             val orbitStep = (2 * PI) / group.size.coerceAtLeast(1)
 
             group.forEachIndexed { i, album ->
-                val radius = 180f + (i * 80f) + (random.nextFloat() * 40f)
+                val radius = 260f + (i * 110f) + (random.nextFloat() * 50f)
                 val eccentricity = 0.10f + random.nextFloat() * 0.20f
-                val phaseOffset = (i * 0.5f + random.nextFloat() * 0.5f).toFloat()
+                val phaseOffset = (i * 0.5f + random.nextFloat() * 0.5f)
 
                 result.add(
                     PositionedNode(
@@ -138,7 +138,7 @@ class OrbitalLayoutEngine @Inject constructor() {
                         baseOrbitCenter = galaxyCenter,
                         orbitRadius = radius,
                         baseAngle = (i * orbitStep).toFloat(),
-                        orbitSpeed = 0.003f + random.nextFloat() * 0.002f,
+                        orbitSpeed = 0.013f + random.nextFloat() * 0.02f,
                         color = parent.color.copy(alpha = 0.85f),
                         depth = VisualDepth.MID,
                         scale = 0.8f + (album.importance * 0.5f),
@@ -150,7 +150,8 @@ class OrbitalLayoutEngine @Inject constructor() {
                         energy = album.audioEnergyBias,
                         trailLength = 0.5f,
                         eccentricity = eccentricity,
-                        phaseOffset = phaseOffset
+                        phaseOffset = phaseOffset,
+                        artistName = parent.label
                     )
                 )
             }
@@ -163,7 +164,7 @@ class OrbitalLayoutEngine @Inject constructor() {
             val step = (2 * PI) / group.size.coerceAtLeast(1)
 
             group.forEachIndexed { i, track ->
-                val radius = 70f + (i * 30f) + random.nextFloat() * 20f
+                val radius = 110f + (i * 45f) + random.nextFloat() * 25f
                 val eccentricity = 0.05f + random.nextFloat() * 0.15f
                 val phaseOffset = (random.nextFloat() * 2 * PI).toFloat()
 
