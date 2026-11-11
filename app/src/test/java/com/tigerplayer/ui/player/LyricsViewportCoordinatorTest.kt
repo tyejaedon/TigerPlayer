@@ -1,6 +1,6 @@
 package com.tigerplayer.ui.player
 
-import com.tigerplayer.data.model.LrcLine
+import com.tigerplayer.data.model.LyricLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,11 +8,11 @@ import org.junit.Test
 class LyricsViewportCoordinatorTest {
 
     private val sampleLines = listOf(
-        LrcLine(timeMs = 1_000L, text = "Line 1"),
-        LrcLine(timeMs = 5_000L, text = "Line 2"),
-        LrcLine(timeMs = 10_000L, text = "Line 3"),
-        LrcLine(timeMs = 10_400L, text = "Line 4 (Short gap)"),
-        LrcLine(timeMs = 30_000L, text = "Line 5 (Long gap)")
+        LyricLine(timeMs = 1_000L, text = "Line 1"),
+        LyricLine(timeMs = 5_000L, text = "Line 2"),
+        LyricLine(timeMs = 10_000L, text = "Line 3"),
+        LyricLine(timeMs = 10_400L, text = "Line 4 (Short gap)"),
+        LyricLine(timeMs = 30_000L, text = "Line 5 (Long gap)")
     )
 
     @Test

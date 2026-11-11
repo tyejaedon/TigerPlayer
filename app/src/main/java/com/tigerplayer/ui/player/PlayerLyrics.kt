@@ -60,6 +60,28 @@ object LyricsTestTags {
     const val LYRIC_LINE_PREFIX = "lyric_line_"
 }
 
+/**
+ * Main composable for displaying track lyrics, supporting empty/missing lyrics states,
+ * unsynced plain text lyrics, and timestamp-synchronized 3D auto-scrolling lyrics.
+ *
+ * @param lyrics The [Lyrics] model state (None, Plain, or Synced). Dictates whether an empty state,
+ *   plain scrollable text box, or auto-scrolling synced 3D list is rendered.
+ * @param currentPosition Track playback position in milliseconds. Primary timeline anchor for lyric synchronization.
+ * @param textColor Base theme/contrast text color. Serves as baseline color for inactive lyrics and UI icons.
+ * @param activeFontSize Font size applied to the currently active (sung) lyric line.
+ * @param inactiveFontSize Base font size for inactive lyric lines; used to calculate relative scaling (`inactiveScale`).
+ * @param plainLyricsFontSize Font size used when displaying unsynced plain text lyrics.
+ * @param lineVerticalPadding Vertical padding spacing applied around each individual lyric row.
+ * @param manualOffsetMs User-adjusted timing offset in milliseconds (+ delays lyrics, - advances lyrics).
+ *   Added to static track offset to resynchronize misaligned lyrics.
+ * @param showOffsetControls Toggles visibility of the manual timing offset adjustment UI overlay.
+ * @param cyclicProjection Enables or disables 3D cylindrical perspective projection (rotation tilt, scaling,
+ *   and alpha fade based on distance from focal center).
+ * @param leadWindowMs Time window in milliseconds before line timestamp to begin predictive smooth scrolling.
+ * @param onLineClick Optional callback invoked with line timestamp (in ms) when tapped, enabling seek-to-position.
+ * @param onOffsetAdjust Optional callback invoked to shift manual timing offset by a delta in milliseconds.
+ * @param onOffsetReset Optional callback invoked to reset manual timing offset back to zero.
+ */
 @Composable
 fun LyricsDisplay(
     lyrics: Lyrics,
@@ -122,13 +144,16 @@ fun LyricsDisplay(
                 }
             } else {
                 val listState = rememberLazyListState()
+                // True when user is actively dragging list; suspends programmatic auto-scroll
                 val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
                 val density = LocalDensity.current
 
+                // Net offset combined from track-level offset and user manual adjustment
                 val totalOffsetMs = lyrics.offsetMs + manualOffsetMs
+                // Adjusted position reflecting net timing offset; shifts effective line matching window
                 val rawAdjustedPosition = currentPosition + totalOffsetMs
 
-                // Sub-frame monotonic time tracker to extrapolate 250ms playback ticks smoothly
+                // Monotonic time tracking anchors to extrapolate position between 250ms player updates
                 var lastAnchorPos by remember { mutableLongStateOf(rawAdjustedPosition) }
                 var lastAnchorMonoTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
 
@@ -137,6 +162,7 @@ fun LyricsDisplay(
                     lastAnchorMonoTime = android.os.SystemClock.elapsedRealtime()
                 }
 
+                // High-precision frame monotonic clock updated every frame via withFrameMillis
                 var frameMonotonicTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
                 LaunchedEffect(lyrics, currentPosition) {
                     while (isActive) {
@@ -146,6 +172,7 @@ fun LyricsDisplay(
                     }
                 }
 
+                // Continuously extrapolated playback position driving jitter-free 60/120 FPS animations
                 val smoothPosition = remember(lastAnchorPos, lastAnchorMonoTime, frameMonotonicTime) {
                     LyricsViewportCoordinator.extrapolatePosition(
                         reportedPositionMs = lastAnchorPos,
@@ -155,6 +182,7 @@ fun LyricsDisplay(
                     )
                 }
 
+                // Anticipatory scroll metrics (active index, scroll target, focal position, lead window)
                 val anticipatoryState = remember(parsed, smoothPosition, leadWindowMs) {
                     LyricsViewportCoordinator.calculateAnticipatoryState(
                         lines = parsed,
@@ -163,17 +191,24 @@ fun LyricsDisplay(
                     )
                 }
 
+                // Zero-based index of line corresponding to smoothPosition (controls active line styling)
                 val activeIndex = anticipatoryState.activeIndex
+                // Viewport auto-scroll target index anticipating upcoming line transitions
                 val targetScrollIndex = anticipatoryState.targetScrollIndex
+                // Continuous floating-point viewport center index driving fluid 3D transformations
                 val focalIndex = anticipatoryState.focalIndex
+                // Dynamic line height lookup map used for exact item center-offset calculations
                 val itemHeights = remember { mutableStateMapOf<Int, Int>() }
 
-                var previousTargetIndex by remember { mutableIntStateOf(targetScrollIndex) }
+                // Tracks prior target index to distinguish small steps from large seek jumps
+                var previousTargetIndex by remember { mutableIntStateOf(-1) }
+                var isInitialScroll by remember { mutableStateOf(true) }
 
                 LaunchedEffect(targetScrollIndex, isUserDragging) {
                     if (targetScrollIndex in parsed.indices && !isUserDragging) {
-                        val isLargeJump = abs(targetScrollIndex - previousTargetIndex) > 1
+                        val isLargeJump = isInitialScroll || abs(targetScrollIndex - previousTargetIndex) > 1
                         previousTargetIndex = targetScrollIndex
+                        isInitialScroll = false
 
                         val layoutInfo = listState.layoutInfo
                         val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetScrollIndex }
@@ -258,6 +293,15 @@ fun LyricsDisplay(
     }
 }
 
+/**
+ * Overlay control panel allowing real-time adjustment (+/- 500ms) and resetting of manual lyric synchronization offsets.
+ *
+ * @param offsetMs Current manual offset in milliseconds (+ delays lyrics, - advances lyrics).
+ * @param onAdjust Callback invoked when user taps +/- buttons to increment/decrement offset by delta.
+ * @param onReset Callback invoked when user taps offset display to reset offset to 0ms.
+ * @param textColor Tint color for text and icons.
+ * @param modifier Layout modifier positioning the overlay container.
+ */
 @Composable
 private fun LyricsOffsetControls(
     offsetMs: Long,
@@ -290,8 +334,10 @@ private fun LyricsOffsetControls(
                 )
             }
 
+            // Converted float value in seconds for formatted user display
             val offsetSec = offsetMs / 1000f
-            val formatted = if (offsetMs == 0L) "Sync" else String.format(Locale.US, "%+.1fs", offsetSec)
+            // Display text formatted as "+0.5s", "-0.5s", or "Sync" when offset is zero
+            val formatted = if (offsetMs == 0L) "Sync" else String.format(java.util.Locale.US, "%+.1fs", offsetSec)
             Text(
                 text = formatted,
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
@@ -318,6 +364,27 @@ private fun LyricsOffsetControls(
         }
     }
 }
+
+/**
+ * Individual lyric row item rendered within the synchronized lyrics list. Applies dynamic 3D projection transformations
+ * (scaling, rotation, alpha fading, and color blending) based on proximity to the continuous focal center index.
+ *
+ * @param line Content string of the lyric line.
+ * @param isActive Boolean indicating whether this row represents the active singing line.
+ * @param isInterlude Boolean indicating whether to show pulsing dots instead.
+ * @param currentPositionMs Current ms for drawing word fills.
+ * @param hasWordLevelTiming True if words can be filled.
+ * @param index Row position index within the parsed lyric line list.
+ * @param focalIndex Continuous floating-point focal center index of the lyrics viewport.
+ * @param cyclicProjection Enables or disables 3D cylindrical projection physics (tilting, scaling, alpha).
+ * @param activeColor Highlight color applied to the active lyric line (e.g. TigerNeonOrange).
+ * @param textColor Base theme text color for inactive lyric lines.
+ * @param activeFontSize Target font size for active lyric lines.
+ * @param inactiveScale Minimum scale factor for inactive lyric lines.
+ * @param lineVerticalPadding Vertical padding spacing applied to the row.
+ * @param onHeightMeasured Callback emitting measured row pixel height to update the `itemHeights` lookup map.
+ * @param onLineClick Optional callback emitting `lineTimeMs` when clicked to seek playback.
+ */
 @Composable
 private fun LyricRow(
     text: String,
@@ -390,4 +457,50 @@ private fun LyricRow(
                 }
             }
     )
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, backgroundColor = 0xFF121212)
+@Composable
+fun LyricsDisplayPreview() {
+    val dummyLines = listOf(
+        com.tigerplayer.data.model.LyricLine(
+            timeMs = 1000L,
+            durationMs = 2500L,
+            text = "Is this the real life?",
+            words = emptyList()
+        ),
+        com.tigerplayer.data.model.LyricLine(
+            timeMs = 4000L,
+            durationMs = 3000L,
+            text = "Is this just fantasy?",
+            words = listOf(
+                com.tigerplayer.data.model.LyricWord(4000L, 4500L, "Is "),
+                com.tigerplayer.data.model.LyricWord(4500L, 5000L, "this "),
+                com.tigerplayer.data.model.LyricWord(5000L, 5500L, "just "),
+                com.tigerplayer.data.model.LyricWord(5500L, 7000L, "fantasy?")
+            )
+        ),
+        com.tigerplayer.data.model.LyricLine(
+            timeMs = 8000L,
+            durationMs = 3000L,
+            text = "Caught in a landslide",
+            words = emptyList()
+        ),
+        com.tigerplayer.data.model.LyricLine(
+            timeMs = 12000L,
+            durationMs = 4000L,
+            text = "No escape from reality",
+            words = emptyList()
+        )
+    )
+
+    MaterialTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
+            LyricsDisplay(
+                lyrics = com.tigerplayer.data.model.Lyrics.Synced(lines = dummyLines, hasWordLevelTiming = true),
+                currentPosition = 1500L, // Matches the middle of the FIRST line to demonstrate exact centering natively in the preview pane
+                textColor = Color.White
+            )
+        }
+    }
 }
