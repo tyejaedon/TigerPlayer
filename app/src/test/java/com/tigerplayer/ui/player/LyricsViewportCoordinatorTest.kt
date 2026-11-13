@@ -1,7 +1,9 @@
 package com.tigerplayer.ui.player
 
 import com.tigerplayer.data.model.LyricLine
+import com.tigerplayer.data.model.LyricWord
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -154,9 +156,11 @@ class LyricsViewportCoordinatorTest {
     fun `center offset calculation precisely aligns item midpoint with viewport midpoint`() {
         val viewportHeight = 600
         val itemHeight = 60
-        // Expected center offset: -((600 / 2) - (60 / 2)) = -(300 - 30) = -270
+        // In Compose LazyColumn with vertical contentPadding = viewportHeight / 2, item index 0 naturally
+        // aligns its top edge to viewportHeight / 2. Shifting upward by itemHeight / 2 (positive scrollOffset = 30)
+        // precisely aligns the item's midpoint with the viewport midpoint.
         val offset = LyricsViewportCoordinator.calculateCenterOffset(viewportHeight, itemHeight)
-        assertEquals(-270, offset)
+        assertEquals(30, offset)
     }
 
     @Test
@@ -190,5 +194,53 @@ class LyricsViewportCoordinatorTest {
             isPlaying = false
         )
         assertEquals(basePos, posPaused)
+    }
+
+    @Test
+    fun `interlude detection identifies gaps greater than 6 seconds`() {
+        // Line 4 is at 10_400ms, Line 5 is at 30_000ms. Gap is 19.6s.
+        // At 15_000ms, next line is at 30_000ms (remaining > 6s) -> interlude
+        val stateInterlude = LyricsViewportCoordinator.calculateAnticipatoryState(
+            lines = sampleLines,
+            currentPositionMs = 15_000L
+        )
+        assertTrue(stateInterlude.isInterlude)
+
+        // At 25_000ms, remaining to 30_000ms is 5000ms (<= 6s) -> not an interlude
+        val stateNoInterlude = LyricsViewportCoordinator.calculateAnticipatoryState(
+            lines = sampleLines,
+            currentPositionMs = 25_000L
+        )
+        assertFalse(stateNoInterlude.isInterlude)
+    }
+
+    @Test
+    fun `word progress calculation calculates progressive highlight fractions`() {
+        val line = LyricLine(
+            timeMs = 1000L,
+            text = "Hello world",
+            words = listOf(
+                LyricWord(startTimeMs = 1000L, endTimeMs = 2000L, text = "Hello"),
+                LyricWord(startTimeMs = 2200L, endTimeMs = 3000L, text = "world")
+            )
+        )
+
+        // Before first word
+        val progBefore = LyricsViewportCoordinator.calculateWordProgress(900L, line)
+        assertEquals(listOf(0f, 0f), progBefore)
+
+        // Mid first word (1500ms -> 50%)
+        val progMid1 = LyricsViewportCoordinator.calculateWordProgress(1500L, line)
+        assertEquals(0.5f, progMid1[0], 0.001f)
+        assertEquals(0f, progMid1[1], 0.001f)
+
+        // Between words (2100ms)
+        val progBetween = LyricsViewportCoordinator.calculateWordProgress(2100L, line)
+        assertEquals(1.0f, progBetween[0], 0.001f)
+        assertEquals(0f, progBetween[1], 0.001f)
+
+        // Past all words
+        val progAfter = LyricsViewportCoordinator.calculateWordProgress(3500L, line)
+        assertEquals(listOf(1f, 1f), progAfter)
     }
 }
