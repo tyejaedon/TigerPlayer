@@ -404,7 +404,7 @@ fun CoverScreenMiniHub(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        TrackInfoText(
+                        CoverScreenTrackDashboard(
                             track = track,
                             subtitle = stringResource(R.string.coverscreen_status_flex_mode_active),
                             lyrics = uiState.currentLyrics,
@@ -499,7 +499,7 @@ fun CoverScreenMiniHub(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Top
                 ) {
-                    TrackInfoText(
+                    CoverScreenTrackDashboard(
                         track = track,
                         subtitle = if (uiState.isPlaying) stringResource(R.string.coverscreen_status_now_playing) else stringResource(R.string.coverscreen_status_paused),
                         lyrics = uiState.currentLyrics,

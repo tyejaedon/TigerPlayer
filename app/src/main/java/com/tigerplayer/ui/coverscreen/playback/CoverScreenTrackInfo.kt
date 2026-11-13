@@ -180,7 +180,7 @@ internal fun calculateCoverArtSize(
 internal const val COVER_MEDIA_CYCLE_PAGE_COUNT = 2
 
 /**
- * View cycle targets for the swipable media area in [TrackInfoText]:
+ * View cycle targets for the swipable media area in [CoverScreenTrackDashboard]:
  * Dot 1 (index 0) = Album artwork
  * Dot 2 (index 1) = Synced lyrics (LyricsDisplay)
  */
@@ -373,7 +373,7 @@ internal fun CoverScreenMediaCycleViewport(
 }
 
 @Composable
-internal fun TrackInfoText(
+internal fun CoverScreenTrackDashboard(
     track: AudioTrack?,
     subtitle: String,
     lyrics: Lyrics,
@@ -424,52 +424,30 @@ internal fun TrackInfoText(
 
     // View index: 0 = Album (dot 1), 1 = Lyrics (dot 2)
     var currentViewIndex by remember { mutableIntStateOf(0) }
-    var columnDragX by remember { mutableFloatStateOf(0f) }
-    val swipeThresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
 
-    var showOverflowMenu by remember { mutableStateOf(false) }
     var showPlaybackRateDialog by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showPlaylistSelector by remember { mutableStateOf(false) }
 
-    if (showPlaybackRateDialog) {
-        PlaybackRateDialog(
-            initialSpeed = playbackSpeed,
-            initialPitchRatio = pitchRatio,
-            onDismissRequest = { showPlaybackRateDialog = false },
-            onSpeedChangeFinished = onSpeedChangeFinished,
-            onPitchChangeFinished = onPitchChangeFinished
-        )
-    }
-
-    if (showSleepTimerSheet) {
-        SleepTimerSheet(
-            state = sleepTimerState ?: SleepTimerState(),
-            onDismiss = { showSleepTimerSheet = false },
-            onSetDuration = { minutes ->
-                onSetSleepTimerDuration?.invoke(minutes)
-            },
-            onSetEndOfTrack = {
-                onSetEndOfTrackSleepTimer?.invoke()
-            },
-            onSetEndOfQueue = {
-                onSetEndOfQueueSleepTimer?.invoke()
-            },
-            onCancel = {
-                onCancelSleepTimer?.invoke()
-            }
-        )
-    }
-
-    if (showPlaylistSelector) {
-        CoverScreenAddToPlaylistDialog(
-            playlists = playlists,
-            onDismiss = { showPlaylistSelector = false },
-            onPlaylistSelected = { playlistId: Long ->
-                onAddToPlaylist?.invoke(playlistId)
-            }
-        )
-    }
+    CoverScreenTrackActionDialogs(
+        showPlaybackRateDialog = showPlaybackRateDialog,
+        showSleepTimerSheet = showSleepTimerSheet,
+        showPlaylistSelector = showPlaylistSelector,
+        playbackSpeed = playbackSpeed,
+        pitchRatio = pitchRatio,
+        sleepTimerState = sleepTimerState,
+        playlists = playlists,
+        onDismissPlaybackRateDialog = { showPlaybackRateDialog = false },
+        onDismissSleepTimerSheet = { showSleepTimerSheet = false },
+        onDismissPlaylistSelector = { showPlaylistSelector = false },
+        onSpeedChangeFinished = onSpeedChangeFinished,
+        onPitchChangeFinished = onPitchChangeFinished,
+        onSetSleepTimerDuration = onSetSleepTimerDuration,
+        onSetEndOfTrackSleepTimer = onSetEndOfTrackSleepTimer,
+        onSetEndOfQueueSleepTimer = onSetEndOfQueueSleepTimer,
+        onCancelSleepTimer = onCancelSleepTimer,
+        onAddToPlaylist = onAddToPlaylist
+    )
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -478,251 +456,19 @@ internal fun TrackInfoText(
 
         Spacer(modifier = Modifier.height(spacerHeight))
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            if (!isVortexImmersive) {
-                Box {
-                    IconButton(
-                        onClick = { showOverflowMenu = true },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag(CoverScreenTestTags.queueTrack("open"))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "Track options",
-                            tint = Color.White.copy(alpha = 0.85f),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showOverflowMenu,
-                        onDismissRequest = { showOverflowMenu = false },
-                        modifier = Modifier
-                            .glassEffect(RoundedCornerShape(18.dp))
-                    ) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = "Add to playlist",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                                    contentDescription = null,
-                                    tint = TigerNeonOrange,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            onClick = {
-                                showOverflowMenu = false
-                                showPlaylistSelector = true
-                            },
-                            modifier = Modifier.testTag("cover_track_menu_add_playlist")
-                        )
-
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = "Open queue",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.85f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenQueue()
-                            },
-                            modifier = Modifier.testTag("cover_track_menu_open_queue")
-                        )
-
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = "Playback speed",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Speed,
-                                    contentDescription = null,
-                                    tint = Color(0xFF4FC3F7),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            onClick = {
-                                showOverflowMenu = false
-                                showPlaybackRateDialog = true
-                            },
-                            modifier = Modifier.testTag("cover_track_menu_playback_speed")
-                        )
-
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = "Settings",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Settings,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.85f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            onClick = {
-                                showOverflowMenu = false
-                                onOpenPlaybackSettings()
-                            },
-                            modifier = Modifier.testTag("cover_track_menu_settings")
-                        )
-
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = "Sleep timer",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Bedtime,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFFD54F),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            onClick = {
-                                showOverflowMenu = false
-                                showSleepTimerSheet = true
-                            },
-                            modifier = Modifier.testTag("cover_track_menu_sleep_timer")
-                        )
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.size(32.dp))
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 6.dp)
-                    .pointerInput(currentViewIndex, isVortexImmersive) {
-                        if (!isVortexImmersive) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { columnDragX = 0f },
-                                onHorizontalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    columnDragX += dragAmount
-                                },
-                                onDragEnd = {
-                                    if (columnDragX < -swipeThresholdPx) {
-                                        currentViewIndex = (currentViewIndex + 1).coerceAtMost(COVER_MEDIA_CYCLE_PAGE_COUNT - 1)
-                                    } else if (columnDragX > swipeThresholdPx) {
-                                        currentViewIndex = (currentViewIndex - 1).coerceAtLeast(0)
-                                    }
-                                }
-                            )
-                        }
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = track?.title ?: stringResource(R.string.coverscreen_default_title),
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = if (isLarge) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black
-                )
-
-                Text(
-                    text = track?.artist?.uppercase() ?: stringResource(R.string.coverscreen_default_artist),
-                    color = TigerNeonOrange,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
-                )
-
-                // Ellipsis dot scroll indicator syncing with the 2 views:
-                // Dot 1 (index 0) = Album, Dot 2 (index 1) = Lyrics
-                if (!isVortexImmersive) {
-                    Row(
-                        modifier = Modifier
-                            .padding(top = 4.dp, bottom = 2.dp)
-                            .testTag("cover_media_cycle_dots"),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        (0 until COVER_MEDIA_CYCLE_PAGE_COUNT).forEach { index ->
-                            val isActive = index == currentViewIndex
-                            val dotWidth by animateDpAsState(
-                                targetValue = if (isActive) 14.dp else 5.dp,
-                                label = "DotWidth_$index"
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(width = dotWidth, height = 5.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isActive) TigerNeonOrange else Color.White.copy(alpha = 0.35f)
-                                    )
-                                    .clickable { currentViewIndex = index }
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (!isVortexImmersive) {
-                IconButton(
-                    onClick = onOpenLibrary,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .testTag(CoverScreenTestTags.LIBRARY_OPEN)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.LibraryMusic,
-                        contentDescription = stringResource(R.string.coverscreen_action_library),
-                        tint = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.size(32.dp))
-            }
-        }
+        CoverScreenTrackHeader(
+            track = track,
+            isLarge = isLarge,
+            isVortexImmersive = isVortexImmersive,
+            currentViewIndex = currentViewIndex,
+            onViewIndexChanged = { currentViewIndex = it },
+            onOpenQueue = onOpenQueue,
+            onOpenLibrary = onOpenLibrary,
+            onOpenPlaybackSettings = onOpenPlaybackSettings,
+            onShowPlaylistSelector = { showPlaylistSelector = true },
+            onShowPlaybackRateDialog = { showPlaybackRateDialog = true },
+            onShowSleepTimerSheet = { showSleepTimerSheet = true }
+        )
 
         if (!isVortexImmersive) {
             Spacer(modifier = Modifier.height(spacerHeight))
@@ -755,6 +501,370 @@ internal fun TrackInfoText(
                 letterSpacing = 1.sp
             )
         }
+    }
+}
+
+@Composable
+internal fun CoverScreenTrackHeader(
+    track: AudioTrack?,
+    isLarge: Boolean,
+    isVortexImmersive: Boolean,
+    currentViewIndex: Int,
+    onViewIndexChanged: (Int) -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenLibrary: () -> Unit,
+    onOpenPlaybackSettings: () -> Unit,
+    onShowPlaylistSelector: () -> Unit,
+    onShowPlaybackRateDialog: () -> Unit,
+    onShowSleepTimerSheet: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        if (!isVortexImmersive) {
+            CoverScreenTrackOverflowMenu(
+                onOpenQueue = onOpenQueue,
+                onOpenPlaybackSettings = onOpenPlaybackSettings,
+                onShowPlaylistSelector = onShowPlaylistSelector,
+                onShowPlaybackRateDialog = onShowPlaybackRateDialog,
+                onShowSleepTimerSheet = onShowSleepTimerSheet
+            )
+        } else {
+            Spacer(modifier = Modifier.size(32.dp))
+        }
+
+        CoverScreenTrackMetadataArea(
+            track = track,
+            isLarge = isLarge,
+            isVortexImmersive = isVortexImmersive,
+            currentViewIndex = currentViewIndex,
+            onViewIndexChanged = onViewIndexChanged,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 6.dp)
+        )
+
+        if (!isVortexImmersive) {
+            IconButton(
+                onClick = onOpenLibrary,
+                modifier = Modifier
+                    .size(32.dp)
+                    .testTag(CoverScreenTestTags.LIBRARY_OPEN)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LibraryMusic,
+                    contentDescription = stringResource(R.string.coverscreen_action_library),
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        } else {
+            Spacer(modifier = Modifier.size(32.dp))
+        }
+    }
+}
+
+@Composable
+internal fun CoverScreenTrackOverflowMenu(
+    onOpenQueue: () -> Unit,
+    onOpenPlaybackSettings: () -> Unit,
+    onShowPlaylistSelector: () -> Unit,
+    onShowPlaybackRateDialog: () -> Unit,
+    onShowSleepTimerSheet: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showOverflowMenu by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        IconButton(
+            onClick = { showOverflowMenu = true },
+            modifier = Modifier
+                .size(32.dp)
+                .testTag(CoverScreenTestTags.queueTrack("open"))
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = "Track options",
+                tint = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = showOverflowMenu,
+            onDismissRequest = { showOverflowMenu = false },
+            modifier = Modifier.glassEffect(RoundedCornerShape(18.dp), isOpaque = true),
+            containerColor = Color.Transparent
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Add to playlist",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                        contentDescription = null,
+                        tint = TigerNeonOrange,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showOverflowMenu = false
+                    onShowPlaylistSelector()
+                },
+                modifier = Modifier.testTag("cover_track_menu_add_playlist")
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Open queue",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showOverflowMenu = false
+                    onOpenQueue()
+                },
+                modifier = Modifier.testTag("cover_track_menu_open_queue")
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Playback speed",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Speed,
+                        contentDescription = null,
+                        tint = Color(0xFF4FC3F7),
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showOverflowMenu = false
+                    onShowPlaybackRateDialog()
+                },
+                modifier = Modifier.testTag("cover_track_menu_playback_speed")
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Settings",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Settings,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showOverflowMenu = false
+                    onOpenPlaybackSettings()
+                },
+                modifier = Modifier.testTag("cover_track_menu_settings")
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Sleep timer",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Bedtime,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD54F),
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showOverflowMenu = false
+                    onShowSleepTimerSheet()
+                },
+                modifier = Modifier.testTag("cover_track_menu_sleep_timer")
+            )
+        }
+    }
+}
+
+@Composable
+internal fun CoverScreenTrackMetadataArea(
+    track: AudioTrack?,
+    isLarge: Boolean,
+    isVortexImmersive: Boolean,
+    currentViewIndex: Int,
+    onViewIndexChanged: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var columnDragX by remember { mutableFloatStateOf(0f) }
+    val swipeThresholdPx = with(LocalDensity.current) { 36.dp.toPx() }
+
+    Column(
+        modifier = modifier
+            .pointerInput(currentViewIndex, isVortexImmersive) {
+                if (!isVortexImmersive) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { columnDragX = 0f },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            columnDragX += dragAmount
+                        },
+                        onDragEnd = {
+                            if (columnDragX < -swipeThresholdPx) {
+                                onViewIndexChanged((currentViewIndex + 1).coerceAtMost(COVER_MEDIA_CYCLE_PAGE_COUNT - 1))
+                            } else if (columnDragX > swipeThresholdPx) {
+                                onViewIndexChanged((currentViewIndex - 1).coerceAtLeast(0))
+                            }
+                        }
+                    )
+                }
+            },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = track?.title ?: stringResource(R.string.coverscreen_default_title),
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = if (isLarge) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black
+        )
+
+        Text(
+            text = track?.artist?.uppercase() ?: stringResource(R.string.coverscreen_default_artist),
+            color = TigerNeonOrange,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp
+        )
+
+        // Ellipsis dot scroll indicator syncing with the 2 views:
+        // Dot 1 (index 0) = Album, Dot 2 (index 1) = Lyrics
+        if (!isVortexImmersive) {
+            Row(
+                modifier = Modifier
+                    .padding(top = 4.dp, bottom = 2.dp)
+                    .testTag("cover_media_cycle_dots"),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                (0 until COVER_MEDIA_CYCLE_PAGE_COUNT).forEach { index ->
+                    val isActive = index == currentViewIndex
+                    val dotWidth by animateDpAsState(
+                        targetValue = if (isActive) 14.dp else 5.dp,
+                        label = "DotWidth_$index"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(width = dotWidth, height = 5.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isActive) TigerNeonOrange else Color.White.copy(alpha = 0.35f)
+                            )
+                            .clickable { onViewIndexChanged(index) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CoverScreenTrackActionDialogs(
+    showPlaybackRateDialog: Boolean,
+    showSleepTimerSheet: Boolean,
+    showPlaylistSelector: Boolean,
+    playbackSpeed: Float,
+    pitchRatio: Float,
+    sleepTimerState: SleepTimerState?,
+    playlists: List<Playlist>,
+    onDismissPlaybackRateDialog: () -> Unit,
+    onDismissSleepTimerSheet: () -> Unit,
+    onDismissPlaylistSelector: () -> Unit,
+    onSpeedChangeFinished: (Float) -> Unit,
+    onPitchChangeFinished: (Float) -> Unit,
+    onSetSleepTimerDuration: ((Int) -> Unit)?,
+    onSetEndOfTrackSleepTimer: (() -> Unit)?,
+    onSetEndOfQueueSleepTimer: (() -> Unit)?,
+    onCancelSleepTimer: (() -> Unit)?,
+    onAddToPlaylist: ((Long) -> Unit)?
+) {
+    if (showPlaybackRateDialog) {
+        PlaybackRateDialog(
+            initialSpeed = playbackSpeed,
+            initialPitchRatio = pitchRatio,
+            onDismissRequest = onDismissPlaybackRateDialog,
+            onSpeedChangeFinished = onSpeedChangeFinished,
+            onPitchChangeFinished = onPitchChangeFinished
+        )
+    }
+
+    if (showSleepTimerSheet) {
+        SleepTimerSheet(
+            state = sleepTimerState ?: SleepTimerState(),
+            onDismiss = onDismissSleepTimerSheet,
+            onSetDuration = { minutes ->
+                onSetSleepTimerDuration?.invoke(minutes)
+            },
+            onSetEndOfTrack = {
+                onSetEndOfTrackSleepTimer?.invoke()
+            },
+            onSetEndOfQueue = {
+                onSetEndOfQueueSleepTimer?.invoke()
+            },
+            onCancel = {
+                onCancelSleepTimer?.invoke()
+            }
+        )
+    }
+
+    if (showPlaylistSelector) {
+        CoverScreenAddToPlaylistDialog(
+            playlists = playlists,
+            onDismiss = onDismissPlaylistSelector,
+            onPlaylistSelected = { playlistId: Long ->
+                onAddToPlaylist?.invoke(playlistId)
+            }
+        )
     }
 }
 
