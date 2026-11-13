@@ -13,9 +13,7 @@ import kotlin.math.sin
  */
 object CoverScreenPerformanceManager {
     const val TARGET_FPS_DEFAULT = 60
-    const val TARGET_FPS_THROTTLED = 30
-    const val FRAME_INTERVAL_60_FPS_MS = 16L
-    const val FRAME_INTERVAL_60_FPS_NS = 16_666_666L
+
 
     /**
      * Calculates the frame interval in milliseconds for a target frame rate.
