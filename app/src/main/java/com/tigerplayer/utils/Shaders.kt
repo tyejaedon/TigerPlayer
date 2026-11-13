@@ -472,7 +472,7 @@ object FluidShaders {
 
         // Screen boundary margin containment: ensures fluid never touches the screen edges,
         // leaving untouched real estate as pure high-contrast black (#000000).
-        vec2 boxOffset = max(abs(vUv - vec2(0.5)) - vec2(0.36), vec2(0.0));
+        vec2 boxOffset = max(abs(vUv - vec2(0.5)) - vec2(0.46), vec2(0.0));
         float containment = 1.0 - smoothstep(0.0, 0.08, length(boxOffset));
         color *= containment;
 
@@ -614,7 +614,7 @@ object FluidShaders {
         void main() {
             vec3 scene = texture(uScene, vUv).rgb;
             vec3 bloom = texture(uBloom, vUv).rgb * max(uBloomStrength, 0.0);
-            vec2 boxOffset = max(abs(vUv - vec2(0.5)) - vec2(0.36), vec2(0.0));
+            vec2 boxOffset = max(abs(vUv - vec2(0.5)) - vec2(0.46), vec2(0.0));
             float containment = 1.0 - smoothstep(0.0, 0.08, length(boxOffset));
             vec3 color = (scene + bloom) * containment;
             outColor = vec4(color, 1.0);
