@@ -1,6 +1,6 @@
 package com.tigerplayer.utils
 
-import com.tigerplayer.data.model.LrcLine
+import com.tigerplayer.data.model.LyricLine
 import com.tigerplayer.data.model.Lyrics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -46,9 +46,12 @@ class LrcParserTest {
         assertTrue(result is Lyrics.Synced)
         val synced = result as Lyrics.Synced
         assertEquals(3, synced.lines.size)
-        assertEquals(LrcLine(1000L, "First line"), synced.lines[0])
-        assertEquals(LrcLine(5500L, "Second line"), synced.lines[1])
-        assertEquals(LrcLine(70123L, "Third line"), synced.lines[2])
+        assertEquals(1000L, synced.lines[0].timeMs)
+        assertEquals("First line", synced.lines[0].text)
+        assertEquals(5500L, synced.lines[1].timeMs)
+        assertEquals("Second line", synced.lines[1].text)
+        assertEquals(70123L, synced.lines[2].timeMs)
+        assertEquals("Third line", synced.lines[2].text)
         assertEquals(0L, synced.offsetMs)
     }
 
@@ -63,9 +66,12 @@ class LrcParserTest {
         assertTrue(result is Lyrics.Synced)
         val synced = result as Lyrics.Synced
         assertEquals(3, synced.lines.size)
-        assertEquals(LrcLine(1000L, "Repeated chorus line"), synced.lines[0])
-        assertEquals(LrcLine(5000L, "Repeated chorus line"), synced.lines[1])
-        assertEquals(LrcLine(10000L, "Late line"), synced.lines[2])
+        assertEquals(1000L, synced.lines[0].timeMs)
+        assertEquals("Repeated chorus line", synced.lines[0].text)
+        assertEquals(5000L, synced.lines[1].timeMs)
+        assertEquals("Repeated chorus line", synced.lines[1].text)
+        assertEquals(10000L, synced.lines[2].timeMs)
+        assertEquals("Late line", synced.lines[2].text)
     }
 
     @Test
@@ -78,8 +84,10 @@ class LrcParserTest {
         val result = LrcParser.parse(lrc)
         assertTrue(result is Lyrics.Synced)
         val synced = result as Lyrics.Synced
-        assertEquals(LrcLine(2500L, "Tenths with comma"), synced.lines[0])
-        assertEquals(LrcLine(4500L, "Tenths with dot"), synced.lines[1])
+        assertEquals(2500L, synced.lines[0].timeMs)
+        assertEquals("Tenths with comma", synced.lines[0].text)
+        assertEquals(4500L, synced.lines[1].timeMs)
+        assertEquals("Tenths with dot", synced.lines[1].text)
     }
 
     @Test

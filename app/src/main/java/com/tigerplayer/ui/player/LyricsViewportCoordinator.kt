@@ -1,7 +1,7 @@
 package com.tigerplayer.ui.player
 
 import androidx.compose.animation.core.FastOutSlowInEasing
-import com.tigerplayer.data.model.LrcLine
+import com.tigerplayer.data.model.LyricLine
 import kotlin.math.abs
 
 /**
@@ -13,7 +13,8 @@ data class LyricsAnticipatoryState(
     val targetScrollIndex: Int,
     val transitionProgress: Float,
     val focalIndex: Float,
-    val effectiveLeadWindowMs: Long
+    val effectiveLeadWindowMs: Long,
+    val isInterlude: Boolean
 )
 
 data class ItemProjection(
@@ -37,7 +38,7 @@ object LyricsViewportCoordinator {
      * exactly as the vocal starts.
      */
     fun calculateAnticipatoryState(
-        lines: List<LrcLine>,
+        lines: List<LyricLine>,
         currentPositionMs: Long,
         leadWindowMs: Long = DEFAULT_LEAD_WINDOW_MS
     ): LyricsAnticipatoryState {
@@ -47,13 +48,22 @@ object LyricsViewportCoordinator {
                 targetScrollIndex = -1,
                 transitionProgress = 0f,
                 focalIndex = 0f,
-                effectiveLeadWindowMs = leadWindowMs
+                effectiveLeadWindowMs = leadWindowMs,
+                isInterlude = false
             )
         }
 
         val currentIndex = lines.indexOfLast { it.timeMs <= currentPositionMs }
         val activeIndex = if (currentIndex == -1) 0 else currentIndex
         val nextIndex = activeIndex + 1
+
+        val isInterlude = if (currentIndex == -1) {
+            (lines[0].timeMs - currentPositionMs) > 6000L
+        } else if (nextIndex in lines.indices) {
+            (lines[nextIndex].timeMs - currentPositionMs) > 6000L
+        } else {
+            false
+        }
 
         if (nextIndex !in lines.indices) {
             // Last line or beyond: stay anchored on the last line
@@ -62,7 +72,8 @@ object LyricsViewportCoordinator {
                 targetScrollIndex = activeIndex,
                 transitionProgress = 0f,
                 focalIndex = activeIndex.toFloat(),
-                effectiveLeadWindowMs = leadWindowMs
+                effectiveLeadWindowMs = leadWindowMs,
+                isInterlude = isInterlude
             )
         }
 
@@ -83,7 +94,8 @@ object LyricsViewportCoordinator {
                 targetScrollIndex = nextIndex,
                 transitionProgress = easedProgress,
                 focalIndex = activeIndex.toFloat() + easedProgress,
-                effectiveLeadWindowMs = effectiveLead
+                effectiveLeadWindowMs = effectiveLead,
+                isInterlude = isInterlude
             )
         } else {
             LyricsAnticipatoryState(
@@ -91,7 +103,8 @@ object LyricsViewportCoordinator {
                 targetScrollIndex = activeIndex,
                 transitionProgress = 0f,
                 focalIndex = activeIndex.toFloat(),
-                effectiveLeadWindowMs = effectiveLead
+                effectiveLeadWindowMs = effectiveLead,
+                isInterlude = isInterlude
             )
         }
     }
@@ -131,11 +144,18 @@ object LyricsViewportCoordinator {
     }
 
     /**
-     * Calculates the center scroll offset in pixels for an item of height [itemHeightPx]
-     * within a viewport of height [viewportHeightPx].
+     * Calculates the scroll offset in pixels required to align an item of height [itemHeightPx]
+     * to the exact center of a viewport of height [viewportHeightPx].
+     *
+     * In Jetpack Compose, when a LazyColumn has top `contentPadding = viewportHeightPx / 2`,
+     * item index 0 naturally aligns its top edge to `y = viewportHeightPx / 2` (the center line).
+     * To center the item *itself* (not just its top edge), we must shift it UP by half of its own height.
+     * Shifting an item UP relative to its natural padded position requires a POSITIVE scrollOffset.
      */
     fun calculateCenterOffset(viewportHeightPx: Int, itemHeightPx: Int): Int {
-        return -((viewportHeightPx / 2) - (itemHeightPx / 2))
+        // We shift the scroll offset down (positive) by half the item's height
+        // to move the item's physical rendering position UP to the true vertical center.
+        return itemHeightPx / 2
     }
 
     /**
@@ -153,5 +173,26 @@ object LyricsViewportCoordinator {
         }
         val elapsed = (currentMonotonicMs - lastAnchorMonotonicMs).coerceIn(0L, MAX_FORWARD_EXTRAPOLATION_MS)
         return reportedPositionMs + elapsed
+    }
+
+    /**
+     * Given the current playback position and the lyric line, calculates the fill progress
+     * for word-by-word highlighting (Apple Music style).
+     *
+     * Returns a list of floats (one for each word) representing the fill percentage [0f, 1f].
+     */
+    fun calculateWordProgress(currentPositionMs: Long, line: LyricLine): List<Float> {
+        if (line.words.isEmpty()) return emptyList()
+
+        return line.words.map { word ->
+            if (currentPositionMs < word.startTimeMs) {
+                0f
+            } else if (currentPositionMs >= word.endTimeMs) {
+                1f
+            } else {
+                val duration = word.endTimeMs - word.startTimeMs
+                if (duration <= 0L) 1f else (currentPositionMs - word.startTimeMs).toFloat() / duration.toFloat()
+            }
+        }
     }
 }

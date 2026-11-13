@@ -1,6 +1,6 @@
 package com.tigerplayer.utils
 
-import com.tigerplayer.data.model.LrcLine
+import com.tigerplayer.data.model.LyricLine
 import com.tigerplayer.data.model.Lyrics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -43,8 +43,10 @@ class EmbeddedLyricsParserTest {
         assertTrue("Expected Synced lyrics, was: $result", result is Lyrics.Synced)
         val synced = result as Lyrics.Synced
         assertEquals(2, synced.lines.size)
-        assertEquals(LrcLine(1000L, "First synced line"), synced.lines[0])
-        assertEquals(LrcLine(3500L, "Second synced line"), synced.lines[1])
+        assertEquals(1000L, synced.lines[0].timeMs)
+        assertEquals("First synced line", synced.lines[0].text)
+        assertEquals(3500L, synced.lines[1].timeMs)
+        assertEquals("Second synced line", synced.lines[1].text)
     }
 
     @Test
@@ -58,7 +60,8 @@ class EmbeddedLyricsParserTest {
         assertTrue("Expected Synced lyrics to take precedence, was: $result", result is Lyrics.Synced)
         val synced = result as Lyrics.Synced
         assertEquals(1, synced.lines.size)
-        assertEquals(LrcLine(2000L, "Synced beat"), synced.lines[0])
+        assertEquals(2000L, synced.lines[0].timeMs)
+        assertEquals("Synced beat", synced.lines[0].text)
     }
 
     @Test
