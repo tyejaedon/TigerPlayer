@@ -360,6 +360,7 @@ private fun CoverScreenEqualizerLayout(
                 Box(
                     modifier = Modifier
                         .width(76.dp)
+                        .height(140.dp) // <-- ADDED EXPLICIT HEIGHT HERE
                         .bounceClick { viewModel.setSelectedBand(index) }
                         .testTag("EqBandCard_$index")
                         .glassEffect(RoundedCornerShape(12.dp))
@@ -370,9 +371,10 @@ private fun CoverScreenEqualizerLayout(
                 ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp, horizontal = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .fillMaxSize()
+                            .padding(vertical = 10.dp, horizontal = 4.dp), // Increased vertical padding
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.SpaceBetween // Spread out the content
                     ) {
                         Text(
                             text = band.label,
@@ -510,14 +512,7 @@ private fun CoverScreenEqualizerLayout(
                 Text("Flat", color = Color.White, fontSize = 10.sp)
             }
 
-            listOf(
-                EqualizerPresets.BASS_BOOST,
-                EqualizerPresets.VOCAL_BOOSTER,
-                EqualizerPresets.TREBLE_BOOST,
-                EqualizerPresets.ELECTRONIC,
-                EqualizerPresets.ROCK,
-                EqualizerPresets.NIGHT_DRIVE
-            ).forEach { presetName ->
+            EqualizerPresets.ALL_PRESETS.forEach { presetName ->
                 val isSelected = state.activePresetName == presetName
                 FilterChip(
                     selected = isSelected,
