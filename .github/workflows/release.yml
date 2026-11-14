@@ -49,23 +49,24 @@ jobs:
 
           if [[ -n "$TAG" ]]; then
             VERSION_NAME="${TAG#v}"
-            if [[ "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.?([0-9]+))? ]]; then
+            if [[ "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(\.([0-9]+))?(-beta\.?([0-9]+))? ]]; then
               MAJOR="${BASH_REMATCH[1]}"
               MINOR="${BASH_REMATCH[2]}"
               PATCH="${BASH_REMATCH[3]}"
-              BETA_NUM="${BASH_REMATCH[5]:-99}"
+              HOTFIX="${BASH_REMATCH[5]:-0}"
+              BETA_NUM="${BASH_REMATCH[7]:-99}"
               CALCULATED_CODE=$(( MAJOR * 1000000 + MINOR * 10000 + PATCH * 100 + BETA_NUM ))
               if (( CALCULATED_CODE < 2020020 )); then
-                VERSION_CODE=2020020
+                VERSION_CODE=$(( 2020020 + HOTFIX ))
               else
-                VERSION_CODE=$CALCULATED_CODE
+                VERSION_CODE=$(( CALCULATED_CODE + HOTFIX ))
               fi
             else
-              VERSION_CODE=2020020
+              VERSION_CODE=2020025
             fi
           else
-            VERSION_NAME="2.1.8"
-            VERSION_CODE=2020020
+            VERSION_NAME="2.1.8.5"
+            VERSION_CODE=2020025
           fi
 
           echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
