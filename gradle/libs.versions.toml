@@ -6,8 +6,8 @@ datastorePreferences = "1.3.0"
 documentfile = "1.1.0"
 gson = "2.15.0"
 jtransforms = "3.2"
-kotlin = "2.4.20"
-ksp = "2.3.12"
+kotlin = "2.4.21"
+ksp = "2.3.13"
 # Keep every kotlinx-coroutines artifact on one version. The Compose runtime carries a
 # constraint on kotlinx-coroutines-android 1.9.0, so without an explicit declaration the
 # resolved version differs per product flavor (the `full`-only coroutines-play-services
