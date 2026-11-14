@@ -34,26 +34,27 @@ configure<ApplicationExtension> {
         val resolvedVersionName = project.findProperty("VERSION_NAME")?.toString()
             ?: System.getenv("BETA_VERSION_NAME")
             ?: System.getenv("VERSION_NAME")
-            ?: "2.1.8"
+            ?: "2.1.8.5"
 
         // SemVer multiplier formula: MAJOR * 1_000_000 + MINOR * 10_000 + PATCH * 100 + BUILD_INDEX
         // For stable production releases, BUILD_INDEX defaults to 99 so it supersedes candidate betas (1..98).
         // Historical floor of 2020020 ensures v2.1.6 cleanly supersedes v2.2.0-beta.19 (versionCode 2020019)
         // without triggering Android OS INSTALL_FAILED_VERSION_DOWNGRADE.
         fun calculateVersionCode(vName: String): Int {
-            val semverRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:-beta\.?(\d+))?""")
+            val semverRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-beta\.?(\d+))?""")
             val match = semverRegex.find(vName)
+            val hotfix = match?.groupValues?.getOrNull(4)?.takeIf { it.isNotEmpty() }?.toInt() ?: 0
             val computed = if (match != null) {
                 val major = match.groupValues[1].toInt()
                 val minor = match.groupValues[2].toInt()
                 val patch = match.groupValues[3].toInt()
-                val betaNum = match.groupValues[4].takeIf { it.isNotEmpty() }?.toInt()
+                val betaNum = match.groupValues[5].takeIf { it.isNotEmpty() }?.toInt()
                 val buildIndex = betaNum ?: 99
-                major * 1_000_000 + minor * 10_000 + patch * 100 + buildIndex
+                major * 1_000_000 + minor * 10_000 + patch * 100 + buildIndex + hotfix
             } else {
                 2_020_020
             }
-            val historicalFloor = 2_020_020
+            val historicalFloor = 2_020_020 + hotfix
             return maxOf(computed, historicalFloor)
         }
 
