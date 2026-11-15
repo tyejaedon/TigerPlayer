@@ -204,7 +204,7 @@ fun LyricsDisplay(
                 var previousTargetIndex by remember { mutableIntStateOf(-1) }
                 var isInitialScroll by remember { mutableStateOf(true) }
 
-                LaunchedEffect(targetScrollIndex) {
+                LaunchedEffect(targetScrollIndex, isUserDragging) {
                     if (targetScrollIndex in parsed.indices && !isUserDragging) {
                         val isLargeJump = isInitialScroll || abs(targetScrollIndex - previousTargetIndex) > 1
                         previousTargetIndex = targetScrollIndex
@@ -214,9 +214,12 @@ fun LyricsDisplay(
                         val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetScrollIndex }
 
                         if (targetItem != null && !isLargeJump) {
-                            val viewportCenter = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
-                            val itemCenter = targetItem.offset + (targetItem.size / 2)
-                            val delta = (itemCenter - viewportCenter).toFloat()
+                            val delta = LyricsViewportCoordinator.calculateIncrementalScrollDelta(
+                                viewportStartOffset = layoutInfo.viewportStartOffset,
+                                viewportEndOffset = layoutInfo.viewportEndOffset,
+                                itemOffset = targetItem.offset,
+                                itemSize = targetItem.size
+                            )
 
                             if (abs(delta) > 1f) {
                                 listState.animateScrollBy(
