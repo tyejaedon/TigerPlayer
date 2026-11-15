@@ -150,7 +150,6 @@ class AudioPlayerService : MediaLibraryService() {
         private const val CUSTOM_COMMAND_SHUFFLE = "ACTION_SHUFFLE"
         private const val CUSTOM_COMMAND_REPEAT = "ACTION_REPEAT"
         const val CUSTOM_COMMAND_LIKE = "ACTION_LIKE"
-        const val ACTION_TOGGLE_DSP = "ACTION_TOGGLE_DSP"
         const val ACTION_LOAD_PEQ = "ACTION_LOAD_PEQ"
         const val ACTION_SET_ACOUSTIC_ENV = "ACTION_SET_ACOUSTIC_ENV"
         const val EXTRA_ACOUSTIC_ENV_MODE = "EXTRA_ACOUSTIC_ENV_MODE"
