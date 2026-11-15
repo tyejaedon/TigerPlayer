@@ -48,6 +48,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.data.model.HeadphoneSearchResult
+import com.tigerplayer.ui.devices.AudioDevicesHubSheet
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.bounceClick
@@ -69,6 +70,7 @@ fun EqualizerHubView(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAutoEqDialog by remember { mutableStateOf(false) }
+    var showAudioDevicesSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier
@@ -82,6 +84,7 @@ fun EqualizerHubView(
                     state = uiState,
                     viewModel = viewModel,
                     onOpenAutoEq = { showAutoEqDialog = true },
+                    onOpenAudioDevices = { showAudioDevicesSheet = true },
                     onClose = onClose
                 )
             } else {
@@ -89,6 +92,7 @@ fun EqualizerHubView(
                     state = uiState,
                     viewModel = viewModel,
                     onOpenAutoEq = { showAutoEqDialog = true },
+                    onOpenAudioDevices = { showAudioDevicesSheet = true },
                     onClose = onClose
                 )
             }
@@ -104,6 +108,7 @@ fun EqualizerHubView(
             connectedDeviceName = uiState.connectedDeviceName,
             currentBandMode = uiState.bandMode,
             isCoverScreen = isCoverScreen,
+            activeAutoEqModel = uiState.autoEqModel,
             onQueryChanged = viewModel::searchAutoEq,
             onAutoMatchDevice = {
                 viewModel.autoMatchConnectedDevice()
@@ -113,10 +118,17 @@ fun EqualizerHubView(
                 viewModel.applyAutoEqProfile(item, forceParametric = forceParametric)
                 showAutoEqDialog = false
             },
+            onRemoveAutoEq = viewModel::removeAutoEqProfile,
             onImportRawText = { rawText, profileName ->
                 viewModel.importRawAutoEq(rawText, profileName)
             },
             onDismiss = { showAutoEqDialog = false }
+        )
+    }
+
+    if (showAudioDevicesSheet) {
+        AudioDevicesHubSheet(
+            onDismiss = { showAudioDevicesSheet = false }
         )
     }
 }
@@ -129,8 +141,11 @@ private fun CoverScreenEqualizerLayout(
     state: EqualizerHubUiState,
     viewModel: EqualizerHubViewModel,
     onOpenAutoEq: () -> Unit,
+    onOpenAudioDevices: () -> Unit = {},
     onClose: (() -> Unit)?
 ) {
+    var showFaderOverlay by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -141,31 +156,49 @@ private fun CoverScreenEqualizerLayout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 6.dp),
+                .padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (state.isEqEnabled) TigerNeonOrange else Color.Gray)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "PEQ HUB",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    letterSpacing = 1.sp
-                )
-                if (state.autoEqModel != null) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (state.isEqEnabled) TigerNeonOrange else Color.Gray)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = " • AUTOEQ",
+                        text = "PEQ HUB",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.sp
+                    )
+                    if (state.autoEqModel != null) {
+                        Text(
+                            text = " • AUTOEQ",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TigerCyberCyan,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "TARGET: ${state.connectedDeviceName.ifBlank { "SPEAKER / WIRED" }.uppercase(Locale.US)} ➔",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TigerCyberCyan,
-                        fontWeight = FontWeight.Bold
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 9.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clickable(onClick = onOpenAudioDevices)
+                            .testTag("CoverEqOpenDevicesButton")
                     )
                 }
             }
@@ -203,6 +236,11 @@ private fun CoverScreenEqualizerLayout(
             }
         }
 
+        // DSP Signal Chain Pill (Parity with MainAppStudioEqualizerLayout)
+        DspSignalChainPill(state = state)
+
+        Spacer(modifier = Modifier.height(6.dp))
+
         TwoWayEngineSourceSwitcher(
             activeSource = state.activeEngineSource,
             onSelectSource = viewModel::setActiveEngineSource,
@@ -217,20 +255,27 @@ private fun CoverScreenEqualizerLayout(
             modifier = Modifier.padding(bottom = 6.dp)
         )
 
-        // 2. Frequency Response Curve Preview
+        // 2. Frequency Response Curve Preview (Interactive, Parity with Main Screen)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(260.dp)
+                .height(220.dp)
                 .glassEffect(RoundedCornerShape(14.dp))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 EqualizerFrequencyCurve(
                     points = state.frequencyCurvePoints,
                     bands = state.bands,
-                    isInteractive = false,
+                    isInteractive = true,
                     selectedBandIndex = state.selectedBandIndex,
                     audioFrame = state.audioReactiveFrame,
+                    onNodeDragged = { idx, newFreq, newGain ->
+                        if (state.autoEqModel != null) {
+                            viewModel.updateBandFrequency(idx, newFreq)
+                        }
+                        viewModel.updateBandGain(idx, newGain)
+                    },
+                    onBandSelected = viewModel::setSelectedBand,
                     modifier = Modifier.fillMaxSize(),
                     curveColor = if (state.isEqEnabled) TigerCyberCyan else Color.Gray
                 )
@@ -261,87 +306,205 @@ private fun CoverScreenEqualizerLayout(
                     )
                 }
 
-                // Active Preset / AutoEq Label
-                Text(
-                    text = state.activePresetName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                // Active Preset / AutoEq Label + Status Message
+                Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(6.dp)
-                )
+                        .fillMaxWidth()
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = state.activePresetName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (!state.statusMessage.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = state.statusMessage,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TigerCyberCyan,
+                            fontSize = 9.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // AutoEq Headphone Catalog & Restore Button Bar (Placed above frequency band cards)
+        // AutoEq Headphone Catalog, Restore & Remove Bar + Band Mode Selector
         val isCoverAutoEqModified = state.isAutoEqModified && state.autoEqModel != null
-        Box(
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1.2f)
+                    .height(38.dp)
+                    .glassEffect(RoundedCornerShape(12.dp))
+                    .border(
+                        1.dp,
+                        if (isCoverAutoEqModified) TigerNeonOrange.copy(alpha = 0.6f)
+                        else if (state.autoEqModel != null) TigerCyberCyan.copy(alpha = 0.5f)
+                        else Color.White.copy(alpha = 0.08f),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .clickable {
+                        if (isCoverAutoEqModified) {
+                            viewModel.restoreAutoEqProfile()
+                        } else {
+                            onOpenAutoEq()
+                        }
+                    }
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = if (isCoverAutoEqModified) Icons.Default.RestartAlt else Icons.Default.Headphones,
+                            contentDescription = null,
+                            tint = if (isCoverAutoEqModified) TigerNeonOrange else TigerCyberCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when {
+                                isCoverAutoEqModified -> "Restore (${state.autoEqModel})"
+                                state.autoEqModel != null -> "AutoEq: ${state.autoEqModel}"
+                                else -> "AutoEq Catalog"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isCoverAutoEqModified) TigerNeonOrange else if (state.autoEqModel != null) TigerCyberCyan else Color.White,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (state.autoEqModel != null) {
+                        IconButton(
+                            onClick = viewModel::removeAutoEqProfile,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .testTag("EqRemoveAutoEqButton")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Disable AutoEq",
+                                tint = TigerNeonOrange,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "CATALOG ➔",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = TigerCyberCyan,
+                            fontSize = 9.sp
+                        )
+                    }
+                }
+            }
+
+            // Band Mode Selector Pill (5-Band / 10-Band ISO parity with Main Screen)
+            Box(
+                modifier = Modifier
+                    .weight(0.8f)
+                    .height(38.dp)
+                    .glassEffect(RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                    .padding(3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    EqualizerBandMode.entries.forEach { mode ->
+                        val selected = state.bandMode == mode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) TigerNeonOrange else Color.Transparent)
+                                .clickable { viewModel.setBandMode(mode) }
+                                .testTag("CoverEqBandMode_${mode.name}"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (mode == EqualizerBandMode.FIVE_BAND) "5-Band" else "10-Band",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) Color.White else Color.White.copy(alpha = 0.6f),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Preamp & Headroom Bar (Parity with Main Screen)
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .glassEffect(RoundedCornerShape(12.dp))
-                .border(
-                    1.dp,
-                    if (isCoverAutoEqModified) TigerNeonOrange.copy(alpha = 0.6f)
-                    else if (state.autoEqModel != null) TigerCyberCyan.copy(alpha = 0.5f)
-                    else Color.White.copy(alpha = 0.08f),
-                    RoundedCornerShape(12.dp)
-                )
-                .clickable {
-                    if (isCoverAutoEqModified) {
-                        viewModel.restoreAutoEqProfile()
-                    } else {
-                        onOpenAutoEq()
-                    }
-                }
-                .padding(vertical = 8.dp, horizontal = 10.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = if (isCoverAutoEqModified) Icons.Default.RestartAlt else Icons.Default.Headphones,
-                        contentDescription = null,
-                        tint = if (isCoverAutoEqModified) TigerNeonOrange else TigerCyberCyan,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = when {
-                            isCoverAutoEqModified -> "Restore AutoEq (${state.autoEqModel})"
-                            state.autoEqModel != null -> "AutoEq: ${state.autoEqModel}"
-                            else -> "AutoEq Headphone Catalog"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isCoverAutoEqModified) TigerNeonOrange else if (state.autoEqModel != null) TigerCyberCyan else Color.White,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Text(
-                    text = when {
-                        isCoverAutoEqModified -> "RESTORE ➔"
-                        state.autoEqModel != null -> "ACTIVE ➔"
-                        else -> "CATALOG ➔"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Black,
-                    color = if (isCoverAutoEqModified) TigerNeonOrange else TigerCyberCyan,
-                    fontSize = 10.sp
+            Text(
+                text = "PREAMP",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 9.sp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Slider(
+                value = state.preampDb,
+                onValueChange = viewModel::setPreamp,
+                valueRange = -15f..6f,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(26.dp)
+                    .testTag("CoverEqPreampSlider"),
+                colors = SliderDefaults.colors(
+                    thumbColor = TigerCyberCyan,
+                    activeTrackColor = TigerCyberCyan
                 )
-            }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = String.format(Locale.US, "%+.1f dB", state.preampDb),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp,
+                color = if (state.preampDb > 0f) TigerNeonOrange else Color.White
+            )
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -360,7 +523,7 @@ private fun CoverScreenEqualizerLayout(
                 Box(
                     modifier = Modifier
                         .width(76.dp)
-                        .height(140.dp) // <-- ADDED EXPLICIT HEIGHT HERE
+                        .height(156.dp)
                         .bounceClick { viewModel.setSelectedBand(index) }
                         .testTag("EqBandCard_$index")
                         .glassEffect(RoundedCornerShape(12.dp))
@@ -372,15 +535,15 @@ private fun CoverScreenEqualizerLayout(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(vertical = 10.dp, horizontal = 4.dp), // Increased vertical padding
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.SpaceBetween // Spread out the content
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
                             text = band.label,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = band.color,
+                            color = if (band.isEnabled) band.color else Color.Gray,
                             fontSize = 10.sp
                         )
 
@@ -388,16 +551,14 @@ private fun CoverScreenEqualizerLayout(
                             text = String.format(Locale.US, "%+.1f", band.gainDb),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
-                            color = Color.White,
+                            color = if (band.isEnabled) Color.White else Color.Gray,
                             fontSize = 13.sp
                         )
-
-                        Spacer(modifier = Modifier.height(4.dp))
 
                         IconButton(
                             onClick = { viewModel.stepBandGain(index, 0.5f) },
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(26.dp)
                                 .background(Color.White.copy(alpha = 0.08f), CircleShape)
                                 .testTag("EqBandInc_$index")
                         ) {
@@ -409,12 +570,10 @@ private fun CoverScreenEqualizerLayout(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
-
                         IconButton(
                             onClick = { viewModel.stepBandGain(index, -0.5f) },
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(26.dp)
                                 .background(Color.White.copy(alpha = 0.08f), CircleShape)
                                 .testTag("EqBandDec_$index")
                         ) {
@@ -425,8 +584,68 @@ private fun CoverScreenEqualizerLayout(
                                 modifier = Modifier.size(14.dp)
                             )
                         }
+
+                        Text(
+                            text = if (band.isEnabled) "ON" else "BYP",
+                            color = if (band.isEnabled) EmeraldNeon else Color.Gray,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable { viewModel.toggleBandEnabled(index) }
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                .testTag("EqBandToggle_$index")
+                        )
                     }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Precision Faders Overlay Trigger (Parity with Main Screen)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            TigerCyberCyan.copy(alpha = 0.22f),
+                            TigerNeonOrange.copy(alpha = 0.18f),
+                            TigerCyberCyan.copy(alpha = 0.22f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(TigerCyberCyan, TigerNeonOrange, TigerCyberCyan)
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .bounceClick { showFaderOverlay = true }
+                .testTag("CoverTuneFrequencyBandsButton"),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = null,
+                    tint = TigerCyberCyan,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "TUNE FREQUENCY BANDS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 1.sp
+                )
             }
         }
 
@@ -440,12 +659,32 @@ private fun CoverScreenEqualizerLayout(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Button(
+                onClick = onOpenAutoEq,
+                colors = ButtonDefaults.buttonColors(containerColor = TigerCyberCyan),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier
+                    .height(30.dp)
+                    .testTag("EqAutoEqButton")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Headphones,
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("AutoEq", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+
             if (isCoverAutoEqModified) {
                 Button(
                     onClick = viewModel::restoreAutoEqProfile,
                     colors = ButtonDefaults.buttonColors(containerColor = TigerNeonOrange),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(30.dp)
+                    modifier = Modifier
+                        .height(30.dp)
+                        .testTag("EqRestoreAutoEqButton")
                 ) {
                     Icon(
                         imageVector = Icons.Default.RestartAlt,
@@ -456,23 +695,25 @@ private fun CoverScreenEqualizerLayout(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Restore", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
-            } else {
-                Button(
-                    onClick = onOpenAutoEq,
-                    colors = ButtonDefaults.buttonColors(containerColor = TigerCyberCyan),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            }
+
+            if (state.autoEqModel != null) {
+                OutlinedButton(
+                    onClick = viewModel::removeAutoEqProfile,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     modifier = Modifier
                         .height(30.dp)
-                        .testTag("EqAutoEqButton")
+                        .testTag("EqDisableAutoEqButton"),
+                    border = BorderStroke(1.dp, TigerNeonOrange.copy(alpha = 0.6f))
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Headphones,
+                        imageVector = Icons.Default.Close,
                         contentDescription = null,
-                        tint = Color.Black,
+                        tint = TigerNeonOrange,
                         modifier = Modifier.size(12.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("AutoEq", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Disable AutoEq", color = TigerNeonOrange, fontSize = 10.sp)
                 }
             }
 
@@ -529,6 +770,14 @@ private fun CoverScreenEqualizerLayout(
             }
         }
     }
+
+    if (showFaderOverlay) {
+        FrequencyBandsTuningOverlay(
+            state = state,
+            viewModel = viewModel,
+            onDismiss = { showFaderOverlay = false }
+        )
+    }
 }
 
 /**
@@ -539,6 +788,7 @@ private fun MainAppStudioEqualizerLayout(
     state: EqualizerHubUiState,
     viewModel: EqualizerHubViewModel,
     onOpenAutoEq: () -> Unit,
+    onOpenAudioDevices: () -> Unit = {},
     onClose: (() -> Unit)?
 ) {
     var showFaderOverlay by remember { mutableStateOf(false) }
@@ -573,12 +823,15 @@ private fun MainAppStudioEqualizerLayout(
                     )
                 }
                 Text(
-                    text = "TARGET: ${state.connectedDeviceName.ifBlank { "SPEAKER / WIRED" }.uppercase(Locale.US)}",
+                    text = "TARGET: ${state.connectedDeviceName.ifBlank { "SPEAKER / WIRED" }.uppercase(Locale.US)} ➔",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.5f),
                     letterSpacing = 0.8.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .clickable(onClick = onOpenAudioDevices)
+                        .testTag("MainEqOpenDevicesButton")
                 )
                 if (state.connectedDeviceName.isNotBlank()) {
                     Spacer(modifier = Modifier.height(2.dp))
@@ -712,17 +965,29 @@ private fun MainAppStudioEqualizerLayout(
                         }
                     }
 
-                    Text(
-                        text = when {
-                            isModified -> "RESTORE ➔"
-                            state.autoEqModel != null -> "ACTIVE"
-                            else -> "CALIBRATE"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Black,
-                        color = if (isModified) TigerNeonOrange else TigerCyberCyan,
-                        fontSize = 9.sp
-                    )
+                    if (state.autoEqModel != null) {
+                        IconButton(
+                            onClick = viewModel::removeAutoEqProfile,
+                            modifier = Modifier
+                                .size(26.dp)
+                                .testTag("MainEqRemoveAutoEqButton")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Disable AutoEq",
+                                tint = TigerNeonOrange,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "CALIBRATE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = TigerCyberCyan,
+                            fontSize = 9.sp
+                        )
+                    }
                 }
             }
 
@@ -941,6 +1206,28 @@ private fun MainAppStudioEqualizerLayout(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (state.autoEqModel != null) {
+                item {
+                    OutlinedButton(
+                        onClick = viewModel::removeAutoEqProfile,
+                        modifier = Modifier
+                            .height(32.dp)
+                            .testTag("MainEqDisableAutoEqChip"),
+                        border = BorderStroke(1.dp, TigerNeonOrange.copy(alpha = 0.6f)),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            tint = TigerNeonOrange,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Disable AutoEq", fontSize = 11.sp, color = TigerNeonOrange)
+                    }
+                }
+            }
+
             item {
                 OutlinedButton(
                     onClick = viewModel::resetToFlat,

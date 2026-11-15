@@ -105,6 +105,10 @@ fun CoverScreenNexusView(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                com.tigerplayer.ui.equalizer.DspSignalChainPill(state = state)
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 TwoWayEngineSourceSwitcher(
                     activeSource = state.activeEngineSource,
                     onSelectSource = viewModel::setActiveEngineSource,
@@ -129,7 +133,7 @@ fun CoverScreenNexusView(
 
                 // Interactive Mood Selector
                 NexusMoodPresetSelector(
-                    presets = listOf("Neural Adaptive", "Night Drive", "Pure Vocal", "Studio Flat"),
+                    presets = com.tigerplayer.data.local.CoverScreenEqPreset.entries.map { it.displayName },
                     selected = state.spatialMood,
                     onSelectMood = viewModel::setSpatialMoodPreset
                 )

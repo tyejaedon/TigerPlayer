@@ -98,7 +98,7 @@ fun SpatialNexusView(
                 modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp)
             )
             NexusMoodPresetSelector(
-                presets = listOf("Neural Adaptive", "Night Drive", "Pure Vocal", "Studio Flat"),
+                presets = com.tigerplayer.data.local.CoverScreenEqPreset.entries.map { it.displayName },
                 selected = uiState.spatialMood,
                 onSelectMood = viewModel::setSpatialMoodPreset
             )

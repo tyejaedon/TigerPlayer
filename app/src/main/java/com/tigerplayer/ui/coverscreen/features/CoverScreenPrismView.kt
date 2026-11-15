@@ -3,7 +3,9 @@ package com.tigerplayer.ui.coverscreen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -18,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tigerplayer.ui.prism.PrismPreset
 import com.tigerplayer.ui.prism.PrismViewModel
 import com.tigerplayer.ui.prism.PrismFader
 import com.tigerplayer.ui.theme.TigerCyberCyan
@@ -122,6 +125,52 @@ fun CoverScreenPrismView(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PrismPreset.entries
+                        .filter { it != PrismPreset.CUSTOM }
+                        .forEach { preset ->
+                            FilterChip(
+                                selected = state.preset == preset,
+                                onClick = { prismViewModel.applyPreset(preset) },
+                                label = {
+                                    Text(
+                                        text = preset.displayName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (state.preset == preset) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = TigerCyberCyan.copy(alpha = 0.2f),
+                                    selectedLabelColor = TigerCyberCyan,
+                                    containerColor = Color.White.copy(alpha = 0.05f),
+                                    labelColor = Color.White.copy(alpha = 0.8f)
+                                ),
+                                modifier = Modifier.testTag("CoverPrismPreset_${preset.name}")
+                            )
+                        }
+                    AssistChip(
+                        onClick = prismViewModel::resetMixToBalanced,
+                        label = {
+                            Text(
+                                text = "Reset",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = Color.White.copy(alpha = 0.08f),
+                            labelColor = TigerNeonOrange
+                        ),
+                        modifier = Modifier.testTag("CoverPrismResetButton")
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
             }
         }

@@ -250,4 +250,21 @@ class AudioDevicesViewModelTest {
 
         coVerify { engine.deletePreset("preset_123") }
     }
+
+    @Test
+    fun removeAutoEqFromDevice_callsEngineAndClosesDialog() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.openAutoEqDialog(testActiveDevice)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.showAutoEqDialog)
+
+        viewModel.removeAutoEqFromSelectedDevice()
+        advanceUntilIdle()
+
+        coVerify { engine.removeAutoEqFromDevice(testActiveDevice.deviceId) }
+        assertFalse(viewModel.uiState.value.showAutoEqDialog)
+        assertNull(viewModel.uiState.value.selectedDeviceForAutoEq)
+    }
 }
