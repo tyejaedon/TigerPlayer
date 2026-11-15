@@ -204,7 +204,7 @@ fun LyricsDisplay(
                 var previousTargetIndex by remember { mutableIntStateOf(-1) }
                 var isInitialScroll by remember { mutableStateOf(true) }
 
-                LaunchedEffect(targetScrollIndex, isUserDragging) {
+                LaunchedEffect(targetScrollIndex) {
                     if (targetScrollIndex in parsed.indices && !isUserDragging) {
                         val isLargeJump = isInitialScroll || abs(targetScrollIndex - previousTargetIndex) > 1
                         previousTargetIndex = targetScrollIndex
