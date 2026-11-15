@@ -32,6 +32,8 @@ interface AudioDeviceRepository {
         presetId: String
     )
 
+    suspend fun removeAutoEqFromDevice(deviceId: String)
+
     suspend fun createNamedWiredProfile(
         profileName: String,
         matchedAutoEqModel: String? = null,

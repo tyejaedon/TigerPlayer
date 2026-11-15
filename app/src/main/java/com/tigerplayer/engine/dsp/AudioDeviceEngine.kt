@@ -61,6 +61,10 @@ class AudioDeviceEngine @Inject constructor(
         return Result.success(preset)
     }
 
+    suspend fun removeAutoEqFromDevice(deviceId: String) {
+        audioDeviceRepository.removeAutoEqFromDevice(deviceId)
+    }
+
     suspend fun assignPresetToDevice(deviceId: String, presetId: String?) {
         audioDeviceRepository.assignPresetToDevice(deviceId, presetId)
     }

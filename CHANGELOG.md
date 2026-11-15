@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **AutoEQ Configuration Disable/Remove & Full Cover Screen Feature Parity**: added `removeAutoEqProfile()` to `EqualizerHubViewModel` and `removeAutoEqFromDevice(deviceId)` across `AudioDeviceRepository`, `AudioDeviceEngine`, and `AudioDevicesViewModel` so applied AutoEQ profiles and device bindings can be disabled or removed cleanly from `EqualizerHubView` (Main & Cover Screen), `AutoEqSelectorSheet`, `CoverScreenEqHubCard`, `AudioDevicesHubSheet`, and `AutoEqHeadphoneSelectorDialog`; brought `CoverScreenEqualizerLayout` to full studio parity with `MainAppStudioEqualizerLayout` (interactive frequency curve node dragging, `DspSignalChainPill`, `5-Band`/`10-Band` mode switcher, `PREAMP` headroom slider, per-band `ON`/`BYP` toggles, `FrequencyBandsTuningOverlay` launcher, and clickable target device header opening `AudioDevicesHubSheet`); unified `CoverScreenEqPreset` alignments (including `Transparency (SpaceBuds Z)`) and `DspSignalChainPill` across `CoverScreenNexusView`, `SpatialNexusView`, and `AuralNexusScreen`; added `PrismPreset` selector chips and `Reset` action to `CoverScreenPrismView`; added `Visualizer & Waveform` and `Storage & Cache` management sections to `CoverScreenSettingsView`; added unit tests in `EqualizerHubViewModelTest` and `AudioDevicesViewModelTest`. (closes #433)
+
 ### Fixed
 - **Sequential Active Lyric Line Viewport Centering**: fixed a coordinate-space mismatch in `PlayerLyrics` where sequential `n + 1` lyric line transitions computed the viewport center as half the viewport span (`(viewportEndOffset - viewportStartOffset) / 2`) rather than the true midpoint in padded `LazyListLayoutInfo` coordinates (`(viewportStartOffset + viewportEndOffset) / 2`); extracted `LyricsViewportCoordinator.calculateIncrementalScrollDelta` and added unit test coverage in `LyricsViewportCoordinatorTest`. (closes #431)
 

@@ -261,6 +261,15 @@ class EqualizerHubViewModel(
             "Studio Flat" -> nodes.map { n ->
                 n.copy(spatialPos = Offset(n.spatialPos.x, 0f))
             }
+            "Transparency (SpaceBuds Z)" -> nodes.map { n ->
+                when (n.id) {
+                    "sub" -> n.copy(spatialPos = Offset(-0.8f, 0.4f))
+                    "warmth" -> n.copy(spatialPos = Offset(-0.4f, 0.3f))
+                    "presence" -> n.copy(spatialPos = Offset(0.3f, -0.4f))
+                    "air" -> n.copy(spatialPos = Offset(0.8f, 0.5f))
+                    else -> n
+                }
+            }
             else -> nodes
         }
         _uiState.update { it.copy(spatialNodes = updated, spatialMood = mood) }
@@ -416,13 +425,16 @@ class EqualizerHubViewModel(
             }
         }
 
+        activeAutoEqItem = null
         _uiState.update {
             it.copy(
                 bandMode = it.bandMode,
                 bands = newBands,
+                preampDb = 0f,
                 activePresetName = presetName,
                 autoEqModel = null,
                 autoEqSource = null,
+                targetCurve = null,
                 isAutoEqModified = false,
                 originalAutoEqBands = emptyList(),
                 originalPreampDb = 0f
@@ -434,6 +446,38 @@ class EqualizerHubViewModel(
 
     fun resetToFlat() {
         applyPreset(EqualizerPresets.FLAT)
+    }
+
+    fun removeAutoEqProfile() {
+        val previousModel = _uiState.value.autoEqModel
+        activeAutoEqItem = null
+        val mode = _uiState.value.bandMode
+        val flatBands = when (mode) {
+            EqualizerBandMode.FIVE_BAND -> COMPACT_5_BANDS
+            EqualizerBandMode.TEN_BAND -> ISO_10_BANDS
+        }
+
+        _uiState.update {
+            it.copy(
+                bands = flatBands,
+                selectedBandIndex = 0,
+                preampDb = 0f,
+                activePresetName = EqualizerPresets.FLAT,
+                autoEqModel = null,
+                autoEqSource = null,
+                targetCurve = null,
+                isAutoEqModified = false,
+                originalAutoEqBands = emptyList(),
+                originalPreampDb = 0f,
+                statusMessage = if (previousModel != null) {
+                    "Removed AutoEq: $previousModel"
+                } else {
+                    "AutoEq profile disabled"
+                }
+            )
+        }
+        recomputeCurveAndTelemetry()
+        dispatchDspNodes()
     }
 
     fun restoreAutoEqProfile() {

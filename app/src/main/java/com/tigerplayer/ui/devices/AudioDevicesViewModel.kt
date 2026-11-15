@@ -145,6 +145,20 @@ class AudioDevicesViewModel @Inject constructor(
         }
     }
 
+    fun removeAutoEqFromDevice(deviceId: String) {
+        viewModelScope.launch {
+            engine.removeAutoEqFromDevice(deviceId)
+        }
+    }
+
+    fun removeAutoEqFromSelectedDevice() {
+        val targetDevice = _uiState.value.selectedDeviceForAutoEq ?: _uiState.value.activeDevice
+        viewModelScope.launch {
+            engine.removeAutoEqFromDevice(targetDevice.deviceId)
+            closeAutoEqDialog()
+        }
+    }
+
     fun openCreateWiredDialog() {
         _uiState.update { it.copy(showCreateWiredDialog = true) }
     }
