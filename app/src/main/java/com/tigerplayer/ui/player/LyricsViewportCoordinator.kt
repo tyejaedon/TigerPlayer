@@ -159,6 +159,27 @@ object LyricsViewportCoordinator {
     }
 
     /**
+     * Calculates the incremental scroll delta in pixels required to align a visible item's
+     * vertical midpoint ([itemOffset] + [itemSize] / 2) with the viewport's vertical midpoint.
+     *
+     * In Jetpack Compose's LazyListLayoutInfo, when symmetric vertical `contentPadding` is applied
+     * (e.g., `edgePadding = maxHeight / 2`), [viewportStartOffset] is `-edgePadding` and
+     * [viewportEndOffset] is `+edgePadding`, while [itemOffset] is measured relative to the
+     * padded content origin (`0` = viewport center). Thus the viewport midpoint in item-offset
+     * coordinates is the average `(viewportStartOffset + viewportEndOffset) / 2`, not half the span.
+     */
+    fun calculateIncrementalScrollDelta(
+        viewportStartOffset: Int,
+        viewportEndOffset: Int,
+        itemOffset: Int,
+        itemSize: Int
+    ): Float {
+        val viewportCenter = (viewportStartOffset + viewportEndOffset) / 2f
+        val itemCenter = itemOffset + (itemSize / 2f)
+        return itemCenter - viewportCenter
+    }
+
+    /**
      * Smoothly extrapolates playback position based on monotonic frame clock
      * between discrete position updates.
      */

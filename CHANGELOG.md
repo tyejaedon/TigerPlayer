@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Fixed
+- **Sequential Active Lyric Line Viewport Centering**: fixed a coordinate-space mismatch in `PlayerLyrics` where sequential `n + 1` lyric line transitions computed the viewport center as half the viewport span (`(viewportEndOffset - viewportStartOffset) / 2`) rather than the true midpoint in padded `LazyListLayoutInfo` coordinates (`(viewportStartOffset + viewportEndOffset) / 2`); extracted `LyricsViewportCoordinator.calculateIncrementalScrollDelta` and added unit test coverage in `LyricsViewportCoordinatorTest`. (closes #431)
+
 ## [2.1.8.5] - 2026-11-14
 
 ### Added
