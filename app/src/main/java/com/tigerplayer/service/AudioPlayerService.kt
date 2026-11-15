@@ -149,7 +149,7 @@ class AudioPlayerService : MediaLibraryService() {
         private const val TAG = "AudioPlayerService"
         private const val CUSTOM_COMMAND_SHUFFLE = "ACTION_SHUFFLE"
         private const val CUSTOM_COMMAND_REPEAT = "ACTION_REPEAT"
-        const val ACTION_TOGGLE_DSP = "ACTION_TOGGLE_DSP"
+        const val CUSTOM_COMMAND_LIKE = "ACTION_LIKE"
         const val ACTION_LOAD_PEQ = "ACTION_LOAD_PEQ"
         const val ACTION_SET_ACOUSTIC_ENV = "ACTION_SET_ACOUSTIC_ENV"
         const val EXTRA_ACOUSTIC_ENV_MODE = "EXTRA_ACOUSTIC_ENV_MODE"
@@ -835,12 +835,11 @@ class AudioPlayerService : MediaLibraryService() {
             Player.REPEAT_MODE_ALL -> R.drawable.ic_material_repeat_all
             else -> R.drawable.ic_material_repeat_off
         }
-        val dspIcon = if (isBitPerfectMode) R.drawable.ic_material_dsp_off else R.drawable.ic_material_dsp_on
 
         return listOf(
+            CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_LIKE, Bundle.EMPTY)).setIconResId(R.drawable.ic_material_favorite).setDisplayName("Like").setEnabled(true).build(),
             CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY)).setIconResId(shuffleIcon).setDisplayName(shuffleLabel).setEnabled(true).build(),
-            CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY)).setIconResId(repeatIcon).setDisplayName("Repeat").setEnabled(true).build(),
-            CommandButton.Builder().setSessionCommand(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY)).setIconResId(dspIcon).setDisplayName(if (isBitPerfectMode) "Bit-Perfect" else "Aural Nexus Active").setEnabled(true).build()
+            CommandButton.Builder().setSessionCommand(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY)).setIconResId(repeatIcon).setDisplayName("Repeat").setEnabled(true).build()
         )
     }
 
@@ -934,9 +933,9 @@ class AudioPlayerService : MediaLibraryService() {
         @OptIn(UnstableApi::class)
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+                .add(SessionCommand(CUSTOM_COMMAND_LIKE, Bundle.EMPTY))
                 .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
                 .add(SessionCommand(CUSTOM_COMMAND_REPEAT, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_TOGGLE_DSP, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_LOAD_PEQ, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_SET_ACOUSTIC_ENV, Bundle.EMPTY))
                 .build()
@@ -959,11 +958,6 @@ class AudioPlayerService : MediaLibraryService() {
                         else -> Player.REPEAT_MODE_OFF
                     }
                     invalidateCustomLayout()
-                }
-                ACTION_TOGGLE_DSP -> {
-                    serviceScope.launch {
-                        settingsDataStore.setRouteToSystemDecoderDsp(!routeToSystemDecoderDsp)
-                    }
                 }
                 ACTION_LOAD_PEQ -> {
                     val rawText = args.getString("peq_raw_text") ?: ""
