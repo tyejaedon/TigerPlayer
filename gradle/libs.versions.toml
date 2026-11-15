@@ -25,7 +25,7 @@ window = "1.5.1"
 
 # Compose
 composeBom = "2026.09.00"
-mockk = "1.14.11"
+mockk = "1.14.12"
 mockkAndroid = "1.14.11"
 navigationCompose = "2.10.2"
 playServicesLocation = "21.4.0"
