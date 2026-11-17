@@ -102,12 +102,21 @@ class WaveformEngine @Inject constructor(
             val mime = format.getString(MediaFormat.KEY_MIME) ?: return emptyList()
             val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 1)
 
+            val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
+            val codecName = codecList.codecInfos
+                .filter { !it.isEncoder }
+                .filter { !it.isHardwareAccelerated }
+                .firstOrNull { it.supportedTypes.contains(mime) }
+                ?.name
+
             codec = try {
-                MediaCodec.createDecoderByType(mime)
+                if (codecName != null) {
+                    MediaCodec.createByCodecName(codecName)
+                } else {
+                    MediaCodec.createDecoderByType(mime)
+                }
             } catch (e: Exception) {
-                val swMime = if (mime.contains("mp3")) "audio/mpeg" else mime
-                try { MediaCodec.createByCodecName("c2.android.${swMime.substringAfter("/")}.decoder") }
-                catch (e2: Exception) { MediaCodec.createDecoderByType(mime) }
+                MediaCodec.createDecoderByType(mime)
             }
 
             codec.configure(format, null, null, 0)

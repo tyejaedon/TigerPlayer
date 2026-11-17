@@ -733,7 +733,7 @@ private fun PlayerMainContent(
                             val observer = LifecycleEventObserver { _, event ->
                                 when (event) {
                                     Lifecycle.Event.ON_RESUME -> {
-                                        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+                                        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
                                     }
                                     Lifecycle.Event.ON_PAUSE -> {
                                         sensorManager.unregisterListener(listener)
