@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Build
+import android.os.StrictMode
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -21,6 +22,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -225,11 +228,24 @@ class AudioPlayerService : MediaLibraryService() {
             .setAllowedCapturePolicy(C.ALLOW_CAPTURE_BY_NONE)
             .build()
 
+        val loadControl = DefaultLoadControl.Builder()
+            .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+            .setBufferDurationsMs(
+                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+            )
+            .setTargetBufferBytes(8 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .build()
+
         player = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(this)
                     .setDataSourceFactory(buildNavidromeAwareDataSourceFactory())
             )
+            .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
@@ -325,6 +341,16 @@ class AudioPlayerService : MediaLibraryService() {
         }
 
         player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                if (error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FAILED ||
+                    error.cause is android.media.MediaCodec.CodecException) {
+                    Log.e("AudioPlayerService", "MediaCodec error, preparing to recover", error)
+                    player.prepare()
+                    player.play()
+                }
+            }
+
             override fun onRepeatModeChanged(repeatMode: Int) = invalidateCustomLayout()
             override fun onShuffleModeEnabledChanged(enabled: Boolean) {
                 invalidateCustomLayout()
@@ -920,10 +946,23 @@ class AudioPlayerService : MediaLibraryService() {
     private fun <T> runAsyncFuture(block: suspend () -> T): ListenableFuture<T> {
         val future = SettableFuture.create<T>()
         serviceScope.launch {
-            try {
-                future.set(block())
+            val result = try {
+                block()
             } catch (e: Throwable) {
                 future.setException(e)
+                return@launch
+            }
+
+            val oldPolicy = StrictMode.allowThreadDiskReads()
+            try {
+                val oldWritePolicy = StrictMode.allowThreadDiskWrites()
+                try {
+                    future.set(result)
+                } finally {
+                    StrictMode.setThreadPolicy(oldWritePolicy)
+                }
+            } finally {
+                StrictMode.setThreadPolicy(oldPolicy)
             }
         }
         return future

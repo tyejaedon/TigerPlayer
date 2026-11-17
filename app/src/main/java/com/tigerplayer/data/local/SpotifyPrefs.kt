@@ -4,8 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,22 +38,38 @@ class SpotifyPrefs @Inject constructor(
         return readEncrypted(key)?.toLongOrNull()
     }
 
-    private val _accessToken = MutableStateFlow(readEncrypted(ACCESS_TOKEN))
-    private val _tokenTimestamp = MutableStateFlow(readLongOrNull(TOKEN_TIMESTAMP))
-    private val _refreshToken = MutableStateFlow(readEncrypted(REFRESH_TOKEN))
-    private val _grantedScope = MutableStateFlow(readEncrypted(GRANTED_SCOPE))
+    private val _accessToken = MutableStateFlow<String?>(null)
+    private val _tokenTimestamp = MutableStateFlow<Long?>(null)
+    private val _refreshToken = MutableStateFlow<String?>(null)
+    private val _grantedScope = MutableStateFlow<String?>(null)
 
     val accessToken: Flow<String?> = _accessToken
     val tokenTimestamp: Flow<Long?> = _tokenTimestamp
     val refreshToken: Flow<String?> = _refreshToken
     val grantedScope: Flow<String?> = _grantedScope
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        scope.launch {
+            val initAccessToken = readEncrypted(ACCESS_TOKEN)
+            val initTokenTimestamp = readLongOrNull(TOKEN_TIMESTAMP)
+            val initRefreshToken = readEncrypted(REFRESH_TOKEN)
+            val initGrantedScope = readEncrypted(GRANTED_SCOPE)
+
+            _accessToken.value = initAccessToken
+            _tokenTimestamp.value = initTokenTimestamp
+            _refreshToken.value = initRefreshToken
+            _grantedScope.value = initGrantedScope
+        }
+    }
+
     suspend fun saveToken(
         token: String,
         timestamp: Long,
         refreshToken: String? = null,
         grantedScope: String? = null
-    ) {
+    ) = withContext(Dispatchers.IO) {
         securePrefs.edit {
             putString(ACCESS_TOKEN, cipher.encrypt(token))
             putString(TOKEN_TIMESTAMP, cipher.encrypt(timestamp.toString()))
@@ -69,7 +90,7 @@ class SpotifyPrefs @Inject constructor(
         }
     }
 
-    suspend fun clearToken() {
+    suspend fun clearToken() = withContext(Dispatchers.IO) {
         securePrefs.edit {
             remove(ACCESS_TOKEN)
             remove(TOKEN_TIMESTAMP)
