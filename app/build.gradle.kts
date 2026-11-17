@@ -34,7 +34,7 @@ configure<ApplicationExtension> {
         val resolvedVersionName = project.findProperty("VERSION_NAME")?.toString()
             ?: System.getenv("BETA_VERSION_NAME")
             ?: System.getenv("VERSION_NAME")
-            ?: "2.1.8.5"
+            ?: "2.1.9"
 
         // SemVer multiplier formula: MAJOR * 1_000_000 + MINOR * 10_000 + PATCH * 100 + BUILD_INDEX
         // For stable production releases, BUILD_INDEX defaults to 99 so it supersedes candidate betas (1..98).
@@ -52,9 +52,10 @@ configure<ApplicationExtension> {
                 val buildIndex = betaNum ?: 99
                 major * 1_000_000 + minor * 10_000 + patch * 100 + buildIndex + hotfix
             } else {
-                2_020_020
+                2_020_030
             }
-            val historicalFloor = 2_020_020 + hotfix
+            // Floor of 2020030 guarantees monotonic advancement past v2.1.8.5 (2020025) and legacy beta ceiling (2020019)
+            val historicalFloor = 2_020_030 + hotfix
             return maxOf(computed, historicalFloor)
         }
 

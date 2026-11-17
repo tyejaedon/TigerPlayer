@@ -231,7 +231,8 @@ object WaveformComputation {
         val energyModulation = 0.90f + 0.10f * baseEnergyFactor + transientKick
         val effectiveHeight = maxHeight * energyModulation
 
-        val sampleCount = max(64, points.size)
+        // Higher sample count for perfectly smooth curves (prevents visual faceting/jank at slower animation speeds)
+        val sampleCount = max(256, points.size * 2)
         val step = width / sampleCount
 
         val y0 = calculateWaveformYWithEffectiveHeight(

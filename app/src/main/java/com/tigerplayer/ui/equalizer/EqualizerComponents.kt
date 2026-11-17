@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -285,9 +286,11 @@ fun AutoEqSelectorSheet(
     connectedDeviceName: String,
     currentBandMode: EqualizerBandMode,
     isCoverScreen: Boolean,
+    activeAutoEqModel: String? = null,
     onQueryChanged: (String) -> Unit,
     onAutoMatchDevice: () -> Unit,
     onSelect: (item: HeadphoneSearchResult, forceParametric: Boolean) -> Unit,
+    onRemoveAutoEq: (() -> Unit)? = null,
     onImportRawText: ((rawText: String, profileName: String) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
@@ -334,6 +337,64 @@ fun AutoEqSelectorSheet(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+
+                if (activeAutoEqModel != null && onRemoveAutoEq != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = TigerNeonOrange.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, TigerNeonOrange.copy(alpha = 0.45f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "ACTIVE AUTOEQ",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TigerNeonOrange,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 9.sp
+                                )
+                                Text(
+                                    text = activeAutoEqModel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    onRemoveAutoEq()
+                                    onDismiss()
+                                },
+                                modifier = Modifier.testTag("AutoEqSheetRemoveButton"),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Disable AutoEq",
+                                    tint = TigerNeonOrange,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "DISABLE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TigerNeonOrange,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // Tab Switcher Row: [ Catalog | Import ]
                 Row(

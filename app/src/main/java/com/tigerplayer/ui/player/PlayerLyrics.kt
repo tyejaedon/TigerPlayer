@@ -214,9 +214,12 @@ fun LyricsDisplay(
                         val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetScrollIndex }
 
                         if (targetItem != null && !isLargeJump) {
-                            val viewportCenter = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
-                            val itemCenter = targetItem.offset + (targetItem.size / 2)
-                            val delta = (itemCenter - viewportCenter).toFloat()
+                            val delta = LyricsViewportCoordinator.calculateIncrementalScrollDelta(
+                                viewportStartOffset = layoutInfo.viewportStartOffset,
+                                viewportEndOffset = layoutInfo.viewportEndOffset,
+                                itemOffset = targetItem.offset,
+                                itemSize = targetItem.size
+                            )
 
                             if (abs(delta) > 1f) {
                                 listState.animateScrollBy(

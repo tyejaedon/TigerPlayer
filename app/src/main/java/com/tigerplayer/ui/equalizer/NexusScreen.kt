@@ -93,7 +93,7 @@ fun AuralNexusScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val audioFrame by viewModel.audioReactiveFrame.collectAsStateWithLifecycle()
-    val presets = remember { listOf("Neural Adaptive", "Night Drive", "Pure Vocal", "Studio Flat") }
+    val presets = remember { com.tigerplayer.data.local.CoverScreenEqPreset.entries.map { it.displayName } }
 
     Box(
         modifier = Modifier

@@ -320,6 +320,41 @@ class AudioDeviceRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun removeAutoEqFromDevice(deviceId: String) = withContext(ioDispatcher) {
+        val existing = audioDeviceDao.getDeviceById(deviceId)
+        val previousPresetId = existing?.assignedPresetId
+            ?: _currentActiveDevice.value.takeIf { it.deviceId == deviceId }?.assignedPresetId
+
+        if (existing != null) {
+            val updated = existing.copy(
+                matchedAutoEqModel = null,
+                matchedAutoEqSource = null,
+                targetCurve = null,
+                formFactor = null,
+                assignedPresetId = null
+            )
+            audioDeviceDao.upsertDevice(updated)
+        }
+
+        if (previousPresetId != null) {
+            val preset = audioDeviceDao.getPresetById(previousPresetId)
+            if (preset?.isAutoEq == true) {
+                audioDeviceDao.deletePreset(previousPresetId)
+            }
+        }
+
+        if (_currentActiveDevice.value.deviceId == deviceId) {
+            _currentActiveDevice.value = _currentActiveDevice.value.copy(
+                matchedAutoEqModel = null,
+                matchedAutoEqSource = null,
+                targetCurve = null,
+                formFactor = null,
+                assignedPresetId = null
+            )
+            _currentActivePreset.value = null
+        }
+    }
+
     override suspend fun createNamedWiredProfile(
         profileName: String,
         matchedAutoEqModel: String?,

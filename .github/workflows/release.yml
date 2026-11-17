@@ -56,17 +56,17 @@ jobs:
               HOTFIX="${BASH_REMATCH[5]:-0}"
               BETA_NUM="${BASH_REMATCH[7]:-99}"
               CALCULATED_CODE=$(( MAJOR * 1000000 + MINOR * 10000 + PATCH * 100 + BETA_NUM ))
-              if (( CALCULATED_CODE < 2020020 )); then
-                VERSION_CODE=$(( 2020020 + HOTFIX ))
+              if (( CALCULATED_CODE < 2020030 )); then
+                VERSION_CODE=$(( 2020030 + HOTFIX ))
               else
                 VERSION_CODE=$(( CALCULATED_CODE + HOTFIX ))
               fi
             else
-              VERSION_CODE=2020025
+              VERSION_CODE=2020030
             fi
           else
-            VERSION_NAME="2.1.8.5"
-            VERSION_CODE=2020025
+            VERSION_NAME="2.1.9"
+            VERSION_CODE=2020030
           fi
 
           echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT

@@ -3,10 +3,12 @@ package com.tigerplayer.ui.coverscreen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Tune
@@ -59,6 +61,7 @@ fun CoverScreenEqHubCard(
         bands = uiState.bands,
         onToggleMasterEq = viewModel::toggleMasterEq,
         onQuickPreset = viewModel::applyPreset,
+        onRemoveAutoEq = viewModel::removeAutoEqProfile,
         onClick = onOpenEqHub,
         modifier = modifier
     )
@@ -79,7 +82,8 @@ fun CoverScreenEqHubCardContent(
     onToggleMasterEq: (Boolean) -> Unit,
     onQuickPreset: (String) -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRemoveAutoEq: (() -> Unit)? = null
 ) {
     Box(
         modifier = modifier
@@ -197,8 +201,27 @@ fun CoverScreenEqHubCardContent(
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 11.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+                    if (autoEqModel != null && onRemoveAutoEq != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(TigerNeonOrange.copy(alpha = 0.2f))
+                                .clickable(onClick = onRemoveAutoEq)
+                                .padding(3.dp)
+                                .testTag("CoverHomeClearAutoEqButton"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Remove AutoEq",
+                                tint = TigerNeonOrange,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
                 }
 
                 Row(

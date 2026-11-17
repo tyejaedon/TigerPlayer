@@ -164,6 +164,34 @@ class LyricsViewportCoordinatorTest {
     }
 
     @Test
+    fun `incremental scroll delta aligns n+1 line to viewport center under symmetric contentPadding`() {
+        // Viewport height = 600px with vertical contentPadding = 300px:
+        // Compose LazyListLayoutInfo reports viewportStartOffset = -300, viewportEndOffset = +300,
+        // and item offsets relative to the padded content origin (0 = viewport center).
+        val viewportStartOffset = -300
+        val viewportEndOffset = 300
+        val itemHeight = 60
+
+        // Line n is currently centered: top at -30, midpoint at 0 -> delta is 0f
+        val centeredDelta = LyricsViewportCoordinator.calculateIncrementalScrollDelta(
+            viewportStartOffset = viewportStartOffset,
+            viewportEndOffset = viewportEndOffset,
+            itemOffset = -30,
+            itemSize = itemHeight
+        )
+        assertEquals(0f, centeredDelta, 0.001f)
+
+        // Line n+1 sits directly below Line n: top at +30, midpoint at +60 -> positive scroll delta of +60f
+        val nextLineDelta = LyricsViewportCoordinator.calculateIncrementalScrollDelta(
+            viewportStartOffset = viewportStartOffset,
+            viewportEndOffset = viewportEndOffset,
+            itemOffset = 30,
+            itemSize = itemHeight
+        )
+        assertEquals(60f, nextLineDelta, 0.001f)
+    }
+
+    @Test
     fun `position extrapolation clamps to maximum bound and respects pause`() {
         val basePos = 10_000L
         val anchorTime = 1_000L
