@@ -148,6 +148,8 @@ class MediaControllerManager @Inject constructor(
     private var flowStateFadeOutJob: Job? = null
     private var flowStateFadeInJob: Job? = null
     private var fadeOutAndPauseJob: Job? = null
+    private var saveStateJob: Job? = null
+    private var setPlaylistJob: Job? = null
     private var lastInfiniteAnchorId: String? = null
     private var activeFlowStateMediaId: String? = null
     private var pendingFlowStateFadeIn = false
@@ -669,16 +671,26 @@ class MediaControllerManager @Inject constructor(
         return List(controller.mediaItemCount) { controller.getMediaItemAt(it) }
     }
 
+    private val queueTracksFlow: Flow<List<AudioTrack>> = mediaControllerState
+        .onStart { emit(Unit) }
+        .map { getCurrentQueue() }
+        .map { items ->
+            withContext(Dispatchers.Default) {
+                items.map { mediaItemToAudioTrack(it) }
+            }
+        }
+        .distinctUntilChanged()
+        .shareIn(managerScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
     fun getQueueFlow(): Flow<List<AudioTrack>> {
         return getQueueSnapshotFlow().map { it.tracks }
     }
 
     fun getQueueSnapshotFlow(): Flow<QueueSnapshot> {
         return combine(
-            mediaControllerState.onStart { emit(Unit) },
+            queueTracksFlow,
             currentMediaItemIndex
-        ) { _, currentIndex ->
-            val queue = getQueueTracks()
+        ) { queue, currentIndex ->
             val safeIndex = if (currentIndex in queue.indices) currentIndex else -1
             QueueSnapshot(tracks = queue, currentIndex = safeIndex)
         }.distinctUntilChanged()
@@ -729,18 +741,24 @@ class MediaControllerManager @Inject constructor(
         MediaItemConverter.buildMetadataExtras(track)
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
-        val controller = mediaController ?: return
-        val mediaItems = tracks.map { createMediaItem(it) }
+        if (mediaController == null) return
+        setPlaylistJob?.cancel()
+        setPlaylistJob = managerScope.launch {
+            val mediaItems = withContext(Dispatchers.Default) {
+                tracks.map { createMediaItem(it) }
+            }
+            val activeController = mediaController ?: return@launch
 
-        resetFlowStatePipeline(restoreFullVolume = true)
+            resetFlowStatePipeline(restoreFullVolume = true)
 
-        controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
-        controller.prepare()
-        controller.play()
+            activeController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+            activeController.prepare()
+            activeController.play()
 
-        updateCurrentQueuePointer(controller)
-        _mediaControllerState.tryEmit(Unit)
-        saveCurrentState()
+            updateCurrentQueuePointer(activeController)
+            _mediaControllerState.tryEmit(Unit)
+            saveCurrentState()
+        }
     }
 
     fun removeFromQueueAt(index: Int) {
@@ -820,7 +838,10 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun saveCurrentState() {
-        managerScope.launch {
+        saveStateJob?.cancel()
+        saveStateJob = managerScope.launch {
+            // Coalesce back-to-back queue mutations (e.g. setPlaylistAndPlay + onMediaItemTransition).
+            delay(150L)
             val controller = mediaController ?: return@launch
             if (controller.mediaItemCount == 0) {
                 playbackPrefs.clearPlaybackState()
@@ -828,13 +849,19 @@ class MediaControllerManager @Inject constructor(
             }
 
             val queue = getCurrentQueue()
-            val queueIds = queue.map { it.mediaId }
+            val currentMediaId = controller.currentMediaItem?.mediaId
+            val currentPosition = controller.currentPosition
+
+            val (queueIds, queueSnapshot) = withContext(Dispatchers.Default) {
+                queue.map { it.mediaId } to serializeQueueSnapshot(queue)
+            }
+
             playbackPrefs.savePlaybackState(
-                controller.currentMediaItem?.mediaId,
-                controller.currentPosition,
+                currentMediaId,
+                currentPosition,
                 queueIds,
                 queueIds, // We no longer need to maintain separate 'original' lists for custom shuffle
-                queueSnapshot = serializeQueueSnapshot(queue)
+                queueSnapshot = queueSnapshot
             )
         }
     }

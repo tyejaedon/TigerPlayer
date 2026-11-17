@@ -23,6 +23,7 @@ import com.tigerplayer.ui.home.HomeUiState
 import com.tigerplayer.ui.home.UserStatistics
 import com.tigerplayer.ui.player.LibraryArtist
 import com.tigerplayer.utils.ArtistUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -108,7 +109,7 @@ class LibraryEngine @Inject constructor(
     ): Flow<LibraryAggregation> {
         return combine(unifiedTracksFlow, _searchQuery, trackSortOrder, albumSortOrder) { tracks, query, tSort, aSort ->
             aggregateLibrary(tracks, query, tSort, aSort)
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     /**
@@ -226,8 +227,9 @@ class LibraryEngine @Inject constructor(
                     .values.toList().shuffled(random).take(5).flatten()
             } else emptyList()
 
+            val tracksById = allTracks.associateBy { it.id }
             val recentlyPlayed = recentEntities.mapNotNull { entity ->
-                allTracks.find { it.id == entity.trackId }
+                tracksById[entity.trackId]
             }
 
             HomeUiState(
@@ -243,7 +245,7 @@ class LibraryEngine @Inject constructor(
                 recommendedTracks = recommended,
                 isLoading = false
             )
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     /** Returns a flow of custom user playlists. */
