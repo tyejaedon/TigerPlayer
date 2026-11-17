@@ -32,6 +32,8 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun WetPaint(
@@ -132,13 +134,15 @@ fun WetPaintingFadeImage(
         val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
 
         accent = bitmap?.let { b ->
-            val palette = Palette.from(b).generate()
-            val colorInt = palette.vibrantSwatch?.rgb
-                ?: palette.lightVibrantSwatch?.rgb
-                ?: palette.dominantSwatch?.rgb
-                ?: fallback.toArgb()
+            withContext(Dispatchers.Default) {
+                val palette = Palette.from(b).generate()
+                val colorInt = palette.vibrantSwatch?.rgb
+                    ?: palette.lightVibrantSwatch?.rgb
+                    ?: palette.dominantSwatch?.rgb
+                    ?: fallback.toArgb()
 
-            Color(colorInt)
+                Color(colorInt)
+            }
         } ?: fallback
     }
 
