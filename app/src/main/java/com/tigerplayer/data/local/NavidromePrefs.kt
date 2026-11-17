@@ -4,8 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,13 +33,27 @@ class NavidromePrefs @Inject constructor(
 
     private fun readEncrypted(key: String): String? = cipher.decrypt(securePrefs.getString(key, null))
 
-    private val _serverUrl = MutableStateFlow(readEncrypted(KEY_SERVER_URL))
-    private val _username = MutableStateFlow(readEncrypted(KEY_USERNAME))
-    private val _password = MutableStateFlow(readEncrypted(KEY_PASSWORD))
+    private val _serverUrl = MutableStateFlow<String?>(null)
+    private val _username = MutableStateFlow<String?>(null)
+    private val _password = MutableStateFlow<String?>(null)
 
     val serverUrl: Flow<String?> = _serverUrl
     val username: Flow<String?> = _username
     val password: Flow<String?> = _password
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        scope.launch {
+            val initServerUrl = readEncrypted(KEY_SERVER_URL)
+            val initUsername = readEncrypted(KEY_USERNAME)
+            val initPassword = readEncrypted(KEY_PASSWORD)
+
+            _serverUrl.value = initServerUrl
+            _username.value = initUsername
+            _password.value = initPassword
+        }
+    }
 
     // Synchronous snapshots for callers that cannot suspend - notably the Media3 data-source
     // resolver and the Coil interceptor, which sign requests on a loading thread (issue #44).
@@ -48,7 +67,7 @@ class NavidromePrefs @Inject constructor(
     /**
      * Stores the credentials. This is called when you hit "Initiate Sync".
      */
-    suspend fun saveCredentials(url: String, user: String, pass: String) {
+    suspend fun saveCredentials(url: String, user: String, pass: String) = withContext(Dispatchers.IO) {
         securePrefs.edit {
             putString(KEY_SERVER_URL, cipher.encrypt(url))
             putString(KEY_USERNAME, cipher.encrypt(user))
@@ -63,7 +82,7 @@ class NavidromePrefs @Inject constructor(
     /**
      * Clears all server data. Perfect for a "Logout" or "De-link" ritual.
      */
-    suspend fun clearCredentials() {
+    suspend fun clearCredentials() = withContext(Dispatchers.IO) {
         securePrefs.edit { clear() }
         _serverUrl.value = null
         _username.value = null
