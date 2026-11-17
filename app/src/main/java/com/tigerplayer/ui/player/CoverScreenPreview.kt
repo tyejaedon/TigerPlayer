@@ -70,10 +70,10 @@ fun CoverScreenLyricsPreview() {
                     .border(2.dp, Color.Green) // Visible bounding box constraint!
             ) {
                 // Key forces full recomposition and state reset when we change the position
-                key(8500L) {
+                key(8000L) {
                     LyricsDisplay(
                         lyrics = Lyrics.Synced(lines = dummyLines, hasWordLevelTiming = true),
-                        currentPosition = 8500L, // Matches the middle of the "Caught in a landslide" line (8000L - 11000L)
+                        currentPosition = 8000L, // Matches the middle of the "Caught in a landslide" line (8000L - 11000L)
                         textColor = Color.White
                     )
                 }
