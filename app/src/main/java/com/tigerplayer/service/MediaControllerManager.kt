@@ -297,6 +297,17 @@ class MediaControllerManager @Inject constructor(
 
         controllerFuture = MediaController.Builder(context, sessionToken)
             .setApplicationLooper(Looper.getMainLooper())
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    Log.w("MediaManager", "Controller disconnected. Reconnecting...")
+                    controllerFuture?.let { MediaController.releaseFuture(it) }
+                    mediaController = null
+                    _isPlaying.value = false
+                    positionJob?.cancel()
+                    bluetoothDeviceManager.stopTrackingListeningTime()
+                    initializeController()
+                }
+            })
             .buildAsync()
 
         controllerFuture?.addListener({
@@ -481,7 +492,7 @@ class MediaControllerManager @Inject constructor(
                     if (elapsedSinceSave >= POSITION_SAVE_INTERVAL_MS) {
                         elapsedSinceSave = 0L
                         // Throttled write; do not persist on every tick.
-                        playbackPrefs.savePosition(controller.currentPosition)
+                        managerScope.launch { playbackPrefs.savePosition(controller.currentPosition) }
                     }
                 }
                 delay(TICK_INTERVAL_MS.milliseconds)
@@ -1066,12 +1077,20 @@ class MediaControllerManager @Inject constructor(
     }
     fun skipToNext() {
         resetFlowStatePipeline(restoreFullVolume = true)
-        mediaController?.seekToNext()
+        mediaController?.let {
+            it.seekToNextMediaItem()
+            updateCurrentQueuePointer(it)
+            _isPlaying.value = it.isPlaying
+        }
     }
 
     fun skipToPrevious() {
         resetFlowStatePipeline(restoreFullVolume = true)
-        mediaController?.seekToPrevious()
+        mediaController?.let {
+            it.seekToPreviousMediaItem()
+            updateCurrentQueuePointer(it)
+            _isPlaying.value = it.isPlaying
+        }
     }
 
     fun release() {
