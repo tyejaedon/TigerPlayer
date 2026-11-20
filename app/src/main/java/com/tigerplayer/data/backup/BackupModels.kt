@@ -145,7 +145,9 @@ data class BackupSummary(
     val trackRefCount: Int,
     val historyCount: Int,
     val audioDeviceCount: Int = 0,
-    val devicePresetCount: Int = 0
+    val devicePresetCount: Int = 0,
+    val unresolvedTrackCount: Int = 0,
+    val unresolvedByPlaylist: Map<String, Int> = emptyMap()
 )
 
 data class AudioDeviceBackup(

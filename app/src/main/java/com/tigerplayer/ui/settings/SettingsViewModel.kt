@@ -52,8 +52,25 @@ data class LibraryRescanState(
 /** One-shot outcome of the last export/import, surfaced by the Settings screen then cleared. */
 sealed interface BackupUiEvent {
     data class ExportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
-    data class ImportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
+    data class ImportSucceeded(
+        val playlists: Int,
+        val history: Int,
+        val unresolvedTracks: Int = 0,
+        val unresolvedByPlaylist: Map<String, Int> = emptyMap()
+    ) : BackupUiEvent
     data class Failed(val message: String) : BackupUiEvent
+
+    fun toDisplayMessage(): String = when (this) {
+        is ExportSucceeded ->
+            "Backup saved: $playlists playlists, $history history rows"
+        is ImportSucceeded -> if (unresolvedTracks > 0) {
+            val noun = if (unresolvedTracks == 1) "track" else "tracks"
+            "Restored $playlists playlists, $history history rows - $unresolvedTracks $noun could not be found and were skipped"
+        } else {
+            "Restored: $playlists playlists, $history history rows"
+        }
+        is Failed -> "Backup error: $message"
+    }
 }
 
 /** Connection status for the third-party accounts surfaced in the Settings "Connected Accounts" section. */
@@ -214,7 +231,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             backupManager.importFrom(source, strategy).fold(
                 onSuccess = { summary ->
-                    _backupEvent.value = BackupUiEvent.ImportSucceeded(summary.playlistCount, summary.historyCount)
+                    _backupEvent.value = BackupUiEvent.ImportSucceeded(
+                        playlists = summary.playlistCount,
+                        history = summary.historyCount,
+                        unresolvedTracks = summary.unresolvedTrackCount,
+                        unresolvedByPlaylist = summary.unresolvedByPlaylist
+                    )
                 },
                 onFailure = { error ->
                     _backupEvent.value = BackupUiEvent.Failed(error.message ?: "Import failed")
