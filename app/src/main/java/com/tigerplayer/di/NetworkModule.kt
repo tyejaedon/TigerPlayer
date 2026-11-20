@@ -2,6 +2,7 @@ package com.tigerplayer.di
 
 import com.google.gson.Gson
 import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.remote.DeezerRateLimitInterceptor
 import com.tigerplayer.data.remote.api.*
 import dagger.Module
 import dagger.Provides
@@ -28,6 +29,7 @@ import javax.inject.Singleton
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class LrclibRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class AutoEqRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class KugouRetrofit
+@Qualifier @Retention(AnnotationRetention.BINARY) annotation class DeezerRetrofit
 
 @Singleton
 class SubsonicHostManager @Inject constructor() {
@@ -62,6 +64,7 @@ object NetworkModule {
     private const val ITUNES_BASE_URL = "https://itunes.apple.com/"
     private const val LRCLIB_BASE_URL = "https://lrclib.net/"
     private const val KUGOU_BASE_URL = "https://krcs.kugou.com/"
+    private const val DEEZER_BASE_URL = "https://api.deezer.com/"
 
     @Provides
     @Singleton
@@ -280,5 +283,29 @@ object NetworkModule {
     fun provideAutoEqApi(@AutoEqRetrofit retrofit: Retrofit): AutoEqApi {
         return retrofit.create(AutoEqApi::class.java)
     }
+
+    // --- DEEZER FREE API INJECTIONS ---
+
+    @Provides
+    @Singleton
+    @DeezerRetrofit
+    fun provideDeezerClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+        .addInterceptor(DeezerRateLimitInterceptor())
+        .build()
+
+    @Provides
+    @Singleton
+    @DeezerRetrofit
+    fun provideDeezerRetrofit(@DeezerRetrofit client: OkHttpClient): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(DEEZER_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideDeezerApi(@DeezerRetrofit retrofit: Retrofit): DeezerApiService =
+        retrofit.create(DeezerApiService::class.java)
 }
 
