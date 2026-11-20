@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Glance Home Screen & Cover Screen Widgets**: added `TigerPlayerWidget` (`2x2` compact for home/cover screens, `4x1` slim, and `4x2` standard) and `DaylistShortcutWidget` (`Day List` / `Heavy Rotation` shortcut) in `com.tigerplayer.widget`, registered `TigerPlayerWidgetReceiver` and `DaylistShortcutWidgetReceiver` in `AndroidManifest.xml` with `home_screen|keyguard` provider metadata, integrated `DominantColorExtractor` neon accents with `GlanceTheme` light/dark/dynamic colors, wired `PlaybackWidgetUpdater` into `AudioPlayerService` for notification-driven sync, and added background/killed `MediaController` transport `ActionCallback`s plus unit tests in `TigerPlayerWidgetTest`. (closes #61)
+
 ## [2.1.9] - 2026-11-16
 
 ### Added

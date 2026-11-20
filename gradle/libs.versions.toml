@@ -97,6 +97,8 @@ androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime
 
 # Alpha / Standalone Compose / Extras
 androidx-glance = { group = "androidx.glance", name = "glance", version.ref = "glance" }
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 
 # Media, Network & Injection
 androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }

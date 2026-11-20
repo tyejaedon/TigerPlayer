@@ -95,4 +95,14 @@
     <string name="coverscreen_search_prompt">Musik durchsuchen</string>
     <string name="coverscreen_voice_search_no_speech">Keine Sprache erkannt. Erneut versuchen oder tippen.</string>
     <string name="coverscreen_voice_search_unavailable">Sprachsuche nicht verfügbar. Tippen zum Suchen.</string>
+
+    <!-- App Widgets -->
+    <string name="widget_player_label">TigerPlayer</string>
+    <string name="widget_player_description">Wiedergabesteuerung und Cover (2x2, 4x1, 4x2, Cover-Display)</string>
+    <string name="widget_daylist_label">TigerPlayer Day List</string>
+    <string name="widget_daylist_description">Schnellzugriff auf Day List und Heavy Rotation</string>
+    <string name="widget_idle_title">Keine Wiedergabe</string>
+    <string name="widget_idle_artist">Tippen, um TigerPlayer zu öffnen</string>
+    <string name="widget_daylist_title">Day List</string>
+    <string name="widget_heavy_rotation_subtitle">Heavy Rotation</string>
 </resources>
