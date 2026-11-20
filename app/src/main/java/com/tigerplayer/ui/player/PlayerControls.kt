@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,7 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import com.tigerplayer.R
@@ -42,9 +43,8 @@ fun PlaybackControls(
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onShuffleToggle) {
-                val shuffleIconRes = if (uiState.isShuffleEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle_off
                 Icon(
-                    painter = painterResource(id = shuffleIconRes),
+                    imageVector = Icons.Rounded.Shuffle,
                     contentDescription = if (uiState.isShuffleEnabled) "Shuffle enabled" else "Shuffle disabled",
                     tint = if (uiState.isShuffleEnabled) toggleActiveColor else inactiveToggleColor,
                     modifier = Modifier.size(22.dp)

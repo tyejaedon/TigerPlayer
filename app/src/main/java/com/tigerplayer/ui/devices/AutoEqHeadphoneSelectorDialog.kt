@@ -35,6 +35,7 @@ fun AutoEqHeadphoneSelectorDialog(
     isSearching: Boolean,
     onSearchQueryChanged: (String) -> Unit,
     onModelSelected: (HeadphoneSearchResult) -> Unit,
+    onRemoveAutoEq: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -84,6 +85,29 @@ fun AutoEqHeadphoneSelectorDialog(
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
+
+                if (targetDevice?.matchedAutoEqModel != null && onRemoveAutoEq != null) {
+                    OutlinedButton(
+                        onClick = onRemoveAutoEq,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TigerNeonOrange)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Remove AutoEq (${targetDevice.matchedAutoEqModel})",
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
 
                 // Search Input
                 OutlinedTextField(

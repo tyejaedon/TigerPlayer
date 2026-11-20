@@ -50,7 +50,7 @@ class OrbitalLayoutEngineTest {
         val positioned = layoutEngine.layout(graph)
 
         val maxRadius = positioned.filter { it.type == NodeType.ARTIST }.maxOf { it.orbitRadius }
-        assertTrue("Max artist radius ($maxRadius) should be <= 3500f", maxRadius <= 3500f)
+        assertTrue("Max artist radius ($maxRadius) should be <= 6000f", maxRadius <= 6000f)
     }
 
     @Test

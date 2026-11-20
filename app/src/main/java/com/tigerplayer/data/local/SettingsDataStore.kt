@@ -68,7 +68,8 @@ enum class CoverScreenEqPreset(val displayName: String) {
     NEURAL_ADAPTIVE("Neural Adaptive"),
     NIGHT_DRIVE("Night Drive"),
     PURE_VOCAL("Pure Vocal"),
-    STUDIO_FLAT("Studio Flat")
+    STUDIO_FLAT("Studio Flat"),
+    TRANSPARENCY("Transparency (SpaceBuds Z)")
 }
 
 data class TigerSettingsState(

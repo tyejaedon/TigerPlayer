@@ -10,6 +10,7 @@ import com.tigerplayer.ui.player.DetailedStatsUiState
 import com.tigerplayer.ui.player.StatItem
 import com.tigerplayer.utils.ArtistUtils
 import com.tigerplayer.utils.ElapsedTimeSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -140,6 +141,17 @@ class StatsEngine @Inject constructor(
                     0f
                 }
 
+                val tracksById = allTracks.associateBy { it.id }
+                val fallbackArtistArt = buildMap {
+                    for (t in allTracks) {
+                        val key = ArtistUtils.getBaseArtist(t.artist).lowercase().trim()
+                        val uri = t.artworkUri.toString()
+                        if (!containsKey(key)) {
+                            put(key, uri)
+                        }
+                    }
+                }
+
                 DetailedStatsUiState(
                     selectedFilter = filter,
                     totalListeningHours = hours,
@@ -149,7 +161,7 @@ class StatsEngine @Inject constructor(
                     topArtists = topArtistsDb.map { artist ->
                         val normalizedKey = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
                         val cachedImg = artistDetailsMap[normalizedKey]?.imageUrl
-                            ?: allTracks.firstOrNull { ArtistUtils.getBaseArtist(it.artist).equals(artist.artistName, ignoreCase = true) }?.artworkUri?.toString()
+                            ?: fallbackArtistArt[normalizedKey]
 
                         StatItem(
                             id = artist.artistName,
@@ -160,7 +172,7 @@ class StatsEngine @Inject constructor(
                         )
                     },
                     topTracks = topTracksDb.map { track ->
-                        val albumArt = allTracks.find { it.id == track.trackId }?.artworkUri?.toString()
+                        val albumArt = tracksById[track.trackId]?.artworkUri?.toString()
                         StatItem(
                             id = track.trackId,
                             name = track.title,
@@ -171,7 +183,7 @@ class StatsEngine @Inject constructor(
                     }
                 )
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     /** Called when the active track changes. Commits outgoing play and begins accounting for [track]. */

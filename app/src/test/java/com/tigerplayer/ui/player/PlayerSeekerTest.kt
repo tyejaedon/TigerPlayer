@@ -13,9 +13,10 @@ import com.tigerplayer.engine.StatsEngine
 import com.tigerplayer.engine.WaveformEngine
 import com.tigerplayer.service.MediaControllerManager
 import com.tigerplayer.utils.BluetoothDeviceManager
-import com.tigerplayer.ui.coverscreen.populatePositiveWaveformPath
-import com.tigerplayer.ui.coverscreen.calculateWaveformY
-import com.tigerplayer.ui.coverscreen.calculateWaveformYWithEffectiveHeight
+import com.tigerplayer.engine.WaveformComputation
+import com.tigerplayer.engine.populatePositiveWaveformPath
+import com.tigerplayer.engine.calculateWaveformY
+import com.tigerplayer.engine.calculateWaveformYWithEffectiveHeight
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -322,5 +323,38 @@ class PlayerSeekerTest {
         assertEquals("Path left must be 0", 0f, bounds.left, 0.1f)
         assertEquals("Path right must be width", width, bounds.right, 0.1f)
         assertEquals("Path bottom must touch baseline", effectiveBaselineY, bounds.bottom, 0.1f)
+    }
+
+    // --- 5. MODULAR WAVEFORM ENGINE & COMPUTATION TESTS ---
+
+    @Test
+    fun `WaveformComputation and WaveformEngine companion compute consistent points and curves`() {
+        val rawAmplitudes = listOf(0.1f, 0.4f, 0.9f, 0.6f, 0.3f)
+        val pointsComp = WaveformComputation.calculateWaveformPoints(rawAmplitudes, 16)
+        val pointsEng = WaveformEngine.calculateWaveformPoints(rawAmplitudes, 16)
+
+        assertEquals(16, pointsComp.size)
+        assertEquals(16, pointsEng.size)
+        for (i in 0 until 16) {
+            assertEquals(pointsComp[i], pointsEng[i], 0.0001f)
+        }
+
+        val yComp = WaveformComputation.calculateWaveformY(
+            x = 100f,
+            width = 500f,
+            maxHeight = 25f,
+            baselineY = 30f,
+            overlapPx = 2f,
+            phase = 0.5f
+        )
+        val yEng = WaveformEngine.calculateWaveformY(
+            x = 100f,
+            width = 500f,
+            maxHeight = 25f,
+            baselineY = 30f,
+            overlapPx = 2f,
+            phase = 0.5f
+        )
+        assertEquals(yComp, yEng, 0.0001f)
     }
 }

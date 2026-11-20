@@ -7,6 +7,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -137,26 +139,11 @@ fun MiniPlayer(
                         color = if (isLightTheme) MaterialTheme.colorScheme.outlineVariant else Color.White.copy(alpha = 0.08f),
                         shape = RoundedCornerShape(24.dp)
                     )
-                    .pointerInput(track.id) {
-                        detectTapGestures(
-                            onTap = { onExpandClick() },
-                            onDoubleTap = {
-                                viewModel.toggleTrackLikeStatus(track)
-                                coroutineScope.launch {
-                                    showFlyingHeart = true
-                                    heartAlpha.snapTo(1f)
-                                    heartScale.snapTo(0.3f)
-                                    heartOffsetY.snapTo(0f)
-
-                                    launch { heartScale.animateTo(1.2f, spring(dampingRatio = 0.6f)) }
-                                    launch { heartOffsetY.animateTo(-80f, tween(600, easing = FastOutSlowInEasing)) }
-
-                                    heartAlpha.animateTo(0f, tween(600, 200))
-                                    showFlyingHeart = false
-                                }
-                            }
-                        )
-                    }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onExpandClick
+                    )
                     .pointerInput(track.id) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
@@ -222,7 +209,26 @@ fun MiniPlayer(
                         modifier = Modifier
                             .size(52.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = if (isLightTheme) 0.1f else 0.06f)),
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = if (isLightTheme) 0.1f else 0.06f))
+                            .pointerInput(track.id) {
+                                detectTapGestures(
+                                    onDoubleTap = {
+                                        viewModel.toggleTrackLikeStatus(track)
+                                        coroutineScope.launch {
+                                            showFlyingHeart = true
+                                            heartAlpha.snapTo(1f)
+                                            heartScale.snapTo(0.3f)
+                                            heartOffsetY.snapTo(0f)
+
+                                            launch { heartScale.animateTo(1.2f, spring(dampingRatio = 0.6f)) }
+                                            launch { heartOffsetY.animateTo(-80f, tween(600, easing = FastOutSlowInEasing)) }
+
+                                            heartAlpha.animateTo(0f, tween(600, 200))
+                                            showFlyingHeart = false
+                                        }
+                                    }
+                                )
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(

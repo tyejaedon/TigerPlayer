@@ -55,6 +55,9 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import com.tigerplayer.data.local.CoverScreenEqPreset
 import com.tigerplayer.ui.theme.TigerNeonOrange
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import com.tigerplayer.ui.theme.glassEffect
 
 @Composable
 fun CoverScreenPlaybackSettings(
@@ -83,7 +86,7 @@ fun CoverScreenPlaybackSettings(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Color.Black.copy(alpha = 0.5f))
             .clickable(onClick = onClose)
             .testTag(CoverScreenTestTags.PLAYBACK_SETTINGS)
     ) {
@@ -92,12 +95,14 @@ fun CoverScreenPlaybackSettings(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(12.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .glassEffect(RoundedCornerShape(24.dp), isOpaque = true)
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
                 .pointerInput(Unit) { detectTapGestures(onTap = {}) }
                 .testTag(CoverScreenTestTags.PLAYBACK_SETTINGS_PANEL),
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF17181D),
-            contentColor = Color.White,
-            tonalElevation = 6.dp
+            color = Color.Transparent,
+            contentColor = Color.White
         ) {
             Column(
                 modifier = Modifier

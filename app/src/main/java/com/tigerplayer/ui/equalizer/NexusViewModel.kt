@@ -135,6 +135,15 @@ class AuralNexusViewModel @OptIn(UnstableApi::class)
             "Studio Flat" -> nodes.map { n ->
                 n.copy(spatialPos = Offset(n.spatialPos.x, 0f))
             }
+            "Transparency (SpaceBuds Z)" -> nodes.map { n ->
+                when (n.id) {
+                    "sub" -> n.copy(spatialPos = Offset(-0.8f, 0.4f)) // Cut Sub/Bass
+                    "warmth" -> n.copy(spatialPos = Offset(-0.4f, 0.3f)) // Cut Warmth/Mid-Bass
+                    "presence" -> n.copy(spatialPos = Offset(0.3f, -0.4f)) // Boost Presence
+                    "air" -> n.copy(spatialPos = Offset(0.8f, 0.5f)) // Cut Air/High Treble
+                    else -> n
+                }
+            }
             else -> nodes
         }
         _uiState.value = _uiState.value.copy(nodes = updated, currentMood = mood)

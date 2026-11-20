@@ -107,6 +107,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideNeteaseApi(client: OkHttpClient): com.tigerplayer.data.remote.api.NeteaseApi {
+        return Retrofit.Builder()
+            .baseUrl("https://music.163.com/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(com.tigerplayer.data.remote.api.NeteaseApi::class.java)
+    }
+
+    @Provides
+    @Singleton
     fun provideWeatherApi(): WeatherApiService {
         return Retrofit.Builder()
             .baseUrl("https://api.open-meteo.com/")

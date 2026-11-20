@@ -3,7 +3,7 @@ package com.tigerplayer.data.source
 import android.content.Context
 import android.net.Uri
 import com.tigerplayer.data.model.AudioTrack
-import com.tigerplayer.data.model.LrcLine
+import com.tigerplayer.data.model.LyricLine
 import com.tigerplayer.data.model.Lyrics
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -51,8 +51,10 @@ class LocalLyricsSourceTest {
         assertTrue("Expected Synced lyrics, got: $lyrics", lyrics is Lyrics.Synced)
         val synced = lyrics as Lyrics.Synced
         assertEquals(2, synced.lines.size)
-        assertEquals(LrcLine(1000L, "Mama, just killed a man"), synced.lines[0])
-        assertEquals(LrcLine(5000L, "Put a gun against his head"), synced.lines[1])
+        assertEquals(1000L, synced.lines[0].timeMs)
+        assertEquals("Mama, just killed a man", synced.lines[0].text)
+        assertEquals(5000L, synced.lines[1].timeMs)
+        assertEquals("Put a gun against his head", synced.lines[1].text)
     }
 
     @Test

@@ -13,9 +13,7 @@ import kotlin.math.sin
  */
 object CoverScreenPerformanceManager {
     const val TARGET_FPS_DEFAULT = 60
-    const val TARGET_FPS_THROTTLED = 30
-    const val FRAME_INTERVAL_60_FPS_MS = 16L
-    const val FRAME_INTERVAL_60_FPS_NS = 16_666_666L
+
 
     /**
      * Calculates the frame interval in milliseconds for a target frame rate.
@@ -136,23 +134,7 @@ object CoverScreenPerformanceManager {
     fun calculateWaveformPoints(
         amplitudes: List<Float>?,
         pointCount: Int = 32
-    ): FloatArray {
-        val safeCount = pointCount.coerceAtLeast(2)
-        val result = FloatArray(safeCount)
-        if (amplitudes.isNullOrEmpty()) {
-            result.fill(0.2f)
-            return result
-        }
-
-        val lastIdx = (amplitudes.size - 1).coerceAtLeast(0)
-        val divisor = (safeCount - 1).toFloat()
-        for (i in 0 until safeCount) {
-            val sourceIndex = ((i / divisor) * lastIdx).toInt().coerceIn(0, lastIdx)
-            val raw = amplitudes[sourceIndex]
-            result[i] = if (raw.isFinite()) raw.coerceIn(0f, 1f) else 0.2f
-        }
-        return result
-    }
+    ): FloatArray = com.tigerplayer.engine.WaveformComputation.calculateWaveformPoints(amplitudes, pointCount)
 
     /**
      * Generates a waveform path into an existing [Path] object without allocating new Path instances.

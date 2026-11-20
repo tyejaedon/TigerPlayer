@@ -395,12 +395,12 @@ fun MainScreen(
             } else {
                 slideOutVertically(
                     targetOffsetY = { fullHeight -> fullHeight },
-                    animationSpec = tween(
-                        durationMillis = 350,
-                        easing = FastOutSlowInEasing
+                    animationSpec = spring(
+                        dampingRatio = 0.85f,
+                        stiffness = 250f
                     )
                 ) + fadeOut(
-                    animationSpec = tween(250)
+                    animationSpec = tween(200)
                 )
             }
         ) {

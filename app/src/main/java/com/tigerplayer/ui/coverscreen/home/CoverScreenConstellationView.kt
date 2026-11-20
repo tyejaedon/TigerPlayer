@@ -28,18 +28,22 @@ import com.tigerplayer.constellation.NodeType
 import com.tigerplayer.constellation.PositionedNode
 import com.tigerplayer.ui.constellation.ConstellationState
 import com.tigerplayer.ui.constellation.ConstellationViewModel
+import com.tigerplayer.ui.coverscreen.home.CoverScreenAtomicArtistView
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.glassEffect
+import kotlinx.coroutines.flow.flowOf
 
 @Composable
 fun CoverScreenConstellationView(
     viewModel: ConstellationViewModel,
     onArtistSelected: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onTrackSelected: ((PositionedNode) -> Unit)? = null
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedNode by remember { mutableStateOf<PositionedNode?>(null) }
+    var activeAtomicArtistName by remember { mutableStateOf<String?>(null) }
 
     // Zoom and Pan state suited for reeled-in galaxy on cover screen
     var scale by remember { mutableFloatStateOf(0.55f) }
@@ -241,7 +245,11 @@ fun CoverScreenConstellationView(
                             }
                             if (curr.type == NodeType.ARTIST) {
                                 Button(
-                                    onClick = { onArtistSelected(curr.label) },
+                                    onClick = {
+                                        viewModel.prefetchArtistReading(curr.label)
+                                        activeAtomicArtistName = curr.label
+                                        onArtistSelected(curr.label)
+                                    },
                                     colors = ButtonDefaults.buttonColors(containerColor = TigerNeonOrange)
                                 ) {
                                     Text("Explore")
@@ -266,6 +274,33 @@ fun CoverScreenConstellationView(
                             Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = TigerCyberCyan, modifier = Modifier.size(12.dp))
                             Text("Constellation Galaxy Active", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f))
                         }
+                    }
+                }
+
+                // --- ATOMIC ORBIT ARTIST OVERLAY ---
+                val currentAtomicArtist = activeAtomicArtistName
+                if (currentAtomicArtist != null) {
+                    val atomicArtistReading by remember(currentAtomicArtist) {
+                        viewModel.observeArtistReading(currentAtomicArtist)
+                    }.collectAsState(initial = null)
+
+                    val atomicArtistNodes = remember(currentAtomicArtist, s.nodes) {
+                        s.nodes.values.filter { node ->
+                            node.label.equals(currentAtomicArtist, ignoreCase = true) ||
+                            node.artistName?.equals(currentAtomicArtist, ignoreCase = true) == true ||
+                            (node.type == NodeType.ALBUM && s.nodes[node.orbitCenterId]?.label?.equals(currentAtomicArtist, ignoreCase = true) == true)
+                        }
+                    }
+
+                    val reading = atomicArtistReading
+                    if (reading != null) {
+                        CoverScreenAtomicArtistView(
+                            artistReading = reading,
+                            artistNodes = atomicArtistNodes,
+                            onTrackSelected = { track -> onTrackSelected?.invoke(track) },
+                            onClose = { activeAtomicArtistName = null },
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
             }

@@ -60,6 +60,23 @@ internal class TapGestureClassifier(
 }
 
 /**
+ * Pure evaluator determining whether a touch position lies within the system edge exclusion zone
+ * (preserving Android OS notification shade pull-down, navigation bar, and back gesture areas).
+ */
+internal fun isCoverScreenSystemEdge(
+    position: Offset,
+    sizeWidth: Float,
+    sizeHeight: Float,
+    edgeRatio: Float = 0.12f
+): Boolean {
+    if (sizeWidth <= 0f || sizeHeight <= 0f) return false
+    val edgeX = sizeWidth * edgeRatio
+    val edgeY = sizeHeight * edgeRatio
+    return position.x < edgeX || position.x > sizeWidth - edgeX ||
+        position.y < edgeY || position.y > sizeHeight - edgeY
+}
+
+/**
  * Custom pointer input modifier handling cover-screen swipe, tap, and press-and-hold gestures while
  * respecting edge exclusion zones for device shell navigation (e.g., Samsung Galaxy Z Flip edge gestures).
  */
@@ -83,12 +100,8 @@ internal fun Modifier.coverScreenGestures(
             val down = awaitFirstDown(requireUnconsumed = true)
             val ignoreGesture = shouldIgnoreGestureAt(down.position)
 
-            // Preserve system edge gestures, except top-edge down swipes used to open search.
-            val edgeX = size.width * 0.12f
-            val edgeY = size.height * 0.12f
-            val startedAtTopEdge = down.position.y < edgeY
-            if (down.position.x < edgeX || down.position.x > size.width - edgeX ||
-                down.position.y > size.height - edgeY) {
+            // Preserve system edge gestures symmetrically (Samsung Galaxy Z Flip / Motorola Razr notification shade, back, and home gestures)
+            if (isCoverScreenSystemEdge(down.position, size.width.toFloat(), size.height.toFloat())) {
                 return@awaitEachGesture // Let the OS handle the edge swipe
             }
 
@@ -97,6 +110,7 @@ internal fun Modifier.coverScreenGestures(
             var totalY = 0f
             var isReleased = false
             var longPressTriggered = false
+            var gestureAborted = false
 
             if (onLongPress != null && !ignoreGesture) {
                 try {
@@ -106,6 +120,11 @@ internal fun Modifier.coverScreenGestures(
                             val change = event.changes.firstOrNull { it.id == pointerId }
                                 ?: event.changes.firstOrNull()
                                 ?: break
+
+                            if (change.isConsumed) {
+                                gestureAborted = true
+                                break
+                            }
 
                             val delta = change.positionChange()
                             totalX += delta.x
@@ -123,13 +142,17 @@ internal fun Modifier.coverScreenGestures(
                         }
                     }
                 } catch (_: PointerEventTimeoutCancellationException) {
-                    longPressTriggered = true
-                    pendingTapJob?.cancel()
-                    pendingTapJob = null
-                    classifier.reset()
-                    onLongPress.invoke()
+                    if (!gestureAborted) {
+                        longPressTriggered = true
+                        pendingTapJob?.cancel()
+                        pendingTapJob = null
+                        classifier.reset()
+                        onLongPress.invoke()
+                    }
                 }
             }
+
+            if (gestureAborted) return@awaitEachGesture
 
             if (longPressTriggered) {
                 while (true) {
@@ -150,6 +173,11 @@ internal fun Modifier.coverScreenGestures(
                         ?: event.changes.firstOrNull()
                         ?: break
 
+                    if (change.isConsumed) {
+                        gestureAborted = true
+                        break
+                    }
+
                     val delta = change.positionChange()
                     totalX += delta.x
                     totalY += delta.y
@@ -158,6 +186,8 @@ internal fun Modifier.coverScreenGestures(
                     if (!change.pressed) break
                 }
             }
+
+            if (gestureAborted) return@awaitEachGesture
 
             val absX = abs(totalX)
             val absY = abs(totalY)
@@ -186,19 +216,19 @@ internal fun Modifier.coverScreenGestures(
                         }
                     }
                 }
-                !startedAtTopEdge && absX > absY && totalX <= -swipeThresholdPx -> {
+                absX > absY && totalX <= -swipeThresholdPx -> {
                     classifier.reset()
                     pendingTapJob?.cancel()
                     pendingTapJob = null
                     onSwipeLeft()
                 }
-                !startedAtTopEdge && absX > absY && totalX >= swipeThresholdPx -> {
+                absX > absY && totalX >= swipeThresholdPx -> {
                     classifier.reset()
                     pendingTapJob?.cancel()
                     pendingTapJob = null
                     onSwipeRight()
                 }
-                !startedAtTopEdge && absY > absX && totalY <= -swipeThresholdPx -> {
+                absY > absX && totalY <= -swipeThresholdPx -> {
                     classifier.reset()
                     pendingTapJob?.cancel()
                     pendingTapJob = null

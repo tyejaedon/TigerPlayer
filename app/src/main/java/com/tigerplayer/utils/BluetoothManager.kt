@@ -52,8 +52,8 @@ class BluetoothDeviceManager @Inject constructor(
         context
     }
 
-    private val bluetoothManager = attributedContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
+    private val bluetoothManager by lazy { attributedContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager }
+    private val bluetoothAdapter: BluetoothAdapter? by lazy { bluetoothManager.adapter }
 
     private val _connectedDevice = MutableStateFlow(BluetoothDeviceInfo())
     val connectedDevice: StateFlow<BluetoothDeviceInfo> = _connectedDevice.asStateFlow()
@@ -118,17 +118,20 @@ class BluetoothDeviceManager @Inject constructor(
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
-        updateConnectedDevice()
+        managerScope.launch(Dispatchers.IO) {
+            updateConnectedDevice()
+        }
     }
 
     @SuppressLint("MissingPermission")
     private fun updateConnectedDevice() {
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled || !hasBluetoothConnectPermission()) {
+        val adapter = bluetoothAdapter
+        if (adapter == null || !adapter.isEnabled || !hasBluetoothConnectPermission()) {
             disconnectAndClear()
             return
         }
 
-        bluetoothAdapter.getProfileProxy(attributedContext, object : BluetoothProfile.ServiceListener {
+        adapter.getProfileProxy(attributedContext, object : BluetoothProfile.ServiceListener {
             override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
                 if (profile == BluetoothProfile.A2DP) {
                     val a2dp = proxy as? BluetoothA2dp
@@ -164,7 +167,7 @@ class BluetoothDeviceManager @Inject constructor(
                     } else {
                         disconnectAndClear()
                     }
-                    bluetoothAdapter.closeProfileProxy(BluetoothProfile.A2DP, proxy)
+                    adapter.closeProfileProxy(BluetoothProfile.A2DP, proxy)
                 }
             }
 

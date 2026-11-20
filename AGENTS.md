@@ -132,6 +132,10 @@ UI (Compose) -> ViewModel -> Engine -> Repository -> DataSource / DAO / API
 - All OpenGL / Vulkan resources must have deterministic lifecycles: implement `release()` on all buffers, textures, FBOs, and shader programs.
 - SurfaceView / GLSurfaceView lifecycles must handle EGL context loss gracefully by recreating GPU resources upon context recreation.
 
+**Cover Screen Feature Parity:**
+
+- Any feature, UI modification, or functionality added to the main screen/app layout that is applicable to the cover screen MUST be implemented on the cover screen variant (optimized for its layout, touch targets, and usability). There must be zero feature disparity between main app views and cover screen view instances.
+
 ---
 
 ## 5. Guardrails — do not do these

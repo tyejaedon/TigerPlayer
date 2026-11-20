@@ -298,6 +298,9 @@ internal fun CoverScreenModalOverlays(
                 }
             },
             onRefresh = dashboardViewModel::refreshForYou,
+            onSavePlaylist = { name ->
+                playerViewModel.saveCuratedPlaylist(name, discoveryWeeklyTracks)
+            },
             onClose = onDismissDiscoveryDetail
         )
     }
@@ -338,6 +341,9 @@ internal fun CoverScreenModalOverlays(
                 }
             },
             onRefresh = dashboardViewModel::refreshForYou,
+            onSavePlaylist = { name ->
+                playerViewModel.saveCuratedPlaylist(name, daylistTracks)
+            },
             onClose = onDismissDaylistDetail
         )
     }
