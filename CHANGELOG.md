@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Local Audio Tag Editor**: added single-file and multi-select batch tag editing for local MP3, FLAC, M4A, and OGG files via `LocalTagDataSource` (`jaudiotagger`), `MetadataEngine`, `AudioRepository.rescanEditedTracks`, `TagEditorViewModel`, and `TagEditorSheet`; supports title, artist, album, album artist, track number, disc number, year, genre, embedded artwork replacement/removal, pre-write file backup, explicit confirmation, Android 10/11+ Scoped Storage write consent (`MediaStore.createWriteRequest` / `RecoverableSecurityException`), and full Cover Screen parity across `CoverScreenSongPicker` and `CoverScreenTrackOverflowMenu`. (closes #63)
+
 ## [2.1.9] - 2026-11-16
 
 ### Added

@@ -403,6 +403,21 @@ class PlaybackStateManager(
                     }
                 }
         }
+
+        scope.launch {
+            metadataEngine.editedTracksFlow.collect { updatedTracks ->
+                val byId = updatedTracks.associateBy { it.id }
+                _playbackState.update { state ->
+                    val updatedCurrent = state.currentTrack?.let { current -> byId[current.id] ?: current }
+                    val updatedQueue = if (state.queue.any { it.id in byId }) {
+                        state.queue.map { track -> byId[track.id] ?: track }
+                    } else {
+                        state.queue
+                    }
+                    state.copy(currentTrack = updatedCurrent, queue = updatedQueue)
+                }
+            }
+        }
     }
 
     fun updateTrackColor(color: Color) {

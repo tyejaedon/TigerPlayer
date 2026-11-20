@@ -226,6 +226,7 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.gson)
     implementation(libs.jtransforms)
+    implementation(libs.jaudiotagger.android)
 
     implementation(libs.kotlin.youtubeextractor)
     // --- Room (The Vault) ---
