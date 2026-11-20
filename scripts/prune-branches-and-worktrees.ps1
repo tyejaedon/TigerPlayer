@@ -228,6 +228,38 @@ function Get-CommitsAhead {
     return [int]$count
 }
 
+function Remove-WorktreeDirectoryLongPath {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $true
+    }
+    $winPath = ($Path -replace '/', '\').TrimEnd('\')
+    $longPath = if ($winPath.StartsWith('\\?\')) { $winPath } else { "\\?\$winPath" }
+
+    $prevPref = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        cmd /c "rmdir /s /q `"$longPath`"" 2>$null | Out-Null
+        if (-not (Test-Path -LiteralPath $Path)) {
+            return $true
+        }
+        # Fallback: robocopy empty directory mirror handles >260-char paths and locked/read-only attributes
+        $emptyDir = Join-Path $env:TEMP ("tp-empty-" + [guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $emptyDir -Force | Out-Null
+        try {
+            robocopy $emptyDir $winPath /mir /nfl /ndl /njh /njs /nc /ns /np | Out-Null
+            cmd /c "rmdir /s /q `"$longPath`"" 2>$null | Out-Null
+        }
+        finally {
+            Remove-Item -LiteralPath $emptyDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        return (-not (Test-Path -LiteralPath $Path))
+    }
+    finally {
+        $ErrorActionPreference = $prevPref
+    }
+}
+
 # Verify we are inside a git repository
 $repoRoot = (git rev-parse --show-toplevel 2>$null)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
@@ -392,13 +424,28 @@ foreach ($wt in $worktrees) {
         Write-ActionItem -Status "REMOVE" -Message "$($wt.Path) [$($wt.Branch)] ($reason)" -Color Green
     }
     elseif ($PSCmdlet.ShouldProcess($wt.Path, "Remove AI worktree ($reason)")) {
-        $removeArgs = @("worktree", "remove")
+        $removeArgs = @("-c", "core.longpaths=true", "worktree", "remove")
         if ($Force.IsPresent) {
             $removeArgs += "--force"
         }
         $removeArgs += $wt.Path
+
+        $prevPref = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         $output = & git @removeArgs 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $removeExit = $LASTEXITCODE
+        $ErrorActionPreference = $prevPref
+
+        $removed = ($removeExit -eq 0)
+        if (-not $removed) {
+            # Windows MAX_PATH (260-char) fallback via \\?\ long-path removal + git worktree prune
+            if (Remove-WorktreeDirectoryLongPath -Path $wt.Path) {
+                git worktree prune 2>$null
+                $removed = $true
+            }
+        }
+
+        if ($removed) {
             if ($wt.Branch) {
                 [void]$removedWorktreeBranches.Add($wt.Branch)
             }
