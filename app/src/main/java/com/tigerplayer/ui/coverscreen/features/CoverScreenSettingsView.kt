@@ -269,6 +269,7 @@ fun CoverScreenSettingsView(
                         when (serviceToLogOut) {
                             "Spotify" -> viewModel.logoutSpotify()
                             "Navidrome" -> viewModel.logoutNavidrome()
+                            "Last.fm" -> viewModel.logoutLastfm()
                         }
                         pendingLogout = null
                     },
@@ -1305,6 +1306,117 @@ fun CoverScreenSettingsView(
                                     Text("Disconnect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        // Last.fm Account
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "LAST.FM",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accent
+                                )
+                                Text(
+                                    text = when {
+                                        connectedAccounts.isLastfmConnected -> {
+                                            val user = connectedAccounts.lastfmUsername?.takeIf { it.isNotBlank() } ?: "Connected"
+                                            if (connectedAccounts.pendingScrobbleCount > 0) {
+                                                "$user • ${connectedAccounts.pendingScrobbleCount} queued"
+                                            } else {
+                                                "Connected as $user"
+                                            }
+                                        }
+                                        !connectedAccounts.isLastfmConfigured -> "API keys not configured"
+                                        else -> "Not authenticated"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (connectedAccounts.isLastfmConnected) {
+                                OutlinedButton(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        pendingLogout = "Last.fm"
+                                    },
+                                    modifier = Modifier
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_LASTFM_DISCONNECT),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red.copy(alpha = 0.85f)),
+                                    border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.35f))
+                                ) {
+                                    Text("Disconnect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        viewModel.connectLastfm(context)
+                                    },
+                                    enabled = connectedAccounts.isLastfmConfigured,
+                                    modifier = Modifier
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = accent,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Connect", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+
+                        if (connectedAccounts.isLastfmConnected) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                thickness = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.08f)
+                            )
+                            CoverSettingsSwitchRow(
+                                headline = "Scrobble Plays",
+                                supporting = "Scrobble after 50% or 4 min",
+                                icon = Icons.Rounded.CloudSync,
+                                checked = settingsState.lastfmScrobbleEnabled,
+                                onCheckedChange = viewModel::setLastfmScrobbleEnabled,
+                                accent = accent,
+                                modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_LASTFM_SCROBBLE_TOGGLE)
+                            )
+                            CoverSettingsSwitchRow(
+                                headline = "Now Playing",
+                                supporting = "Update Last.fm on track start",
+                                icon = Icons.Rounded.CloudSync,
+                                checked = settingsState.lastfmNowPlayingEnabled,
+                                onCheckedChange = viewModel::setLastfmNowPlayingEnabled,
+                                accent = accent,
+                                modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_LASTFM_NOW_PLAYING_TOGGLE)
+                            )
+                            CoverSettingsSwitchRow(
+                                headline = "Scrobble Remote",
+                                supporting = "Include Navidrome & Spotify (off = local only)",
+                                icon = Icons.Rounded.CloudSync,
+                                checked = settingsState.lastfmScrobbleRemote,
+                                onCheckedChange = viewModel::setLastfmScrobbleRemote,
+                                accent = accent,
+                                modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_LASTFM_REMOTE_TOGGLE)
+                            )
                         }
                     }
                 }

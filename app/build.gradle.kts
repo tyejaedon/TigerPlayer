@@ -78,6 +78,7 @@ configure<ApplicationExtension> {
 
         val clientId = secrets.getProperty("SPOTIFY_CLIENT_ID") ?: "MISSING_ID"
         val lastfmApiKey = secrets.getProperty("LASTFM_API_KEY") ?: "MISSING_API_KEY"
+        val lastfmApiSecret = secrets.getProperty("LASTFM_API_SECRET") ?: "MISSING_API_SECRET"
         val youtubeApiKey = secrets.getProperty("YOUTUBE_API_KEY") ?: "MISSING_YOUTUBE_KEY"
 
         // BuildConfig Fields
@@ -85,6 +86,7 @@ configure<ApplicationExtension> {
         // which requires no client secret. Never add one back here (issue #46).
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$clientId\"")
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastfmApiKey\"")
+        buildConfigField("String", "LASTFM_API_SECRET", "\"$lastfmApiSecret\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
     }
 

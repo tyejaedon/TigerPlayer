@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Last.fm Scrobbling & Now Playing**: implemented Last.fm OAuth web flow (`tigerplayer://callback/lastfm`) with encrypted session storage (`LastfmPrefs` via `SecurePrefsCipher`), `api_sig` MD5 signing (`LastfmSignature`), `track.updateNowPlaying` on track start, real-listened-time scrobbling driven by `StatsEngine.qualifiedPlays` (>= 50% or >= 4 min, track > 30s), durable Room offline scrobble queue (`PendingScrobbleEntity` / `PendingScrobbleDao`, DB v18) with exponential backoff and automatic flush on network reconnect (`ScrobbleEngine`), and Settings + Cover Screen parity controls (`SCROBBLE PLAYS`, `UPDATE NOW PLAYING`, `SCROBBLE REMOTE TRACKS`). (closes #62)
+
 ## [2.1.9] - 2026-11-16
 
 ### Added

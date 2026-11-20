@@ -42,6 +42,8 @@ import com.tigerplayer.navigation.TigerPlayerNavGraph
 import com.tigerplayer.ui.player.PipVisualizerSurface
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.settings.SettingsViewModel
+import com.tigerplayer.data.repository.LastFmRepository
+import com.tigerplayer.engine.scrobble.ScrobbleEngine
 import com.tigerplayer.ui.theme.TigerPlayerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +59,12 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var settingsDataStore: SettingsDataStore
+
+    @Inject
+    lateinit var lastFmRepository: LastFmRepository
+
+    @Inject
+    lateinit var scrobbleEngine: ScrobbleEngine
 
     private val playerViewModel: PlayerViewModel by viewModels()
     private val isInPipMode = MutableStateFlow(false)
@@ -145,6 +153,25 @@ class MainActivity : ComponentActivity() {
     private fun handleSpotifyRedirect(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme != "tigerplayer" || uri.host != "callback") return
+
+        if (uri.path == "/lastfm") {
+            val token = uri.getQueryParameter("token")
+            if (token.isNullOrBlank()) {
+                authMessage.value = "Last.fm authorization cancelled or missing token."
+                return
+            }
+            lifecycleScope.launch {
+                val result = lastFmRepository.completeAuth(token)
+                result.onSuccess { user ->
+                    scrobbleEngine.clearAuthError()
+                    authMessage.value = "Connected Last.fm as $user"
+                    scrobbleEngine.flushQueue()
+                }.onFailure { err ->
+                    authMessage.value = err.message ?: "Last.fm authorization failed."
+                }
+            }
+            return
+        }
 
         val code = uri.getQueryParameter("code")
         val error = uri.getQueryParameter("error")
@@ -248,6 +275,19 @@ class MainActivity : ComponentActivity() {
             .appendQueryParameter("scope", scopes)
             .build()
 
+        CustomTabsIntent.Builder().build().launchUrl(this, uri)
+    }
+
+    fun authenticateLastfm() {
+        if (!lastFmRepository.isConfigured()) {
+            authMessage.value = "Last.fm API credentials are not configured in this build."
+            return
+        }
+        if (!hasInternetConnection()) {
+            authMessage.value = "Internet connection required to connect Last.fm."
+            return
+        }
+        val uri = Uri.parse(lastFmRepository.buildAuthUrl())
         CustomTabsIntent.Builder().build().launchUrl(this, uri)
     }
 
