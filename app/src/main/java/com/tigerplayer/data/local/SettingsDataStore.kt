@@ -104,7 +104,10 @@ data class TigerSettingsState(
     val autoDownloadLyrics: Boolean = false,
     val visualizerSensitivity: Float = 1f,
     val visualizerPaletteMode: VisualizerPaletteMode = VisualizerPaletteMode.ALBUM_ART,
-    val waveformSensitivity: Float = 1f
+    val waveformSensitivity: Float = 1f,
+    val lastfmScrobbleEnabled: Boolean = true,
+    val lastfmNowPlayingEnabled: Boolean = true,
+    val lastfmScrobbleRemote: Boolean = false
 )
 
 @Singleton
@@ -154,7 +157,10 @@ class SettingsDataStore @Inject constructor(
             autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false,
             visualizerSensitivity = (prefs[VISUALIZER_SENSITIVITY] ?: 1f).coerceIn(0.5f, 2.0f),
             visualizerPaletteMode = enumOrDefault(prefs[VISUALIZER_PALETTE_MODE], VisualizerPaletteMode.ALBUM_ART),
-            waveformSensitivity = (prefs[WAVEFORM_SENSITIVITY] ?: 1f).coerceIn(0.5f, 2.0f)
+            waveformSensitivity = (prefs[WAVEFORM_SENSITIVITY] ?: 1f).coerceIn(0.5f, 2.0f),
+            lastfmScrobbleEnabled = prefs[LASTFM_SCROBBLE_ENABLED] ?: true,
+            lastfmNowPlayingEnabled = prefs[LASTFM_NOW_PLAYING_ENABLED] ?: true,
+            lastfmScrobbleRemote = prefs[LASTFM_SCROBBLE_REMOTE] ?: false
         )
     }
 
@@ -286,6 +292,18 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[WAVEFORM_SENSITIVITY] = sensitivity.coerceIn(0.5f, 2.0f) }
     }
 
+    suspend fun setLastfmScrobbleEnabled(enabled: Boolean) {
+        dataStore.edit { it[LASTFM_SCROBBLE_ENABLED] = enabled }
+    }
+
+    suspend fun setLastfmNowPlayingEnabled(enabled: Boolean) {
+        dataStore.edit { it[LASTFM_NOW_PLAYING_ENABLED] = enabled }
+    }
+
+    suspend fun setLastfmScrobbleRemote(enabled: Boolean) {
+        dataStore.edit { it[LASTFM_SCROBBLE_REMOTE] = enabled }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -328,5 +346,8 @@ class SettingsDataStore @Inject constructor(
         val VISUALIZER_SENSITIVITY = floatPreferencesKey("visualizer_sensitivity")
         val VISUALIZER_PALETTE_MODE = stringPreferencesKey("visualizer_palette_mode")
         val WAVEFORM_SENSITIVITY = floatPreferencesKey("waveform_sensitivity")
+        val LASTFM_SCROBBLE_ENABLED = booleanPreferencesKey("lastfm_scrobble_enabled")
+        val LASTFM_NOW_PLAYING_ENABLED = booleanPreferencesKey("lastfm_now_playing_enabled")
+        val LASTFM_SCROBBLE_REMOTE = booleanPreferencesKey("lastfm_scrobble_remote")
     }
 }
