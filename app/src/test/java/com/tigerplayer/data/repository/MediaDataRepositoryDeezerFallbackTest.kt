@@ -15,8 +15,13 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import retrofit2.Response
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class MediaDataRepositoryDeezerFallbackTest {
 
     private val tigerDao = mockk<TigerDao>(relaxed = true)
