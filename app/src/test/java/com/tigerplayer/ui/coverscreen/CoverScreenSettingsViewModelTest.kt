@@ -207,6 +207,35 @@ class CoverScreenSettingsViewModelTest {
     }
 
     @Test
+    fun backupImportSurfacesUnresolvedTracksAndFormatsMessage() = runTest {
+        val importUri = mockk<Uri>()
+        coEvery { backupManager.importFrom(importUri, RestoreStrategy.MERGE) } returns Result.success(
+            BackupSummary(
+                playlistCount = 3,
+                trackRefCount = 20,
+                historyCount = 40,
+                unresolvedTrackCount = 12,
+                unresolvedByPlaylist = mapOf("Favorites" to 7, "Gym" to 5)
+            )
+        )
+
+        viewModel.importBackup(importUri, RestoreStrategy.MERGE)
+        advanceUntilIdle()
+
+        val event = viewModel.backupEvent.value as BackupUiEvent.ImportSucceeded
+        assertEquals(12, event.unresolvedTracks)
+        assertEquals(mapOf("Favorites" to 7, "Gym" to 5), event.unresolvedByPlaylist)
+        assertEquals(
+            "Restored 3 playlists, 40 history rows - 12 tracks could not be found and were skipped",
+            event.toDisplayMessage()
+        )
+        assertEquals(
+            "Restored: 3 playlists, 40 history rows",
+            BackupUiEvent.ImportSucceeded(playlists = 3, history = 40).toDisplayMessage()
+        )
+    }
+
+    @Test
     fun accountDisconnectOperationsClearSessionAndCredentials() = runTest {
         every { libraryEngine.getLocalAudioScanFlow(forceRefresh = true) } returns flowOf()
 

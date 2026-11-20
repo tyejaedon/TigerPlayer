@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **Backup Restore Unresolved Track Visibility**: cross-reference restored playlist and history `trackId`s against `CachedTrackEntity` in `BackupManager.importFrom(...)`, populate `unresolvedTrackCount` and `unresolvedByPlaylist` on `BackupSummary`, and surface skipped unresolved track counts in the Settings and Cover Screen restore confirmation messages via `BackupUiEvent.ImportSucceeded`. (closes #149)
+
 ## [2.1.9] - 2026-11-16
 
 ### Added

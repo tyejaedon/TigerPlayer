@@ -176,14 +176,7 @@ fun CoverScreenSettingsView(
 
     LaunchedEffect(backupEvent) {
         val event = backupEvent ?: return@LaunchedEffect
-        val message = when (event) {
-            is BackupUiEvent.ExportSucceeded ->
-                "Backup saved: ${event.playlists} playlists, ${event.history} history rows"
-            is BackupUiEvent.ImportSucceeded ->
-                "Restored: ${event.playlists} playlists, ${event.history} history rows"
-            is BackupUiEvent.Failed -> "Backup error: ${event.message}"
-        }
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        Toast.makeText(context, event.toDisplayMessage(), Toast.LENGTH_LONG).show()
         viewModel.consumeBackupEvent()
     }
 
