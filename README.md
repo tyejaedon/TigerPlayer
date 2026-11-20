@@ -1,6 +1,6 @@
 # TigerPlayer 🐅🐺
 
-[![Latest Release](https://img.shields.io/badge/Release-v2.1.8-3DDC84?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.1.8)
+[![Latest Release](https://img.shields.io/badge/Release-v2.1.9-3DDC84?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.1.9)
 [![Beta Preview](https://img.shields.io/badge/Beta%20Preview-v2.2.0--beta.19-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/tyejaedon/TigerPlayer/android-ci.yml?branch=master&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/tyejaedon/TigerPlayer/actions/workflows/android-ci.yml)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
@@ -13,16 +13,16 @@ Built with **Kotlin**, **Jetpack Compose**, **AndroidX Media3**, **Room**, **Hil
 
 ---
 
-## 🚀 Latest Stable Release: v2.1.8
+## 🚀 Latest Stable Release: v2.1.9
 
-TigerPlayer **v2.1.8** introduces an in-place Immersive Fluid Visualizer mode and spring gesture polish in the Main Player, anticipatory rolling lyrics with 3D cyclic carousel projection, application storage breakdown & cache purging, an algorithmic overhaul of Vinyl Warmth DSP, dynamic artwork palette binding for fluid simulation, side-scrollable PEQ tuning overlay, restored sweeping curved waveforms, and Cover Screen gesture isolation.
+TigerPlayer **v2.1.9** delivers comprehensive AutoEQ configuration management (disable/remove applied profile and reset headroom/bands across all entry points), complete feature parity between Cover Screen and Main App views (interactive PEQ curve dragging, 5/10-band switcher, preamp slider, per-band toggles, bands tuning overlay, device switcher, Spatial Nexus SpaceBuds preset, Sonic Prism chips/reset, and settings visualizer/storage sections), pixel-perfect sequential active lyrics viewport centering in padded viewports, and notification media controls with a quick-like action.
 
 | Edition | Description | Direct Download |
 |:---|:---|:---|
-| 🎵 **Full Release** | Complete feature suite: Local Library + Spotify App Remote + Online Lyrics | [Download Full Release APK (`v2.1.8`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.8/app-full-release.apk) |
-| 🛡️ **FOSS Release** | 100% Free & Open Source: zero proprietary binaries, zero tracking, F-Droid reproducible | [Download FOSS Release APK (`v2.1.8`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.8/app-foss-release.apk) |
+| 🎵 **Full Release** | Complete feature suite: Local Library + Spotify App Remote + Online Lyrics | [Download Full Release APK (`v2.1.9`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.9/app-full-release.apk) |
+| 🛡️ **FOSS Release** | 100% Free & Open Source: zero proprietary binaries, zero tracking, F-Droid reproducible | [Download FOSS Release APK (`v2.1.9`)](https://github.com/tyejaedon/TigerPlayer/releases/download/v2.1.9/app-foss-release.apk) |
 
-> 📖 **Release Notes & Changelog:** Read the complete end-user [v2.1.8 Release Notes](docs/Release-Notes-v2.1.8.md) and technical [CHANGELOG.md](CHANGELOG.md).
+> 📖 **Release Notes & Changelog:** Read the complete end-user [v2.1.9 Release Notes](docs/Release-Notes-v2.1.9.md) and technical [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -235,6 +235,8 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.github/instructions/AGENT-WORKFL
 
 ## 📝 Documentation & Changelog
 
+- [`docs/Release-Notes-v2.1.9.md`](docs/Release-Notes-v2.1.9.md) — Official end-user release notes for v2.1.9.
+- [`docs/Release-Notes-v2.1.8.5.md`](docs/Release-Notes-v2.1.8.5.md) — Official end-user release notes for v2.1.8.5.
 - [`docs/Release-Notes-v2.1.8.md`](docs/Release-Notes-v2.1.8.md) — Official end-user release notes for v2.1.8.
 - [`docs/Release-Notes-v2.1.7.md`](docs/Release-Notes-v2.1.7.md) — Official end-user release notes for v2.1.7.
 - [`docs/Release-Notes-v2.1.6.md`](docs/Release-Notes-v2.1.6.md) — Official end-user release notes for v2.1.6.

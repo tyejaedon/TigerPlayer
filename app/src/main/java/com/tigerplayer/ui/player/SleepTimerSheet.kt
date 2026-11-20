@@ -36,7 +36,7 @@ fun SleepTimerSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 8.dp, end = 8.dp, bottom = 12.dp)
-                .glassEffect(RoundedCornerShape(28.dp)),
+                .glassEffect(RoundedCornerShape(28.dp), isOpaque = true),
             color = MaterialTheme.elevatedSurface.copy(alpha = 0.72f),
             shape = RoundedCornerShape(28.dp)
         ) {

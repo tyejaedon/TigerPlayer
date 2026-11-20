@@ -184,14 +184,25 @@ class EqualizerHubViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(EqualizerBandMode.AUTOEQ_PARAMETRIC, state.bandMode)
+        assertEquals(EqualizerBandMode.TEN_BAND, state.bandMode)
         assertEquals(3, state.bands.size)
         assertEquals(-4.5f, state.preampDb, 0.01f)
         assertEquals("Sennheiser HD 650", state.autoEqModel)
+        assertFalse(state.isAutoEqModified)
 
         assertEquals(28f, state.bands[0].frequencyHz, 0.01f)
         assertEquals(6.2f, state.bands[0].gainDb, 0.01f)
         assertEquals(FilterType.PEAKING, state.bands[0].filterType)
+
+        // Test manual edit detection and restore
+        viewModel.updateBandGain(0, 10.0f)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isAutoEqModified)
+
+        viewModel.restoreAutoEqProfile()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isAutoEqModified)
+        assertEquals(6.2f, viewModel.uiState.value.bands[0].gainDb, 0.01f)
 
         assertEquals(105f, state.bands[1].frequencyHz, 0.01f)
         assertEquals(-2.0f, state.bands[1].gainDb, 0.01f)
@@ -257,5 +268,41 @@ class EqualizerHubViewModelTest {
         assertEquals(-0.6f, sub.spatialPos.x, 0.01f)
         assertEquals(-0.6f, sub.spatialPos.y, 0.01f)
         coVerify { settingsDataStore.setCoverScreenEqPreset(CoverScreenEqPreset.NIGHT_DRIVE) }
+    }
+
+    @Test
+    fun `removeAutoEqProfile clears applied AutoEQ profile and resets bands and preamp to flat`() = runTest(testDispatcher) {
+        val sampleAutoEqText = """
+            Preamp: -4.5 dB
+            Filter 1: ON PK Fc 28 Hz Gain 6.2 dB Q 1.41
+            Filter 2: ON LSC Fc 105 Hz Gain -2.0 dB Q 0.71
+            Filter 3: ON HSC Fc 10000 Hz Gain 1.8 dB Q 0.71
+        """.trimIndent()
+
+        viewModel.importRawAutoEq(sampleAutoEqText, "Sennheiser HD 650")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("Sennheiser HD 650", viewModel.uiState.value.autoEqModel)
+        assertEquals(-4.5f, viewModel.uiState.value.preampDb, 0.01f)
+
+        viewModel.removeAutoEqProfile()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(state.autoEqModel)
+        assertNull(state.autoEqSource)
+        assertNull(state.targetCurve)
+        assertFalse(state.isAutoEqModified)
+        assertTrue(state.originalAutoEqBands.isEmpty())
+        assertEquals(0f, state.preampDb, 0.01f)
+        assertEquals(EqualizerPresets.FLAT, state.activePresetName)
+        assertEquals(10, state.bands.size)
+        assertTrue(state.bands.all { it.gainDb == 0f })
+
+        // Switching band mode after removing AutoEQ should stay flat and not re-apply removed AutoEQ
+        viewModel.setBandMode(EqualizerBandMode.FIVE_BAND)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.autoEqModel)
+        assertEquals(5, viewModel.uiState.value.bands.size)
+        assertTrue(viewModel.uiState.value.bands.all { it.gainDb == 0f })
     }
 }

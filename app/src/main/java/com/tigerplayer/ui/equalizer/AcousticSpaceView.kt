@@ -19,6 +19,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.glassEffect
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 @Composable
 fun AcousticSpaceView(
     modifier: Modifier = Modifier,
@@ -33,7 +36,13 @@ fun AcousticSpaceView(
             .testTag("AcousticSpaceView"),
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -76,7 +85,7 @@ fun AcousticSpaceView(
             AcousticSpacePanel(
                 currentMode = uiState.environmentMode,
                 onSelectMode = viewModel::setAcousticEnvironment,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

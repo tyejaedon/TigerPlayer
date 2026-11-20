@@ -398,4 +398,36 @@ class AdaptiveDspEngineTest {
         assertEquals("Output after flush and reset on zero input should be clean", 0, outL)
         assertEquals("Output after flush and reset on zero input should be clean", 0, outR)
     }
+
+    @Test
+    fun spectralAnalysis_whenDisabled_bypassesFftAndEmitsNoFrames() {
+        val engine = AdaptiveDspEngine(mockContext())
+        val sampleRate = 48_000
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+
+        // Disable spectral analysis (e.g. screen off or visualizer inactive)
+        engine.setSpectralAnalysisActive(false)
+        assertFalse(engine.isSpectralAnalysisActive())
+
+        val tone = buildStereoSineBuffer(sampleRate, frequencyHz = 60f, frames = 12_288, amplitude = 0.72f)
+        engine.queueInput(tone)
+        engine.getOutput()
+
+        val frame = engine.audioReactiveFrame.value
+        assertEquals("Energy should remain zero when spectral analysis is bypassed", 0f, frame.energy, 0.001f)
+        assertEquals("Bass should remain zero when spectral analysis is bypassed", 0f, frame.bass, 0.001f)
+        assertTrue("Spectral bands should be empty or zero", frame.spectralBands.isEmpty() || frame.spectralBands.all { it == 0f })
+
+        // Re-enable spectral analysis
+        engine.setSpectralAnalysisActive(true)
+        assertTrue(engine.isSpectralAnalysisActive())
+
+        val tone2 = buildStereoSineBuffer(sampleRate, frequencyHz = 60f, frames = 12_288, amplitude = 0.72f)
+        engine.queueInput(tone2)
+        engine.getOutput()
+
+        val activeFrame = engine.audioReactiveFrame.value
+        assertTrue("Energy should be computed when spectral analysis is re-enabled", activeFrame.energy > 0f)
+        assertTrue("Bass should be computed when spectral analysis is re-enabled", activeFrame.bass > 0f)
+    }
 }

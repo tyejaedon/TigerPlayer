@@ -3,7 +3,7 @@ package com.tigerplayer.data.repository
 import com.tigerplayer.data.local.dao.TigerDao
 import com.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.tigerplayer.data.model.AudioTrack
-import com.tigerplayer.data.model.LrcLine
+import com.tigerplayer.data.model.LyricLine
 import com.tigerplayer.data.model.Lyrics
 import com.tigerplayer.data.remote.api.KugouApi
 import com.tigerplayer.data.remote.api.KugouCandidate
@@ -11,6 +11,8 @@ import com.tigerplayer.data.remote.api.KugouDownloadResponse
 import com.tigerplayer.data.remote.api.KugouSearchResponse
 import com.tigerplayer.data.remote.api.LrclibApi
 import com.tigerplayer.data.remote.api.LrclibResponse
+import com.tigerplayer.data.remote.provider.*
+
 import com.tigerplayer.data.source.LocalLyricsSource
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -32,14 +34,13 @@ import retrofit2.Response
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-@OptIn(ExperimentalCoroutinesApi::class)
 class LyricsRepositoryTest {
 
     private val lrclibApi = mockk<LrclibApi>()
     private val kugouApi = mockk<KugouApi>(relaxed = true)
     private val tigerDao = mockk<TigerDao>(relaxed = true)
     private val localLyricsSource = mockk<LocalLyricsSource>()
-    private val repository = LyricsRepository(lrclibApi, kugouApi, tigerDao, localLyricsSource)
+    private val repository = LyricsRepository(tigerDao, LocalLyricsProvider(localLyricsSource), LrclibProvider(lrclibApi), NeteaseProvider(mockk(relaxed=true)), KugouProvider(kugouApi))
 
     @Before
     fun setUp() {
@@ -132,7 +133,7 @@ class LyricsRepositoryTest {
 
         val lyrics = repository.getLyrics(track).first()
 
-        assertEquals(Lyrics.Synced(lines = listOf(LrcLine(1000L, "Is this the real life?")), offsetMs = 0L), lyrics)
+        assertEquals(Lyrics.Synced(lines = listOf(LyricLine(timeMs = 1000L, text = "Is this the real life?", durationMs = 5000L)), offsetMs = 0L), lyrics)
         coVerify {
             lrclibApi.getLyrics(
                 trackName = "Bohemian Rhapsody - Remastered 2011",
@@ -239,7 +240,7 @@ class LyricsRepositoryTest {
             path = "/storage/music/Sidecar Song.mp3"
         )
         val sidecarLyrics = Lyrics.Synced(
-            lines = listOf(LrcLine(1000L, "Local sidecar line")),
+            lines = listOf(LyricLine(timeMs = 1000L, text = "Local sidecar line", durationMs = 5000L)),
             offsetMs = 0L
         )
         every { localLyricsSource.getSidecarLyrics(track) } returns sidecarLyrics

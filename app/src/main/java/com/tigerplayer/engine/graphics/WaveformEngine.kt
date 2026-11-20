@@ -102,12 +102,21 @@ class WaveformEngine @Inject constructor(
             val mime = format.getString(MediaFormat.KEY_MIME) ?: return emptyList()
             val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 1)
 
+            val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
+            val codecName = codecList.codecInfos
+                .filter { !it.isEncoder }
+                .filter { !it.isHardwareAccelerated }
+                .firstOrNull { it.supportedTypes.contains(mime) }
+                ?.name
+
             codec = try {
-                MediaCodec.createDecoderByType(mime)
+                if (codecName != null) {
+                    MediaCodec.createByCodecName(codecName)
+                } else {
+                    MediaCodec.createDecoderByType(mime)
+                }
             } catch (e: Exception) {
-                val swMime = if (mime.contains("mp3")) "audio/mpeg" else mime
-                try { MediaCodec.createByCodecName("c2.android.${swMime.substringAfter("/")}.decoder") }
-                catch (e2: Exception) { MediaCodec.createDecoderByType(mime) }
+                MediaCodec.createDecoderByType(mime)
             }
 
             codec.configure(format, null, null, 0)
@@ -222,5 +231,112 @@ class WaveformEngine @Inject constructor(
             smoothed.add(((prev + raw[i] + next) / 3f).coerceIn(0.15f, 1f))
         }
         return smoothed
+    }
+
+    companion object {
+        fun calculateWaveformPoints(amplitudes: List<Float>?, pointCount: Int = 32): FloatArray =
+            WaveformComputation.calculateWaveformPoints(amplitudes, pointCount)
+
+        fun calculateWaveformYWithEffectiveHeight(
+            x: Float,
+            width: Float,
+            effectiveHeight: Float,
+            effectiveBaselineY: Float,
+            safePhase: Float,
+            phaseOffset: Float = 0f,
+            isCosine: Boolean = false,
+            frequencyMultiplier: Float = 1f,
+            waveCycles: Float = 2.0f,
+            turbulence: Float = 0f,
+            edgeTaper: Float = 0.12f,
+            points: FloatArray? = null
+        ): Float = WaveformComputation.calculateWaveformYWithEffectiveHeight(
+            x = x,
+            width = width,
+            effectiveHeight = effectiveHeight,
+            effectiveBaselineY = effectiveBaselineY,
+            safePhase = safePhase,
+            phaseOffset = phaseOffset,
+            isCosine = isCosine,
+            frequencyMultiplier = frequencyMultiplier,
+            waveCycles = waveCycles,
+            turbulence = turbulence,
+            edgeTaper = edgeTaper,
+            points = points
+        )
+
+        fun calculateWaveformY(
+            x: Float,
+            width: Float,
+            maxHeight: Float,
+            baselineY: Float,
+            overlapPx: Float,
+            phase: Float,
+            phaseOffset: Float = 0f,
+            isCosine: Boolean = false,
+            frequencyMultiplier: Float = 1f,
+            waveCycles: Float = 2.0f,
+            bass: Float = 0f,
+            energy: Float = 1f,
+            flux: Float = 0f,
+            turbulence: Float = 0f,
+            edgeTaper: Float = 0.12f,
+            points: FloatArray? = null
+        ): Float = WaveformComputation.calculateWaveformY(
+            x = x,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = phase,
+            phaseOffset = phaseOffset,
+            isCosine = isCosine,
+            frequencyMultiplier = frequencyMultiplier,
+            waveCycles = waveCycles,
+            bass = bass,
+            energy = energy,
+            flux = flux,
+            turbulence = turbulence,
+            edgeTaper = edgeTaper,
+            points = points
+        )
+
+        fun populatePositiveWaveformPath(
+            path: androidx.compose.ui.graphics.Path,
+            fillPath: androidx.compose.ui.graphics.Path? = null,
+            points: FloatArray,
+            width: Float,
+            maxHeight: Float,
+            baselineY: Float,
+            overlapPx: Float,
+            phase: Float,
+            phaseOffset: Float = 0f,
+            isCosine: Boolean = false,
+            frequencyMultiplier: Float = 1f,
+            waveCycles: Float = 2.0f,
+            bass: Float = 0f,
+            energy: Float = 1f,
+            flux: Float = 0f,
+            turbulence: Float = 0f,
+            edgeTaper: Float = 0f
+        ): androidx.compose.ui.graphics.Path = WaveformComputation.populatePositiveWaveformPath(
+            path = path,
+            fillPath = fillPath,
+            points = points,
+            width = width,
+            maxHeight = maxHeight,
+            baselineY = baselineY,
+            overlapPx = overlapPx,
+            phase = phase,
+            phaseOffset = phaseOffset,
+            isCosine = isCosine,
+            frequencyMultiplier = frequencyMultiplier,
+            waveCycles = waveCycles,
+            bass = bass,
+            energy = energy,
+            flux = flux,
+            turbulence = turbulence,
+            edgeTaper = edgeTaper
+        )
     }
 }

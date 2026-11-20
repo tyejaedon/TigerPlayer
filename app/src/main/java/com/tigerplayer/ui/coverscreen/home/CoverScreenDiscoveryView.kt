@@ -28,11 +28,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Timer
+import com.tigerplayer.ui.home.SaveCuratedPlaylistDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -412,6 +414,7 @@ fun CoverScreenDaylistDetailView(
     onPlayTrack: (AudioTrack) -> Unit,
     onPlayFeed: () -> Unit = {},
     onShuffleFeed: () -> Unit = {},
+    onSavePlaylist: ((String) -> Unit)? = null,
     onRefresh: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -424,6 +427,27 @@ fun CoverScreenDaylistDetailView(
             .maxByOrNull { it.value }
             ?.key
             ?: "Unknown"
+    }
+
+    var showSaveDialog by remember { mutableStateOf(false) }
+    val formattedDate = remember {
+        java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date())
+    }
+    val defaultPlaylistName = remember(dayPhase.label, formattedDate) {
+        "Daylist - ${dayPhase.label} ($formattedDate)"
+    }
+
+    if (showSaveDialog && onSavePlaylist != null) {
+        SaveCuratedPlaylistDialog(
+            initialName = defaultPlaylistName,
+            trackCount = tracks.size,
+            accentColor = dayPhase.accent,
+            onDismiss = { showSaveDialog = false },
+            onConfirm = { name ->
+                showSaveDialog = false
+                onSavePlaylist(name)
+            }
+        )
     }
 
     Box(
@@ -561,18 +585,19 @@ fun CoverScreenDaylistDetailView(
                     }
                 }
 
-                // Quick Play / Shuffle Buttons
+                // Quick Play / Shuffle / Save Buttons
                 if (tracks.isNotEmpty()) {
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
                                 onClick = onPlayFeed,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(36.dp),
+                                    .height(42.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = dayPhase.accent,
@@ -583,7 +608,7 @@ fun CoverScreenDaylistDetailView(
                                 Icon(
                                     imageVector = Icons.Rounded.PlayArrow,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Play Arc", fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium)
@@ -593,7 +618,7 @@ fun CoverScreenDaylistDetailView(
                                 onClick = onShuffleFeed,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(36.dp),
+                                    .height(42.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.dp, dayPhase.accent.copy(alpha = 0.7f)),
                                 contentPadding = PaddingValues(horizontal = 8.dp)
@@ -602,10 +627,27 @@ fun CoverScreenDaylistDetailView(
                                     imageVector = Icons.Rounded.Shuffle,
                                     contentDescription = null,
                                     tint = dayPhase.accent,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Shuffle Tide", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                            }
+
+                            if (onSavePlaylist != null) {
+                                OutlinedButton(
+                                    onClick = { showSaveDialog = true },
+                                    modifier = Modifier.size(42.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, dayPhase.accent.copy(alpha = 0.7f)),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                        contentDescription = "Save Playlist",
+                                        tint = dayPhase.accent,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -763,11 +805,33 @@ fun CoverScreenDiscoverWeeklyDetailView(
     onPlayTrack: (AudioTrack) -> Unit,
     onPlayFeed: () -> Unit = {},
     onShuffleFeed: () -> Unit = {},
+    onSavePlaylist: ((String) -> Unit)? = null,
     onRefresh: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spotlight = remember(tracks) { tracks.take(3) }
+    var showSaveDialog by remember { mutableStateOf(false) }
+    val formattedDate = remember {
+        java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date())
+    }
+    val defaultPlaylistName = remember(formattedDate) {
+        "Discover Weekly ($formattedDate)"
+    }
+    val accentGreen = Color(0xFF67F7B1)
+
+    if (showSaveDialog && onSavePlaylist != null) {
+        SaveCuratedPlaylistDialog(
+            initialName = defaultPlaylistName,
+            trackCount = tracks.size,
+            accentColor = accentGreen,
+            onDismiss = { showSaveDialog = false },
+            onConfirm = { name ->
+                showSaveDialog = false
+                onSavePlaylist(name)
+            }
+        )
+    }
 
     Box(
         modifier = modifier
@@ -860,18 +924,19 @@ fun CoverScreenDiscoverWeeklyDetailView(
                     }
                 }
 
-                // Quick Play / Shuffle Buttons
+                // Quick Play / Shuffle / Save Buttons
                 if (tracks.isNotEmpty()) {
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
                                 onClick = onPlayFeed,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(36.dp),
+                                    .height(42.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF67F7B1),
@@ -882,7 +947,7 @@ fun CoverScreenDiscoverWeeklyDetailView(
                                 Icon(
                                     imageVector = Icons.Rounded.PlayArrow,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Play Feed", fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium)
@@ -892,7 +957,7 @@ fun CoverScreenDiscoverWeeklyDetailView(
                                 onClick = onShuffleFeed,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(36.dp),
+                                    .height(42.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.dp, Color(0xFF67F7B1).copy(alpha = 0.75f)),
                                 contentPadding = PaddingValues(horizontal = 8.dp)
@@ -901,10 +966,27 @@ fun CoverScreenDiscoverWeeklyDetailView(
                                     imageVector = Icons.Rounded.Shuffle,
                                     contentDescription = null,
                                     tint = Color(0xFF67F7B1),
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Random", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                            }
+
+                            if (onSavePlaylist != null) {
+                                OutlinedButton(
+                                    onClick = { showSaveDialog = true },
+                                    modifier = Modifier.size(42.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF67F7B1).copy(alpha = 0.75f)),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                        contentDescription = "Save Playlist",
+                                        tint = Color(0xFF67F7B1),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }

@@ -62,21 +62,55 @@ fun Modifier.bounceClick(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modif
 // ------------------------------
 // SAMSUNG GLASS (REALISTIC LAYERING)
 // ------------------------------
-fun Modifier.glassEffect(shape: Shape) = this.composed {
+fun Modifier.glassEffect(
+    shape: Shape,
+    isOpaque: Boolean = false,
+    opaqueAlpha: Float? = null
+) = this.composed {
     val isSystemDark = isSystemInDarkTheme()
     val tint = if (isSystemDark) Color.White else Color.Black
 
-    this
-        .clip(shape)
-        .background(
-            Brush.verticalGradient(
-                listOf(
-                    tint.copy(alpha = if (isSystemDark) 0.08f else 0.04f),
-                    tint.copy(alpha = if (isSystemDark) 0.02f else 0.01f)
+    if (isOpaque) {
+        val glassBg = if (isSystemDark) Color(0xFF13141C) else Color(0xFFEBF0F5)
+        val topAlpha = opaqueAlpha ?: if (isSystemDark) 0.94f else 0.90f
+        val bottomAlpha = opaqueAlpha?.times(0.93f) ?: if (isSystemDark) 0.88f else 0.84f
+
+        this
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        glassBg.copy(alpha = topAlpha),
+                        glassBg.copy(alpha = bottomAlpha)
+                    )
                 )
             )
-        )
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        tint.copy(alpha = if (isSystemDark) 0.06f else 0.03f),
+                        Color.Transparent
+                    )
+                )
+            )
+    } else {
+        this
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        tint.copy(alpha = if (isSystemDark) 0.08f else 0.04f),
+                        tint.copy(alpha = if (isSystemDark) 0.02f else 0.01f)
+                    )
+                )
+            )
+    }
 }
+
+fun Modifier.opaqueGlassEffect(
+    shape: Shape,
+    opaqueAlpha: Float? = null
+) = this.glassEffect(shape = shape, isOpaque = true, opaqueAlpha = opaqueAlpha)
 // ------------------------------
 // SAMSUNG "DEPTH GLOW"
 // ------------------------------

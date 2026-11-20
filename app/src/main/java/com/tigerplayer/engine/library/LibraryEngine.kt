@@ -18,10 +18,12 @@ import com.tigerplayer.data.repository.M3uRepository
 import com.tigerplayer.data.repository.MediaDataRepository
 import com.tigerplayer.data.repository.MusicFolderRepository
 import com.tigerplayer.data.repository.StorageRepository
+import com.tigerplayer.engine.library.MediaBrowseTree
 import com.tigerplayer.ui.home.HomeUiState
 import com.tigerplayer.ui.home.UserStatistics
 import com.tigerplayer.ui.player.LibraryArtist
 import com.tigerplayer.utils.ArtistUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -41,7 +43,8 @@ class LibraryEngine @Inject constructor(
     private val mediaDataRepository: MediaDataRepository,
     private val musicFolderRepository: MusicFolderRepository,
     private val m3uRepository: M3uRepository,
-    private val storageRepository: StorageRepository
+    private val storageRepository: StorageRepository,
+    val mediaBrowseTree: MediaBrowseTree
 ) {
 
     /** Supported sorting criteria for tracks and albums in the library. */
@@ -106,7 +109,7 @@ class LibraryEngine @Inject constructor(
     ): Flow<LibraryAggregation> {
         return combine(unifiedTracksFlow, _searchQuery, trackSortOrder, albumSortOrder) { tracks, query, tSort, aSort ->
             aggregateLibrary(tracks, query, tSort, aSort)
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     /**
@@ -224,8 +227,9 @@ class LibraryEngine @Inject constructor(
                     .values.toList().shuffled(random).take(5).flatten()
             } else emptyList()
 
+            val tracksById = allTracks.associateBy { it.id }
             val recentlyPlayed = recentEntities.mapNotNull { entity ->
-                allTracks.find { it.id == entity.trackId }
+                tracksById[entity.trackId]
             }
 
             HomeUiState(
@@ -241,7 +245,7 @@ class LibraryEngine @Inject constructor(
                 recommendedTracks = recommended,
                 isLoading = false
             )
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     /** Returns a flow of custom user playlists. */

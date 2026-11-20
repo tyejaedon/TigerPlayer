@@ -317,45 +317,9 @@ fun CoverScreenMiniHub(
                 }
             )
     ) {
-        val backgroundArtModel = remember(track?.artworkUri, uiState.artistImageUrl) {
-            uiState.artistImageUrl?.takeIf { it.isNotBlank() } ?: track?.artworkUri
-        }
-        val context = LocalContext.current
-        val coverImageRequest = remember(backgroundArtModel) {
-            backgroundArtModel?.let {
-                ImageRequest.Builder(context)
-                    .data(it)
-                    .crossfade(true)
-                    .allowHardware(false)
-                    .listener(onSuccess = { _, result ->
-                        val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                        bitmap?.let { b ->
-                            androidx.palette.graphics.Palette.from(b).generate { palette ->
-                                val cVibrant = palette?.vibrantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
-                                val cDominant = palette?.dominantSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
-                                val cMuted = palette?.mutedSwatch?.let { floatArrayOf(Color(it.rgb).red, Color(it.rgb).green, Color(it.rgb).blue) }
-                                val paletteColors = listOfNotNull(cVibrant, cDominant, cMuted).ifEmpty { null }
-                                playerViewModel.fluidRenderer.updatePaletteColors(paletteColors)
-                            }
-                        }
-                    })
-                    .build()
-            }
-        }
 
         // BACKGROUND: Fluid Vortex (primary) with Artist/Artwork photo as fallback
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (coverImageRequest != null) {
-                AsyncImage(
-                    model = coverImageRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blur(16.dp)
-                )
-            }
-
+        Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray)) {
             AndroidView(
                 factory = { ctx ->
                     FluidVortexView(ctx).apply {
@@ -367,7 +331,7 @@ fun CoverScreenMiniHub(
                 },
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(vortexBlurRadius)
+
             )
 
             // SOFT SCRIM OVERLAY (animates to clear in immersive mode)
@@ -440,7 +404,7 @@ fun CoverScreenMiniHub(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        TrackInfoText(
+                        CoverScreenTrackDashboard(
                             track = track,
                             subtitle = stringResource(R.string.coverscreen_status_flex_mode_active),
                             lyrics = uiState.currentLyrics,
@@ -535,7 +499,7 @@ fun CoverScreenMiniHub(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Top
                 ) {
-                    TrackInfoText(
+                    CoverScreenTrackDashboard(
                         track = track,
                         subtitle = if (uiState.isPlaying) stringResource(R.string.coverscreen_status_now_playing) else stringResource(R.string.coverscreen_status_paused),
                         lyrics = uiState.currentLyrics,
@@ -703,8 +667,7 @@ fun CoverScreenMiniHub(
     }
 }
 
-internal fun calculateVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp =
-    if (isVortexImmersive) 0.dp else 6.dp
+internal fun calculateVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp = 0.dp
 
 internal fun calculateVortexScrimAlpha(isVortexImmersive: Boolean): Float =
     if (isVortexImmersive) 0f else 0.55f

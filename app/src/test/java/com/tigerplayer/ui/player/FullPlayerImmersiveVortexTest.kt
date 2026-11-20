@@ -12,9 +12,9 @@ import org.junit.Test
 class FullPlayerImmersiveVortexTest {
 
     @Test
-    fun `vortex blur radius dissipates to 0dp in immersive mode and restores to 8dp in standard mode`() {
+    fun `vortex blur radius maintains crisp 0dp across immersive and standard modes for sharp fluid boundaries`() {
         assertEquals(0.dp, calculateFullPlayerVortexBlurRadius(isVortexImmersive = true))
-        assertEquals(8.dp, calculateFullPlayerVortexBlurRadius(isVortexImmersive = false))
+        assertEquals(0.dp, calculateFullPlayerVortexBlurRadius(isVortexImmersive = false))
     }
 
     @Test

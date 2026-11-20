@@ -49,8 +49,7 @@ data class ParametricBand(
  */
 enum class EqualizerBandMode(val title: String) {
     FIVE_BAND("5-Band"),
-    TEN_BAND("10-Band ISO"),
-    AUTOEQ_PARAMETRIC("AutoEq PEQ")
+    TEN_BAND("10-Band ISO")
 }
 
 /**
@@ -165,6 +164,7 @@ object EqualizerPresets {
     val HIP_HOP = "Hip-Hop"
     val R_AND_B = "R&B"
     val NIGHT_DRIVE = "Night Drive"
+    val TRANSPARENCY = "Transparency (SpaceBuds Z)"
 
     val ALL_PRESETS = listOf(
         FLAT,
@@ -181,7 +181,8 @@ object EqualizerPresets {
         R_AND_B,
         BASS_REDUCER,
         TREBLE_REDUCER,
-        NIGHT_DRIVE
+        NIGHT_DRIVE,
+        TRANSPARENCY
     )
 
     /**
@@ -202,7 +203,8 @@ object EqualizerPresets {
         ACOUSTIC to listOf(3.5f, 2.5f, 1.5f, 1f, 1f, 1.5f, 2f, 2.5f, 3f, 3.5f),
         HIP_HOP to listOf(6f, 5f, 3f, 1f, -1f, 1f, 1.5f, 2.5f, 3.5f, 4f),
         R_AND_B to listOf(4.5f, 3.5f, 2f, 0.5f, -0.5f, 1f, 1.5f, 2f, 3f, 3.5f),
-        NIGHT_DRIVE to listOf(5f, 4f, 2f, 0.5f, -1f, 0f, 1.5f, 2.5f, 3.5f, 4.5f)
+        NIGHT_DRIVE to listOf(5f, 4f, 2f, 0.5f, -1f, 0f, 1.5f, 2.5f, 3.5f, 4.5f),
+        TRANSPARENCY to listOf(-2.5f, -2.5f, -2.0f, -2.0f, 0f, 0.5f, 1.5f, 1.5f, -1.5f, -2.0f)
     )
 
     /**
@@ -223,7 +225,8 @@ object EqualizerPresets {
         ACOUSTIC to listOf(3f, 1.5f, 1f, 2f, 3f),
         HIP_HOP to listOf(5.5f, 2.5f, -0.5f, 2f, 3.5f),
         R_AND_B to listOf(4f, 1.5f, 0f, 2f, 3.5f),
-        NIGHT_DRIVE to listOf(4.5f, 1.5f, -0.5f, 2f, 4f)
+        NIGHT_DRIVE to listOf(4.5f, 1.5f, -0.5f, 2f, 4f),
+        TRANSPARENCY to listOf(-2.5f, -2.0f, 0.5f, 1.5f, -2.0f)
     )
 }
 
@@ -242,6 +245,9 @@ data class EqualizerHubUiState(
     val autoEqModel: String? = null,
     val autoEqSource: String? = null,
     val targetCurve: String? = null,
+    val isAutoEqModified: Boolean = false,
+    val originalAutoEqBands: List<ParametricBand> = emptyList(),
+    val originalPreampDb: Float = 0f,
     val connectedDeviceName: String = "Internal Speaker",
     val environmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.STUDIO,
     val studioTab: EqualizerStudioTab = EqualizerStudioTab.STUDIO_EQ,

@@ -73,10 +73,11 @@ fun SpatialNexusView(
             DspSignalChainPill(state = uiState)
             Spacer(modifier = Modifier.height(10.dp))
 
-            EngineSourceToggle(
-                title = "SPATIAL NEXUS",
-                isActive = uiState.activeEngineSource == EqualizerEngineSource.SPATIAL_NODES,
-                onToggle = { viewModel.setActiveEngineSource(EqualizerEngineSource.SPATIAL_NODES) }
+            TwoWayEngineSourceSwitcher(
+                activeSource = uiState.activeEngineSource,
+                onSelectSource = viewModel::setActiveEngineSource,
+                allowToggleOff = true,
+                onToggleOff = { viewModel.setActiveEngineSource(EqualizerEngineSource.PARAMETRIC_BANDS) }
             )
             Spacer(modifier = Modifier.height(10.dp))
             NexusSpatialCanvas(
@@ -97,7 +98,7 @@ fun SpatialNexusView(
                 modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp)
             )
             NexusMoodPresetSelector(
-                presets = listOf("Neural Adaptive", "Night Drive", "Pure Vocal", "Studio Flat"),
+                presets = com.tigerplayer.data.local.CoverScreenEqPreset.entries.map { it.displayName },
                 selected = uiState.spatialMood,
                 onSelectMood = viewModel::setSpatialMoodPreset
             )

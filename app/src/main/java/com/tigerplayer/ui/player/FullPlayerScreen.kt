@@ -276,6 +276,15 @@ fun FullPlayerScreen(
     }
 
     val isVisualizerActive = (effectiveVisualMode == PlayerVisualMode.VORTEX || isVortexImmersive) && !albumClarityMode
+    val isVisualizerRendering = isVisualizerActive && isRenderingActive
+
+    DisposableEffect(isVisualizerRendering) {
+        viewModel.setVisualizerActive(isVisualizerRendering)
+        onDispose {
+            viewModel.setVisualizerActive(false)
+        }
+    }
+
     val visualizerAlpha by animateFloatAsState(
         targetValue = if (isVisualizerActive && isRenderingActive) 1f else 0f,
         animationSpec = tween(durationMillis = 400),
@@ -308,6 +317,13 @@ fun FullPlayerScreen(
                     .fillMaxSize()
                     .graphicsLayer(alpha = visualizerAlpha)
             ) {
+                // High-contrast solid black backdrop beneath fluid visualizer
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                )
+
                 AndroidView(
                     factory = { ctx ->
                         FluidVortexView(ctx).apply {
@@ -717,7 +733,7 @@ private fun PlayerMainContent(
                             val observer = LifecycleEventObserver { _, event ->
                                 when (event) {
                                     Lifecycle.Event.ON_RESUME -> {
-                                        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+                                        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
                                     }
                                     Lifecycle.Event.ON_PAUSE -> {
                                         sensorManager.unregisterListener(listener)
@@ -915,8 +931,7 @@ internal fun PlaybackRateDialog(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(dialogShape)
-                .background(Color(0xFF121212).copy(alpha = 0.94f))
-                .glassEffect(dialogShape)
+                .glassEffect(dialogShape, isOpaque = true)
                 .border(1.dp, Color.White.copy(alpha = 0.14f), dialogShape)
                 .padding(20.dp)
         ) {
@@ -1305,8 +1320,7 @@ private fun HeaderButton(
     }
 }
 
-internal fun calculateFullPlayerVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp =
-    if (isVortexImmersive) 0.dp else 8.dp
+internal fun calculateFullPlayerVortexBlurRadius(isVortexImmersive: Boolean): androidx.compose.ui.unit.Dp = 0.dp
 
 internal fun calculateFullPlayerVortexScrimAlpha(isVortexImmersive: Boolean): Float =
     if (isVortexImmersive) 0f else 1f

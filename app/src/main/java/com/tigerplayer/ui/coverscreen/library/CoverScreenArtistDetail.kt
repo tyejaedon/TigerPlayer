@@ -181,14 +181,6 @@ internal fun CoverScreenArtistView(
             }
 
             item {
-                CoverScreenArtistInfoCard(
-                    artist = artist,
-                    albumCount = artistAlbums.size,
-                    trackCount = artistTracks.size
-                )
-            }
-
-            item {
                 CoverScreenArtistDiscography(
                     albums = artistAlbums,
                     onAlbumSelected = { album ->
@@ -381,77 +373,65 @@ private fun CoverScreenArtistHero(
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun CoverScreenArtistInfoCard(
-    artist: Artist,
-    albumCount: Int,
-    trackCount: Int
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .glassEffect(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-            .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-            .padding(14.dp)
-    ) {
-        Text(
-            text = "VANGUARD DOSSIER",
-            style = MaterialTheme.typography.labelMedium,
-            color = TigerTextHigh,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Spacer(modifier = Modifier.height(24.dp))
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.Start
         ) {
-            CoverArtistMetadataBadge(
-                text = "$albumCount ALBUMS",
-                textColor = MaterialTheme.aardBlue,
-                isHighlight = true
+            Text(
+                text = "VANGUARD DOSSIER",
+                style = MaterialTheme.typography.labelMedium,
+                color = TigerTextHigh,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
             )
-            if (trackCount > 0) {
-                CoverArtistMetadataBadge(
-                    text = "$trackCount TRACKS",
-                    textColor = TigerNeonOrange,
-                    isHighlight = false
-                )
-            }
-        }
-        if (artist.genres.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                artist.genres.take(3).forEach { genre ->
-                    CoverGenrePill(name = genre, accentColor = MaterialTheme.aardBlue)
+                CoverArtistMetadataBadge(
+                    text = "$albumCount ALBUMS",
+                    textColor = MaterialTheme.aardBlue,
+                    isHighlight = true
+                )
+                if (trackCount > 0) {
+                    CoverArtistMetadataBadge(
+                        text = "$trackCount TRACKS",
+                        textColor = TigerNeonOrange,
+                        isHighlight = false
+                    )
                 }
             }
-        }
-        if (!artist.bio.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "BIOGRAPHY",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.aardBlue,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = artist.bio,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 16.sp
-            )
+            if (artist.genres.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    artist.genres.take(3).forEach { genre ->
+                        CoverGenrePill(name = genre, accentColor = MaterialTheme.aardBlue)
+                    }
+                }
+            }
+            if (!artist.bio.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "BIOGRAPHY",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.aardBlue,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = artist.bio,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
         }
     }
 }

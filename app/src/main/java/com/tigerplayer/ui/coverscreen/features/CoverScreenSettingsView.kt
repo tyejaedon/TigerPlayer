@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.BluetoothAudio
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -52,6 +54,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material.icons.rounded.ScreenRotation
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Upload
@@ -142,9 +145,12 @@ fun CoverScreenSettingsView(
     val musicFolders by viewModel.musicFolders.collectAsStateWithLifecycle()
     val hapticsDebug by viewModel.hapticsDebugState.collectAsStateWithLifecycle()
     val backupEvent by viewModel.backupEvent.collectAsStateWithLifecycle()
+    val storageBreakdown by viewModel.storageBreakdown.collectAsStateWithLifecycle()
+    val storageEventMessage by viewModel.storageEventMessage.collectAsStateWithLifecycle()
 
     var pendingLogout by remember { mutableStateOf<String?>(null) }
     var restoreStrategy by remember { mutableStateOf(RestoreStrategy.MERGE) }
+    var showPurgeAllDialog by remember { mutableStateOf(false) }
 
     val addFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -179,6 +185,50 @@ fun CoverScreenSettingsView(
         }
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         viewModel.consumeBackupEvent()
+    }
+
+    LaunchedEffect(storageEventMessage) {
+        val message = storageEventMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.consumeStorageEventMessage()
+    }
+
+    if (showPurgeAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showPurgeAllDialog = false },
+            title = {
+                Text(
+                    text = "PURGE TEMPORARY ARCHIVES?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "This will free up approximately ${storageBreakdown.formattedPurgeableSize} by purging album artwork, downloaded lyrics, artist metadata, and waveform analysis peaks.\n\nYour playlists, play history, and sound presets will NOT be deleted.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        showPurgeAllDialog = false
+                        viewModel.clearAllTemporaryCaches()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TigerNeonRed)
+                ) {
+                    Text("PURGE ARCHIVES", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPurgeAllDialog = false }) {
+                    Text("CANCEL", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 
     if (spotifyAuthError != null) {
@@ -511,6 +561,125 @@ fun CoverScreenSettingsView(
                     }
                 }
 
+                // SECTION 2B: VISUALIZER & WAVEFORM (Parity with SettingScreen)
+                item(key = "section_visualizer") {
+                    CoverSettingsCard(title = "Visualizer & Waveform", icon = Icons.Rounded.GraphicEq, accent = accent) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(
+                                text = "PALETTE COLOR MODE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = accent,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                com.tigerplayer.data.local.VisualizerPaletteMode.entries.forEach { mode ->
+                                    val isSelected = settingsState.visualizerPaletteMode == mode
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            viewModel.setVisualizerPaletteMode(mode)
+                                        },
+                                        label = {
+                                            Text(
+                                                if (mode == com.tigerplayer.data.local.VisualizerPaletteMode.ALBUM_ART)
+                                                    "ALBUM ART"
+                                                else
+                                                    "DEFAULT NEON"
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = accent.copy(alpha = 0.22f),
+                                            selectedLabelColor = accent
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "FLUID SENSITIVITY",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.1fx", settingsState.visualizerSensitivity),
+                                    color = accent,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            Slider(
+                                value = settingsState.visualizerSensitivity,
+                                onValueChange = { viewModel.setVisualizerSensitivity(it) },
+                                valueRange = 0.5f..2.0f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = accent,
+                                    activeTrackColor = accent,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                                ),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "WAVEFORM SENSITIVITY",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.1fx", settingsState.waveformSensitivity),
+                                    color = accent,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            Slider(
+                                value = settingsState.waveformSensitivity,
+                                onValueChange = { viewModel.setWaveformSensitivity(it) },
+                                valueRange = 0.5f..2.0f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = accent,
+                                    activeTrackColor = accent,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                                ),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+
                 // SECTION 3: NEURAL DSP & AUDIO ENGINE
                 item(key = "section_audio") {
                     CoverSettingsCard(title = "Neural DSP & Playback", icon = Icons.Rounded.GraphicEq, accent = accent) {
@@ -641,7 +810,7 @@ fun CoverScreenSettingsView(
                         // System Decoder / DSP
                         CoverSettingsSwitchRow(
                             headline = "System Decoder / DSP",
-                            supporting = "Route audio through Android offload path",
+                            supporting = "Route audio through Android offload path (saves battery)",
                             icon = Icons.Rounded.BluetoothAudio,
                             checked = settingsState.routeToSystemDecoderDsp,
                             onCheckedChange = { viewModel.setRouteToSystemDecoderDsp(it) },
@@ -1140,6 +1309,103 @@ fun CoverScreenSettingsView(
                     }
                 }
 
+                // SECTION 6B: STORAGE & CACHE (Parity with SettingScreen)
+                item(key = "section_storage") {
+                    CoverSettingsCard(title = "Storage & Cache", icon = Icons.Rounded.Storage, accent = accent) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "TOTAL APPLICATION STORAGE",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = accent,
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = storageBreakdown.formattedTotalAppSize,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    Text(
+                                        text = "Temporary Cache: ${storageBreakdown.formattedTotalCacheSize}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.refreshStorageBreakdown() }) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Refresh,
+                                        contentDescription = "Refresh Storage",
+                                        tint = accent
+                                    )
+                                }
+                            }
+
+                            CoverStorageCategoryRow(
+                                title = "Artwork & Thumbnails",
+                                subtitle = "${storageBreakdown.artwork.formattedSize} • ${storageBreakdown.artwork.itemCount ?: 0} cached",
+                                color = TigerCyberCyan,
+                                onClear = if (storageBreakdown.artwork.sizeBytes > 0) {
+                                    { viewModel.clearArtworkCache() }
+                                } else null
+                            )
+                            CoverStorageCategoryRow(
+                                title = "Synchronized Lyrics",
+                                subtitle = "${storageBreakdown.lyrics.formattedSize} • ${storageBreakdown.lyrics.itemCount ?: 0} songs",
+                                color = TigerNeonOrange,
+                                onClear = if ((storageBreakdown.lyrics.itemCount ?: 0) > 0) {
+                                    { viewModel.clearLyricsCache() }
+                                } else null
+                            )
+                            CoverStorageCategoryRow(
+                                title = "Artist Biographies & Info",
+                                subtitle = "${storageBreakdown.artists.formattedSize} • ${storageBreakdown.artists.itemCount ?: 0} artists",
+                                color = TigerSpectralViolet,
+                                onClear = if ((storageBreakdown.artists.itemCount ?: 0) > 0) {
+                                    { viewModel.clearArtistCache() }
+                                } else null
+                            )
+                            CoverStorageCategoryRow(
+                                title = "Waveform Peak Analysis",
+                                subtitle = "${storageBreakdown.waveforms.formattedSize} • ${storageBreakdown.waveforms.itemCount ?: 0} tracks",
+                                color = TigerToxicLime,
+                                onClear = if ((storageBreakdown.waveforms.itemCount ?: 0) > 0) {
+                                    { viewModel.clearWaveformCache() }
+                                } else null
+                            )
+
+                            OutlinedButton(
+                                onClick = { showPurgeAllDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .minimumInteractiveComponentSize(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TigerNeonRed),
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = storageBreakdown.totalPurgeableBytes > 0
+                            ) {
+                                Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "PURGE CACHES (${storageBreakdown.formattedPurgeableSize})",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // SECTION 7: BACKUP & RESTORE
                 item(key = "section_backup") {
                     CoverSettingsCard(title = "Backup & Restore", icon = Icons.Rounded.SaveAlt, accent = accent) {
@@ -1471,6 +1737,55 @@ private fun CoverSettingsSwitchRow(
                 uncheckedTrackColor = Color.White.copy(alpha = 0.12f)
             )
         )
+    }
+}
+
+@Composable
+private fun CoverStorageCategoryRow(
+    title: String,
+    subtitle: String,
+    color: Color,
+    onClear: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (onClear != null) {
+            TextButton(onClick = onClear) {
+                Text(
+                    text = "CLEAR",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
     }
 }
 
