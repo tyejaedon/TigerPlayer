@@ -4,10 +4,10 @@ Source: user-provided GitHub issue board snapshot.
 
 ## Snapshot Summary
 
-- Total tracked issues: **35**
-- Done: **16** (45.7%)
-- In Progress: **3** (8.6%)
-- Todo: **16** (45.7%)
+- Total tracked issues: **36**
+- Done: **17** (47.2%)
+- In Progress: **3** (8.3%)
+- Todo: **16** (44.4%)
 
 ## Status Breakdown
 
@@ -28,6 +28,7 @@ Source: user-provided GitHub issue board snapshot.
 - #33 Add Compose UI test for FullPlayer play-pause state transitions
 - #38 Finalize proguard-rules for Media3/Coil/Retrofit-Gson/Room
 - #39 Finalize proguard-rules for Media3/Coil/Retrofit-Gson/Room (duplicate tracker)
+- #309 End-to-end Deezer Free API integration across Network, Engine, and UI for zero-auth discovery and preview playback
 
 ### In Progress (3)
 - #7 Map 6 FFT perceptual bands to multi-band chromatic fluid injection
@@ -61,6 +62,7 @@ Source: user-provided GitHub issue board snapshot.
 | Apex DSP + Crossfade | 3 | 0 | 4 | 7 |
 | Sonic Footprint + PiP | 3 | 0 | 3 | 6 |
 | QA + Release Hardening | 4 | 0 | 5 | 9 |
+| v2.2 Parity | 1 | 0 | 0 | 1 |
 
 ## Full Issue Table
 
@@ -101,4 +103,5 @@ Source: user-provided GitHub issue board snapshot.
 | 37 | Add Macrobenchmark for QueueScreen scroll/frame timing                  | https://github.com/tyejaedon/TigerPlayer/issues/37 | -         | Todo        | -          | -          | Not started                    | QA + Release Hardening |
 | 38 | Finalize proguard-rules for Media3/Coil/Retrofit-Gson/Room              | https://github.com/tyejaedon/TigerPlayer/issues/38 | -         | Done        | -          | -          | Completed per board snapshot   | QA + Release Hardening |
 | 39 | Finalize proguard-rules for Media3/Coil/Retrofit-Gson/Room              | https://github.com/tyejaedon/TigerPlayer/issues/39 | -         | Done        | -          | -          | Duplicate tracker title of #38 | QA + Release Hardening |
+| 309 | Feature: End-to-end Deezer Free API integration across Network, Engine, and UI for zero-auth discovery and preview playback | https://github.com/tyejaedon/TigerPlayer/issues/309 | tyejaedon | Done | - | - | Implemented in `DeezerApiService.kt`, `DeezerRateLimitInterceptor.kt`, `DeezerRepository.kt`, `MediaDataRepository.kt`, `PlaybackEngine.kt`, `DeezerDiscoveryViewModel.kt`, `DeezerDiscoverySection.kt`, `CloudScreen.kt`, and `CoverScreenDiscoverView.kt`; validated via `:app:lintFullDebug`, `:app:testFullDebugUnitTest`, and `:app:assembleFullDebug`. | v2.2 Parity |
 

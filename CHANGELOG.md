@@ -11,6 +11,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 
 ## [Unreleased]
 
+### Added
+- **End-to-End Deezer Free API Integration**: added `DeezerApiService`, `DeezerModels`, `DeezerRateLimitInterceptor` (50 req / 5s sliding-window + HTTP 429 exponential backoff), `@DeezerRetrofit` DI bindings in `NetworkModule`, and `DeezerRepository` with TTL caching and `AudioTrack` mapping; wired zero-auth 1000x1000 artwork, artist imagery, and Infinite Play fallbacks into `MediaDataRepository`; added `PlaybackEngine.playPreview` for 30s Media3 preview streaming through the standard DSP/visualizer pipeline; added `DeezerDiscoveryViewModel`, `DeezerDiscoverySection` (trending charts, 300ms debounced tabbed search, and 30s preview bar) in `CloudScreen`, plus `CoverScreenDiscoverView` in `CoverScreenLibraryMenu` for cover screen parity; added unit tests in `DeezerModelsTest`, `DeezerRateLimitInterceptorTest`, `DeezerRepositoryTest`, and `MediaDataRepositoryDeezerFallbackTest`. (closes #309)
+
 ## [2.1.9] - 2026-11-16
 
 ### Added
