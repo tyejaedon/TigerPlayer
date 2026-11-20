@@ -524,8 +524,18 @@ foreach ($entry in $rawBranches) {
         Write-ActionItem -Status "DELETE" -Message "$branchName ($reason)" -Color Green
     }
     elseif ($PSCmdlet.ShouldProcess($branchName, "Delete local branch ($reason)")) {
+        $prevPref = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         $delOut = git branch $deleteFlag $branchName 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $delExit = $LASTEXITCODE
+        if ($delExit -ne 0 -and $deleteFlag -eq "-d") {
+            # Already verified merged into $BaseBranch via merge-base; retry with -D if upstream/HEAD differs
+            $delOut = git branch -D $branchName 2>&1
+            $delExit = $LASTEXITCODE
+        }
+        $ErrorActionPreference = $prevPref
+
+        if ($delExit -eq 0) {
             $stats.BranchesDeleted++
             Write-ActionItem -Status "DELETED" -Message "$branchName ($reason)" -Color Green
         }
@@ -581,8 +591,12 @@ if ($IncludeRemote.IsPresent -and $remoteExists) {
             Write-ActionItem -Status "DELETE-REMOTE" -Message "$fullRemoteRef ($reason)" -Color Green
         }
         elseif ($PSCmdlet.ShouldProcess($fullRemoteRef, "Delete remote branch ($reason)")) {
+            $prevPref = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
             $pushOut = git push $Remote --delete $remoteBranchName 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $pushExit = $LASTEXITCODE
+            $ErrorActionPreference = $prevPref
+            if ($pushExit -eq 0) {
                 $stats.RemoteDeleted++
                 Write-ActionItem -Status "DELETED-REMOTE" -Message "$fullRemoteRef ($reason)" -Color Green
             }
