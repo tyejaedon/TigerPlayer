@@ -243,11 +243,20 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("LastFmRetrofit") // Use Named so Hilt doesn't confuse it with Spotify's Retrofit
-    fun provideLastFmRetrofit(): Retrofit {
+    fun provideLastFmRetrofit(baseClient: OkHttpClient): Retrofit {
+        val lastFmClient = baseClient.newBuilder()
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", "TigerPlayer/${com.tigerplayer.BuildConfig.VERSION_NAME} (Android)")
+                    .build()
+                chain.proceed(request)
+            }
+            .build()
+
         return Retrofit.Builder()
             .baseUrl("https://ws.audioscrobbler.com/")
+            .client(lastFmClient)
             .addConverterFactory(GsonConverterFactory.create())
-            // Consider adding an OkHttpClient with a custom User-Agent interceptor later!
             .build()
     }
 

@@ -79,5 +79,47 @@ data class LastFmBio(
     @SerializedName("content") val content: String?
 )
 
+data class LastFmSessionResponse(
+    @SerializedName("session") val session: LastFmSession?
+)
+
+data class LastFmSession(
+    @SerializedName("name") val name: String?,
+    @SerializedName("key") val key: String?,
+    @SerializedName("subscriber") val subscriber: Int?
+)
+
+data class LastFmNowPlayingResponse(
+    @SerializedName("nowplaying") val nowPlaying: LastFmNowPlayingTrack?
+)
+
+data class LastFmNowPlayingTrack(
+    @SerializedName("track") val track: LastFmTextField?,
+    @SerializedName("artist") val artist: LastFmTextField?
+)
+
+data class LastFmTextField(
+    @SerializedName("#text") val text: String?
+)
+
+data class LastFmScrobbleResponse(
+    @SerializedName("scrobbles") val scrobbles: LastFmScrobblesContainer?
+)
+
+data class LastFmScrobblesContainer(
+    @SerializedName("@attr") val attr: LastFmScrobbleAttr?
+)
+
+data class LastFmScrobbleAttr(
+    @SerializedName("accepted") val accepted: Int?,
+    @SerializedName("ignored") val ignored: Int?
+)
+
+data class LastFmErrorResponse(
+    @SerializedName("error") val error: Int?,
+    @SerializedName("message") val message: String?
+)
+
+
 
 
