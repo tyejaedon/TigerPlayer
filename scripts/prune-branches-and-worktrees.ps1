@@ -180,27 +180,31 @@ function Get-GitWorktrees {
     return $worktrees
 }
 
-function Get-MergedPrBranches {
-    $mergedSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+function Get-PrBranchesByState {
+    param(
+        [ValidateSet("merged", "open")]
+        [string]$State
+    )
+    $branchSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
     if ($null -eq $ghCmd) {
-        return $mergedSet
+        return $branchSet
     }
     try {
-        $json = gh pr list --state merged --limit 200 --json headRefName 2>$null
+        $json = gh pr list --state $State --limit 200 --json headRefName 2>$null
         if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($json)) {
             $prs = $json | ConvertFrom-Json
             foreach ($pr in $prs) {
                 if (-not [string]::IsNullOrWhiteSpace($pr.headRefName)) {
-                    [void]$mergedSet.Add($pr.headRefName)
+                    [void]$branchSet.Add($pr.headRefName)
                 }
             }
         }
     }
     catch {
-        Write-Verbose "Unable to query GitHub PRs via gh CLI: $_"
+        Write-Verbose "Unable to query GitHub $State PRs via gh CLI: $_"
     }
-    return $mergedSet
+    return $branchSet
 }
 
 function Test-BranchMergedIntoBase {
@@ -276,7 +280,8 @@ if ($LASTEXITCODE -eq 0) {
     $baseRef = "$Remote/$BaseBranch"
 }
 
-$mergedPrBranches = Get-MergedPrBranches
+$mergedPrBranches = Get-PrBranchesByState -State "merged"
+$openPrBranches = Get-PrBranchesByState -State "open"
 
 # 2. Prune utilized AI worktrees
 Write-Section "2. AI Worktree Cleanup"
@@ -501,10 +506,17 @@ if ($IncludeRemote.IsPresent -and $remoteExists) {
         if ($ProtectedBranches -contains $remoteBranchName -or $remoteBranchName -eq $currentBranch) {
             continue
         }
+        if ($openPrBranches.Contains($remoteBranchName) -and -not $Force.IsPresent) {
+            Write-ActionItem -Status "SKIP-OPEN-PR" -Message "$fullRemoteRef (has an open PR on GitHub; use -Force to override)" -Color Yellow
+            continue
+        }
 
         $reason = $null
         if (Test-BranchMergedIntoBase -Ref $fullRemoteRef -BaseRef $baseRef) {
             $reason = "merged into $baseRef"
+        }
+        elseif ($mergedPrBranches.Contains($remoteBranchName)) {
+            $reason = "PR merged on GitHub"
         }
         elseif ($IncludeStale -and -not [string]::IsNullOrWhiteSpace($dateStr)) {
             $commitDate = [DateTimeOffset]::Parse($dateStr).LocalDateTime
