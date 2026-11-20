@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.tigerplayer.data.local.TigerDatabase
 import com.tigerplayer.data.local.dao.AudioDeviceDao
 import com.tigerplayer.data.local.dao.MusicFolderDao
+import com.tigerplayer.data.local.dao.PendingScrobbleDao
 import com.tigerplayer.data.local.dao.PlaylistDao
 import com.tigerplayer.data.local.dao.TigerDao
 import dagger.Module
@@ -49,5 +50,10 @@ object DatabaseModule {
     @Provides
     fun provideAudioDeviceDao(database: TigerDatabase): AudioDeviceDao {
         return database.audioDeviceDao()
+    }
+
+    @Provides
+    fun providePendingScrobbleDao(database: TigerDatabase): PendingScrobbleDao {
+        return database.pendingScrobbleDao()
     }
 }

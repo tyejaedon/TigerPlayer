@@ -85,13 +85,16 @@ class PlaybackEngine @Inject constructor(
     /** Observable flow of the current Spotify remote track. */
     val spotifyRemoteTrack: Flow<AudioTrack?> = spotifyPlaybackState.map { it?.track }
 
-    /** Plays an audio track, routing to Spotify or local media controller based on ID. */
+    /** Plays an audio track, routing to Spotify or local/remote Media3 controller based on ID. */
     fun playTrack(track: AudioTrack, libraryTracks: List<AudioTrack>) {
         val isSpotifyTrack = track.id.startsWith("spotify:")
         if (isSpotifyTrack) {
             mediaControllerManager.pause()
             spotifyRepository.playUri(track.id, track)
         } else {
+            if (spotifyRepository.spotifyPlaybackState.value?.isPlaying == true) {
+                spotifyRepository.pause()
+            }
             mediaControllerManager.pause()
             val startIndex = libraryTracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
             mediaControllerManager.setPlaylistAndPlay(
@@ -99,6 +102,15 @@ class PlaybackEngine @Inject constructor(
                 startIndex
             )
         }
+    }
+
+    /**
+     * Streams a 30-second remote preview track (e.g. Deezer `preview` MP3 URL) through Media3/ExoPlayer
+     * so it passes through the standard DSP, FFT spectral, visualizer, and haptics pipeline.
+     */
+    fun playPreview(track: AudioTrack) {
+        if (track.uri == android.net.Uri.EMPTY) return
+        playTrack(track, listOf(track))
     }
 
     /** Plays a Spotify track whose metadata is fully known. */

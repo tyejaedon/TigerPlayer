@@ -62,8 +62,12 @@ class StatsEngine @Inject constructor(
     private val sessionStartedAtMs = System.currentTimeMillis()
     private val playLock = Any()
     private var pendingTrack: AudioTrack? = null
+    private var pendingStartedAtEpochSec: Long = 0L
     private var accumulatedMs = 0L
     private var resumedAtMs: Long? = null
+
+    private val _qualifiedPlays = MutableSharedFlow<QualifiedPlay>(extraBufferCapacity = 64)
+    val qualifiedPlays: SharedFlow<QualifiedPlay> = _qualifiedPlays.asSharedFlow()
 
     /** Updates the active statistics filter time window (e.g. "Today", "This Week", "Lifetime"). */
     fun updateStatsFilter(newFilter: String) {
@@ -191,6 +195,7 @@ class StatsEngine @Inject constructor(
         commitPendingPlay()
         synchronized(playLock) {
             pendingTrack = track
+            pendingStartedAtEpochSec = System.currentTimeMillis() / 1000L
             accumulatedMs = 0L
             resumedAtMs = if (isPlaying) elapsedTimeSource.elapsedMs() else null
         }
@@ -224,23 +229,25 @@ class StatsEngine @Inject constructor(
         val pending = synchronized(playLock) {
             val track = pendingTrack ?: return@synchronized null
             accumulateLocked()
-            val snapshot = PendingPlay(track, accumulatedMs)
+            val snapshot = PendingPlay(track, accumulatedMs, pendingStartedAtEpochSec)
             pendingTrack = null
+            pendingStartedAtEpochSec = 0L
             accumulatedMs = 0L
             resumedAtMs = null
             snapshot
         } ?: return
 
-        persistPlay(pending.track, pending.listenedMs)
+        persistPlay(pending.track, pending.listenedMs, pending.startedAtEpochSec)
     }
 
     /** Persists a qualified play to history repository. */
-    private suspend fun persistPlay(track: AudioTrack, rawListenedMs: Long) {
+    private suspend fun persistPlay(track: AudioTrack, rawListenedMs: Long, startedAtEpochSec: Long) {
         val durationMs = track.durationMs
         val listenedMs = if (durationMs > 0L) rawListenedMs.coerceAtMost(durationMs) else rawListenedMs
 
         if (!qualifiesAsPlay(listenedMs, durationMs)) return
 
+        val source = resolveSource(track)
         historyRepository.addTrackToHistory(
             trackId = track.id,
             title = track.title,
@@ -248,7 +255,15 @@ class StatsEngine @Inject constructor(
             album = track.album,
             imageUrl = track.artworkUri.toString(),
             durationListenedMs = listenedMs,
-            source = resolveSource(track)
+            source = source
+        )
+        _qualifiedPlays.tryEmit(
+            QualifiedPlay(
+                track = track,
+                listenedMs = listenedMs,
+                startedAtEpochSec = startedAtEpochSec.takeIf { it > 0L } ?: (System.currentTimeMillis() / 1000L),
+                source = source
+            )
         )
     }
 
@@ -332,7 +347,11 @@ class StatsEngine @Inject constructor(
         }
     }
 
-    private data class PendingPlay(val track: AudioTrack, val listenedMs: Long)
+    private data class PendingPlay(
+        val track: AudioTrack,
+        val listenedMs: Long,
+        val startedAtEpochSec: Long
+    )
 
     private companion object {
         const val COVER_SCREEN_STATS_REFRESH_MS = 5 * 60 * 1000L
@@ -341,3 +360,10 @@ class StatsEngine @Inject constructor(
         const val MIN_LISTENED_MS = 5_000L
     }
 }
+
+data class QualifiedPlay(
+    val track: AudioTrack,
+    val listenedMs: Long,
+    val startedAtEpochSec: Long,
+    val source: MediaSource
+)

@@ -46,7 +46,8 @@ class MediaDataRepository @Inject constructor(
     private val spotifyApiService: SpotifyApiService,
     private val authManager: SpotifyAuthManager,
     private val lastFmApi: LastFmApi,
-    private val audioRepository: AudioRepository
+    private val audioRepository: AudioRepository,
+    private val deezerRepository: DeezerRepository
 ) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -121,11 +122,23 @@ class MediaDataRepository @Inject constructor(
                                 } catch (e: Exception) { null }
                             }
 
+                            val deezerDeferred = async {
+                                try {
+                                    deezerRepository.findArtistInfo(cleanArtist)
+                                        ?.takeIf { isSameArtist(it.name, cleanArtist) }
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
+                                    null
+                                }
+                            }
+
                             val spotifyDetail = spotifyDeferred.await()
                             val lastFmArtist = lastFmDeferred.await()
+                            val deezerArtist = deezerDeferred.await()
 
-                            if (spotifyDetail != null || lastFmArtist != null) {
+                            if (spotifyDetail != null || lastFmArtist != null || deezerArtist != null) {
                                 var imageUrl = spotifyDetail?.images?.firstOrNull()?.url
+                                if (imageUrl.isNullOrBlank()) imageUrl = deezerArtist?.imageUrl
                                 if (imageUrl.isNullOrBlank()) imageUrl = lastFmArtist?.image?.getBestImage()
                                 if (imageUrl.isNullOrBlank()) imageUrl = tigerDao.getLocalArtworkForArtist(cleanArtist)
 
@@ -138,7 +151,7 @@ class MediaDataRepository @Inject constructor(
                                 } ?: spotifyDetail?.let { buildSyntheticBio(it) } ?: "No records found."
 
                                 val details = ArtistDetails(
-                                    name = spotifyDetail?.name ?: lastFmArtist?.name ?: cleanArtist,
+                                    name = spotifyDetail?.name ?: deezerArtist?.name ?: lastFmArtist?.name ?: cleanArtist,
                                     imageUrl = imageUrl,
                                     bio = finalBio,
                                     genres = genreList,
@@ -238,46 +251,46 @@ class MediaDataRepository @Inject constructor(
 
     fun getHighResAlbumArt(title: String, artist: String, album: String): Flow<String?> = flow {
         val token = authManager.getValidToken()
-        if (token.isEmpty()) {
-            emit(null)
-            return@flow
-        }
+        val spotifyUrl = if (token.isNotEmpty()) {
+            try {
+                val cleanTitle = cleanSearchTerm(title)
+                val cleanArtist = cleanSearchTerm(artist)
+                val cleanAlbum = cleanSearchTerm(album)
 
-        val highResUrl = try {
-            val cleanTitle = cleanSearchTerm(title)
-            val cleanArtist = cleanSearchTerm(artist)
-            val cleanAlbum = cleanSearchTerm(album)
+                // 1. SURGICAL SEARCH QUERY: track:"Title" artist:"Artist" album:"Album"
+                val strictQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\" album:\"$cleanAlbum\""
+                val response = spotifyApiService.searchTrack("Bearer $token", strictQuery)
 
-            // 1. SURGICAL SEARCH QUERY: track:"Title" artist:"Artist" album:"Album"
-            val strictQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\" album:\"$cleanAlbum\""
-            val response = spotifyApiService.searchTrack("Bearer $token", strictQuery)
+                if (response.isSuccessful) {
+                    val trackItem = response.body()?.tracks?.items?.firstOrNull()
 
-            if (response.isSuccessful) {
-                val trackItem = response.body()?.tracks?.items?.firstOrNull()
+                    if (isMatchingTrack(trackItem, cleanTitle, cleanArtist)) {
+                        trackItem?.album?.images?.firstOrNull()?.url
+                    } else {
+                        // FALLBACK QUERY: If the exact album metadata is too noisy, search strictly by Track & Artist.
+                        val fallbackQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\""
+                        val fallbackResponse = spotifyApiService.searchTrack("Bearer $token", fallbackQuery)
 
-                if (isMatchingTrack(trackItem, cleanTitle, cleanArtist)) {
-                    trackItem?.album?.images?.firstOrNull()?.url
-                } else {
-                    // FALLBACK QUERY: If the exact album metadata is too noisy, search strictly by Track & Artist.
-                    val fallbackQuery = "track:\"$cleanTitle\" artist:\"$cleanArtist\""
-                    val fallbackResponse = spotifyApiService.searchTrack("Bearer $token", fallbackQuery)
-
-                    if (fallbackResponse.isSuccessful) {
-                        val fallbackTrack = fallbackResponse.body()?.tracks?.items?.firstOrNull()
-                        if (isMatchingTrack(fallbackTrack, cleanTitle, cleanArtist)) {
-                            fallbackTrack?.album?.images?.firstOrNull()?.url
+                        if (fallbackResponse.isSuccessful) {
+                            val fallbackTrack = fallbackResponse.body()?.tracks?.items?.firstOrNull()
+                            if (isMatchingTrack(fallbackTrack, cleanTitle, cleanArtist)) {
+                                fallbackTrack?.album?.images?.firstOrNull()?.url
+                            } else null
                         } else null
-                    } else null
+                    }
+                } else {
+                    null
                 }
-            } else {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("MediaRepo", "Strict Album Art search failed: ${e.message}")
                 null
             }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.e("MediaRepo", "Strict Album Art search failed: ${e.message}")
+        } else {
             null
         }
 
+        val highResUrl = spotifyUrl ?: deezerRepository.findHighResAlbumArt(title, artist, album)
         emit(highResUrl)
     }.flowOn(Dispatchers.IO)
 
@@ -345,6 +358,25 @@ class MediaDataRepository @Inject constructor(
 
         if (mappedSpotify.isNotEmpty()) {
             return@withContext mappedSpotify.take(limit)
+        }
+
+        val deezerMapped = try {
+            deezerRepository.findArtistTopTracksByName(
+                artistName = ArtistUtils.getBaseArtist(anchorTrack.artist),
+                limit = (limit * 2).coerceAtMost(30)
+            ).mapNotNull { candidate ->
+                trackLookup[recommendationKey(candidate.title, candidate.artist?.name.orEmpty())]
+            }
+                .filterNot { it.id == anchorTrack.id }
+                .distinctBy { it.id }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w("MediaRepo", "Infinite Play Deezer fetch failed: ${e.message}")
+            emptyList()
+        }
+
+        if (deezerMapped.isNotEmpty()) {
+            return@withContext deezerMapped.take(limit)
         }
 
         val lastFmMapped = try {

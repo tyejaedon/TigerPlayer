@@ -69,8 +69,10 @@ fun CloudScreen(
     val isLoadingAlbums by viewModel.isLoadingAlbums.collectAsState()
     val isSyncing = isLoadingTracks || isLoadingAlbums
 
-    val tabs = listOf("Playlists", "Albums")
+    val tabs = listOf("Playlists", "Albums", "Discover")
     val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val unauthTabs = listOf("Discover", "Connect")
+    val unauthPagerState = rememberPagerState(pageCount = { unauthTabs.size })
     val scope = rememberCoroutineScope()
 
     // --- OPTIMIZED MAPPINGS ---
@@ -95,10 +97,59 @@ fun CloudScreen(
         label = "CloudConnectionRitual"
     ) { connected ->
         if (!connected) {
-            CloudConnectPrompt(
-                onConnectSpotify = { (context as? MainActivity)?.authenticateSpotify() },
-                onConnectNavidrome = onNavigateToNavidromeLogin
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .statusBarsPadding()
+                    .imePadding()
+            ) {
+                SecondaryTabRow(
+                    selectedTabIndex = unauthPagerState.currentPage,
+                    containerColor = Color.Transparent,
+                    divider = {},
+                    indicator = {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(unauthPagerState.currentPage),
+                            height = 3.dp,
+                            color = SpotifyGreen
+                        )
+                    }
+                ) {
+                    unauthTabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = unauthPagerState.currentPage == index,
+                            onClick = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                scope.launch { unauthPagerState.animateScrollToPage(index) }
+                            },
+                            selectedContentColor = SpotifyGreen,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            text = {
+                                Text(
+                                    text = title.uppercase(),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                        )
+                    }
+                }
+                HorizontalPager(
+                    state = unauthPagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> DeezerDiscoverySection()
+                        else -> CloudConnectPrompt(
+                            onConnectSpotify = { (context as? MainActivity)?.authenticateSpotify() },
+                            onConnectNavidrome = onNavigateToNavidromeLogin
+                        )
+                    }
+                }
+            }
         } else {
             Column(
                 modifier = Modifier
@@ -203,6 +254,9 @@ fun CloudScreen(
                                             }
                                         )
                                     }
+                                }
+                                2 -> {
+                                    DeezerDiscoverySection()
                                 }
                             }
                         }
