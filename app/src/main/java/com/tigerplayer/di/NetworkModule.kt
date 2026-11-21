@@ -3,6 +3,8 @@ package com.tigerplayer.di
 import com.google.gson.Gson
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.remote.api.*
+import com.tigerplayer.data.remote.api.deezer.DeezerApiService
+import com.tigerplayer.data.remote.api.deezer.DeezerRateLimitInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,6 +30,7 @@ import javax.inject.Singleton
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class LrclibRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class AutoEqRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class KugouRetrofit
+@Qualifier @Retention(AnnotationRetention.BINARY) annotation class DeezerRetrofit
 
 @Singleton
 class SubsonicHostManager @Inject constructor() {
@@ -62,6 +65,7 @@ object NetworkModule {
     private const val ITUNES_BASE_URL = "https://itunes.apple.com/"
     private const val LRCLIB_BASE_URL = "https://lrclib.net/"
     private const val KUGOU_BASE_URL = "https://krcs.kugou.com/"
+    private const val DEEZER_BASE_URL = "https://api.deezer.com/"
 
     @Provides
     @Singleton
@@ -100,6 +104,13 @@ object NetworkModule {
                 .build()
             chain.proceed(request)
         }
+        .build()
+
+    @Provides
+    @Singleton
+    @DeezerRetrofit
+    fun provideDeezerClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+        .addInterceptor(DeezerRateLimitInterceptor())
         .build()
 
     // --- Retrofit Builders ---
@@ -190,6 +201,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @DeezerRetrofit
+    fun provideDeezerRetrofit(@DeezerRetrofit client: OkHttpClient, gson: Gson): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(DEEZER_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+
+    @Provides
+    @Singleton
     @KugouRetrofit
     fun provideKugouRetrofit(client: OkHttpClient): Retrofit =
         Retrofit.Builder()
@@ -234,6 +255,11 @@ object NetworkModule {
     @Singleton
     fun provideKugouApi(@KugouRetrofit retrofit: Retrofit): KugouApi =
         retrofit.create(KugouApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideDeezerApi(@DeezerRetrofit retrofit: Retrofit): DeezerApiService =
+        retrofit.create(DeezerApiService::class.java)
 
     // --- LAST.FM INJECTIONS ---
 

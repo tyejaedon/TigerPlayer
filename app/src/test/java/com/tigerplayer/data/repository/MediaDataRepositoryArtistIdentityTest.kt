@@ -5,6 +5,7 @@ import com.tigerplayer.data.local.entity.ArtistCacheEntity
 import com.tigerplayer.data.remote.api.LastFmApi
 import com.tigerplayer.data.remote.api.SpotifyApiService
 import com.tigerplayer.data.remote.model.LastFmArtist
+import com.tigerplayer.data.repository.deezer.DeezerRepository
 import com.tigerplayer.data.remote.model.LastFmResponse
 import com.tigerplayer.data.remote.model.SpotifyArtistDetail
 import com.tigerplayer.data.remote.model.SpotifyFollowers
@@ -35,13 +36,15 @@ class MediaDataRepositoryArtistIdentityTest {
     private val authManager = mockk<SpotifyAuthManager>()
     private val lastFmApi = mockk<LastFmApi>()
     private val audioRepository = mockk<AudioRepository>(relaxed = true)
+    private val deezerRepository = mockk<DeezerRepository>(relaxed = true)
 
     private fun repository() = MediaDataRepository(
         tigerDao = tigerDao,
         spotifyApiService = spotifyApiService,
         authManager = authManager,
         lastFmApi = lastFmApi,
-        audioRepository = audioRepository
+        audioRepository = audioRepository,
+        deezerRepository = deezerRepository
     )
 
     private fun stubLocalStats(artist: String) {

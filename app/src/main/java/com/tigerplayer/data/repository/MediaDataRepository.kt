@@ -10,6 +10,7 @@ import com.tigerplayer.data.remote.api.SpotifyApiService
 import com.tigerplayer.data.remote.model.LastFmImage
 import com.tigerplayer.data.remote.model.SpotifyArtistDetail
 import com.tigerplayer.data.remote.model.SpotifyTrack
+import com.tigerplayer.data.repository.deezer.DeezerRepository
 import com.tigerplayer.utils.ArtistUtils
 import com.tigerplayer.utils.MusicMetadataSearch.cleanSearchTerm
 import kotlinx.coroutines.CancellationException
@@ -46,7 +47,8 @@ class MediaDataRepository @Inject constructor(
     private val spotifyApiService: SpotifyApiService,
     private val authManager: SpotifyAuthManager,
     private val lastFmApi: LastFmApi,
-    private val audioRepository: AudioRepository
+    private val audioRepository: AudioRepository,
+    private val deezerRepository: DeezerRepository
 ) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -127,6 +129,7 @@ class MediaDataRepository @Inject constructor(
                             if (spotifyDetail != null || lastFmArtist != null) {
                                 var imageUrl = spotifyDetail?.images?.firstOrNull()?.url
                                 if (imageUrl.isNullOrBlank()) imageUrl = lastFmArtist?.image?.getBestImage()
+                                if (imageUrl.isNullOrBlank()) imageUrl = deezerRepository.getArtistPicture(cleanArtist)
                                 if (imageUrl.isNullOrBlank()) imageUrl = tigerDao.getLocalArtworkForArtist(cleanArtist)
 
                                 val genreList = spotifyDetail?.genres?.takeIf { it.isNotEmpty() }
