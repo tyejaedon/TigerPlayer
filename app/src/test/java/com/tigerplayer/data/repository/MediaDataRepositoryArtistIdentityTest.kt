@@ -5,7 +5,6 @@ import com.tigerplayer.data.local.entity.ArtistCacheEntity
 import com.tigerplayer.data.remote.api.LastFmApi
 import com.tigerplayer.data.remote.api.SpotifyApiService
 import com.tigerplayer.data.remote.model.LastFmArtist
-import com.tigerplayer.data.repository.deezer.DeezerRepository
 import com.tigerplayer.data.remote.model.LastFmResponse
 import com.tigerplayer.data.remote.model.SpotifyArtistDetail
 import com.tigerplayer.data.remote.model.SpotifyFollowers
