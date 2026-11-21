@@ -666,6 +666,9 @@ abstract class TigerDao {
     @Query("SELECT id, dateModified FROM cached_tracks")
     abstract suspend fun getCachedTrackFingerprints(): List<TrackFingerprint>
 
+    @Query("SELECT id FROM cached_tracks")
+    abstract suspend fun getCachedTrackIdsSync(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun internalInsertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
 

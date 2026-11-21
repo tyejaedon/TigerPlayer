@@ -20,11 +20,13 @@ import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.MusicFolder
 import com.tigerplayer.data.model.StorageBreakdown
 import com.tigerplayer.data.model.formatBytes
+import com.tigerplayer.data.repository.LastFmRepository
 import com.tigerplayer.data.repository.SpotifyAuthError
 import com.tigerplayer.data.repository.SpotifyAuthManager
 import com.tigerplayer.data.repository.SpotifyRepository
 import com.tigerplayer.data.source.LocalAudioDataSource
 import com.tigerplayer.engine.LibraryEngine
+import com.tigerplayer.engine.scrobble.ScrobbleEngine
 import com.tigerplayer.service.HapticsDebugMonitor
 import com.tigerplayer.service.HapticsDebugState
 import com.tigerplayer.utils.findActivity
@@ -50,14 +52,35 @@ data class LibraryRescanState(
 /** One-shot outcome of the last export/import, surfaced by the Settings screen then cleared. */
 sealed interface BackupUiEvent {
     data class ExportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
-    data class ImportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
+    data class ImportSucceeded(
+        val playlists: Int,
+        val history: Int,
+        val unresolvedTracks: Int = 0,
+        val unresolvedByPlaylist: Map<String, Int> = emptyMap()
+    ) : BackupUiEvent
     data class Failed(val message: String) : BackupUiEvent
+
+    fun toDisplayMessage(): String = when (this) {
+        is ExportSucceeded ->
+            "Backup saved: $playlists playlists, $history history rows"
+        is ImportSucceeded -> if (unresolvedTracks > 0) {
+            val noun = if (unresolvedTracks == 1) "track" else "tracks"
+            "Restored $playlists playlists, $history history rows - $unresolvedTracks $noun could not be found and were skipped"
+        } else {
+            "Restored: $playlists playlists, $history history rows"
+        }
+        is Failed -> "Backup error: $message"
+    }
 }
 
 /** Connection status for the third-party accounts surfaced in the Settings "Connected Accounts" section. */
 data class ConnectedAccountsState(
     val isSpotifyConnected: Boolean = false,
-    val navidromeServerUrl: String? = null
+    val navidromeServerUrl: String? = null,
+    val isLastfmConfigured: Boolean = false,
+    val isLastfmConnected: Boolean = false,
+    val lastfmUsername: String? = null,
+    val pendingScrobbleCount: Int = 0
 ) {
     val isNavidromeConnected: Boolean get() = !navidromeServerUrl.isNullOrBlank()
 }
@@ -70,7 +93,9 @@ class SettingsViewModel @Inject constructor(
     private val backupManager: BackupManager,
     private val spotifyAuthManager: SpotifyAuthManager,
     private val spotifyRepository: SpotifyRepository,
-    private val navidromePrefs: NavidromePrefs
+    private val navidromePrefs: NavidromePrefs,
+    private val lastFmRepository: LastFmRepository? = null,
+    private val scrobbleEngine: ScrobbleEngine? = null
 ) : ViewModel() {
 
 
@@ -119,17 +144,42 @@ class SettingsViewModel @Inject constructor(
 
     val connectedAccountsState: StateFlow<ConnectedAccountsState> = combine(
         spotifyAuthManager.token,
-        navidromePrefs.serverUrl
-    ) { token, serverUrl ->
+        navidromePrefs.serverUrl,
+        lastFmRepository?.isConnected ?: kotlinx.coroutines.flow.flowOf(false),
+        lastFmRepository?.username ?: kotlinx.coroutines.flow.flowOf(null),
+        scrobbleEngine?.pendingCount ?: kotlinx.coroutines.flow.flowOf(0)
+    ) { token, serverUrl, lastfmConnected, lastfmUser, pendingCount ->
         ConnectedAccountsState(
             isSpotifyConnected = token.isNotEmpty(),
-            navidromeServerUrl = serverUrl
+            navidromeServerUrl = serverUrl,
+            isLastfmConfigured = lastFmRepository?.isConfigured() == true,
+            isLastfmConnected = lastfmConnected,
+            lastfmUsername = lastfmUser,
+            pendingScrobbleCount = pendingCount
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000L),
         initialValue = ConnectedAccountsState()
     )
+
+    val lastfmAuthError: StateFlow<String?> =
+        scrobbleEngine?.authError ?: MutableStateFlow(null)
+
+    fun dismissLastfmAuthError() {
+        scrobbleEngine?.clearAuthError()
+    }
+
+    fun connectLastfm(context: Context) {
+        val activity = context.findActivity() as? MainActivity ?: return
+        activity.authenticateLastfm()
+    }
+
+    fun flushPendingScrobbles() {
+        viewModelScope.launch {
+            scrobbleEngine?.flushQueue()
+        }
+    }
 
     val spotifyAuthError: StateFlow<SpotifyAuthError?> = spotifyAuthManager.authError
 
@@ -181,7 +231,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             backupManager.importFrom(source, strategy).fold(
                 onSuccess = { summary ->
-                    _backupEvent.value = BackupUiEvent.ImportSucceeded(summary.playlistCount, summary.historyCount)
+                    _backupEvent.value = BackupUiEvent.ImportSucceeded(
+                        playlists = summary.playlistCount,
+                        history = summary.historyCount,
+                        unresolvedTracks = summary.unresolvedTrackCount,
+                        unresolvedByPlaylist = summary.unresolvedByPlaylist
+                    )
                 },
                 onFailure = { error ->
                     _backupEvent.value = BackupUiEvent.Failed(error.message ?: "Import failed")
@@ -276,6 +331,18 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setWaveformSensitivity(sensitivity) }
     }
 
+    fun setLastfmScrobbleEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setLastfmScrobbleEnabled(enabled) }
+    }
+
+    fun setLastfmNowPlayingEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setLastfmNowPlayingEnabled(enabled) }
+    }
+
+    fun setLastfmScrobbleRemote(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setLastfmScrobbleRemote(enabled) }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             settingsDataStore.resetToDefaults()
@@ -352,6 +419,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             navidromePrefs.clearCredentials()
             triggerLibraryRescan()
+        }
+    }
+
+    /** Signs out of Last.fm by clearing the encrypted session key and username. */
+    fun logoutLastfm() {
+        viewModelScope.launch {
+            lastFmRepository?.logout()
+            scrobbleEngine?.clearAuthError()
         }
     }
 

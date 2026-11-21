@@ -375,4 +375,27 @@ class TigerDatabaseMigrationTest {
         }
         connection.close()
     }
+
+    @Test
+    fun migrate17To18_createsPendingScrobblesTable() {
+        var connection: SQLiteConnection = helper.createDatabase(17)
+        connection.close()
+
+        connection = helper.runMigrationsAndValidate(18)
+
+        connection.execSQL(
+            """
+            INSERT INTO pending_scrobbles
+                (trackId, artist, track, album, durationSec, timestampSec, attemptCount, nextRetryAtMs, createdAtMs)
+            VALUES
+                ('local_track_006', 'Tiger Unit', 'Scrobble Test', 'Midnight Circuit', 210, 1720000000, 0, 0, 1720000000000)
+            """.trimIndent()
+        )
+        connection.prepare("SELECT * FROM pending_scrobbles WHERE trackId = 'local_track_006'").use { stmt ->
+            assertTrue("pending_scrobbles row must be readable post-migration", stmt.step())
+            assertEquals("Scrobble Test", stmt.getText(stmt.columnIndex("track")))
+            assertEquals(210, stmt.getInt(stmt.columnIndex("durationSec")))
+        }
+        connection.close()
+    }
 }

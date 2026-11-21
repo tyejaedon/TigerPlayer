@@ -22,6 +22,7 @@ import com.tigerplayer.engine.PlaybackEngine
 import com.tigerplayer.engine.SleepTimerState
 import com.tigerplayer.engine.StatsEngine
 import com.tigerplayer.engine.WaveformEngine
+import com.tigerplayer.engine.scrobble.ScrobbleEngine
 import com.tigerplayer.service.MediaControllerManager
 import com.tigerplayer.utils.BluetoothDeviceInfo
 import com.tigerplayer.utils.BluetoothDeviceManager
@@ -77,7 +78,8 @@ class PlaybackStateManager(
     private val playbackPrefs: PlaybackPrefs,
     private val audioRepository: AudioRepository,
     private val bluetoothDeviceManager: BluetoothDeviceManager,
-    coroutineScope: CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null,
+    private val scrobbleEngine: ScrobbleEngine? = null
 ) {
     @Inject
     constructor(
@@ -90,7 +92,8 @@ class PlaybackStateManager(
         settingsDataStore: SettingsDataStore,
         playbackPrefs: PlaybackPrefs,
         audioRepository: AudioRepository,
-        bluetoothDeviceManager: BluetoothDeviceManager
+        bluetoothDeviceManager: BluetoothDeviceManager,
+        scrobbleEngine: ScrobbleEngine
     ) : this(
         playbackEngine = playbackEngine,
         mediaControllerManager = mediaControllerManager,
@@ -102,7 +105,8 @@ class PlaybackStateManager(
         playbackPrefs = playbackPrefs,
         audioRepository = audioRepository,
         bluetoothDeviceManager = bluetoothDeviceManager,
-        coroutineScope = null
+        coroutineScope = null,
+        scrobbleEngine = scrobbleEngine
     )
 
     private val scope: CoroutineScope = coroutineScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -235,6 +239,9 @@ class PlaybackStateManager(
                         metadataEngine.fetchTrackMetadata(spotifyTrack)
                     }
                     statsEngine.onTrackChanged(spotifyTrack, spotifyState.isPlaying)
+                    if (spotifyState.isPlaying) {
+                        scrobbleEngine?.onTrackStarted(spotifyTrack)
+                    }
                 }
             }
         }
@@ -383,6 +390,9 @@ class PlaybackStateManager(
                         metadataEngine.fetchTrackMetadata(track)
                     }
                     statsEngine.onTrackChanged(track, _playbackState.value.isPlaying)
+                    if (_playbackState.value.isPlaying) {
+                        scrobbleEngine?.onTrackStarted(track)
+                    }
 
                     if (track.isLocal && !track.artworkUri.toString().startsWith("http")) {
                         scope.launch(Dispatchers.IO) {

@@ -1,11 +1,17 @@
 package com.tigerplayer.data.remote.api
 
 import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.remote.model.LastFmNowPlayingResponse
 import com.tigerplayer.data.remote.model.LastFmResponse
+import com.tigerplayer.data.remote.model.LastFmScrobbleResponse
+import com.tigerplayer.data.remote.model.LastFmSessionResponse
 import com.tigerplayer.data.remote.model.LastFmSimilarArtistsResponse
 import com.tigerplayer.data.remote.model.LastFmSimilarTracksResponse
 import retrofit2.Response
+import retrofit2.http.FieldMap
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface LastFmApi {
@@ -32,4 +38,23 @@ interface LastFmApi {
         @Query("limit") limit: Int = 30,
         @Query("api_key") apiKey: String = BuildConfig.LASTFM_API_KEY
     ): Response<LastFmSimilarTracksResponse>
+
+    @GET("2.0/?method=auth.getSession&format=json")
+    suspend fun getSession(
+        @Query("token") token: String,
+        @Query("api_key") apiKey: String,
+        @Query("api_sig") apiSig: String
+    ): Response<LastFmSessionResponse>
+
+    @FormUrlEncoded
+    @POST("2.0/?format=json")
+    suspend fun updateNowPlaying(
+        @FieldMap params: Map<String, String>
+    ): Response<LastFmNowPlayingResponse>
+
+    @FormUrlEncoded
+    @POST("2.0/?format=json")
+    suspend fun scrobble(
+        @FieldMap params: Map<String, String>
+    ): Response<LastFmScrobbleResponse>
 }

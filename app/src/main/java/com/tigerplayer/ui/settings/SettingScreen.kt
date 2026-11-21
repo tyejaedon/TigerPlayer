@@ -147,14 +147,7 @@ fun SettingsScreen(
     }
     LaunchedEffect(backupEvent) {
         val event = backupEvent ?: return@LaunchedEffect
-        val message = when (event) {
-            is BackupUiEvent.ExportSucceeded ->
-                "Backup saved: ${event.playlists} playlists, ${event.history} history rows"
-            is BackupUiEvent.ImportSucceeded ->
-                "Restored: ${event.playlists} playlists, ${event.history} history rows"
-            is BackupUiEvent.Failed -> "Backup error: ${event.message}"
-        }
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        Toast.makeText(context, event.toDisplayMessage(), Toast.LENGTH_LONG).show()
         viewModel.consumeBackupEvent()
     }
     LaunchedEffect(storageEventMessage) {
@@ -719,6 +712,7 @@ private fun MusicFoldersSection(viewModel: SettingsViewModel, accent: Color) {
 @Composable
 private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color) {
     val accounts by viewModel.connectedAccountsState.collectAsStateWithLifecycle()
+    val settings by viewModel.settingsState.collectAsStateWithLifecycle()
     var pendingLogout by remember { mutableStateOf<String?>(null) }
 
     MatrixSection(title = "Connected Accounts", icon = Icons.Rounded.AccountCircle, accent = accent) {
@@ -766,6 +760,81 @@ private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
         )
+
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+        ListItem(
+            headlineContent = { Text("LAST.FM", fontWeight = FontWeight.Bold) },
+            supportingContent = {
+                val status = when {
+                    accounts.isLastfmConnected -> {
+                        val user = accounts.lastfmUsername?.takeIf { it.isNotBlank() } ?: "Connected"
+                        if (accounts.pendingScrobbleCount > 0) {
+                            "$user • ${accounts.pendingScrobbleCount} queued"
+                        } else {
+                            "Connected as $user"
+                        }
+                    }
+                    !accounts.isLastfmConfigured -> "API keys not configured in build"
+                    else -> "Not connected"
+                }
+                Text(status)
+            },
+            leadingContent = {
+                Icon(
+                    Icons.Rounded.CloudSync,
+                    null,
+                    tint = if (accounts.isLastfmConnected) accent else accent.copy(alpha = 0.4f)
+                )
+            },
+            trailingContent = {
+                val itemContext = LocalContext.current
+                if (accounts.isLastfmConnected) {
+                    TextButton(onClick = { pendingLogout = "Last.fm" }) {
+                        Text("LOG OUT")
+                    }
+                } else {
+                    Button(
+                        onClick = { viewModel.connectLastfm(itemContext) },
+                        enabled = accounts.isLastfmConfigured,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accent,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text("CONNECT", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                    }
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        )
+
+        if (accounts.isLastfmConnected) {
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+            ScrobbleSwitchItem(
+                title = "SCROBBLE PLAYS",
+                subtitle = "Scrobble tracks after 50% or 4 minutes",
+                checked = settings.lastfmScrobbleEnabled,
+                accent = accent,
+                onCheckedChange = viewModel::setLastfmScrobbleEnabled
+            )
+            ScrobbleSwitchItem(
+                title = "UPDATE NOW PLAYING",
+                subtitle = "Show currently playing track on Last.fm",
+                checked = settings.lastfmNowPlayingEnabled,
+                accent = accent,
+                onCheckedChange = viewModel::setLastfmNowPlayingEnabled
+            )
+            ScrobbleSwitchItem(
+                title = "SCROBBLE REMOTE TRACKS",
+                subtitle = "Include Navidrome & Spotify plays (off = local only)",
+                checked = settings.lastfmScrobbleRemote,
+                accent = accent,
+                onCheckedChange = viewModel::setLastfmScrobbleRemote
+            )
+        }
     }
 
     val serviceToLogOut = pendingLogout
@@ -779,6 +848,7 @@ private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color
                     when (serviceToLogOut) {
                         "Spotify" -> viewModel.logoutSpotify()
                         "Navidrome" -> viewModel.logoutNavidrome()
+                        "Last.fm" -> viewModel.logoutLastfm()
                     }
                     pendingLogout = null
                 }) {
@@ -792,6 +862,28 @@ private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color
             }
         )
     }
+}
+
+@Composable
+private fun ScrobbleSwitchItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    accent: Color,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(title, fontWeight = FontWeight.Bold) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = if (checked) accent else accent.copy(alpha = 0.4f)) },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
 }
 
 @Composable

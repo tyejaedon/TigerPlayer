@@ -96,4 +96,14 @@
     <string name="coverscreen_search_prompt">音楽を検索</string>
     <string name="coverscreen_voice_search_no_speech">音声が認識されませんでした。もう一度試すか、入力して検索してください。</string>
     <string name="coverscreen_voice_search_unavailable">音声検索は利用できません。入力して検索してください。</string>
+
+    <!-- App Widgets -->
+    <string name="widget_player_label">TigerPlayer</string>
+    <string name="widget_player_description">再生コントロールとアートワーク（2x2、4x1、4x2、カバー画面）</string>
+    <string name="widget_daylist_label">TigerPlayer Day List</string>
+    <string name="widget_daylist_description">Day List と Heavy Rotation へのショートカット</string>
+    <string name="widget_idle_title">再生停止中</string>
+    <string name="widget_idle_artist">タップして TigerPlayer を開く</string>
+    <string name="widget_daylist_title">Day List</string>
+    <string name="widget_heavy_rotation_subtitle">Heavy Rotation</string>
 </resources>
