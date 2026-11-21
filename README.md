@@ -1,7 +1,7 @@
 # TigerPlayer 🐅🐺
 
 [![Latest Release](https://img.shields.io/badge/Release-v2.1.9-3DDC84?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases/tag/v2.1.9)
-[![Beta Preview](https://img.shields.io/badge/Beta%20Preview-v2.2.0--beta.19-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases)
+[![Beta Preview](https://img.shields.io/badge/Beta%20Preview-v2.2.0--beta.20-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/tyejaedon/TigerPlayer/releases)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/tyejaedon/TigerPlayer/android-ci.yml?branch=master&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/tyejaedon/TigerPlayer/actions/workflows/android-ci.yml)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Target SDK](https://img.shields.io/badge/Android-10%20to%2016%20(API%2029--36)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/)

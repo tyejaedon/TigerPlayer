@@ -38,8 +38,8 @@ configure<ApplicationExtension> {
 
         // SemVer multiplier formula: MAJOR * 1_000_000 + MINOR * 10_000 + PATCH * 100 + BUILD_INDEX
         // For stable production releases, BUILD_INDEX defaults to 99 so it supersedes candidate betas (1..98).
-        // Historical floor of 2020020 ensures v2.1.6 cleanly supersedes v2.2.0-beta.19 (versionCode 2020019)
-        // without triggering Android OS INSTALL_FAILED_VERSION_DOWNGRADE.
+        // Historical floor of 2020030 ensures builds supersede v2.1.9 (2020030) and legacy v2.2.0-beta.19 (2020019),
+        // while 2.2.0-beta.20+ shifts by +11 (2020011 + betaNum) to stay strictly between 2020030 and v2.2.0 (2020099).
         fun calculateVersionCode(vName: String): Int {
             val semverRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-beta\.?(\d+))?""")
             val match = semverRegex.find(vName)
@@ -49,12 +49,20 @@ configure<ApplicationExtension> {
                 val minor = match.groupValues[2].toInt()
                 val patch = match.groupValues[3].toInt()
                 val betaNum = match.groupValues[5].takeIf { it.isNotEmpty() }?.toInt()
-                val buildIndex = betaNum ?: 99
-                major * 1_000_000 + minor * 10_000 + patch * 100 + buildIndex + hotfix
+                if (major == 2 && minor == 2 && patch == 0 && betaNum != null && betaNum >= 20) {
+                    val shifted = 2_020_011 + betaNum
+                    require(shifted < 2_020_099) {
+                        "Beta versionCode $shifted collides with v2.2.0 stable (2020099)."
+                    }
+                    shifted
+                } else {
+                    val buildIndex = betaNum ?: 99
+                    major * 1_000_000 + minor * 10_000 + patch * 100 + buildIndex + hotfix
+                }
             } else {
                 2_020_030
             }
-            // Floor of 2020030 guarantees monotonic advancement past v2.1.8.5 (2020025) and legacy beta ceiling (2020019)
+            // Floor of 2020030 guarantees monotonic advancement past v2.1.9 (2020030) and legacy beta ceiling (2020019)
             val historicalFloor = 2_020_030 + hotfix
             return maxOf(computed, historicalFloor)
         }
