@@ -3,12 +3,16 @@ package com.tigerplayer.data.repository
 import android.content.Context
 import android.database.ContentObserver
 import android.media.MediaMetadataRetriever
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
+import coil.Coil
+import coil.annotation.ExperimentalCoilApi
+import coil.memory.MemoryCache
 import java.io.File
 import com.tigerplayer.data.local.dao.PlaylistDao
 import com.tigerplayer.data.local.dao.TigerDao
@@ -17,6 +21,7 @@ import com.tigerplayer.data.local.entity.CachedTrackEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.model.Artist
 import com.tigerplayer.data.model.ArtistSource
+import com.tigerplayer.data.model.AudioTagData
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.source.LocalAudioDataSource
@@ -408,6 +413,78 @@ class AudioRepository @Inject constructor(
 
     suspend fun updateHasEmbeddedArtwork(trackId: String, hasEmbedded: Boolean) {
         tigerDao.updateHasEmbeddedArtwork(trackId, hasEmbedded)
+    }
+
+    /**
+     * Immediately synchronizes Room cache, Coil image cache, and MediaStore after local tags
+     * are modified on disk so UI and subsequent rescans reflect the new metadata.
+     */
+    @OptIn(ExperimentalCoilApi::class)
+    suspend fun rescanEditedTracks(
+        tracks: List<AudioTrack>,
+        updatedTagsByTrackId: Map<String, AudioTagData>
+    ): List<AudioTrack> = withContext(ioDispatcher) {
+        val updatedTracks = mutableListOf<AudioTrack>()
+        val scanPaths = mutableListOf<String>()
+        val scanMimes = mutableListOf<String>()
+        val imageLoader = Coil.imageLoader(context)
+        val nowSeconds = System.currentTimeMillis() / 1000L
+
+        for (track in tracks) {
+            val tagData = updatedTagsByTrackId[track.id] ?: continue
+            val parsedTrackNumber = tagData.trackNumber
+                .substringBefore('/')
+                .trim()
+                .toIntOrNull() ?: track.trackNumber
+            val hasEmbedded = tagData.artworkBytes != null && tagData.artworkBytes.isNotEmpty()
+            val resolvedTitle = tagData.title.ifBlank { track.title }
+            val resolvedArtist = tagData.artist.ifBlank { track.artist }
+            val resolvedAlbum = tagData.album.ifBlank { track.album }
+            val resolvedYear = tagData.year.ifBlank { null }
+
+            tigerDao.updateTrackMetadata(
+                trackId = track.id,
+                title = resolvedTitle,
+                artist = resolvedArtist,
+                album = resolvedAlbum,
+                trackNumber = parsedTrackNumber,
+                year = resolvedYear,
+                dateModified = nowSeconds,
+                hasEmbeddedArtwork = hasEmbedded
+            )
+
+            if (track.artworkUri != Uri.EMPTY) {
+                val uriKey = track.artworkUri.toString()
+                imageLoader.memoryCache?.remove(MemoryCache.Key(uriKey))
+                imageLoader.diskCache?.remove(uriKey)
+            }
+
+            if (!track.path.isNullOrBlank()) {
+                scanPaths += track.path
+                scanMimes += track.mimeType
+            }
+
+            updatedTracks += track.copy(
+                title = resolvedTitle,
+                artist = resolvedArtist,
+                album = resolvedAlbum,
+                trackNumber = parsedTrackNumber,
+                year = resolvedYear,
+                dateModified = nowSeconds,
+                hasEmbeddedArtwork = hasEmbedded
+            )
+        }
+
+        if (scanPaths.isNotEmpty()) {
+            MediaScannerConnection.scanFile(
+                context,
+                scanPaths.toTypedArray(),
+                scanMimes.toTypedArray(),
+                null
+            )
+        }
+
+        updatedTracks
     }
 
     /**

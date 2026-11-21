@@ -3,13 +3,17 @@ package com.tigerplayer.engine
 import android.net.Uri
 import android.util.Log
 import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.model.AudioTagData
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.BatchTagEditRequest
 import com.tigerplayer.data.model.Lyrics
+import com.tigerplayer.data.model.TagWriteResult
 import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.data.repository.LyricsRepository
 import com.tigerplayer.data.repository.MediaDataRepository
 import com.tigerplayer.data.repository.deezer.DeezerRepository
+import com.tigerplayer.data.source.LocalTagDataSource
 import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -44,12 +48,16 @@ class MetadataEngine @Inject constructor(
     private val lyricsRepository: LyricsRepository,
     private val tigerDao: TigerDao,
     private val audioRepository: AudioRepository,
+    private val localTagDataSource: LocalTagDataSource,
     private val settingsDataStore: SettingsDataStore,
     private val deezerRepository: DeezerRepository,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private var autoDownloadJob: Job? = null
+
+    private val _editedTracksFlow = MutableSharedFlow<List<AudioTrack>>(extraBufferCapacity = 4)
+    val editedTracksFlow: SharedFlow<List<AudioTrack>> = _editedTracksFlow.asSharedFlow()
 
     init {
         scope.launch {
@@ -330,6 +338,29 @@ class MetadataEngine @Inject constructor(
             val backoffInterval = (baseIntervalMs * backoffMultiplier).coerceAtMost(maxIntervalMs)
             return (currentTimeMs - failedAt) >= backoffInterval
         }
+    }
+
+    /** Reads editable metadata and embedded artwork directly from a local audio file. */
+    suspend fun readLocalTrackTags(track: AudioTrack): Result<AudioTagData> =
+        localTagDataSource.readTags(track)
+
+    /**
+     * Writes metadata edits to one or more local audio files, triggers a targeted rescan/cache
+     * sync on success, and notifies active playback observers.
+     */
+    suspend fun writeLocalTrackTags(
+        tracks: List<AudioTrack>,
+        edit: BatchTagEditRequest,
+        createBackup: Boolean
+    ): TagWriteResult {
+        val result = localTagDataSource.writeTags(tracks, edit, createBackup)
+        if (result is TagWriteResult.Success) {
+            val updated = audioRepository.rescanEditedTracks(tracks, result.updatedTagsByTrackId)
+            if (updated.isNotEmpty()) {
+                _editedTracksFlow.tryEmit(updated)
+            }
+        }
+        return result
     }
 
     /** Pre-seeds the artist cache in parallel with concurrency limiting for a list of tracks. */

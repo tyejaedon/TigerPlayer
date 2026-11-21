@@ -44,6 +44,7 @@ class MetadataEngineTest {
     private val lyricsRepository = mockk<LyricsRepository>(relaxed = true)
     private val tigerDao = mockk<TigerDao>(relaxed = true)
     private val audioRepository = mockk<AudioRepository>(relaxed = true)
+    private val localTagDataSource = mockk<com.tigerplayer.data.source.LocalTagDataSource>(relaxed = true)
     private val settingsDataStore = mockk<SettingsDataStore>(relaxed = true)
     private val deezerRepository = mockk<DeezerRepository>(relaxed = true)
 
@@ -55,8 +56,9 @@ class MetadataEngineTest {
             lyricsRepository = lyricsRepository,
             tigerDao = tigerDao,
             audioRepository = audioRepository,
-            settingsDataStore = settingsDataStore,
             deezerRepository = deezerRepository
+            localTagDataSource = localTagDataSource,
+            settingsDataStore = settingsDataStore
         )
     }
 
@@ -272,6 +274,7 @@ class MetadataEngineTest {
             audioRepository = audioRepository,
             settingsDataStore = settingsDataStore,
             deezerRepository = deezerRepository
+            localTagDataSource = localTagDataSource,
         )
 
         val processedCount = engine.crawlMissingLyricsBatch(20)
