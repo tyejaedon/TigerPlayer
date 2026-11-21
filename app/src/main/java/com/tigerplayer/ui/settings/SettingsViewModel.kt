@@ -299,6 +299,16 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setRouteToSystemDecoderDsp(enabled) }
     }
 
+    fun setCrossfeedPreset(preset: com.tigerplayer.data.local.CrossfeedPreset) {
+        viewModelScope.launch {
+            if (preset != com.tigerplayer.data.local.CrossfeedPreset.OFF) {
+                // Binaural crossfeed runs in the in-app DSP pipeline.
+                settingsDataStore.setRouteToSystemDecoderDsp(false)
+            }
+            settingsDataStore.setCrossfeedPreset(preset)
+        }
+    }
+
     fun setResumeOnBluetoothConnect(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setResumeOnBluetoothConnect(enabled) }
     }

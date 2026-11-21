@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
@@ -108,6 +109,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.backup.RestoreStrategy
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.SkipShortAudio
 import com.tigerplayer.data.local.ThemeMode
@@ -792,6 +794,71 @@ fun CoverScreenSettingsView(
                                     fontWeight = FontWeight.Black,
                                     fontSize = 12.sp
                                 )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        // Binaural Crossfeed (parity with SettingScreen)
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Headphones,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Binaural Crossfeed",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Headphone stage (auto-bypassed on speakers)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CrossfeedPreset.entries.forEach { preset ->
+                                    val isSelected = settingsState.crossfeedPreset == preset
+                                    val label = when (preset) {
+                                        CrossfeedPreset.OFF -> "OFF"
+                                        CrossfeedPreset.SUBTLE -> "SUBTLE"
+                                        CrossfeedPreset.CLASSIC_STUDIO -> "CLASSIC STUDIO"
+                                    }
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            viewModel.setCrossfeedPreset(preset)
+                                        },
+                                        label = { Text(label) },
+                                        modifier = Modifier
+                                            .defaultMinSize(minHeight = 48.dp)
+                                            .testTag(CoverScreenTestTags.settingsCrossfeedPreset(preset.name)),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = accent.copy(alpha = 0.22f),
+                                            selectedLabelColor = accent
+                                        )
+                                    )
+                                }
                             }
                         }
 

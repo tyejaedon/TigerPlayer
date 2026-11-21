@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.model.HeadphoneSearchResult
 import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.ui.theme.TigerCyberCyan
@@ -121,6 +122,103 @@ fun AcousticSpacePanel(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = desc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BinauralCrossfeedPanel(
+    currentPreset: CrossfeedPreset,
+    isBuiltInSpeakerOutput: Boolean,
+    onSelectPreset: (CrossfeedPreset) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "BINAURAL CROSSFEED",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.5.sp,
+                color = Color.White.copy(alpha = 0.6f)
+            )
+            if (currentPreset != CrossfeedPreset.OFF && isBuiltInSpeakerOutput) {
+                Text(
+                    text = "Auto-bypassed on built-in speaker",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TigerNeonOrange,
+                    fontSize = 10.sp
+                )
+            }
+        }
+
+        CrossfeedPreset.entries.forEach { preset ->
+            val isSelected = currentPreset == preset
+            val isSpeakerBypassed = isSelected && preset != CrossfeedPreset.OFF && isBuiltInSpeakerOutput
+            val borderColor = when {
+                isSpeakerBypassed -> TigerNeonOrange
+                isSelected -> TigerCyberCyan
+                else -> Color.White.copy(alpha = 0.08f)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+                    .glassEffect(RoundedCornerShape(14.dp))
+                    .border(
+                        if (isSelected) 1.5.dp else 0.5.dp,
+                        borderColor,
+                        RoundedCornerShape(14.dp)
+                    )
+                    .clickable { onSelectPreset(preset) }
+                    .testTag("crossfeed_preset_${preset.name}")
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = preset.displayName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                isSpeakerBypassed -> TigerNeonOrange
+                                isSelected -> TigerCyberCyan
+                                else -> Color.White
+                            }
+                        )
+                        if (isSelected) {
+                            Text(
+                                text = if (isSpeakerBypassed) "SPEAKER BYPASS" else "ACTIVE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = if (isSpeakerBypassed) TigerNeonOrange else EmeraldNeon,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = preset.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.65f),
                         fontSize = 11.sp,
@@ -739,6 +837,21 @@ fun DspSignalChainPill(state: EqualizerHubUiState) {
             isActive = true,
             color = if (isSpaceActive) TigerNeonOrange else Color.Gray
         )
+
+        if (state.crossfeedPreset != CrossfeedPreset.OFF) {
+            SignalChainArrow()
+            SignalChainBlock(
+                icon = Icons.Default.Headphones,
+                label = "Crossfeed",
+                badge = if (state.isBuiltInSpeakerOutput) {
+                    "SPEAKER BYPASS"
+                } else {
+                    state.crossfeedPreset.displayName.uppercase(Locale.US)
+                },
+                isActive = true,
+                color = if (state.isBuiltInSpeakerOutput) Color.Gray else TigerCyberCyan
+            )
+        }
     }
 }
 

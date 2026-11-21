@@ -64,6 +64,36 @@ enum class ReplayGainMode {
     SMART
 }
 
+enum class CrossfeedPreset(
+    val displayName: String,
+    val description: String,
+    val cutoffHz: Float,
+    val delayMicros: Float,
+    val feedGain: Float
+) {
+    OFF(
+        displayName = "Bypass / Off",
+        description = "Default pure stereo with zero crossfeed processing.",
+        cutoffHz = 700f,
+        delayMicros = 0f,
+        feedGain = 0f
+    ),
+    SUBTLE(
+        displayName = "Subtle",
+        description = "Natural crossfeed for modern wide mixes (-12 dB feed, 260 us ITD).",
+        cutoffHz = 700f,
+        delayMicros = 260f,
+        feedGain = 0.25f
+    ),
+    CLASSIC_STUDIO(
+        displayName = "Classic Studio",
+        description = "Bauer/Linkwitz stage for vintage hard-panned stereo masters (-8.5 dB feed, 300 us ITD).",
+        cutoffHz = 700f,
+        delayMicros = 300f,
+        feedGain = 0.375f
+    )
+}
+
 enum class CoverScreenEqPreset(val displayName: String) {
     NEURAL_ADAPTIVE("Neural Adaptive"),
     NIGHT_DRIVE("Night Drive"),
@@ -94,6 +124,7 @@ data class TigerSettingsState(
     val replayGainMode: ReplayGainMode = ReplayGainMode.SMART,
     val replayGainPreampDb: Float = 0f,
     val replayGainPreventClipping: Boolean = true,
+    val crossfeedPreset: CrossfeedPreset = CrossfeedPreset.OFF,
     val coverScreenVolume: Float = 1f,
     val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
     val coverScreenPreviewMode: Boolean = false,
@@ -141,6 +172,7 @@ class SettingsDataStore @Inject constructor(
             replayGainMode = enumOrDefault(prefs[REPLAY_GAIN_MODE], ReplayGainMode.SMART),
             replayGainPreampDb = (prefs[REPLAY_GAIN_PREAMP_DB] ?: 0f).coerceIn(-15f, 15f),
             replayGainPreventClipping = prefs[REPLAY_GAIN_PREVENT_CLIPPING] ?: true,
+            crossfeedPreset = enumOrDefault(prefs[CROSSFEED_PRESET], CrossfeedPreset.OFF),
             coverScreenVolume = prefs[COVER_SCREEN_VOLUME]
                 ?.takeIf { it.isFinite() }
                 ?.coerceIn(0f, 1f)
@@ -304,6 +336,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[LASTFM_SCROBBLE_REMOTE] = enabled }
     }
 
+    suspend fun setCrossfeedPreset(preset: CrossfeedPreset) {
+        dataStore.edit { it[CROSSFEED_PRESET] = preset.name }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -349,5 +385,6 @@ class SettingsDataStore @Inject constructor(
         val LASTFM_SCROBBLE_ENABLED = booleanPreferencesKey("lastfm_scrobble_enabled")
         val LASTFM_NOW_PLAYING_ENABLED = booleanPreferencesKey("lastfm_now_playing_enabled")
         val LASTFM_SCROBBLE_REMOTE = booleanPreferencesKey("lastfm_scrobble_remote")
+        val CROSSFEED_PRESET = stringPreferencesKey("crossfeed_preset")
     }
 }

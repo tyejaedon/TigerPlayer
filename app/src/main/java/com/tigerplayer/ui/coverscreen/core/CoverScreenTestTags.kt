@@ -122,6 +122,7 @@ object CoverScreenTestTags {
     fun discoveryPlay(id: String): String = "cover_screen_discovery_play_$id"
     fun discoveryQueue(id: String): String = "cover_screen_discovery_queue_$id"
     fun eqPreset(name: String): String = "cover_screen_eq_preset_$name"
+    fun settingsCrossfeedPreset(name: String): String = "cover_screen_settings_crossfeed_$name"
 
     // Settings screen test tags
     const val SETTINGS_VIEW = "CoverScreenSettingsView"
