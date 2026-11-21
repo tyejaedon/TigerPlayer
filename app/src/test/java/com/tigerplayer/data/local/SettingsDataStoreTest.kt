@@ -117,4 +117,25 @@ class SettingsDataStoreTest {
             assertEquals(1.8f, snapshot.waveformSensitivity, 0.001f)
         }
     }
+
+    @Test
+    fun persists_and_defaults_crossfeed_preset_with_safe_fallback() {
+        runBlocking {
+            val defaultStore = SettingsDataStore(InMemoryPreferencesDataStore())
+            assertEquals(CrossfeedPreset.OFF, defaultStore.settingsFlow.first().crossfeedPreset)
+
+            defaultStore.setCrossfeedPreset(CrossfeedPreset.SUBTLE)
+            assertEquals(CrossfeedPreset.SUBTLE, defaultStore.settingsFlow.first().crossfeedPreset)
+
+            defaultStore.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+            assertEquals(CrossfeedPreset.CLASSIC_STUDIO, defaultStore.settingsFlow.first().crossfeedPreset)
+
+            val fallbackStore = SettingsDataStore(
+                InMemoryPreferencesDataStore(
+                    mutablePreferencesOf(stringPreferencesKey("crossfeed_preset") to "UNKNOWN_CROSSFEED")
+                )
+            )
+            assertEquals(CrossfeedPreset.OFF, fallbackStore.settingsFlow.first().crossfeedPreset)
+        }
+    }
 }

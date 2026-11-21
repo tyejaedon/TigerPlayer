@@ -2,6 +2,7 @@ package com.tigerplayer.ui.equalizer
 
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.CoverScreenEqPreset
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.TigerSettingsState
@@ -48,6 +49,7 @@ class EqualizerHubViewModelTest {
 
     private val activeDeviceFlow = MutableStateFlow(testActiveDevice)
     private val envModeFlow = MutableStateFlow(AcousticEnvironmentMode.STUDIO.name)
+    private val speakerOutputFlow = MutableStateFlow(false)
 
     private lateinit var viewModel: EqualizerHubViewModel
 
@@ -57,6 +59,7 @@ class EqualizerHubViewModelTest {
 
         every { adaptiveDspEngine.getSampleRate() } returns 48000
         every { adaptiveDspEngine.audioReactiveFrame } returns MutableStateFlow(AudioReactiveFrame())
+        every { adaptiveDspEngine.isBuiltInSpeakerOutputFlow } returns speakerOutputFlow
         every { audioDeviceEngine.activeDevice } returns activeDeviceFlow
         every { playbackPrefs.acousticEnvironmentMode } returns envModeFlow
         every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
@@ -304,5 +307,26 @@ class EqualizerHubViewModelTest {
         assertNull(viewModel.uiState.value.autoEqModel)
         assertEquals(5, viewModel.uiState.value.bands.size)
         assertTrue(viewModel.uiState.value.bands.all { it.gainDb == 0f })
+    }
+
+    @Test
+    fun `setCrossfeedPreset updates DSP, persists preference, and reflects speaker bypass state`() = runTest(testDispatcher) {
+        viewModel.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(CrossfeedPreset.CLASSIC_STUDIO, viewModel.uiState.value.crossfeedPreset)
+        verify { adaptiveDspEngine.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO) }
+        coVerify { settingsDataStore.setRouteToSystemDecoderDsp(false) }
+        coVerify { settingsDataStore.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO) }
+
+        speakerOutputFlow.value = true
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isBuiltInSpeakerOutput)
+
+        viewModel.setCrossfeedPreset(CrossfeedPreset.OFF)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(CrossfeedPreset.OFF, viewModel.uiState.value.crossfeedPreset)
+        coVerify(exactly = 1) { settingsDataStore.setRouteToSystemDecoderDsp(false) }
+        coVerify { settingsDataStore.setCrossfeedPreset(CrossfeedPreset.OFF) }
     }
 }

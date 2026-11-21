@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
@@ -98,6 +99,7 @@ import android.widget.Toast
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.backup.RestoreStrategy
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.SkipShortAudio
 import com.tigerplayer.data.local.ThemeMode
@@ -412,6 +414,57 @@ fun SettingsScreen(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
                 }
+
+                HorizontalDivider(
+                    Modifier.padding(horizontal = 16.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Headphones, null, tint = accent, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("BINAURAL CROSSFEED", fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Bauer/Linkwitz headphone stage (auto-bypassed on built-in speakers)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CrossfeedPreset.entries.forEach { preset ->
+                            FilterChip(
+                                selected = settings.crossfeedPreset == preset,
+                                onClick = { viewModel.setCrossfeedPreset(preset) },
+                                label = {
+                                    val label = when (preset) {
+                                        CrossfeedPreset.OFF -> "OFF"
+                                        CrossfeedPreset.SUBTLE -> "SUBTLE"
+                                        CrossfeedPreset.CLASSIC_STUDIO -> "CLASSIC STUDIO"
+                                    }
+                                    Text(label)
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(
+                    Modifier.padding(horizontal = 16.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
 
                 ListItem(
                     headlineContent = { Text("SYSTEM DECODER / DSP", fontWeight = FontWeight.Bold) },

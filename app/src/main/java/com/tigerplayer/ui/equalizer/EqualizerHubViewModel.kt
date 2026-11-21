@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.CoverScreenEqPreset
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.model.HeadphoneSearchResult
@@ -30,7 +31,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -128,6 +131,22 @@ class EqualizerHubViewModel(
                 val mode = runCatching { AcousticEnvironmentMode.valueOf(savedName) }
                     .getOrDefault(AcousticEnvironmentMode.STUDIO)
                 _uiState.update { it.copy(environmentMode = mode) }
+            }
+        }
+
+        // 2b. Observe binaural crossfeed preset & speaker output route state
+        viewModelScope.launch {
+            settingsDataStore.settingsFlow
+                .map { it.crossfeedPreset }
+                .distinctUntilChanged()
+                .collect { preset ->
+                    adaptiveDspEngine.setCrossfeedPreset(preset)
+                    _uiState.update { it.copy(crossfeedPreset = preset) }
+                }
+        }
+        viewModelScope.launch {
+            adaptiveDspEngine.isBuiltInSpeakerOutputFlow.collect { isSpeaker ->
+                _uiState.update { it.copy(isBuiltInSpeakerOutput = isSpeaker) }
             }
         }
 
@@ -681,6 +700,17 @@ class EqualizerHubViewModel(
         _uiState.update { it.copy(environmentMode = mode) }
         viewModelScope.launch(ioDispatcher) {
             playbackPrefs.saveAcousticEnvironmentMode(mode.name)
+        }
+    }
+
+    fun setCrossfeedPreset(preset: CrossfeedPreset) {
+        adaptiveDspEngine.setCrossfeedPreset(preset)
+        _uiState.update { it.copy(crossfeedPreset = preset) }
+        viewModelScope.launch(ioDispatcher) {
+            if (preset != CrossfeedPreset.OFF) {
+                settingsDataStore.setRouteToSystemDecoderDsp(false)
+            }
+            settingsDataStore.setCrossfeedPreset(preset)
         }
     }
 

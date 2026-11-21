@@ -87,6 +87,15 @@ fun AcousticSpaceView(
                 onSelectMode = viewModel::setAcousticEnvironment,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            BinauralCrossfeedPanel(
+                currentPreset = uiState.crossfeedPreset,
+                isBuiltInSpeakerOutput = uiState.isBuiltInSpeakerOutput,
+                onSelectPreset = viewModel::setCrossfeedPreset,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

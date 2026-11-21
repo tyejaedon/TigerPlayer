@@ -1,8 +1,10 @@
 package com.tigerplayer.engine
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -11,6 +13,7 @@ import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.util.UnstableApi
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.ReplayGainMode
 import com.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -88,6 +91,12 @@ class AdaptiveDspEngine @Inject constructor(
 
     @Volatile private var pendingNodes: List<AcousticNode> = emptyList()
     @Volatile private var acousticEnvironmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.STUDIO
+    @Volatile private var crossfeedPreset: CrossfeedPreset = CrossfeedPreset.OFF
+    @Volatile private var isBuiltInSpeakerOutput: Boolean = false
+    private val _isBuiltInSpeakerOutputFlow = MutableStateFlow(false)
+    /** StateFlow indicating whether audio output is currently routed solely to built-in speakers. */
+    val isBuiltInSpeakerOutputFlow: StateFlow<Boolean> = _isBuiltInSpeakerOutputFlow.asStateFlow()
+    private val crossfeedProcessor = BinauralCrossfeedProcessor()
     @Volatile private var prismMode: PrismMode = PrismMode.BYPASS
     @Volatile private var prismTargetMix = PrismMixLevels()
     @Volatile private var spectralAnalysisMode: SpectralAnalysisMode = SpectralAnalysisMode.FFT
@@ -326,11 +335,13 @@ class AdaptiveDspEngine @Inject constructor(
      * USB DACs, and Samsung Galaxy Buds) and dynamically configures device compensation filters.
      */
     fun detectAndApplyDeviceProfile() {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
 
         val isBluetooth = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
         val isBuiltIn = devices.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+        isBuiltInSpeakerOutput = detectBuiltInSpeakerOutput(audioManager, devices)
+        _isBuiltInSpeakerOutputFlow.value = isBuiltInSpeakerOutput
 
         // AUDIOPHILE COMPATIBILITY: Detect Samsung-specific outputs (Galaxy Buds)
         // to avoid phase-cancellation conflicts with Samsung's native 360 Audio.
@@ -359,6 +370,48 @@ class AdaptiveDspEngine @Inject constructor(
         deviceCompensationFilters = newDeviceFilters
     }
 
+    private fun isSpeakerLikeDevice(type: Int): Boolean {
+        return type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE)
+    }
+
+    private fun detectBuiltInSpeakerOutput(
+        audioManager: AudioManager,
+        devices: Array<AudioDeviceInfo>
+    ): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val routed = runCatching {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+                audioManager.getAudioDevicesForAttributes(attrs)
+            }.getOrNull()
+            if (!routed.isNullOrEmpty()) {
+                return routed.all { isSpeakerLikeDevice(it.type) }
+            }
+        }
+
+        val hasExternalRoute = devices.any { device ->
+            when (device.type) {
+                AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                AudioDeviceInfo.TYPE_USB_HEADSET,
+                AudioDeviceInfo.TYPE_USB_DEVICE,
+                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                AudioDeviceInfo.TYPE_HEARING_AID,
+                AudioDeviceInfo.TYPE_LINE_ANALOG,
+                AudioDeviceInfo.TYPE_LINE_DIGITAL,
+                AudioDeviceInfo.TYPE_AUX_LINE -> true
+                else -> Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
+        }
+        val hasBuiltInSpeaker = devices.any { isSpeakerLikeDevice(it.type) }
+        return hasBuiltInSpeaker && !hasExternalRoute
+    }
+
     /**
      * Recalculates sample-rate aware attack and release coefficients for true-peak look-ahead limiter.
      */
@@ -375,6 +428,7 @@ class AdaptiveDspEngine @Inject constructor(
     private fun isDigitalOverImminent(): Boolean {
         return hasPositiveEqBoost ||
             acousticEnvironmentMode == AcousticEnvironmentMode.CONCERT_HALL ||
+            isCrossfeedEffectivelyActive() ||
             (prismMode == PrismMode.ISOLATION && (prismTargetMix.vocals > 1.0f || prismTargetMix.beats > 1.0f || prismTargetMix.instruments > 1.0f)) ||
             replayGainLinear > 1.001f
     }
@@ -448,6 +502,24 @@ class AdaptiveDspEngine @Inject constructor(
      */
     fun setAcousticEnvironmentMode(mode: AcousticEnvironmentMode) {
         acousticEnvironmentMode = mode
+    }
+
+    /**
+     * Configures the stereophonic-to-binaural Crossfeed preset (Bauer / Linkwitz model).
+     */
+    fun setCrossfeedPreset(preset: CrossfeedPreset) {
+        crossfeedPreset = preset
+    }
+
+    /** Returns the currently configured [CrossfeedPreset]. */
+    fun getCrossfeedPreset(): CrossfeedPreset = crossfeedPreset
+
+    /** Returns true when output is routed exclusively to built-in speakers. */
+    fun isBuiltInSpeakerOutput(): Boolean = isBuiltInSpeakerOutput
+
+    /** Returns true when binaural crossfeed is actively processing headphone output. */
+    fun isCrossfeedEffectivelyActive(): Boolean {
+        return crossfeedPreset != CrossfeedPreset.OFF && !isBuiltInSpeakerOutput && !isBitPerfect
     }
 
 
@@ -611,6 +683,7 @@ class AdaptiveDspEngine @Inject constructor(
             .coerceIn(24, LOOK_AHEAD_BUFFER_SIZE - 1)
         val safeRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
         hallProcessor.configure(safeRate)
+        crossfeedProcessor.configure(safeRate)
         prismIsolator.configure(safeRate)
         vinylShelf.updateParameters(350f, 2.5f, 0.5f, safeRate)
         configureSpectralAnalyzer(inputAudioFormat.sampleRate)
@@ -678,6 +751,10 @@ class AdaptiveDspEngine @Inject constructor(
         val localDeviceFilters = deviceCompensationFilters
         val localActiveFilters = activeFilters
         val localEnvironmentMode = acousticEnvironmentMode
+        val localCrossfeedPreset = crossfeedPreset
+        val localBuiltInSpeaker = isBuiltInSpeakerOutput
+        val localBitPerfect = isBitPerfect
+        val localCrossfeedActive = localCrossfeedPreset != CrossfeedPreset.OFF && !localBuiltInSpeaker && !localBitPerfect
         val localPrismMode = prismMode
         val localPrismTargetMix = prismTargetMix
         val localSpectralMode = spectralAnalysisMode
@@ -722,7 +799,7 @@ class AdaptiveDspEngine @Inject constructor(
             }
 
             // 1. HEADPHONE WIDENING (Optimized for transparency)
-            if (isHeadphones && channels == 2) {
+            if (isHeadphones && channels == 2 && !localCrossfeedActive) {
                 val mid = (sampleL + sampleR) * 0.5f
                 val side = (sampleL - sampleR) * 0.5f
                 val widenedSide = side * 1.02f
@@ -763,6 +840,18 @@ class AdaptiveDspEngine @Inject constructor(
                     sampleR = hallProcessor.outR
                 }
             }
+
+            // 3.5. BINAURAL CROSSFEED (Linear-phase Bauer / Linkwitz, auto-bypassed on built-in speakers)
+            crossfeedProcessor.process(
+                inputL = sampleL,
+                inputR = sampleR,
+                channels = channels,
+                preset = localCrossfeedPreset,
+                bypassForSpeaker = localBuiltInSpeaker,
+                isBitPerfect = localBitPerfect
+            )
+            sampleL = crossfeedProcessor.outL
+            sampleR = crossfeedProcessor.outR
 
             // 4. PRISM ISOLATION (Linkwitz-Riley)
             if (localPrismMode == PrismMode.ISOLATION) {
@@ -965,6 +1054,7 @@ class AdaptiveDspEngine @Inject constructor(
         vinylSignalEnvelope = 0f
         vinylShelf.reset()
         hallProcessor.reset()
+        crossfeedProcessor.reset()
         prismIsolator.reset()
         prismCurrentVocals = prismTargetMix.vocals
         prismCurrentBeats = prismTargetMix.beats

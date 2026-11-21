@@ -5,6 +5,7 @@ import com.tigerplayer.data.backup.BackupManager
 import com.tigerplayer.data.backup.BackupSummary
 import com.tigerplayer.data.backup.RestoreStrategy
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.NavidromePrefs
 import com.tigerplayer.data.local.SettingsDataStore
@@ -255,5 +256,18 @@ class CoverScreenSettingsViewModelTest {
         viewModel.resetToDefaults()
         advanceUntilIdle()
         coVerify(exactly = 1) { settingsDataStore.resetToDefaults() }
+    }
+
+    @Test
+    fun crossfeedPresetSelectionPersistsAndDisablesOffloadWhenEnabled() = runTest {
+        viewModel.setCrossfeedPreset(CrossfeedPreset.SUBTLE)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { settingsDataStore.setRouteToSystemDecoderDsp(false) }
+        coVerify(exactly = 1) { settingsDataStore.setCrossfeedPreset(CrossfeedPreset.SUBTLE) }
+
+        viewModel.setCrossfeedPreset(CrossfeedPreset.OFF)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { settingsDataStore.setRouteToSystemDecoderDsp(false) }
+        coVerify(exactly = 1) { settingsDataStore.setCrossfeedPreset(CrossfeedPreset.OFF) }
     }
 }

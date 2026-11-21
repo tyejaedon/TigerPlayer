@@ -2,6 +2,7 @@ package com.tigerplayer.ui.equalizer
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AcousticNode
 import com.tigerplayer.engine.FilterType
@@ -250,6 +251,8 @@ data class EqualizerHubUiState(
     val originalPreampDb: Float = 0f,
     val connectedDeviceName: String = "Internal Speaker",
     val environmentMode: AcousticEnvironmentMode = AcousticEnvironmentMode.STUDIO,
+    val crossfeedPreset: CrossfeedPreset = CrossfeedPreset.OFF,
+    val isBuiltInSpeakerOutput: Boolean = false,
     val studioTab: EqualizerStudioTab = EqualizerStudioTab.STUDIO_EQ,
     val activeEngineSource: EqualizerEngineSource = EqualizerEngineSource.PARAMETRIC_BANDS,
     val spatialNodes: List<SpatialNode> = DEFAULT_SPATIAL_NODES,

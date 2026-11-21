@@ -5,6 +5,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
+import com.tigerplayer.data.local.CrossfeedPreset
 import io.mockk.every
 import io.mockk.mockk
 import java.nio.ByteBuffer
@@ -13,6 +14,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.sqrt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -429,5 +431,153 @@ class AdaptiveDspEngineTest {
         val activeFrame = engine.audioReactiveFrame.value
         assertTrue("Energy should be computed when spectral analysis is re-enabled", activeFrame.energy > 0f)
         assertTrue("Bass should be computed when spectral analysis is re-enabled", activeFrame.bass > 0f)
+    }
+
+    private fun buildLeftPannedSineBuffer(
+        sampleRate: Int,
+        frequencyHz: Float,
+        frames: Int,
+        amplitude: Float
+    ): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(frames * 4).order(ByteOrder.nativeOrder())
+        for (index in 0 until frames) {
+            val t = index.toDouble() / sampleRate.toDouble()
+            val sample = (sin(2.0 * PI * frequencyHz * t) * amplitude).coerceIn(-0.98, 0.98)
+            buffer.putShort((sample * Short.MAX_VALUE).toInt().toShort())
+            buffer.putShort(0)
+        }
+        buffer.flip()
+        return buffer
+    }
+
+    private fun measureChannelRms(buffer: ByteBuffer): Pair<Float, Float> {
+        val copy = buffer.duplicate().order(ByteOrder.nativeOrder())
+        var sumSqL = 0.0
+        var sumSqR = 0.0
+        var count = 0
+        while (copy.remaining() >= 4) {
+            val l = copy.getShort().toDouble() / 32768.0
+            val r = copy.getShort().toDouble() / 32768.0
+            sumSqL += l * l
+            sumSqR += r * r
+            count++
+        }
+        if (count == 0) return 0f to 0f
+        return sqrt(sumSqL / count).toFloat() to sqrt(sumSqR / count).toFloat()
+    }
+
+    private fun mockMixedHeadphonesAndSpeakerContext(): Context {
+        val context = mockk<Context>()
+        val audioManager = mockk<AudioManager>()
+        val speaker = mockk<AudioDeviceInfo>()
+        val headphones = mockk<AudioDeviceInfo>()
+
+        every { speaker.type } returns AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        every { speaker.productName } returns "Built-in speaker"
+        every { headphones.type } returns AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+        every { headphones.productName } returns "Reference IEM"
+        every { context.getSystemService(Context.AUDIO_SERVICE) } returns audioManager
+        every { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) } returns arrayOf(speaker, headphones)
+        return context
+    }
+
+    @Test
+    fun crossfeed_isAutoBypassedOnBuiltInSpeakerOutput() {
+        val engine = AdaptiveDspEngine(mockContext())
+        engine.configure(AudioFormat(48_000, 2, C.ENCODING_PCM_16BIT))
+        engine.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+
+        assertTrue(engine.isBuiltInSpeakerOutput())
+        assertFalse(engine.isCrossfeedEffectivelyActive())
+
+        val input = buildLeftPannedSineBuffer(48_000, 200f, 4096, 0.7f)
+        engine.queueInput(input)
+        val output = engine.getOutput()
+        val (rmsL, rmsR) = measureChannelRms(output)
+
+        assertTrue("Left channel must remain audible (rmsL=$rmsL)", rmsL > 0.2f)
+        assertTrue("Right channel must have zero crossfeed on built-in speaker (rmsR=$rmsR)", rmsR < 0.001f)
+    }
+
+    @Test
+    fun crossfeed_activatesOnHeadphonesWithSpeakerPresent_andIsolatesHighFrequencies() {
+        val engine = AdaptiveDspEngine(mockMixedHeadphonesAndSpeakerContext())
+        engine.configure(AudioFormat(48_000, 2, C.ENCODING_PCM_16BIT))
+        engine.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+
+        assertFalse(engine.isBuiltInSpeakerOutput())
+        assertTrue(engine.isCrossfeedEffectivelyActive())
+
+        val lowTone = buildLeftPannedSineBuffer(48_000, 200f, 4096, 0.7f)
+        engine.queueInput(lowTone)
+        val (_, lowRmsR) = measureChannelRms(engine.getOutput())
+        assertTrue("200 Hz hard-panned Left must crossfeed into Right channel (lowRmsR=$lowRmsR)", lowRmsR > 0.12f)
+
+        engine.flush()
+        val highTone = buildLeftPannedSineBuffer(48_000, 8000f, 4096, 0.7f)
+        engine.queueInput(highTone)
+        val (_, highRmsR) = measureChannelRms(engine.getOutput())
+        assertTrue("8 kHz must be strongly attenuated by -6 dB/oct head-shadow filter (highRmsR=$highRmsR)", highRmsR < 0.03f)
+        assertTrue("Low frequency crossfeed must significantly exceed high frequency leakage", lowRmsR > highRmsR * 5f)
+    }
+
+    @Test
+    fun crossfeed_tracksLiveOutputRouteSwitchBetweenHeadphonesAndBuiltInSpeaker() {
+        val context = mockk<Context>()
+        val audioManager = mockk<AudioManager>()
+        val speaker = mockk<AudioDeviceInfo>()
+        val headphones = mockk<AudioDeviceInfo>()
+        every { speaker.type } returns AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        every { speaker.productName } returns "Built-in speaker"
+        every { headphones.type } returns AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+        every { headphones.productName } returns "Wired Headphones"
+        every { context.getSystemService(Context.AUDIO_SERVICE) } returns audioManager
+
+        var activeDevices = arrayOf(speaker, headphones)
+        every { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) } answers { activeDevices }
+
+        val engine = AdaptiveDspEngine(context)
+        engine.configure(AudioFormat(48_000, 2, C.ENCODING_PCM_16BIT))
+        engine.setCrossfeedPreset(CrossfeedPreset.SUBTLE)
+
+        assertFalse(engine.isBuiltInSpeakerOutput())
+        assertTrue(engine.isCrossfeedEffectivelyActive())
+
+        // Switch live to built-in speaker only (unplug headphones)
+        activeDevices = arrayOf(speaker)
+        engine.detectAndApplyDeviceProfile()
+
+        assertTrue(engine.isBuiltInSpeakerOutput())
+        assertFalse(engine.isCrossfeedEffectivelyActive())
+
+        // Drain 8ms smoothing ramp then verify zero crossfeed leakage
+        engine.queueInput(buildLeftPannedSineBuffer(48_000, 200f, 2048, 0.7f))
+        engine.getOutput()
+        engine.queueInput(buildLeftPannedSineBuffer(48_000, 200f, 2048, 0.7f))
+        val (_, rmsR) = measureChannelRms(engine.getOutput())
+        assertTrue("Crossfeed must bypass cleanly after route switches to built-in speaker (rmsR=$rmsR)", rmsR < 0.001f)
+    }
+
+    @Test
+    fun crossfeed_processes32BitFloatPcmCleanly() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val frames = 2048
+        engine.configure(AudioFormat(48_000, 2, C.ENCODING_PCM_FLOAT))
+        engine.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+
+        val floatInput = ByteBuffer.allocateDirect(frames * 8).order(ByteOrder.nativeOrder())
+        for (i in 0 until frames) {
+            val s = (sin(2.0 * PI * 250.0 * i / 48_000.0) * 0.75).toFloat()
+            floatInput.putFloat(s)
+            floatInput.putFloat(0f)
+        }
+        floatInput.flip()
+
+        engine.queueInput(floatInput)
+        val output = engine.getOutput()
+        val (rmsL, rmsR) = measureChannelRms(output)
+        assertEquals(frames * 4, output.remaining())
+        assertTrue("32-bit float Left output must be audible (rmsL=$rmsL)", rmsL > 0.2f)
+        assertTrue("32-bit float crossfeed Right output must be audible (rmsR=$rmsR)", rmsR > 0.12f)
     }
 }

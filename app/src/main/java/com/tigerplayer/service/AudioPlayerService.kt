@@ -3,8 +3,13 @@ package com.tigerplayer.service
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.StrictMode
 import android.os.SystemClock
 import android.os.VibrationEffect
@@ -129,6 +134,7 @@ class AudioPlayerService : MediaLibraryService() {
     private var lastHapticSkipPublishAtMs = 0L
     private var hapticPulseCount = 0L
     private var currentProfile: PeqProfile? = null
+    private var audioDeviceCallback: AudioDeviceCallback? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** In-flight offload transition, cancelled if the user toggles again mid-fade (issue #53). */
@@ -339,6 +345,30 @@ class AudioPlayerService : MediaLibraryService() {
                         isBitPerfect = isBitPerfectMode
                     )
                 }
+        }
+
+        serviceScope.launch {
+            settingsDataStore.settingsFlow
+                .map { it.crossfeedPreset }
+                .distinctUntilChanged()
+                .collect { preset ->
+                    adaptiveDspEngine.setCrossfeedPreset(preset)
+                }
+        }
+
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        if (audioManager != null) {
+            val callback = object : AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                    adaptiveDspEngine.detectAndApplyDeviceProfile()
+                }
+
+                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                    adaptiveDspEngine.detectAndApplyDeviceProfile()
+                }
+            }
+            audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+            audioDeviceCallback = callback
         }
 
         player.addListener(object : Player.Listener {
@@ -934,6 +964,11 @@ class AudioPlayerService : MediaLibraryService() {
         isPlayerReleased = true
         offloadTransitionJob?.cancel()
         offloadTransitionJob = null
+        audioDeviceCallback?.let { callback ->
+            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                ?.unregisterAudioDeviceCallback(callback)
+        }
+        audioDeviceCallback = null
         playbackWidgetUpdater.detach()
 
         mediaSession?.run {
