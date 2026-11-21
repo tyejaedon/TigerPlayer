@@ -72,6 +72,7 @@ class PlaybackStateManagerTest {
 
         every { metadataEngine.currentLyrics } returns MutableStateFlow(Lyrics.None)
         every { metadataEngine.currentArtistImageUrl } returns MutableStateFlow(null)
+        every { metadataEngine.editedTracksFlow } returns kotlinx.coroutines.flow.MutableSharedFlow()
 
         every { adaptiveDspEngine.audioReactiveFrame } returns MutableStateFlow(AudioReactiveFrame())
         every { settingsDataStore.settingsFlow } returns MutableStateFlow(TigerSettingsState())

@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Speed
@@ -519,6 +520,8 @@ internal fun CoverScreenTrackHeader(
     onShowSleepTimerSheet: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showTagEditor by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -528,11 +531,13 @@ internal fun CoverScreenTrackHeader(
     ) {
         if (!isVortexImmersive) {
             CoverScreenTrackOverflowMenu(
+                canEditTags = track?.isLocal == true && !track.isRemote,
                 onOpenQueue = onOpenQueue,
                 onOpenPlaybackSettings = onOpenPlaybackSettings,
                 onShowPlaylistSelector = onShowPlaylistSelector,
                 onShowPlaybackRateDialog = onShowPlaybackRateDialog,
-                onShowSleepTimerSheet = onShowSleepTimerSheet
+                onShowSleepTimerSheet = onShowSleepTimerSheet,
+                onEditTags = { showTagEditor = true }
             )
         } else {
             Spacer(modifier = Modifier.size(32.dp))
@@ -567,15 +572,27 @@ internal fun CoverScreenTrackHeader(
             Spacer(modifier = Modifier.size(32.dp))
         }
     }
+
+    if (showTagEditor) {
+        track?.let { localTrack ->
+            com.tigerplayer.ui.library.TagEditorSheet(
+                tracks = listOf(localTrack),
+                isCoverScreen = true,
+                onDismiss = { showTagEditor = false }
+            )
+        }
+    }
 }
 
 @Composable
 internal fun CoverScreenTrackOverflowMenu(
+    canEditTags: Boolean = false,
     onOpenQueue: () -> Unit,
     onOpenPlaybackSettings: () -> Unit,
     onShowPlaylistSelector: () -> Unit,
     onShowPlaybackRateDialog: () -> Unit,
     onShowSleepTimerSheet: () -> Unit,
+    onEditTags: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showOverflowMenu by remember { mutableStateOf(false) }
@@ -720,6 +737,32 @@ internal fun CoverScreenTrackOverflowMenu(
                 },
                 modifier = Modifier.testTag("cover_track_menu_sleep_timer")
             )
+
+            if (canEditTags) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "Edit tags",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = null,
+                            tint = Color(0xFF4FC3F7),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    onClick = {
+                        showOverflowMenu = false
+                        onEditTags()
+                    },
+                    modifier = Modifier.testTag("cover_track_menu_edit_tags")
+                )
+            }
         }
     }
 }

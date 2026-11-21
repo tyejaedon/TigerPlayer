@@ -516,6 +516,7 @@ fun FullPlayerScreen(
         }
 
         // Options Sheet
+        var tracksToEditTags by remember { mutableStateOf<List<AudioTrack>?>(null) }
         if (showOptionsSheet) {
             trackForOptions?.let { selectedTrack ->
                 SongOptionsSheet(
@@ -535,6 +536,9 @@ fun FullPlayerScreen(
                     onGoToAlbum = { albumName ->
                         onNavigateToAlbum(albumName)
                     },
+                    onEditTags = {
+                        tracksToEditTags = listOf(selectedTrack)
+                    },
                     onQueueAdded = {
                         Toast.makeText(
                             context,
@@ -551,6 +555,15 @@ fun FullPlayerScreen(
                     }
                 )
             }
+        }
+        tracksToEditTags?.let { targetTracks ->
+            com.tigerplayer.ui.library.TagEditorSheet(
+                tracks = targetTracks,
+                onDismiss = { tracksToEditTags = null },
+                onSaved = {
+                    Toast.makeText(context, "Tags saved", Toast.LENGTH_SHORT).show()
+                }
+            )
         }
 
         androidx.compose.animation.AnimatedVisibility(

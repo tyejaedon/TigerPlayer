@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +48,7 @@ fun SongOptionsSheet(
     onAddToQueue: () -> Unit = {},
     onAddToPlaylist: (Long) -> Unit,
     onGoToAlbum: (String) -> Unit,
+    onEditTags: (() -> Unit)? = null,
     onQueueAdded: (AudioTrack) -> Unit = {},
     onPlaylistAdded: (AudioTrack, Playlist) -> Unit = { _, _ -> }
 ) {
@@ -163,6 +166,18 @@ fun SongOptionsSheet(
                         ) {
                             onGoToAlbum(track.album)
                             onDismiss()
+                        }
+                    }
+
+                    if (track.isLocal && !track.isRemote && onEditTags != null) {
+                        SheetActionRow(
+                            icon = Icons.Rounded.Edit,
+                            text = "Edit Tags",
+                            accentColor = MaterialTheme.aardBlue,
+                            iconTintOverride = iconTintOverride
+                        ) {
+                            onDismiss()
+                            onEditTags()
                         }
                     }
                 }

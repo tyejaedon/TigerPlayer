@@ -43,6 +43,7 @@ class MetadataEngineTest {
     private val lyricsRepository = mockk<LyricsRepository>(relaxed = true)
     private val tigerDao = mockk<TigerDao>(relaxed = true)
     private val audioRepository = mockk<AudioRepository>(relaxed = true)
+    private val localTagDataSource = mockk<com.tigerplayer.data.source.LocalTagDataSource>(relaxed = true)
     private val settingsDataStore = mockk<SettingsDataStore>(relaxed = true)
 
     private fun engine(fetchOnlineArtwork: Boolean = true): MetadataEngine {
@@ -53,6 +54,7 @@ class MetadataEngineTest {
             lyricsRepository = lyricsRepository,
             tigerDao = tigerDao,
             audioRepository = audioRepository,
+            localTagDataSource = localTagDataSource,
             settingsDataStore = settingsDataStore
         )
     }
@@ -267,6 +269,7 @@ class MetadataEngineTest {
             lyricsRepository = lyricsRepository,
             tigerDao = tigerDao,
             audioRepository = audioRepository,
+            localTagDataSource = localTagDataSource,
             settingsDataStore = settingsDataStore
         )
 

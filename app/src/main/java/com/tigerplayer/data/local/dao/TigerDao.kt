@@ -441,6 +441,30 @@ abstract class TigerDao {
     @Query("UPDATE cached_tracks SET hasEmbeddedArtwork = :hasEmbedded WHERE id = :trackId")
     abstract suspend fun updateHasEmbeddedArtwork(trackId: String, hasEmbedded: Boolean): Int
 
+    @Query(
+        """
+        UPDATE cached_tracks
+        SET title = :title,
+            artist = :artist,
+            album = :album,
+            trackNumber = :trackNumber,
+            year = :year,
+            dateModified = :dateModified,
+            hasEmbeddedArtwork = :hasEmbeddedArtwork
+        WHERE id = :trackId
+        """
+    )
+    abstract suspend fun updateTrackMetadata(
+        trackId: String,
+        title: String,
+        artist: String,
+        album: String,
+        trackNumber: Int,
+        year: String?,
+        dateModified: Long,
+        hasEmbeddedArtwork: Boolean
+    ): Int
+
     @Query("SELECT * FROM cached_tracks WHERE id = :id LIMIT 1")
     abstract suspend fun getCachedTrackById(id: String): CachedTrackEntity?
 
