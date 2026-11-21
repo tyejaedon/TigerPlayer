@@ -23,20 +23,56 @@ plugins {
 // 🔥 THE FIX: Using the explicit AGP 9.0+ ApplicationExtension to bypass the deprecation
 configure<ApplicationExtension> {
     namespace = "com.tigerplayer"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.tigerplayer"
         minSdk = 29
         //noinspection OldTargetApi
-        targetSdk = 36
-        // Dynamic version code/name injection (used for beta/release pipelines) with committed fallback
+        targetSdk = 37
+
+        val resolvedVersionName = project.findProperty("VERSION_NAME")?.toString()
+            ?: System.getenv("BETA_VERSION_NAME")
+            ?: System.getenv("VERSION_NAME")
+            ?: "2.1.9"
+
+        // SemVer multiplier formula: MAJOR * 1_000_000 + MINOR * 10_000 + PATCH * 100 + BUILD_INDEX
+        // For stable production releases, BUILD_INDEX defaults to 99 so it supersedes candidate betas (1..98).
+        // Historical floor of 2020030 ensures builds supersede v2.1.9 (2020030) and legacy v2.2.0-beta.19 (2020019),
+        // while 2.2.0-beta.20+ shifts by +11 (2020011 + betaNum) to stay strictly between 2020030 and v2.2.0 (2020099).
+        fun calculateVersionCode(vName: String): Int {
+            val semverRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-beta\.?(\d+))?""")
+            val match = semverRegex.find(vName)
+            val hotfix = match?.groupValues?.getOrNull(4)?.takeIf { it.isNotEmpty() }?.toInt() ?: 0
+            val computed = if (match != null) {
+                val major = match.groupValues[1].toInt()
+                val minor = match.groupValues[2].toInt()
+                val patch = match.groupValues[3].toInt()
+                val betaNum = match.groupValues[5].takeIf { it.isNotEmpty() }?.toInt()
+                if (major == 2 && minor == 2 && patch == 0 && betaNum != null && betaNum >= 20) {
+                    val shifted = 2_020_011 + betaNum
+                    require(shifted < 2_020_099) {
+                        "Beta versionCode $shifted collides with v2.2.0 stable (2020099)."
+                    }
+                    shifted
+                } else {
+                    val buildIndex = betaNum ?: 99
+                    major * 1_000_000 + minor * 10_000 + patch * 100 + buildIndex + hotfix
+                }
+            } else {
+                2_020_030
+            }
+            // Floor of 2020030 guarantees monotonic advancement past v2.1.9 (2020030) and legacy beta ceiling (2020019)
+            val historicalFloor = 2_020_030 + hotfix
+            return maxOf(computed, historicalFloor)
+        }
+
+        // Dynamic version code/name injection (used for beta/release pipelines) with monotonic computed fallback
         versionCode = project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull()
             ?: System.getenv("BETA_VERSION_CODE")?.toIntOrNull()
-            ?: 7
-        versionName = project.findProperty("VERSION_NAME")?.toString()
-            ?: System.getenv("BETA_VERSION_NAME")
-            ?: "2.1.6-beta.1"
+            ?: System.getenv("VERSION_CODE")?.toIntOrNull()
+            ?: calculateVersionCode(resolvedVersionName)
+        versionName = resolvedVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Spotify Manifest Placeholders
@@ -50,6 +86,7 @@ configure<ApplicationExtension> {
 
         val clientId = secrets.getProperty("SPOTIFY_CLIENT_ID") ?: "MISSING_ID"
         val lastfmApiKey = secrets.getProperty("LASTFM_API_KEY") ?: "MISSING_API_KEY"
+        val lastfmApiSecret = secrets.getProperty("LASTFM_API_SECRET") ?: "MISSING_API_SECRET"
         val youtubeApiKey = secrets.getProperty("YOUTUBE_API_KEY") ?: "MISSING_YOUTUBE_KEY"
 
         // BuildConfig Fields
@@ -57,6 +94,7 @@ configure<ApplicationExtension> {
         // which requires no client secret. Never add one back here (issue #46).
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$clientId\"")
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastfmApiKey\"")
+        buildConfigField("String", "LASTFM_API_SECRET", "\"$lastfmApiSecret\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
     }
 
@@ -147,6 +185,7 @@ ksp {
 
 dependencies {
     implementation(libs.androidx.glance.preview)
+    implementation(libs.foundation.layout)
     // --- Coroutines ---
     // Declared explicitly for every flavor. The Compose runtime constrains
     // kotlinx-coroutines-android to 1.9.0, and coroutines-play-services (which used to pull it
@@ -177,6 +216,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.glance)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.window)
@@ -197,6 +238,7 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.gson)
     implementation(libs.jtransforms)
+    implementation(libs.jaudiotagger.android)
 
     implementation(libs.kotlin.youtubeextractor)
     // --- Room (The Vault) ---

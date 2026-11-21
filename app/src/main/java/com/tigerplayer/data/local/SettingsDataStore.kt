@@ -28,6 +28,11 @@ enum class DefaultPlayerView {
     SONIC_PRISM
 }
 
+enum class VisualizerPaletteMode {
+    ALBUM_ART,
+    DEFAULT_NEON
+}
+
 enum class SkipShortAudio {
     OFF,
     BELOW_30_SECONDS,
@@ -59,11 +64,42 @@ enum class ReplayGainMode {
     SMART
 }
 
+enum class CrossfeedPreset(
+    val displayName: String,
+    val description: String,
+    val cutoffHz: Float,
+    val delayMicros: Float,
+    val feedGain: Float
+) {
+    OFF(
+        displayName = "Bypass / Off",
+        description = "Default pure stereo with zero crossfeed processing.",
+        cutoffHz = 700f,
+        delayMicros = 0f,
+        feedGain = 0f
+    ),
+    SUBTLE(
+        displayName = "Subtle",
+        description = "Natural crossfeed for modern wide mixes (-12 dB feed, 260 us ITD).",
+        cutoffHz = 700f,
+        delayMicros = 260f,
+        feedGain = 0.25f
+    ),
+    CLASSIC_STUDIO(
+        displayName = "Classic Studio",
+        description = "Bauer/Linkwitz stage for vintage hard-panned stereo masters (-8.5 dB feed, 300 us ITD).",
+        cutoffHz = 700f,
+        delayMicros = 300f,
+        feedGain = 0.375f
+    )
+}
+
 enum class CoverScreenEqPreset(val displayName: String) {
     NEURAL_ADAPTIVE("Neural Adaptive"),
     NIGHT_DRIVE("Night Drive"),
     PURE_VOCAL("Pure Vocal"),
-    STUDIO_FLAT("Studio Flat")
+    STUDIO_FLAT("Studio Flat"),
+    TRANSPARENCY("Transparency (SpaceBuds Z)")
 }
 
 data class TigerSettingsState(
@@ -88,6 +124,7 @@ data class TigerSettingsState(
     val replayGainMode: ReplayGainMode = ReplayGainMode.SMART,
     val replayGainPreampDb: Float = 0f,
     val replayGainPreventClipping: Boolean = true,
+    val crossfeedPreset: CrossfeedPreset = CrossfeedPreset.OFF,
     val coverScreenVolume: Float = 1f,
     val coverScreenEqPreset: CoverScreenEqPreset = CoverScreenEqPreset.NEURAL_ADAPTIVE,
     val coverScreenPreviewMode: Boolean = false,
@@ -95,7 +132,13 @@ data class TigerSettingsState(
     val autoApplyDeviceEq: Boolean = true,
     val autoDetectAutoEq: Boolean = true,
     val preferredTargetCurve: String = "Harman Over-Ear 2018",
-    val autoDownloadLyrics: Boolean = false
+    val autoDownloadLyrics: Boolean = false,
+    val visualizerSensitivity: Float = 1f,
+    val visualizerPaletteMode: VisualizerPaletteMode = VisualizerPaletteMode.ALBUM_ART,
+    val waveformSensitivity: Float = 1f,
+    val lastfmScrobbleEnabled: Boolean = true,
+    val lastfmNowPlayingEnabled: Boolean = true,
+    val lastfmScrobbleRemote: Boolean = false
 )
 
 @Singleton
@@ -129,6 +172,7 @@ class SettingsDataStore @Inject constructor(
             replayGainMode = enumOrDefault(prefs[REPLAY_GAIN_MODE], ReplayGainMode.SMART),
             replayGainPreampDb = (prefs[REPLAY_GAIN_PREAMP_DB] ?: 0f).coerceIn(-15f, 15f),
             replayGainPreventClipping = prefs[REPLAY_GAIN_PREVENT_CLIPPING] ?: true,
+            crossfeedPreset = enumOrDefault(prefs[CROSSFEED_PRESET], CrossfeedPreset.OFF),
             coverScreenVolume = prefs[COVER_SCREEN_VOLUME]
                 ?.takeIf { it.isFinite() }
                 ?.coerceIn(0f, 1f)
@@ -142,7 +186,13 @@ class SettingsDataStore @Inject constructor(
             autoApplyDeviceEq = prefs[AUTO_APPLY_DEVICE_EQ] ?: true,
             autoDetectAutoEq = prefs[AUTO_DETECT_AUTOEQ] ?: true,
             preferredTargetCurve = prefs[PREFERRED_TARGET_CURVE] ?: "Harman Over-Ear 2018",
-            autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false
+            autoDownloadLyrics = prefs[AUTO_DOWNLOAD_LYRICS] ?: false,
+            visualizerSensitivity = (prefs[VISUALIZER_SENSITIVITY] ?: 1f).coerceIn(0.5f, 2.0f),
+            visualizerPaletteMode = enumOrDefault(prefs[VISUALIZER_PALETTE_MODE], VisualizerPaletteMode.ALBUM_ART),
+            waveformSensitivity = (prefs[WAVEFORM_SENSITIVITY] ?: 1f).coerceIn(0.5f, 2.0f),
+            lastfmScrobbleEnabled = prefs[LASTFM_SCROBBLE_ENABLED] ?: true,
+            lastfmNowPlayingEnabled = prefs[LASTFM_NOW_PLAYING_ENABLED] ?: true,
+            lastfmScrobbleRemote = prefs[LASTFM_SCROBBLE_REMOTE] ?: false
         )
     }
 
@@ -262,6 +312,34 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { it[AUTO_DOWNLOAD_LYRICS] = enabled }
     }
 
+    suspend fun setVisualizerSensitivity(sensitivity: Float) {
+        dataStore.edit { it[VISUALIZER_SENSITIVITY] = sensitivity.coerceIn(0.5f, 2.0f) }
+    }
+
+    suspend fun setVisualizerPaletteMode(mode: VisualizerPaletteMode) {
+        dataStore.edit { it[VISUALIZER_PALETTE_MODE] = mode.name }
+    }
+
+    suspend fun setWaveformSensitivity(sensitivity: Float) {
+        dataStore.edit { it[WAVEFORM_SENSITIVITY] = sensitivity.coerceIn(0.5f, 2.0f) }
+    }
+
+    suspend fun setLastfmScrobbleEnabled(enabled: Boolean) {
+        dataStore.edit { it[LASTFM_SCROBBLE_ENABLED] = enabled }
+    }
+
+    suspend fun setLastfmNowPlayingEnabled(enabled: Boolean) {
+        dataStore.edit { it[LASTFM_NOW_PLAYING_ENABLED] = enabled }
+    }
+
+    suspend fun setLastfmScrobbleRemote(enabled: Boolean) {
+        dataStore.edit { it[LASTFM_SCROBBLE_REMOTE] = enabled }
+    }
+
+    suspend fun setCrossfeedPreset(preset: CrossfeedPreset) {
+        dataStore.edit { it[CROSSFEED_PRESET] = preset.name }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -301,5 +379,12 @@ class SettingsDataStore @Inject constructor(
         val AUTO_DETECT_AUTOEQ = booleanPreferencesKey("auto_detect_autoeq")
         val PREFERRED_TARGET_CURVE = stringPreferencesKey("preferred_target_curve")
         val AUTO_DOWNLOAD_LYRICS = booleanPreferencesKey("auto_download_lyrics")
+        val VISUALIZER_SENSITIVITY = floatPreferencesKey("visualizer_sensitivity")
+        val VISUALIZER_PALETTE_MODE = stringPreferencesKey("visualizer_palette_mode")
+        val WAVEFORM_SENSITIVITY = floatPreferencesKey("waveform_sensitivity")
+        val LASTFM_SCROBBLE_ENABLED = booleanPreferencesKey("lastfm_scrobble_enabled")
+        val LASTFM_NOW_PLAYING_ENABLED = booleanPreferencesKey("lastfm_now_playing_enabled")
+        val LASTFM_SCROBBLE_REMOTE = booleanPreferencesKey("lastfm_scrobble_remote")
+        val CROSSFEED_PRESET = stringPreferencesKey("crossfeed_preset")
     }
 }

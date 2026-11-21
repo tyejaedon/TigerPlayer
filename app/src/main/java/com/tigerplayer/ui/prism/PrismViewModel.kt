@@ -1,17 +1,23 @@
 package com.tigerplayer.ui.prism
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.PrismSpectralAnalysis
 import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.engine.AdaptiveDspEngine
+import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.engine.PrismMixLevels
 import com.tigerplayer.engine.PrismMode
 import com.tigerplayer.engine.SpectralAnalysisMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +72,47 @@ class PrismViewModel @Inject constructor(
     val uiState: StateFlow<PrismUiState> = _uiState.asStateFlow()
 
     private var hasHydrated = false
+    private var audioReactiveJob: Job? = null
+
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            startAudioReactiveCollection()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            stopAudioReactiveCollection()
+        }
+    }
+
+    private fun startAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = viewModelScope.launch {
+            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
+                val bands = if (frame.spectralBands.size == 6) {
+                    frame.spectralBands.map { it.coerceIn(0f, 1f) }
+                } else {
+                    List(6) { 0f }
+                }
+                val observedMode = when (frame.analysisMode) {
+                    SpectralAnalysisMode.BANDPASS -> PrismSpectralAnalysis.BANDPASS
+                    SpectralAnalysisMode.FFT -> PrismSpectralAnalysis.FFT
+                }
+                _uiState.value = _uiState.value.copy(
+                    spectralBands = bands,
+                    observedAnalysisMode = observedMode,
+                    analysisCostMicros = frame.analysisCostMicros.coerceAtLeast(0f)
+                )
+            }
+        }
+    }
+
+    private fun stopAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = null
+        _uiState.value = _uiState.value.copy(
+            spectralBands = List(6) { 0f }
+        )
+    }
 
     init {
         viewModelScope.launch {
@@ -140,23 +187,13 @@ class PrismViewModel @Inject constructor(
                 }
         }
 
-        viewModelScope.launch {
-            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
-                val bands = if (frame.spectralBands.size == 6) {
-                    frame.spectralBands.map { it.coerceIn(0f, 1f) }
-                } else {
-                    List(6) { 0f }
-                }
-                val observedMode = when (frame.analysisMode) {
-                    SpectralAnalysisMode.BANDPASS -> PrismSpectralAnalysis.BANDPASS
-                    SpectralAnalysisMode.FFT -> PrismSpectralAnalysis.FFT
-                }
-                _uiState.value = _uiState.value.copy(
-                    spectralBands = bands,
-                    observedAnalysisMode = observedMode,
-                    analysisCostMicros = frame.analysisCostMicros.coerceAtLeast(0f)
-                )
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+            if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                startAudioReactiveCollection()
             }
+        }.onFailure {
+            startAudioReactiveCollection()
         }
     }
 
@@ -206,6 +243,18 @@ class PrismViewModel @Inject constructor(
                 abs(preset.mix.beats - beats) <= tolerance &&
                 abs(preset.mix.instruments - instruments) <= tolerance
         } ?: PrismPreset.CUSTOM
+    }
+
+    fun setVisualizerActive(active: Boolean) {
+        adaptiveDspEngine.setVisualizerActive(active)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
+        }
+        stopAudioReactiveCollection()
     }
 
     @androidx.annotation.OptIn(UnstableApi::class)

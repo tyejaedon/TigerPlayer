@@ -71,9 +71,9 @@ class ConstellationDataEngine @Inject constructor(
             ))
 
         /* -----------------------------------
-           🌠 2. ARTIST STARS (Reactive Mapping)
+           🌠 2. ARTIST STARS (Reactive Mapping) (Limited to 25 top artists for performance)
         ----------------------------------- */
-            val artistNodes = topArtists.map { artist ->
+            val artistNodes = topArtists.take(25).map { artist ->
                 val normalized = ArtistUtils.getBaseArtist(artist.artistName).lowercase().trim()
 
                 // Prioritize live profile/lore art, then fallback to most recent local artwork.
@@ -84,13 +84,12 @@ class ConstellationDataEngine @Inject constructor(
 
                 val mass = log10(max(1f, artist.playCount.toFloat() + 1f))
 
-                // Top 3 most-played local songs for this artist, shown in the expanded UI
-                // in place of a bio snippet.
+                // Top 4 most-played local songs for this artist, shown in the expanded UI.
                 val topSongs = artistTracks
                     .distinctBy { it.id }
                     .map { track -> track to (trackPlayMap[track.id]?.playCount ?: 0) }
                     .sortedByDescending { it.second }
-                    .take(3)
+                    .take(4)
                     .map { (track, playCount) -> TopTrackEntry(title = track.title, playCount = playCount) }
 
                 GraphNode(
@@ -108,13 +107,17 @@ class ConstellationDataEngine @Inject constructor(
             nodes.addAll(artistNodes)
 
         /* -----------------------------------
-           🪐 3. ALBUM ORBITAL SYSTEMS
+           🪐 3. ALBUM ORBITAL SYSTEMS (Limited to top 3 albums per artist)
         ----------------------------------- */
             artistNodes.forEach { artist ->
                 val artistKey = ArtistUtils.getBaseArtist(artist.label).lowercase().trim()
                 val artistTracks = tracksByArtist[artistKey] ?: emptyList()
                 val albums = artistTracks.groupBy { it.album }
                     .filter { it.key.isNotBlank() && !it.key.contains("unknown", true) }
+                    .entries
+                    .sortedByDescending { (_, tracks) -> tracks.sumOf { trackPlayMap[it.id]?.playCount ?: 0 } }
+                    .take(3)
+                    .associate { it.key to it.value }
 
                 albums.forEach { (albumName, tracks) ->
                     val albumPlay = tracks.sumOf { trackPlayMap[it.id]?.playCount ?: 0 }
@@ -129,7 +132,8 @@ class ConstellationDataEngine @Inject constructor(
                         imageUrl = tracks.firstOrNull()?.artworkUri?.toString(),
                         parentId = artist.id,
                         importance = albumMass,
-                        audioEnergyBias = albumMass * 0.4f
+                        audioEnergyBias = albumMass * 0.4f,
+                        artistName = artist.label
                     ))
 
                     edges.add(GraphEdge(sourceId = artist.id, targetId = albumId, strength = albumMass))
@@ -137,20 +141,9 @@ class ConstellationDataEngine @Inject constructor(
             }
 
         /* -----------------------------------
-           ☄️ 4. TRACK DEBRIS FIELD
+           ☄️ 4. TRACK DEBRIS FIELD (ASTEROID BELT)
         ----------------------------------- */
-            val rogueCoreId = "core_rogue"
-            nodes.add(GraphNode(
-                id = rogueCoreId,
-                label = "LIFETIME CHANTS",
-                type = NodeType.GALAXY_CORE,
-                playCount = globalTracks.sumOf { it.playCount },
-                imageUrl = null,
-                importance = 0.3f,
-                audioEnergyBias = 0.8f
-            ))
-
-            topTracks.forEach { track ->
+            topTracks.take(15).forEach { track ->
                 val mass = log10(max(1f, track.playCount.toFloat() + 1f)) * 0.5f
                 val trackNodeId = safeId("track", track.trackId)
 
@@ -160,13 +153,13 @@ class ConstellationDataEngine @Inject constructor(
                     type = NodeType.TRACK,
                     playCount = track.playCount,
                     imageUrl = track.imageUrl,
-                    parentId = rogueCoreId,
+                    parentId = coreId, // Direct parent: primary core_galaxy (Asteroid Belt)
                     importance = mass,
                     audioEnergyBias = mass * 0.8f,
                     artistName = track.artist
                 ))
 
-                edges.add(GraphEdge(sourceId = rogueCoreId, targetId = trackNodeId, strength = mass))
+                edges.add(GraphEdge(sourceId = coreId, targetId = trackNodeId, strength = mass))
             }
 
         // Normalization

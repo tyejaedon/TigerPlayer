@@ -57,6 +57,7 @@ class BackupManagerTest {
 
         every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
         coEvery { playlistDao.ensureSingletonLikedPlaylist(any(), any()) } returns emptyList()
+        coEvery { tigerDao.getCachedTrackIdsSync() } returns emptyList()
         coEvery { audioDeviceDao.getAllDevicesSync() } returns emptyList()
         coEvery { audioDeviceDao.getAllPresetsSync() } returns emptyList()
 
@@ -290,6 +291,76 @@ class BackupManagerTest {
 
         coVerify { audioDeviceDao.upsertDevice(match { it.deviceId == "AA:BB:CC:11:22:33" && it.targetCurve == "Harman Over-Ear 2018" }) }
         coVerify { audioDeviceDao.upsertPreset(match { it.presetId == "preset_1" && it.preampDb == -4.5f }) }
+    }
+
+    @Test
+    fun `import reports zero unresolved tracks when all restored track ids exist locally`() = runTest {
+        val json = sampleBackupJson(schemaVersion = BackupManifest.CURRENT_SCHEMA_VERSION)
+        every { contentResolver.openInputStream(destination) } returns ByteArrayInputStream(json.toByteArray())
+        coEvery { playlistDao.insertPlaylist(any()) } returns 1L
+        coEvery { playlistDao.insertTracksBatch(any()) } returns listOf(1L)
+        coEvery { tigerDao.insertHistoryBatch(any()) } returns listOf(1L)
+        coEvery { tigerDao.getCachedTrackIdsSync() } returns listOf("t1")
+
+        val result = backupManager.importFrom(destination, RestoreStrategy.MERGE)
+
+        assertTrue(result.isSuccess)
+        val summary = result.getOrThrow()
+        assertEquals(0, summary.unresolvedTrackCount)
+        assertTrue(summary.unresolvedByPlaylist.isEmpty())
+    }
+
+    @Test
+    fun `import succeeds and reports unresolved track counts when some track ids are missing locally`() = runTest {
+        val manifest = BackupManifest(
+            schemaVersion = BackupManifest.CURRENT_SCHEMA_VERSION,
+            appVersionName = "2.0.0",
+            createdAtEpochMs = 123L,
+            settings = com.google.gson.Gson().fromJson(
+                sampleBackupJson(BackupManifest.CURRENT_SCHEMA_VERSION),
+                BackupManifest::class.java
+            ).settings,
+            playlists = listOf(
+                PlaylistBackup(
+                    name = "Road Trip",
+                    artworkUri = null,
+                    createdAt = 1L,
+                    position = 0,
+                    tracks = listOf(
+                        PlaylistTrackBackup(trackId = "t1", dateAdded = 1L, position = 0),
+                        PlaylistTrackBackup(trackId = "missing-1", dateAdded = 1L, position = 1),
+                        PlaylistTrackBackup(trackId = "missing-2", dateAdded = 1L, position = 2)
+                    )
+                ),
+                PlaylistBackup(
+                    name = "Chill",
+                    artworkUri = null,
+                    createdAt = 2L,
+                    position = 1,
+                    tracks = listOf(
+                        PlaylistTrackBackup(trackId = "t1", dateAdded = 2L, position = 0)
+                    )
+                )
+            ),
+            history = listOf(
+                HistoryBackup("t1", "Song", "Artist", "Album", null, 1000L, 1L, "LOCAL"),
+                HistoryBackup("missing-1", "Gone", "Artist", "Album", null, 1000L, 2L, "LOCAL"),
+                HistoryBackup("missing-3", "Also Gone", "Artist", "Album", null, 1000L, 3L, "LOCAL")
+            )
+        )
+        val json = com.google.gson.Gson().toJson(manifest)
+        every { contentResolver.openInputStream(destination) } returns ByteArrayInputStream(json.toByteArray())
+        coEvery { playlistDao.insertPlaylist(any()) } returnsMany listOf(1L, 2L)
+        coEvery { playlistDao.insertTracksBatch(any()) } returns listOf(1L)
+        coEvery { tigerDao.insertHistoryBatch(any()) } returns listOf(1L, 2L, 3L)
+        coEvery { tigerDao.getCachedTrackIdsSync() } returns listOf("t1")
+
+        val result = backupManager.importFrom(destination, RestoreStrategy.MERGE)
+
+        assertTrue(result.isSuccess)
+        val summary = result.getOrThrow()
+        assertEquals(3, summary.unresolvedTrackCount)
+        assertEquals(mapOf("Road Trip" to 2), summary.unresolvedByPlaylist)
     }
 
     private fun sampleBackupJson(schemaVersion: Int): String {

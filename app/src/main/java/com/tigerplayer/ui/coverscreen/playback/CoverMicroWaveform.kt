@@ -87,6 +87,7 @@ fun CoverMicroWaveform(
     artworkUri: Any? = null,
     baseWaveAmplitude: Dp = 6.5.dp,
     showUnplayedZone: Boolean = true,
+    flux: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -124,12 +125,12 @@ fun CoverMicroWaveform(
         }
     }
 
-    val (phase, animatedEnergy) = if (shouldAnimate) {
+    val (phase, animatedEnergy, animatedFlux) = if (shouldAnimate) {
         val transition = rememberInfiniteTransition(label = "CoverWave")
         val animatedPhase by transition.animateFloat(
             initialValue = 0f,
             targetValue = (Math.PI * 2.0).toFloat(),
-            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 820, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 400, easing = LinearEasing)),
             label = "CoverWavePhase"
         )
         val energyState by animateFloatAsState(
@@ -137,9 +138,14 @@ fun CoverMicroWaveform(
             animationSpec = tween(120),
             label = "CoverWaveEnergy"
         )
-        Pair(animatedPhase, energyState)
+        val fluxState by animateFloatAsState(
+            targetValue = flux.coerceIn(0f, 1f),
+            animationSpec = tween(60),
+            label = "CoverWaveFlux"
+        )
+        Triple(animatedPhase, energyState, fluxState)
     } else {
-        Pair(0f, 0.2f)
+        Triple(0f, (0.2f + energy * 0.9f).coerceIn(0.2f, 1.2f), 0f)
     }
 
     val points = remember(amplitudes) {
@@ -238,7 +244,6 @@ fun CoverMicroWaveform(
                 val wave2Amplitude = wave1Amplitude * 2f
                 val wave3Amplitude = wave2Amplitude * 1.5f
                 val piOver4 = (Math.PI / 4.0).toFloat() // PI / 4 radians (45 degree phase shift)
-                val piOver2 = (Math.PI / 2.0).toFloat() // PI / 2 radians (90 degree phase shift)
 
                 // Base subtle track background
                 drawRoundRect(
@@ -249,6 +254,7 @@ fun CoverMicroWaveform(
                 )
 
                 // 1. Populate Wave 3: 1.5x larger than Wave 2 (3x Wave 1) - crowning cyan apex tier
+                // Cosine wave with 2.0x frequency multiplier and 2.0 cycles: shimmering peak
                 populatePositiveWaveformPath(
                     path = wavePath3,
                     fillPath = fillPath3,
@@ -260,13 +266,17 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = 0f,
                     isCosine = true,
-                    frequencyMultiplier = 1.0f,
+                    frequencyMultiplier = 2.0f,
                     waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
-                    energy = animatedEnergy
+                    energy = animatedEnergy,
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0.08f
                 )
 
                 // 2. Populate Wave 2: 2x larger than Wave 1 - intermediate middle tier (PI / 4 phase lead)
+                // Harmonized 1.5x frequency multiplier and 2.0 cycles with 45-degree phase offset: lively flutter
                 populatePositiveWaveformPath(
                     path = wavePath2,
                     fillPath = fillPath2,
@@ -278,13 +288,17 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = piOver4,
                     isCosine = false,
-                    frequencyMultiplier = 1.0f,
+                    frequencyMultiplier = 1.5f,
                     waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
-                    energy = animatedEnergy
+                    energy = animatedEnergy,
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0.08f
                 )
 
                 // 3. Populate Wave 1: Base amplitude - foundational red foreground tier
+                // Drives the punchy bass anchor at 1.2x frequency multiplier and 2.0 cycles: steady baseline
                 populatePositiveWaveformPath(
                     path = wavePath1,
                     fillPath = fillPath1,
@@ -296,10 +310,13 @@ fun CoverMicroWaveform(
                     phase = phase,
                     phaseOffset = 0f,
                     isCosine = false,
-                    frequencyMultiplier = 1.0f,
+                    frequencyMultiplier = 1.2f,
                     waveCycles = 2.0f,
                     bass = if (shouldAnimate) bass else 0f,
-                    energy = animatedEnergy
+                    energy = animatedEnergy,
+                    flux = 0f,
+                    turbulence = 0f,
+                    edgeTaper = 0.08f
                 )
 
                 // Active Played Zone (0 to progressX horizontally, unconfined vertically by parent bounds)
@@ -578,35 +595,72 @@ fun formatCoverDuration(ms: Long): String {
 }
 
 /**
- * Modular waveform generator that creates smooth, continuous curved paths containing exclusively
- * positive amplitudes resting directly on top of the slider track with slight overlap for seamless
- * visual continuity.
- *
- * Mathematical details:
- * - Continuous raised sinusoidal wave: 0.5 * (1 + trig(theta)), oscillating smoothly between 0 and maxHeight.
- * - At troughs (trig = -1), the wave gently touches the baseline with a zero horizontal derivative (no flat clipping).
- * - At crests (trig = 1), the wave reaches its apex peak height smoothly.
- * - When [isCosine] is false and [phaseOffset] is 0, generates a standard sine wave.
- * - When [isCosine] is false and [phaseOffset] is PI / 4 radians, generates a phase-shifted wave (45-degree offset).
- * - When [isCosine] is true, generates a cosine wave (equivalent to 90-degree offset).
- * - All waves develop proper continuous curves in all scenarios (including zero audio energy, silence, or paused playback)
- *   without flattening or collapsing into straight lines.
- *
- * @param path Pre-allocated Path for the wave stroke outline.
- * @param fillPath Optional pre-allocated Path for the closed gradient fill geometry.
- * @param points Smoothed amplitude data points along the horizontal axis.
- * @param width Full horizontal drawing width in pixels.
- * @param maxHeight Maximum upward peak height in pixels above the baseline.
- * @param baselineY Baseline Y coordinate (top edge of the slider track).
- * @param overlapPx Overlap distance in pixels into the slider rect for seamless visual continuity.
- * @param phase Dynamic animated phase angle in radians.
- * @param phaseOffset Fixed phase offset in radians (e.g. PI / 4 for the second wave).
- * @param isCosine Whether this wave uses cosine (true) or sine (false).
- * @param frequencyMultiplier Harmonic frequency scaling factor.
- * @param waveCycles Number of complete wave cycles across the width (defaults to 2.0f for consistent sinusoidal wavelength).
- * @param bass Real-time low frequency energy (0..1).
- * @param energy Audio energy scaling factor (0.2..1.2).
+ * Modular waveform calculations delegated to [com.tigerplayer.engine.WaveformComputation].
  */
+fun calculateWaveformYWithEffectiveHeight(
+    x: Float,
+    width: Float,
+    effectiveHeight: Float,
+    effectiveBaselineY: Float,
+    safePhase: Float,
+    phaseOffset: Float = 0f,
+    isCosine: Boolean = false,
+    frequencyMultiplier: Float = 1f,
+    waveCycles: Float = 2.0f,
+    turbulence: Float = 0f,
+    edgeTaper: Float = 0.12f,
+    points: FloatArray? = null
+): Float = com.tigerplayer.engine.WaveformComputation.calculateWaveformYWithEffectiveHeight(
+    x = x,
+    width = width,
+    effectiveHeight = effectiveHeight,
+    effectiveBaselineY = effectiveBaselineY,
+    safePhase = safePhase,
+    phaseOffset = phaseOffset,
+    isCosine = isCosine,
+    frequencyMultiplier = frequencyMultiplier,
+    waveCycles = waveCycles,
+    turbulence = turbulence,
+    edgeTaper = edgeTaper,
+    points = points
+)
+
+fun calculateWaveformY(
+    x: Float,
+    width: Float,
+    maxHeight: Float,
+    baselineY: Float,
+    overlapPx: Float,
+    phase: Float,
+    phaseOffset: Float = 0f,
+    isCosine: Boolean = false,
+    frequencyMultiplier: Float = 1f,
+    waveCycles: Float = 2.0f,
+    bass: Float = 0f,
+    energy: Float = 1f,
+    flux: Float = 0f,
+    turbulence: Float = 0f,
+    edgeTaper: Float = 0.12f,
+    points: FloatArray? = null
+): Float = com.tigerplayer.engine.WaveformComputation.calculateWaveformY(
+    x = x,
+    width = width,
+    maxHeight = maxHeight,
+    baselineY = baselineY,
+    overlapPx = overlapPx,
+    phase = phase,
+    phaseOffset = phaseOffset,
+    isCosine = isCosine,
+    frequencyMultiplier = frequencyMultiplier,
+    waveCycles = waveCycles,
+    bass = bass,
+    energy = energy,
+    flux = flux,
+    turbulence = turbulence,
+    edgeTaper = edgeTaper,
+    points = points
+)
+
 fun populatePositiveWaveformPath(
     path: Path,
     fillPath: Path? = null,
@@ -621,61 +675,29 @@ fun populatePositiveWaveformPath(
     frequencyMultiplier: Float = 1f,
     waveCycles: Float = 2.0f,
     bass: Float = 0f,
-    energy: Float = 1f
-): Path {
-    path.reset()
-    fillPath?.reset()
-    if (width <= 0f || maxHeight <= 0f) {
-        return path
-    }
-
-    val effectiveBaselineY = baselineY + overlapPx
-    val safePhase = if (phase.isFinite()) phase else 0f
-    val safeBass = if (bass.isFinite()) bass.coerceIn(0f, 1f) else 0f
-    val safeEnergy = if (energy.isFinite()) energy.coerceIn(0.2f, 1.2f) else 0.5f
-
-    // Subtle audio energy breathing factor (0.90..1.00) ensuring waves ALWAYS develop at least 90%
-    // of full height even during silence, paused playback, or empty amplitudes
-    val energyModulation = 0.90f + 0.10f * (safeBass * 0.5f + ((safeEnergy - 0.2f) / 1.0f).coerceIn(0f, 1f) * 0.5f).coerceIn(0f, 1f)
-    val effectiveHeight = maxHeight * energyModulation
-
-    val twoPi = (Math.PI * 2.0).toFloat()
-    val sampleCount = max(64, points.size)
-    val step = width / sampleCount
-
-    // Helper to compute wave Y coordinate at any horizontal pixel position x
-    fun computeWaveY(x: Float): Float {
-        val normalizedX = (x / width).coerceIn(0f, 1f)
-        val angle = (safePhase * frequencyMultiplier) + phaseOffset + (normalizedX * waveCycles * twoPi * frequencyMultiplier)
-        val rawTrig = if (isCosine) cos(angle.toDouble()).toFloat() else sin(angle.toDouble()).toFloat()
-        // Raised sinusoid: continuous smooth wave in [0, 1] without flat-line clipping
-        val smoothOscillation = 0.5f * (1f + rawTrig)
-        val peakHeight = smoothOscillation * effectiveHeight
-        return effectiveBaselineY - peakHeight
-    }
-
-    val y0 = computeWaveY(0f)
-    path.moveTo(0f, y0)
-    fillPath?.let { fill ->
-        fill.moveTo(0f, effectiveBaselineY)
-        fill.lineTo(0f, y0)
-    }
-
-    for (i in 1..sampleCount) {
-        val x = if (i == sampleCount) width else i * step
-        val y = computeWaveY(x)
-        path.lineTo(x, y)
-        fillPath?.lineTo(x, y)
-    }
-
-    fillPath?.let { fill ->
-        fill.lineTo(width, effectiveBaselineY)
-        fill.lineTo(0f, effectiveBaselineY)
-        fill.close()
-    }
-
-    return path
-}
+    energy: Float = 1f,
+    flux: Float = 0f,
+    turbulence: Float = 0f,
+    edgeTaper: Float = 0f
+): Path = com.tigerplayer.engine.WaveformComputation.populatePositiveWaveformPath(
+    path = path,
+    fillPath = fillPath,
+    points = points,
+    width = width,
+    maxHeight = maxHeight,
+    baselineY = baselineY,
+    overlapPx = overlapPx,
+    phase = phase,
+    phaseOffset = phaseOffset,
+    isCosine = isCosine,
+    frequencyMultiplier = frequencyMultiplier,
+    waveCycles = waveCycles,
+    bass = bass,
+    energy = energy,
+    flux = flux,
+    turbulence = turbulence,
+    edgeTaper = edgeTaper
+)
 
 @Preview(showBackground = true, backgroundColor = 0xFF0E0C0A)
 @Composable
@@ -695,6 +717,7 @@ fun CoverMicroWaveformPreview() {
                 ),
                 bass = 0.65f,
                 energy = 0.80f,
+                flux = 0.50f,
                 isPlaying = true,
                 isRenderingActive = true,
                 duration = 215_000L,

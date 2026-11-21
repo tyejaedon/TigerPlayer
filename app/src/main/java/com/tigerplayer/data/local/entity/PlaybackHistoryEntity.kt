@@ -1,10 +1,18 @@
 package com.tigerplayer.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.tigerplayer.data.local.MediaSource
 
-@Entity(tableName = "playback_history")
+@Entity(
+    tableName = "playback_history",
+    indices = [
+        Index("timestamp"),
+        Index("trackId"),
+        Index("artist")
+    ]
+)
 data class PlaybackHistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val trackId: String,

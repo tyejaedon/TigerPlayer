@@ -11,6 +11,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -102,6 +103,7 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsState()
     // 🔥 NEW: Pull pre-seeded artist profiles from the VM vault
     val artistDetails by viewModel.artistDetails.collectAsState()
+    val context = LocalContext.current
 
     val tabs = listOf("Songs", "Albums", "Artists", "Playlists", "Folders")
     val pagerState = rememberPagerState(pageCount = { tabs.size })
@@ -482,12 +484,16 @@ fun SortRow(
 @Composable
 fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val currentTrack = uiState.currentTrack
     val tracks = uiState.tracks
     val listState = rememberLazyListState()
     val hapticFeedback = LocalHapticFeedback.current
     val density = LocalDensity.current.density
     var trackForOptions by remember { mutableStateOf<AudioTrack?>(null) }
+    var tracksToEditTags by remember { mutableStateOf<List<AudioTrack>?>(null) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedTrackIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
 
 
@@ -509,16 +515,58 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SortRow(
-            currentOrder = uiState.trackSortOrder,
-            onOrderSelected = { viewModel.setTrackSortOrder(it) },
-            options = listOf(
-                LibraryEngine.SortOrder.TITLE,
-                LibraryEngine.SortOrder.ARTIST,
-                LibraryEngine.SortOrder.DATE_ADDED,
-                LibraryEngine.SortOrder.RELEASE_DATE
+        if (isSelectionMode) {
+            val localSelected = tracks.filter { it.id in selectedTrackIds && it.isLocal && !it.isRemote }
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${selectedTrackIds.size} selected",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            val localIds = tracks.filter { it.isLocal && !it.isRemote }.map { it.id }.toSet()
+                            selectedTrackIds = if (selectedTrackIds.containsAll(localIds)) emptySet() else localIds
+                        }) {
+                            Text("All")
+                        }
+                        Button(
+                            onClick = { tracksToEditTags = localSelected },
+                            enabled = localSelected.isNotEmpty()
+                        ) {
+                            Text("Edit Tags")
+                        }
+                        TextButton(onClick = {
+                            isSelectionMode = false
+                            selectedTrackIds = emptySet()
+                        }) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+            }
+        } else {
+            SortRow(
+                currentOrder = uiState.trackSortOrder,
+                onOrderSelected = { viewModel.setTrackSortOrder(it) },
+                options = listOf(
+                    LibraryEngine.SortOrder.TITLE,
+                    LibraryEngine.SortOrder.ARTIST,
+                    LibraryEngine.SortOrder.DATE_ADDED,
+                    LibraryEngine.SortOrder.RELEASE_DATE
+                )
             )
-        )
+        }
 
         LazyColumn(
             state = listState,
@@ -572,9 +620,26 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                         track = track,
                         isActive = isActive,
                         isPlaying = uiState.isPlaying && isActive,
-                        onClick = { viewModel.playTrack(track) },
+                        isSelectionMode = isSelectionMode,
+                        isSelected = track.id in selectedTrackIds,
+                        onClick = {
+                            if (isSelectionMode) {
+                                selectedTrackIds = if (track.id in selectedTrackIds) {
+                                    selectedTrackIds - track.id
+                                } else {
+                                    selectedTrackIds + track.id
+                                }
+                            } else {
+                                viewModel.playTrack(track)
+                            }
+                        },
+                        onLongClick = if (track.isLocal && !track.isRemote) {
+                            {
+                                isSelectionMode = true
+                                selectedTrackIds = selectedTrackIds + track.id
+                            }
+                        } else null,
                         onOptionsClick = { trackForOptions = track }
-                        
                     )
 
 
@@ -594,6 +659,34 @@ fun SongsTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) {
                 },
                 onGoToAlbum = { albumName ->
                     onNavigateToAlbum(albumName)
+                },
+                onEditTags = {
+                    tracksToEditTags = listOf(selectedTrack)
+                },
+                onQueueAdded = {
+                    Toast.makeText(
+                        context,
+                        "${it.title} added to queue",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                onPlaylistAdded = { song, playlist ->
+                    Toast.makeText(
+                        context,
+                        "${song.title} added to ${playlist.name}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
+        }
+        tracksToEditTags?.let { targetTracks ->
+            TagEditorSheet(
+                tracks = targetTracks,
+                onDismiss = { tracksToEditTags = null },
+                onSaved = {
+                    isSelectionMode = false
+                    selectedTrackIds = emptySet()
+                    Toast.makeText(context, "Tags saved", Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -1038,12 +1131,16 @@ fun FoldersTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) 
 // ==========================================
 
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     fun SongItem(
         track: AudioTrack,
         isActive: Boolean,
         isPlaying: Boolean = false,
+        isSelectionMode: Boolean = false,
+        isSelected: Boolean = false,
         onClick: () -> Unit,
+        onLongClick: (() -> Unit)? = null,
         onOptionsClick: (() -> Unit)? = null,
         modifier: Modifier = Modifier
     ) {
@@ -1086,10 +1183,26 @@ fun FoldersTab(viewModel: PlayerViewModel, onNavigateToAlbum: (String) -> Unit) 
                     },
                     shape = RoundedCornerShape(16.dp)
                 )
-                .bounceClick { onClick() }
+                .let { baseModifier ->
+                    if (onLongClick != null) {
+                        baseModifier.combinedClickable(
+                            onClick = onClick,
+                            onLongClick = onLongClick
+                        )
+                    } else {
+                        baseModifier.bounceClick { onClick() }
+                    }
+                }
                 .padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
             // --- 3D-GLOW ARTWORK PORTAL ---
             Box(
                 modifier = Modifier

@@ -13,6 +13,10 @@
     <string name="coverscreen_gesture_long_press_settings">Long press for playback settings</string>
     <string name="coverscreen_gesture_instructions">Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down to close.</string>
     <string name="coverscreen_talkback_gesture_instructions">Cover mini player. Tap to play or pause. Swipe left for next, right for previous, up for queue, down to close.</string>
+    <string name="coverscreen_immersive_hint">Hold anywhere to show controls</string>
+    <string name="coverscreen_action_hide_controls">Hide controls</string>
+    <string name="coverscreen_action_show_controls">Show controls</string>
+    <string name="coverscreen_action_toggle_immersive">Toggle immersive mode</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Previous track</string>
@@ -91,4 +95,14 @@
     <string name="coverscreen_search_prompt">Search your music</string>
     <string name="coverscreen_voice_search_no_speech">No speech was recognized. Try again or type to search.</string>
     <string name="coverscreen_voice_search_unavailable">Voice search is unavailable. Type to search instead.</string>
+
+    <!-- App Widgets -->
+    <string name="widget_player_label">TigerPlayer</string>
+    <string name="widget_player_description">Now playing controls and artwork (2x2, 4x1, 4x2, cover screen)</string>
+    <string name="widget_daylist_label">TigerPlayer Day List</string>
+    <string name="widget_daylist_description">Quick shortcut to your Day List and Heavy Rotation</string>
+    <string name="widget_idle_title">Not playing</string>
+    <string name="widget_idle_artist">Tap to open TigerPlayer</string>
+    <string name="widget_daylist_title">Day List</string>
+    <string name="widget_heavy_rotation_subtitle">Heavy Rotation</string>
 </resources>

@@ -35,13 +35,15 @@ class MediaDataRepositoryArtistIdentityTest {
     private val authManager = mockk<SpotifyAuthManager>()
     private val lastFmApi = mockk<LastFmApi>()
     private val audioRepository = mockk<AudioRepository>(relaxed = true)
+    private val deezerRepository = mockk<DeezerRepository>(relaxed = true)
 
     private fun repository() = MediaDataRepository(
         tigerDao = tigerDao,
         spotifyApiService = spotifyApiService,
         authManager = authManager,
         lastFmApi = lastFmApi,
-        audioRepository = audioRepository
+        audioRepository = audioRepository,
+        deezerRepository = deezerRepository
     )
 
     private fun stubLocalStats(artist: String) {

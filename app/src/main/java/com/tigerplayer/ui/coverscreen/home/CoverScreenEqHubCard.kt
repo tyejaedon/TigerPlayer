@@ -3,10 +3,12 @@ package com.tigerplayer.ui.coverscreen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Tune
@@ -32,6 +34,7 @@ import com.tigerplayer.ui.equalizer.EqualizerPresets
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.bounceClick
+import com.tigerplayer.ui.theme.glassEffect
 
 private val EmeraldNeon = Color(0xFF67F7B1)
 private val CardBackground = Color(0xFF13141A)
@@ -58,6 +61,7 @@ fun CoverScreenEqHubCard(
         bands = uiState.bands,
         onToggleMasterEq = viewModel::toggleMasterEq,
         onQuickPreset = viewModel::applyPreset,
+        onRemoveAutoEq = viewModel::removeAutoEqProfile,
         onClick = onOpenEqHub,
         modifier = modifier
     )
@@ -78,13 +82,13 @@ fun CoverScreenEqHubCardContent(
     onToggleMasterEq: (Boolean) -> Unit,
     onQuickPreset: (String) -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRemoveAutoEq: (() -> Unit)? = null
 ) {
-    Card(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(CardBackground)
+            .glassEffect(RoundedCornerShape(18.dp))
             .border(
                 BorderStroke(
                     1.dp,
@@ -99,9 +103,7 @@ fun CoverScreenEqHubCardContent(
                 RoundedCornerShape(18.dp)
             )
             .bounceClick(onClick = onClick)
-            .testTag(CoverScreenTestTags.HOME_EQ_HUB_CARD),
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        shape = RoundedCornerShape(18.dp)
+            .testTag(CoverScreenTestTags.HOME_EQ_HUB_CARD)
     ) {
         Column(
             modifier = Modifier
@@ -135,7 +137,7 @@ fun CoverScreenEqHubCardContent(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "EQUALIZER & AUTOEQ",
+                                text = "EQUALIZER",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Black,
                                 color = Color.White,
@@ -173,41 +175,6 @@ fun CoverScreenEqHubCardContent(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Mini Frequency Curve Visualizer Canvas
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .border(0.5.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
-            ) {
-                EqualizerFrequencyCurve(
-                    points = curvePoints,
-                    bands = bands,
-                    isInteractive = false,
-                    showGrid = false,
-                    modifier = Modifier.fillMaxSize(),
-                    curveColor = if (isEqEnabled) TigerCyberCyan else Color.Gray
-                )
-
-                // Headroom Badge
-                Text(
-                    text = if (isEqEnabled) "PK ${String.format("%.1f", compositePeakDb)} dB" else "BYPASS",
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isEqEnabled) EmeraldNeon else Color.Gray,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Active Preset & Tweak Action Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -234,8 +201,27 @@ fun CoverScreenEqHubCardContent(
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 11.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+                    if (autoEqModel != null && onRemoveAutoEq != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(TigerNeonOrange.copy(alpha = 0.2f))
+                                .clickable(onClick = onRemoveAutoEq)
+                                .padding(3.dp)
+                                .testTag("CoverHomeClearAutoEqButton"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Remove AutoEq",
+                                tint = TigerNeonOrange,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
                 }
 
                 Row(

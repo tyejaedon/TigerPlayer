@@ -213,36 +213,44 @@ fun DaylistDetailScreen(
                                 alpha = heroAlpha
                                 translationY = (1f - heroAlpha) * 46f
                             },
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = { playCurationAt(viewModel, tracks, index = 0) },
-                            enabled = tracks.isNotEmpty(),
+                        Row(
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = descriptor.accent,
-                                contentColor = Color.Black
-                            )
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Play Arc", fontWeight = FontWeight.Black)
+                            Button(
+                                onClick = { playCurationAt(viewModel, tracks, index = 0) },
+                                enabled = tracks.isNotEmpty(),
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = descriptor.accent,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Play Arc", fontWeight = FontWeight.Black)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    if (tracks.isNotEmpty()) {
+                                        playCurationShuffled(viewModel, tracks)
+                                    }
+                                },
+                                enabled = tracks.isNotEmpty(),
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, descriptor.accent.copy(alpha = 0.7f))
+                            ) {
+                                Icon(Icons.Rounded.Shuffle, contentDescription = null, tint = descriptor.accent)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Shuffle", color = Color.White)
+                            }
                         }
 
-                        OutlinedButton(
-                            onClick = {
-                                if (tracks.isNotEmpty()) {
-                                    playCurationShuffled(viewModel, tracks)
-                                }
-                            },
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier.weight(1f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, descriptor.accent.copy(alpha = 0.7f))
-                        ) {
-                            Icon(Icons.Rounded.Shuffle, contentDescription = null, tint = descriptor.accent)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Shuffle Tide", color = Color.White)
-                        }
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         OutlinedButton(
                             onClick = {
@@ -255,8 +263,6 @@ fun DaylistDetailScreen(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = descriptor.accent)
                         ) {
                             Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null, tint = descriptor.accent)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add", color = Color.White)
                         }
                     }
                 }

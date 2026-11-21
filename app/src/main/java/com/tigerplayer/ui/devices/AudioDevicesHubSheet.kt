@@ -92,7 +92,8 @@ fun AudioDevicesHubSheet(
                     ActiveRouteHeroCard(
                         activeDevice = uiState.activeDevice,
                         assignedPreset = uiState.activePreset,
-                        onOpenAutoEq = { viewModel.openAutoEqDialog(uiState.activeDevice) }
+                        onOpenAutoEq = { viewModel.openAutoEqDialog(uiState.activeDevice) },
+                        onRemoveAutoEq = { viewModel.removeAutoEqFromDevice(uiState.activeDevice.deviceId) }
                     )
                 }
 
@@ -148,6 +149,7 @@ fun AudioDevicesHubSheet(
                         device = device,
                         isActive = device.deviceId == uiState.activeDevice.deviceId,
                         onOpenAutoEq = { viewModel.openAutoEqDialog(device) },
+                        onRemoveAutoEq = { viewModel.removeAutoEqFromDevice(device.deviceId) },
                         onDelete = { viewModel.deleteDevice(device.deviceId) }
                     )
                 }
@@ -166,6 +168,7 @@ fun AudioDevicesHubSheet(
             isSearching = uiState.isSearching,
             onSearchQueryChanged = viewModel::onSearchQueryChanged,
             onModelSelected = viewModel::selectAutoEqModel,
+            onRemoveAutoEq = viewModel::removeAutoEqFromSelectedDevice,
             onDismiss = viewModel::closeAutoEqDialog
         )
     }
@@ -185,7 +188,8 @@ fun AudioDevicesHubSheet(
 private fun ActiveRouteHeroCard(
     activeDevice: AudioOutputDevice,
     assignedPreset: com.tigerplayer.data.local.entity.DevicePresetEntity?,
-    onOpenAutoEq: () -> Unit
+    onOpenAutoEq: () -> Unit,
+    onRemoveAutoEq: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -319,12 +323,31 @@ private fun ActiveRouteHeroCard(
                         }
                     }
 
-                    Text(
-                        text = "CHANGE",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TigerCyberCyan
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (activeDevice.matchedAutoEqModel != null || assignedPreset != null) {
+                            TextButton(
+                                onClick = onRemoveAutoEq,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "REMOVE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TigerNeonOrange
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "CHANGE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TigerCyberCyan
+                        )
+                    }
                 }
             }
         }
@@ -430,6 +453,7 @@ private fun DeviceHistoryItem(
     device: AudioOutputDevice,
     isActive: Boolean,
     onOpenAutoEq: () -> Unit,
+    onRemoveAutoEq: () -> Unit = {},
     onDelete: () -> Unit
 ) {
     Card(
@@ -496,6 +520,16 @@ private fun DeviceHistoryItem(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (device.matchedAutoEqModel != null || device.assignedPresetId != null) {
+                    IconButton(onClick = onRemoveAutoEq) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Remove AutoEq Profile",
+                            tint = TigerNeonOrange
+                        )
+                    }
+                }
+
                 IconButton(onClick = onOpenAutoEq) {
                     Icon(
                         imageVector = Icons.Default.Search,

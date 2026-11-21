@@ -167,11 +167,11 @@ class CoverScreenAccessibilityInstrumentedTest {
         val contentDescList = semantics.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }
         assertTrue("Content description should contain gesture hints", contentDescList.isNotEmpty())
 
-        // Verify all 6 custom accessibility actions
+        // Verify all 8 custom accessibility actions
         val customActions = semantics.config.getOrElse(SemanticsActions.CustomActions) { emptyList() }
         assertEquals(
-            "MiniHub root must expose all 6 custom accessibility actions for TalkBack gestures",
-            6,
+            "MiniHub root must expose all 8 custom accessibility actions for TalkBack gestures",
+            8,
             customActions.size
         )
 
@@ -207,6 +207,16 @@ class CoverScreenAccessibilityInstrumentedTest {
         val settingsAction = customActions[5]
         val handledSettings = settingsAction.action()
         assertTrue(handledSettings)
+
+        // Execute Toggle Immersive custom action (Action 7)
+        val immersiveAction = customActions[6]
+        val handledImmersive = immersiveAction.action()
+        assertTrue(handledImmersive)
+
+        // Execute Open Home custom action (Action 8)
+        val homeAction = customActions[7]
+        val handledHome = homeAction.action()
+        assertTrue(handledHome)
     }
 
     @Test

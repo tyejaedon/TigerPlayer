@@ -51,12 +51,14 @@ import com.tigerplayer.utils.ArtistUtils
 @Composable
 internal fun AlbumPicker(
     albums: List<CoverScreenAlbum>,
+    state: androidx.compose.foundation.lazy.grid.LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
     onAlbumSelected: (CoverScreenAlbum) -> Unit
 ) {
     if (albums.isEmpty()) {
         EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_albums))
     } else {
         LazyVerticalGrid(
+            state = state,
             columns = GridCells.Adaptive(minSize = 136.dp),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),

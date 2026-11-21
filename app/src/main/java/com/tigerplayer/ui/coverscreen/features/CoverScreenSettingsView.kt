@@ -1,6 +1,9 @@
 package com.tigerplayer.ui.coverscreen
 
 import android.view.HapticFeedbackConstants
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,19 +36,31 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.BluetoothAudio
 import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PictureInPicture
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material.icons.rounded.ScreenRotation
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
@@ -63,8 +79,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,7 +95,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import com.tigerplayer.ui.settings.SpotifyAuthErrorDialog
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -89,19 +106,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.backup.RestoreStrategy
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.SkipShortAudio
 import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
+import com.tigerplayer.service.HapticsDebugEvent
+import com.tigerplayer.service.HapticsDebugState
+import com.tigerplayer.ui.settings.BackupUiEvent
 import com.tigerplayer.ui.settings.SettingsViewModel
+import com.tigerplayer.ui.settings.SpotifyAuthErrorDialog
 import com.tigerplayer.ui.theme.SpotifyGreen
 import com.tigerplayer.ui.theme.TigerCyberCyan
 import com.tigerplayer.ui.theme.TigerNeonOrange
 import com.tigerplayer.ui.theme.TigerNeonRed
 import com.tigerplayer.ui.theme.TigerSpectralViolet
 import com.tigerplayer.ui.theme.TigerToxicLime
-import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
 import com.tigerplayer.ui.theme.rememberTigerAmbientGradient
@@ -111,6 +134,7 @@ import kotlin.math.roundToInt
 @Composable
 fun CoverScreenSettingsView(
     viewModel: SettingsViewModel = hiltViewModel(),
+    onOpenEqualizer: (() -> Unit)? = null,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -120,6 +144,87 @@ fun CoverScreenSettingsView(
     val rescanState by viewModel.libraryRescanState.collectAsStateWithLifecycle()
     val connectedAccounts by viewModel.connectedAccountsState.collectAsStateWithLifecycle()
     val spotifyAuthError by viewModel.spotifyAuthError.collectAsStateWithLifecycle()
+    val musicFolders by viewModel.musicFolders.collectAsStateWithLifecycle()
+    val hapticsDebug by viewModel.hapticsDebugState.collectAsStateWithLifecycle()
+    val backupEvent by viewModel.backupEvent.collectAsStateWithLifecycle()
+    val storageBreakdown by viewModel.storageBreakdown.collectAsStateWithLifecycle()
+    val storageEventMessage by viewModel.storageEventMessage.collectAsStateWithLifecycle()
+
+    var pendingLogout by remember { mutableStateOf<String?>(null) }
+    var restoreStrategy by remember { mutableStateOf(RestoreStrategy.MERGE) }
+    var showPurgeAllDialog by remember { mutableStateOf(false) }
+
+    val addFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) viewModel.addMusicFolder(uri, isExcluded = false)
+    }
+    val excludeFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) viewModel.addMusicFolder(uri, isExcluded = true)
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) viewModel.exportBackup(uri)
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) viewModel.importBackup(uri, restoreStrategy)
+    }
+
+    LaunchedEffect(backupEvent) {
+        val event = backupEvent ?: return@LaunchedEffect
+        Toast.makeText(context, event.toDisplayMessage(), Toast.LENGTH_LONG).show()
+        viewModel.consumeBackupEvent()
+    }
+
+    LaunchedEffect(storageEventMessage) {
+        val message = storageEventMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.consumeStorageEventMessage()
+    }
+
+    if (showPurgeAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showPurgeAllDialog = false },
+            title = {
+                Text(
+                    text = "PURGE TEMPORARY ARCHIVES?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "This will free up approximately ${storageBreakdown.formattedPurgeableSize} by purging album artwork, downloaded lyrics, artist metadata, and waveform analysis peaks.\n\nYour playlists, play history, and sound presets will NOT be deleted.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        showPurgeAllDialog = false
+                        viewModel.clearAllTemporaryCaches()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TigerNeonRed)
+                ) {
+                    Text("PURGE ARCHIVES", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPurgeAllDialog = false }) {
+                    Text("CANCEL", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
 
     if (spotifyAuthError != null) {
         SpotifyAuthErrorDialog(
@@ -133,21 +238,71 @@ fun CoverScreenSettingsView(
         )
     }
 
+    val serviceToLogOut = pendingLogout
+    if (serviceToLogOut != null) {
+        AlertDialog(
+            onDismissRequest = { pendingLogout = null },
+            modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_LOGOUT_CONFIRM_DIALOG),
+            title = {
+                Text(
+                    text = "Log out of $serviceToLogOut?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "You'll need to sign back in to use $serviceToLogOut again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        when (serviceToLogOut) {
+                            "Spotify" -> viewModel.logoutSpotify()
+                            "Navidrome" -> viewModel.logoutNavidrome()
+                            "Last.fm" -> viewModel.logoutLastfm()
+                        }
+                        pendingLogout = null
+                    },
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 48.dp)
+                        .minimumInteractiveComponentSize()
+                        .testTag(CoverScreenTestTags.SETTINGS_LOGOUT_CONFIRM)
+                ) {
+                    Text("LOG OUT", color = Color.Red, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+                        pendingLogout = null
+                    },
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 48.dp)
+                        .minimumInteractiveComponentSize()
+                        .testTag(CoverScreenTestTags.SETTINGS_LOGOUT_CANCEL)
+                ) {
+                    Text("CANCEL", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
     val accent = accentColor(settingsState.accentStyle)
     var crossfadeSlider by remember(settingsState.crossfadeDurationSec) {
         mutableFloatStateOf(settingsState.crossfadeDurationSec.toFloat())
     }
 
-    val ambientBrush = rememberTigerAmbientGradient(
-        accent = accent,
-        baseTopAlpha = 0.22f
-    )
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ambientBrush)
-            .testTag("CoverScreenSettingsView")
+            .background(Color.Black)
+            .testTag(CoverScreenTestTags.SETTINGS_VIEW)
             .pointerInput(Unit) {
                 var dragDistance = 0f
                 detectHorizontalDragGestures(
@@ -189,7 +344,7 @@ fun CoverScreenSettingsView(
                             }
                             contentDescription = "Close settings"
                         }
-                        .testTag("cover_screen_settings_back")
+                        .testTag(CoverScreenTestTags.SETTINGS_BACK)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -227,7 +382,7 @@ fun CoverScreenSettingsView(
                             }
                             contentDescription = "Reset defaults"
                         }
-                        .testTag("cover_screen_settings_reset")
+                        .testTag(CoverScreenTestTags.SETTINGS_RESET)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Restore,
@@ -241,7 +396,7 @@ fun CoverScreenSettingsView(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .testTag("cover_screen_settings_list"),
+                    .testTag(CoverScreenTestTags.SETTINGS_LIST),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -402,6 +557,125 @@ fun CoverScreenSettingsView(
                     }
                 }
 
+                // SECTION 2B: VISUALIZER & WAVEFORM (Parity with SettingScreen)
+                item(key = "section_visualizer") {
+                    CoverSettingsCard(title = "Visualizer & Waveform", icon = Icons.Rounded.GraphicEq, accent = accent) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(
+                                text = "PALETTE COLOR MODE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = accent,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                com.tigerplayer.data.local.VisualizerPaletteMode.entries.forEach { mode ->
+                                    val isSelected = settingsState.visualizerPaletteMode == mode
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            viewModel.setVisualizerPaletteMode(mode)
+                                        },
+                                        label = {
+                                            Text(
+                                                if (mode == com.tigerplayer.data.local.VisualizerPaletteMode.ALBUM_ART)
+                                                    "ALBUM ART"
+                                                else
+                                                    "DEFAULT NEON"
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = accent.copy(alpha = 0.22f),
+                                            selectedLabelColor = accent
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "FLUID SENSITIVITY",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.1fx", settingsState.visualizerSensitivity),
+                                    color = accent,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            Slider(
+                                value = settingsState.visualizerSensitivity,
+                                onValueChange = { viewModel.setVisualizerSensitivity(it) },
+                                valueRange = 0.5f..2.0f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = accent,
+                                    activeTrackColor = accent,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                                ),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "WAVEFORM SENSITIVITY",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.1fx", settingsState.waveformSensitivity),
+                                    color = accent,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            Slider(
+                                value = settingsState.waveformSensitivity,
+                                onValueChange = { viewModel.setWaveformSensitivity(it) },
+                                valueRange = 0.5f..2.0f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = accent,
+                                    activeTrackColor = accent,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                                ),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+
                 // SECTION 3: NEURAL DSP & AUDIO ENGINE
                 item(key = "section_audio") {
                     CoverSettingsCard(title = "Neural DSP & Playback", icon = Icons.Rounded.GraphicEq, accent = accent) {
@@ -466,6 +740,128 @@ fun CoverScreenSettingsView(
                             accent = accent
                         )
 
+                        // Equalizer / AutoEQ Entry Point (parity with SettingScreen)
+                        if (onOpenEqualizer != null) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                thickness = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.08f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag(CoverScreenTestTags.SETTINGS_EQUALIZER)
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        onOpenEqualizer()
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Tune,
+                                        contentDescription = null,
+                                        tint = accent,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "Studio Equalizer & AutoEQ",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "10-band curves, targets, headroom",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "OPEN →",
+                                    color = accent,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        // Binaural Crossfeed (parity with SettingScreen)
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Headphones,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Binaural Crossfeed",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Headphone stage (auto-bypassed on speakers)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CrossfeedPreset.entries.forEach { preset ->
+                                    val isSelected = settingsState.crossfeedPreset == preset
+                                    val label = when (preset) {
+                                        CrossfeedPreset.OFF -> "OFF"
+                                        CrossfeedPreset.SUBTLE -> "SUBTLE"
+                                        CrossfeedPreset.CLASSIC_STUDIO -> "CLASSIC STUDIO"
+                                    }
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            viewModel.setCrossfeedPreset(preset)
+                                        },
+                                        label = { Text(label) },
+                                        modifier = Modifier
+                                            .defaultMinSize(minHeight = 48.dp)
+                                            .testTag(CoverScreenTestTags.settingsCrossfeedPreset(preset.name)),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = accent.copy(alpha = 0.22f),
+                                            selectedLabelColor = accent
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 14.dp),
                             thickness = 0.5.dp,
@@ -475,7 +871,7 @@ fun CoverScreenSettingsView(
                         // System Decoder / DSP
                         CoverSettingsSwitchRow(
                             headline = "System Decoder / DSP",
-                            supporting = "Route audio through Android offload path",
+                            supporting = "Route audio through Android offload path (saves battery)",
                             icon = Icons.Rounded.BluetoothAudio,
                             checked = settingsState.routeToSystemDecoderDsp,
                             onCheckedChange = { viewModel.setRouteToSystemDecoderDsp(it) },
@@ -536,6 +932,20 @@ fun CoverScreenSettingsView(
                                     }
                                 }
                             }
+                        }
+
+                        // Haptics Telemetry Debug Panel (when BuildConfig.DEBUG is active)
+                        if (BuildConfig.DEBUG) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                thickness = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.08f)
+                            )
+                            CoverHapticsDebugPanel(
+                                debugState = hapticsDebug,
+                                accent = accent,
+                                modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_HAPTICS_DEBUG)
+                            )
                         }
                     }
                 }
@@ -650,6 +1060,40 @@ fun CoverScreenSettingsView(
                             color = Color.White.copy(alpha = 0.08f)
                         )
 
+                        // Online Artwork Lookup
+                        CoverSettingsSwitchRow(
+                            headline = "Online Artwork Lookup",
+                            supporting = "Fetch high-resolution artwork online",
+                            icon = Icons.Rounded.CloudSync,
+                            checked = settingsState.fetchOnlineArtwork,
+                            onCheckedChange = { viewModel.setFetchOnlineArtwork(it) },
+                            accent = accent,
+                            modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_ONLINE_ARTWORK)
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        // Auto-Download Lyrics
+                        CoverSettingsSwitchRow(
+                            headline = "Auto-Download Lyrics",
+                            supporting = "Silently fetch synchronized lyrics in background",
+                            icon = Icons.Rounded.CloudSync,
+                            checked = settingsState.autoDownloadLyrics,
+                            onCheckedChange = { viewModel.setAutoDownloadLyrics(it) },
+                            accent = accent,
+                            modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_AUTO_LYRICS)
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
                         // Skip Short Audio
                         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                             Text(
@@ -691,7 +1135,131 @@ fun CoverScreenSettingsView(
                     }
                 }
 
-                // SECTION 5: CONNECTED ACCOUNTS
+                // SECTION 5: MUSIC FOLDERS
+                item(key = "section_folders") {
+                    CoverSettingsCard(title = "Music Folders", icon = Icons.Rounded.Folder, accent = accent) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(
+                                text = "Include or exclude specific directories for scanning.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        addFolderLauncher.launch(null)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_ADD_FOLDER),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("ADD", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        excludeFolderLauncher.launch(null)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_EXCLUDE_FOLDER),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Block,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("EXCLUDE", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                }
+                            }
+                        }
+
+                        if (musicFolders.isNotEmpty()) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                thickness = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.08f)
+                            )
+                            musicFolders.forEach { folder ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Folder,
+                                            contentDescription = null,
+                                            tint = if (folder.isExcluded) MaterialTheme.colorScheme.error else accent,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = folder.displayName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = if (folder.isExcluded) "EXCLUDED" else "INCLUDED",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Black,
+                                                color = if (folder.isExcluded) MaterialTheme.colorScheme.error else accent,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            viewModel.removeMusicFolder(folder.uriString)
+                                        },
+                                        modifier = Modifier
+                                            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                            .minimumInteractiveComponentSize()
+                                            .testTag(CoverScreenTestTags.removeFolder(folder.uriString))
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Delete,
+                                            contentDescription = "Remove folder",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // SECTION 6: CONNECTED ACCOUNTS
                 item(key = "section_accounts") {
                     CoverSettingsCard(title = "Connected Accounts", icon = Icons.Rounded.CloudSync, accent = accent) {
                         // Spotify Account
@@ -719,11 +1287,12 @@ fun CoverScreenSettingsView(
                                 OutlinedButton(
                                     onClick = {
                                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                        viewModel.logoutSpotify()
+                                        pendingLogout = "Spotify"
                                     },
                                     modifier = Modifier
                                         .defaultMinSize(minHeight = 48.dp)
-                                        .minimumInteractiveComponentSize(),
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_SPOTIFY_DISCONNECT),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red.copy(alpha = 0.85f)),
                                     border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.35f))
                                 ) {
@@ -785,11 +1354,12 @@ fun CoverScreenSettingsView(
                                 OutlinedButton(
                                     onClick = {
                                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                        viewModel.logoutNavidrome()
+                                        pendingLogout = "Navidrome"
                                     },
                                     modifier = Modifier
-                                        .defaultMinSize(minHeight = 44.dp)
-                                        .minimumInteractiveComponentSize(),
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_NAVIDROME_DISCONNECT),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red.copy(alpha = 0.85f)),
                                     border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.35f))
                                 ) {
@@ -797,10 +1367,327 @@ fun CoverScreenSettingsView(
                                 }
                             }
                         }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        // Last.fm Account
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "LAST.FM",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accent
+                                )
+                                Text(
+                                    text = when {
+                                        connectedAccounts.isLastfmConnected -> {
+                                            val user = connectedAccounts.lastfmUsername?.takeIf { it.isNotBlank() } ?: "Connected"
+                                            if (connectedAccounts.pendingScrobbleCount > 0) {
+                                                "$user • ${connectedAccounts.pendingScrobbleCount} queued"
+                                            } else {
+                                                "Connected as $user"
+                                            }
+                                        }
+                                        !connectedAccounts.isLastfmConfigured -> "API keys not configured"
+                                        else -> "Not authenticated"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (connectedAccounts.isLastfmConnected) {
+                                OutlinedButton(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        pendingLogout = "Last.fm"
+                                    },
+                                    modifier = Modifier
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_LASTFM_DISCONNECT),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red.copy(alpha = 0.85f)),
+                                    border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.35f))
+                                ) {
+                                    Text("Disconnect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        viewModel.connectLastfm(context)
+                                    },
+                                    enabled = connectedAccounts.isLastfmConfigured,
+                                    modifier = Modifier
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .minimumInteractiveComponentSize(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = accent,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Connect", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+
+                        if (connectedAccounts.isLastfmConnected) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                thickness = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.08f)
+                            )
+                            CoverSettingsSwitchRow(
+                                headline = "Scrobble Plays",
+                                supporting = "Scrobble after 50% or 4 min",
+                                icon = Icons.Rounded.CloudSync,
+                                checked = settingsState.lastfmScrobbleEnabled,
+                                onCheckedChange = viewModel::setLastfmScrobbleEnabled,
+                                accent = accent,
+                                modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_LASTFM_SCROBBLE_TOGGLE)
+                            )
+                            CoverSettingsSwitchRow(
+                                headline = "Now Playing",
+                                supporting = "Update Last.fm on track start",
+                                icon = Icons.Rounded.CloudSync,
+                                checked = settingsState.lastfmNowPlayingEnabled,
+                                onCheckedChange = viewModel::setLastfmNowPlayingEnabled,
+                                accent = accent,
+                                modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_LASTFM_NOW_PLAYING_TOGGLE)
+                            )
+                            CoverSettingsSwitchRow(
+                                headline = "Scrobble Remote",
+                                supporting = "Include Navidrome & Spotify (off = local only)",
+                                icon = Icons.Rounded.CloudSync,
+                                checked = settingsState.lastfmScrobbleRemote,
+                                onCheckedChange = viewModel::setLastfmScrobbleRemote,
+                                accent = accent,
+                                modifier = Modifier.testTag(CoverScreenTestTags.SETTINGS_LASTFM_REMOTE_TOGGLE)
+                            )
+                        }
                     }
                 }
 
-                // SECTION 6: RESTORE DEFAULTS BUTTON
+                // SECTION 6B: STORAGE & CACHE (Parity with SettingScreen)
+                item(key = "section_storage") {
+                    CoverSettingsCard(title = "Storage & Cache", icon = Icons.Rounded.Storage, accent = accent) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "TOTAL APPLICATION STORAGE",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = accent,
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = storageBreakdown.formattedTotalAppSize,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    Text(
+                                        text = "Temporary Cache: ${storageBreakdown.formattedTotalCacheSize}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.refreshStorageBreakdown() }) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Refresh,
+                                        contentDescription = "Refresh Storage",
+                                        tint = accent
+                                    )
+                                }
+                            }
+
+                            CoverStorageCategoryRow(
+                                title = "Artwork & Thumbnails",
+                                subtitle = "${storageBreakdown.artwork.formattedSize} • ${storageBreakdown.artwork.itemCount ?: 0} cached",
+                                color = TigerCyberCyan,
+                                onClear = if (storageBreakdown.artwork.sizeBytes > 0) {
+                                    { viewModel.clearArtworkCache() }
+                                } else null
+                            )
+                            CoverStorageCategoryRow(
+                                title = "Synchronized Lyrics",
+                                subtitle = "${storageBreakdown.lyrics.formattedSize} • ${storageBreakdown.lyrics.itemCount ?: 0} songs",
+                                color = TigerNeonOrange,
+                                onClear = if ((storageBreakdown.lyrics.itemCount ?: 0) > 0) {
+                                    { viewModel.clearLyricsCache() }
+                                } else null
+                            )
+                            CoverStorageCategoryRow(
+                                title = "Artist Biographies & Info",
+                                subtitle = "${storageBreakdown.artists.formattedSize} • ${storageBreakdown.artists.itemCount ?: 0} artists",
+                                color = TigerSpectralViolet,
+                                onClear = if ((storageBreakdown.artists.itemCount ?: 0) > 0) {
+                                    { viewModel.clearArtistCache() }
+                                } else null
+                            )
+                            CoverStorageCategoryRow(
+                                title = "Waveform Peak Analysis",
+                                subtitle = "${storageBreakdown.waveforms.formattedSize} • ${storageBreakdown.waveforms.itemCount ?: 0} tracks",
+                                color = TigerToxicLime,
+                                onClear = if ((storageBreakdown.waveforms.itemCount ?: 0) > 0) {
+                                    { viewModel.clearWaveformCache() }
+                                } else null
+                            )
+
+                            OutlinedButton(
+                                onClick = { showPurgeAllDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .minimumInteractiveComponentSize(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TigerNeonRed),
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = storageBreakdown.totalPurgeableBytes > 0
+                            ) {
+                                Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "PURGE CACHES (${storageBreakdown.formattedPurgeableSize})",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // SECTION 7: BACKUP & RESTORE
+                item(key = "section_backup") {
+                    CoverSettingsCard(title = "Backup & Restore", icon = Icons.Rounded.SaveAlt, accent = accent) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(
+                                text = "Export or restore playlists, history, and settings as JSON.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    exportLauncher.launch("tigerplayer-backup.json")
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag(CoverScreenTestTags.SETTINGS_EXPORT_BACKUP),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SaveAlt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("EXPORT BACKUP", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.08f)
+                        )
+
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(
+                                text = "ON RESTORE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = accent,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = restoreStrategy == RestoreStrategy.MERGE,
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        restoreStrategy = RestoreStrategy.MERGE
+                                    },
+                                    label = { Text("ADD TO EXISTING") },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_RESTORE_STRATEGY_MERGE),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = accent.copy(alpha = 0.22f),
+                                        selectedLabelColor = accent
+                                    )
+                                )
+                                FilterChip(
+                                    selected = restoreStrategy == RestoreStrategy.REPLACE,
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        restoreStrategy = RestoreStrategy.REPLACE
+                                    },
+                                    label = { Text("REPLACE ALL") },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag(CoverScreenTestTags.SETTINGS_RESTORE_STRATEGY_REPLACE),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = accent.copy(alpha = 0.22f),
+                                        selectedLabelColor = accent
+                                    )
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    importLauncher.launch(arrayOf("application/json"))
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag(CoverScreenTestTags.SETTINGS_IMPORT_BACKUP),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Upload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("RESTORE BACKUP", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                // SECTION 8: RESTORE DEFAULTS BUTTON
                 item(key = "section_reset") {
                     Box(
                         modifier = Modifier
@@ -836,6 +1723,72 @@ fun CoverScreenSettingsView(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CoverHapticsDebugPanel(
+    debugState: HapticsDebugState,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    val eventLabel = when (debugState.event) {
+        HapticsDebugEvent.IDLE -> "IDLE"
+        HapticsDebugEvent.STATUS -> "STATUS"
+        HapticsDebugEvent.SKIP -> "SKIP"
+        HapticsDebugEvent.FIRE -> "FIRE"
+    }
+
+    val reason = debugState.reason.ifBlank { "none" }
+
+    Column(
+        modifier = modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Text(
+            text = "HAPTICS TELEMETRY DEBUG",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Black,
+            color = accent,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "event=$eventLabel reason=$reason",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp
+        )
+        Text(
+            text = "enabled=${debugState.enabled} playing=${debugState.isPlaying} profile=${debugState.profile.name}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+        )
+        Text(
+            text = "routeToSystem=${debugState.routeToSystemDecoderDsp} bitPerfect=${debugState.isBitPerfectMode} cooldown=${debugState.cooldownRemainingMs}ms",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+        )
+        Text(
+            text = "raw=${"%.3f".format(debugState.rawScore)} smooth=${"%.3f".format(debugState.smoothedScore)} min=${"%.3f".format(debugState.minScore)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+        )
+        Text(
+            text = "bass=${"%.3f".format(debugState.bass)} energy=${"%.3f".format(debugState.energy)} flux=${"%.3f".format(debugState.flux)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+        )
+        Text(
+            text = "pulses=${debugState.pulseCount} amp=${debugState.amplitude} dur=${debugState.durationMs}ms",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+        )
     }
 }
 
@@ -956,6 +1909,55 @@ private fun CoverSettingsSwitchRow(
                 uncheckedTrackColor = Color.White.copy(alpha = 0.12f)
             )
         )
+    }
+}
+
+@Composable
+private fun CoverStorageCategoryRow(
+    title: String,
+    subtitle: String,
+    color: Color,
+    onClear: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (onClear != null) {
+            TextButton(onClick = onClear) {
+                Text(
+                    text = "CLEAR",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
     }
 }
 

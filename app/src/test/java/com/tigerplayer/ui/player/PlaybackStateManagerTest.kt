@@ -72,6 +72,7 @@ class PlaybackStateManagerTest {
 
         every { metadataEngine.currentLyrics } returns MutableStateFlow(Lyrics.None)
         every { metadataEngine.currentArtistImageUrl } returns MutableStateFlow(null)
+        every { metadataEngine.editedTracksFlow } returns kotlinx.coroutines.flow.MutableSharedFlow()
 
         every { adaptiveDspEngine.audioReactiveFrame } returns MutableStateFlow(AudioReactiveFrame())
         every { settingsDataStore.settingsFlow } returns MutableStateFlow(TigerSettingsState())
@@ -201,5 +202,17 @@ class PlaybackStateManagerTest {
 
         manager.cancelSleepTimer()
         verify(exactly = 1) { playbackEngine.cancelSleepTimer() }
+    }
+
+    @Test
+    fun `seekTo immediately updates currentPosition state and delegates to playback engine`() = runTest(dispatcher) {
+        val manager = createManager()
+        advanceUntilIdle()
+
+        manager.seekTo(45_000L)
+        advanceUntilIdle()
+
+        assertEquals(45_000L, manager.playbackState.value.currentPosition)
+        verify(exactly = 1) { playbackEngine.seekTo(45_000L, any()) }
     }
 }

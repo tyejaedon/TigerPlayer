@@ -3,6 +3,8 @@ package com.tigerplayer.di
 import com.google.gson.Gson
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.remote.api.*
+import com.tigerplayer.data.remote.api.deezer.DeezerApiService
+import com.tigerplayer.data.remote.api.deezer.DeezerRateLimitInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,6 +30,7 @@ import javax.inject.Singleton
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class LrclibRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class AutoEqRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class KugouRetrofit
+@Qualifier @Retention(AnnotationRetention.BINARY) annotation class DeezerRetrofit
 
 @Singleton
 class SubsonicHostManager @Inject constructor() {
@@ -62,6 +65,7 @@ object NetworkModule {
     private const val ITUNES_BASE_URL = "https://itunes.apple.com/"
     private const val LRCLIB_BASE_URL = "https://lrclib.net/"
     private const val KUGOU_BASE_URL = "https://krcs.kugou.com/"
+    private const val DEEZER_BASE_URL = "https://api.deezer.com/"
 
     @Provides
     @Singleton
@@ -102,8 +106,26 @@ object NetworkModule {
         }
         .build()
 
+    @Provides
+    @Singleton
+    @DeezerRetrofit
+    fun provideDeezerClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+        .addInterceptor(DeezerRateLimitInterceptor())
+        .build()
+
     // --- Retrofit Builders ---
 
+
+    @Provides
+    @Singleton
+    fun provideNeteaseApi(client: OkHttpClient): com.tigerplayer.data.remote.api.NeteaseApi {
+        return Retrofit.Builder()
+            .baseUrl("https://music.163.com/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(com.tigerplayer.data.remote.api.NeteaseApi::class.java)
+    }
 
     @Provides
     @Singleton
@@ -179,6 +201,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @DeezerRetrofit
+    fun provideDeezerRetrofit(@DeezerRetrofit client: OkHttpClient, gson: Gson): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(DEEZER_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+
+    @Provides
+    @Singleton
     @KugouRetrofit
     fun provideKugouRetrofit(client: OkHttpClient): Retrofit =
         Retrofit.Builder()
@@ -224,16 +256,35 @@ object NetworkModule {
     fun provideKugouApi(@KugouRetrofit retrofit: Retrofit): KugouApi =
         retrofit.create(KugouApi::class.java)
 
+    @Provides
+    @Singleton
+    fun provideDeezerApi(@DeezerRetrofit retrofit: Retrofit): DeezerApiService =
+        retrofit.create(DeezerApiService::class.java)
+
+    @Provides
+    @Singleton
+    fun provideDeezerPublicApi(@DeezerRetrofit retrofit: Retrofit): com.tigerplayer.data.remote.api.DeezerApiService =
+        retrofit.create(com.tigerplayer.data.remote.api.DeezerApiService::class.java)
+
     // --- LAST.FM INJECTIONS ---
 
     @Provides
     @Singleton
     @Named("LastFmRetrofit") // Use Named so Hilt doesn't confuse it with Spotify's Retrofit
-    fun provideLastFmRetrofit(): Retrofit {
+    fun provideLastFmRetrofit(baseClient: OkHttpClient): Retrofit {
+        val lastFmClient = baseClient.newBuilder()
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", "TigerPlayer/${com.tigerplayer.BuildConfig.VERSION_NAME} (Android)")
+                    .build()
+                chain.proceed(request)
+            }
+            .build()
+
         return Retrofit.Builder()
             .baseUrl("https://ws.audioscrobbler.com/")
+            .client(lastFmClient)
             .addConverterFactory(GsonConverterFactory.create())
-            // Consider adding an OkHttpClient with a custom User-Agent interceptor later!
             .build()
     }
 

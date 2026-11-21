@@ -441,6 +441,30 @@ abstract class TigerDao {
     @Query("UPDATE cached_tracks SET hasEmbeddedArtwork = :hasEmbedded WHERE id = :trackId")
     abstract suspend fun updateHasEmbeddedArtwork(trackId: String, hasEmbedded: Boolean): Int
 
+    @Query(
+        """
+        UPDATE cached_tracks
+        SET title = :title,
+            artist = :artist,
+            album = :album,
+            trackNumber = :trackNumber,
+            year = :year,
+            dateModified = :dateModified,
+            hasEmbeddedArtwork = :hasEmbeddedArtwork
+        WHERE id = :trackId
+        """
+    )
+    abstract suspend fun updateTrackMetadata(
+        trackId: String,
+        title: String,
+        artist: String,
+        album: String,
+        trackNumber: Int,
+        year: String?,
+        dateModified: Long,
+        hasEmbeddedArtwork: Boolean
+    ): Int
+
     @Query("SELECT * FROM cached_tracks WHERE id = :id LIMIT 1")
     abstract suspend fun getCachedTrackById(id: String): CachedTrackEntity?
 
@@ -642,6 +666,9 @@ abstract class TigerDao {
     @Query("SELECT id, dateModified FROM cached_tracks")
     abstract suspend fun getCachedTrackFingerprints(): List<TrackFingerprint>
 
+    @Query("SELECT id FROM cached_tracks")
+    abstract suspend fun getCachedTrackIdsSync(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun internalInsertCachedTracks(tracks: List<CachedTrackEntity>): List<Long>
 
@@ -702,6 +729,15 @@ abstract class TigerDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertWaveformCache(waveform: WaveformCacheEntity)
+
+    @Query("SELECT COUNT(*) FROM waveform_cache")
+    abstract suspend fun getWaveformCacheCount(): Int
+
+    @Query("DELETE FROM waveform_cache")
+    abstract suspend fun clearWaveformCache(): Int
+
+    @Query("SELECT COUNT(*) FROM artist_cache")
+    abstract suspend fun getArtistCacheCount(): Int
 
     // --- THE VAULT (Track Caching) ---
 
@@ -806,6 +842,9 @@ abstract class TigerDao {
         """
     )
     abstract suspend fun getTracksWithoutLyricsCache(limit: Int): List<CachedTrackEntity>
+
+    @Query("SELECT COUNT(*) FROM lyrics_cache")
+    abstract suspend fun getLyricsCacheCount(): Int
 
     @Query("DELETE FROM lyrics_cache")
     abstract suspend fun clearAllLyrics(): Int

@@ -3,6 +3,7 @@ package com.tigerplayer.data.local.entity
 import androidx.core.net.toUri
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.tigerplayer.data.model.AudioTrack
 
@@ -11,7 +12,14 @@ import com.tigerplayer.data.model.AudioTrack
  * Represents a local high-fidelity track cached in the Room database
  * to prevent redundant MediaStore scans.
  */
-@Entity(tableName = "cached_tracks")
+@Entity(
+    tableName = "cached_tracks",
+    indices = [
+        Index("artist"),
+        Index("album"),
+        Index("dateAdded")
+    ]
+)
 data class CachedTrackEntity(
     @PrimaryKey val id: String,
     val title: String,

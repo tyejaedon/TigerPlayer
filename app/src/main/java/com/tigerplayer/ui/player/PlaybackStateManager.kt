@@ -1,6 +1,10 @@
 package com.tigerplayer.ui.player
 
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.tigerplayer.data.local.CoverScreenEqPreset
@@ -18,6 +22,7 @@ import com.tigerplayer.engine.PlaybackEngine
 import com.tigerplayer.engine.SleepTimerState
 import com.tigerplayer.engine.StatsEngine
 import com.tigerplayer.engine.WaveformEngine
+import com.tigerplayer.engine.scrobble.ScrobbleEngine
 import com.tigerplayer.service.MediaControllerManager
 import com.tigerplayer.utils.BluetoothDeviceInfo
 import com.tigerplayer.utils.BluetoothDeviceManager
@@ -73,7 +78,8 @@ class PlaybackStateManager(
     private val playbackPrefs: PlaybackPrefs,
     private val audioRepository: AudioRepository,
     private val bluetoothDeviceManager: BluetoothDeviceManager,
-    coroutineScope: CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null,
+    private val scrobbleEngine: ScrobbleEngine? = null
 ) {
     @Inject
     constructor(
@@ -86,7 +92,8 @@ class PlaybackStateManager(
         settingsDataStore: SettingsDataStore,
         playbackPrefs: PlaybackPrefs,
         audioRepository: AudioRepository,
-        bluetoothDeviceManager: BluetoothDeviceManager
+        bluetoothDeviceManager: BluetoothDeviceManager,
+        scrobbleEngine: ScrobbleEngine
     ) : this(
         playbackEngine = playbackEngine,
         mediaControllerManager = mediaControllerManager,
@@ -98,13 +105,31 @@ class PlaybackStateManager(
         playbackPrefs = playbackPrefs,
         audioRepository = audioRepository,
         bluetoothDeviceManager = bluetoothDeviceManager,
-        coroutineScope = null
+        coroutineScope = null,
+        scrobbleEngine = scrobbleEngine
     )
 
     private val scope: CoroutineScope = coroutineScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val _playbackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
+
+    private var audioReactiveJob: Job? = null
+
+    private fun startAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = scope.launch {
+            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
+                _playbackState.update { it.copy(audioReactiveFrame = frame) }
+            }
+        }
+    }
+
+    private fun stopAudioReactiveCollection() {
+        audioReactiveJob?.cancel()
+        audioReactiveJob = null
+        _playbackState.update { it.copy(audioReactiveFrame = AudioReactiveFrame()) }
+    }
 
     private val _activeSource = MutableStateFlow(MediaSource.LOCAL)
     val activeSource: StateFlow<MediaSource> = _activeSource.asStateFlow()
@@ -214,6 +239,9 @@ class PlaybackStateManager(
                         metadataEngine.fetchTrackMetadata(spotifyTrack)
                     }
                     statsEngine.onTrackChanged(spotifyTrack, spotifyState.isPlaying)
+                    if (spotifyState.isPlaying) {
+                        scrobbleEngine?.onTrackStarted(spotifyTrack)
+                    }
                 }
             }
         }
@@ -261,11 +289,22 @@ class PlaybackStateManager(
             }
         }
 
-        // 9. Audio reactive frame
-        scope.launch {
-            adaptiveDspEngine.audioReactiveFrame.collect { frame ->
-                _playbackState.update { it.copy(audioReactiveFrame = frame) }
+        // 9. Audio reactive frame (Lifecycle-aware: paused when app is backgrounded to save CPU and battery)
+        runCatching {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    startAudioReactiveCollection()
+                }
+
+                override fun onStop(owner: LifecycleOwner) {
+                    stopAudioReactiveCollection()
+                }
+            })
+            if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                startAudioReactiveCollection()
             }
+        }.onFailure {
+            startAudioReactiveCollection()
         }
 
         // 10. Bluetooth connected device
@@ -351,6 +390,9 @@ class PlaybackStateManager(
                         metadataEngine.fetchTrackMetadata(track)
                     }
                     statsEngine.onTrackChanged(track, _playbackState.value.isPlaying)
+                    if (_playbackState.value.isPlaying) {
+                        scrobbleEngine?.onTrackStarted(track)
+                    }
 
                     if (track.isLocal && !track.artworkUri.toString().startsWith("http")) {
                         scope.launch(Dispatchers.IO) {
@@ -370,6 +412,21 @@ class PlaybackStateManager(
                         _playbackState.update { it.copy(currentWaveform = realWaveform) }
                     }
                 }
+        }
+
+        scope.launch {
+            metadataEngine.editedTracksFlow.collect { updatedTracks ->
+                val byId = updatedTracks.associateBy { it.id }
+                _playbackState.update { state ->
+                    val updatedCurrent = state.currentTrack?.let { current -> byId[current.id] ?: current }
+                    val updatedQueue = if (state.queue.any { it.id in byId }) {
+                        state.queue.map { track -> byId[track.id] ?: track }
+                    } else {
+                        state.queue
+                    }
+                    state.copy(currentTrack = updatedCurrent, queue = updatedQueue)
+                }
+            }
         }
     }
 
@@ -405,6 +462,7 @@ class PlaybackStateManager(
     }
 
     fun seekTo(positionMs: Long) {
+        _playbackState.update { it.copy(currentPosition = positionMs) }
         playbackEngine.seekTo(positionMs, _playbackState.value.currentTrack)
     }
 

@@ -1,6 +1,6 @@
 package com.tigerplayer.utils
 
-import com.tigerplayer.data.model.LrcLine
+import com.tigerplayer.data.model.LyricLine
 import com.tigerplayer.data.model.Lyrics
 import java.io.InputStream
 import java.nio.charset.Charset
@@ -182,7 +182,7 @@ object EmbeddedLyricsParser {
             }
         }
 
-        val lines = mutableListOf<LrcLine>()
+        val lines = mutableListOf<LyricLine>()
         while (p < end) {
             val textStart = p
             if (isTwoByte) {
@@ -197,7 +197,7 @@ object EmbeddedLyricsParser {
                             ((data[p + 2].toLong() and 0xFF) shl 8) or
                             (data[p + 3].toLong() and 0xFF)
                     p += 4
-                    lines.add(LrcLine(timeMs = timeVal, text = text))
+                    lines.add(LyricLine(timeMs = timeVal, text = text))
                 } else break
             } else {
                 while (p < end && data[p] != 0.toByte()) {
@@ -211,7 +211,7 @@ object EmbeddedLyricsParser {
                             ((data[p + 2].toLong() and 0xFF) shl 8) or
                             (data[p + 3].toLong() and 0xFF)
                     p += 4
-                    lines.add(LrcLine(timeMs = timeVal, text = text))
+                    lines.add(LyricLine(timeMs = timeVal, text = text))
                 } else break
             }
         }

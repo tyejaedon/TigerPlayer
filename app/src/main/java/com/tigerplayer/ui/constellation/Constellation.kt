@@ -39,6 +39,7 @@ import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.tigerplayer.constellation.ConstellationPhysics
 import com.tigerplayer.constellation.NodeType
 import com.tigerplayer.constellation.PositionedNode
 import com.tigerplayer.constellation.TopTrackEntry
@@ -60,14 +61,14 @@ fun ConstellationScreen(
     val scope = rememberCoroutineScope()
 
     // --- MAP-STYLE CAMERA ENGINE ---
-    // Start zoomed out so the vast universe fits
-    val cameraScale = remember { Animatable(0.15f) }
+    // Start at cohesive scale for reeled-in galaxy
+    val cameraScale = remember { Animatable(0.45f) }
     val cameraPan = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
 
     // Static background depth layers - generated once per screen instance, never touched by the
     // camera engine directly, only read with a slower parallax factor at draw time.
-    val farStarfield = remember { generateStarfield(count = 90, seed = 1, radius = 4000f) }
-    val nearStarfield = remember { generateStarfield(count = 50, seed = 2, radius = 2500f) }
+    val farStarfield = remember { generateStarfield(count = 90, seed = 1, radius = 2200f) }
+    val nearStarfield = remember { generateStarfield(count = 50, seed = 2, radius = 1400f) }
 
     var focusedNodeId by remember { mutableStateOf<String?>(null) }
 
@@ -129,7 +130,7 @@ fun ConstellationScreen(
 
                                     val tappedNode = state.nodes.values.find { node ->
                                         if (node.type == NodeType.GALAXY_CORE) return@find false
-                                        val realPos = calculatePosition(node, timeClock, state.nodes)
+                                        val realPos = ConstellationPhysics.calculatePosition(node, timeClock, state.nodes)
                                         val screenPos = Offset(
                                             center.x + (realPos.x * cameraScale.value) + cameraPan.value.x,
                                             center.y + (realPos.y * cameraScale.value) + cameraPan.value.y
@@ -142,7 +143,7 @@ fun ConstellationScreen(
                                         focusedNodeId = tappedNode.id
                                         scope.launch {
                                             val targetScale = if (tappedNode.type == NodeType.ALBUM) 1.2f else 0.8f
-                                            val nodePos = calculatePosition(tappedNode, timeClock, state.nodes)
+                                            val nodePos = ConstellationPhysics.calculatePosition(tappedNode, timeClock, state.nodes)
 
                                             cameraScale.animateTo(targetScale, spring(stiffness = Spring.StiffnessLow))
                                             cameraPan.animateTo(-nodePos * targetScale, spring(stiffness = Spring.StiffnessLow))
@@ -184,7 +185,7 @@ fun ConstellationScreen(
                         state.nodes.values.forEach { node ->
                             if (node.orbitRadius > 0f && node.type != NodeType.TRACK) {
                                 val orbitCenter = if (node.orbitCenterId != null) {
-                                    calculatePosition(state.nodes[node.orbitCenterId]!!, timeClock, state.nodes)
+                                    ConstellationPhysics.calculatePosition(state.nodes[node.orbitCenterId]!!, timeClock, state.nodes)
                                 } else node.baseOrbitCenter
 
                                 val screenCenter = Offset(
@@ -209,8 +210,8 @@ fun ConstellationScreen(
                             val src = state.nodes[edge.sourceId]
                             val tgt = state.nodes[edge.targetId]
                             if (src != null && tgt != null) {
-                                val srcReal = calculatePosition(src, timeClock, state.nodes)
-                                val tgtReal = calculatePosition(tgt, timeClock, state.nodes)
+                                val srcReal = ConstellationPhysics.calculatePosition(src, timeClock, state.nodes)
+                                val tgtReal = ConstellationPhysics.calculatePosition(tgt, timeClock, state.nodes)
 
                                 val srcScreen = Offset(center.x + (srcReal.x * scale) + pan.x, center.y + (srcReal.y * scale) + pan.y)
                                 val tgtScreen = Offset(center.x + (tgtReal.x * scale) + pan.x, center.y + (tgtReal.y * scale) + pan.y)
@@ -242,7 +243,7 @@ fun ConstellationScreen(
                             val animatedAlpha by animateFloatAsState(targetValue = targetAlpha, label = "sunAlpha")
                             val sunRadius = (60f * visualScale).coerceIn(40f, 110f)
 
-                            val realPos = calculatePosition(sun, timeClock, state.nodes)
+                            val realPos = ConstellationPhysics.calculatePosition(sun, timeClock, state.nodes)
                             val screenX = canvasCenter.x + (realPos.x * cameraScale.value) + cameraPan.value.x
                             val screenY = canvasCenter.y + (realPos.y * cameraScale.value) + cameraPan.value.y
 
@@ -278,7 +279,7 @@ fun ConstellationScreen(
                                 // the artwork inside must stay legible at any zoom level.
                                 val nodeRadius = (node.weight * visualScale).coerceAtLeast(minNodeRadius(node.type))
 
-                                val realPos = calculatePosition(node, timeClock, state.nodes)
+                                val realPos = ConstellationPhysics.calculatePosition(node, timeClock, state.nodes)
                                 val screenX = canvasCenter.x + (realPos.x * cameraScale.value) + cameraPan.value.x
                                 val screenY = canvasCenter.y + (realPos.y * cameraScale.value) + cameraPan.value.y
 
@@ -307,12 +308,15 @@ fun ConstellationScreen(
                     }
                 }
 
+                val focusedAlbumNode = focusedNode?.takeIf { it.type == NodeType.ALBUM }
+
                 // --- 3. UI OVERLAY ---
                 ConstellationOverlay(
                     insight = state.insight,
                     isSunFocused = isSunFocused,
                     selectedArtistReading = selectedArtistReading,
                     selectedArtistTopTracks = focusedNode?.takeIf { it.type == NodeType.ARTIST }?.topTracks ?: emptyList(),
+                    selectedAlbumNode = focusedAlbumNode,
                     selectedTrackNode = focusedTrackNode,
                     artistNodeCount = artistNodeCount,
                     albumNodeCount = albumNodeCount,
@@ -321,7 +325,7 @@ fun ConstellationScreen(
                     onRefresh = { viewModel.refreshUniverse() },
                     onRecenter = {
                         scope.launch {
-                            cameraScale.animateTo(0.15f, spring(stiffness = Spring.StiffnessLow))
+                            cameraScale.animateTo(0.45f, spring(stiffness = Spring.StiffnessLow))
                             cameraPan.animateTo(Offset.Zero, spring(stiffness = Spring.StiffnessLow))
                             focusedNodeId = null
                         }
@@ -342,24 +346,6 @@ private fun minNodeRadius(type: NodeType): Float = when (type) {
     NodeType.ALBUM -> 22f
     NodeType.TRACK -> 16f
     NodeType.GALAXY_CORE -> 40f
-}
-
-/**
- * Pure mathematical function to compute the exact orbital position of a node at any given time.
- */
-private fun calculatePosition(node: PositionedNode, time: Float, allNodes: Map<String, PositionedNode>): Offset {
-    val center = if (node.orbitCenterId != null) {
-        val parent = allNodes[node.orbitCenterId]
-        if (parent != null) calculatePosition(parent, time, allNodes) else node.baseOrbitCenter
-    } else {
-        node.baseOrbitCenter
-    }
-
-    val currentAngle = node.baseAngle + (time * node.orbitSpeed)
-    val rx = center.x + cos(currentAngle) * node.orbitRadius
-    val ry = center.y + sin(currentAngle) * node.orbitRadius
-
-    return Offset(rx, ry)
 }
 
 /** A single background star for the parallax depth backdrop, in fixed "world" coordinates. */
@@ -588,6 +574,7 @@ fun ConstellationOverlay(
     isSunFocused: Boolean,
     selectedArtistReading: ConstellationArtistReading?,
     selectedArtistTopTracks: List<TopTrackEntry>,
+    selectedAlbumNode: PositionedNode? = null,
     selectedTrackNode: PositionedNode?,
     artistNodeCount: Int,
     albumNodeCount: Int,
@@ -601,6 +588,7 @@ fun ConstellationOverlay(
     val panelTitle = when {
         isSunFocused -> "COSMIC INSIGHT"
         selectedArtistReading != null -> "ARTIST SIGNAL"
+        selectedAlbumNode != null -> "ALBUM SIGNAL"
         selectedTrackNode != null -> "TRACK SIGNAL"
         else -> "GALAXY GUIDE"
     }
@@ -609,9 +597,13 @@ fun ConstellationOverlay(
         isSunFocused -> "Cosmic Insight • ${insight.densityPercent}% density"
         selectedArtistReading != null ->
             "${selectedArtistReading.artistName} • ${selectedArtistReading.playCount} plays • ${selectedArtistReading.minutesListened} min"
+        selectedAlbumNode != null -> {
+            val estMinutes = (selectedAlbumNode.playCount * 3.5f).toInt()
+            "${selectedAlbumNode.label} • ${selectedAlbumNode.playCount} plays • ~$estMinutes min"
+        }
         selectedTrackNode != null ->
             "${selectedTrackNode.label} • ${selectedTrackNode.playCount} plays"
-        else -> "Tap the Sun, a star, or a track for details"
+        else -> "Tap the Sun, a star, an album, or a track for details"
     }
 
     Column(
@@ -680,10 +672,11 @@ fun ConstellationOverlay(
                     when {
                         isSunFocused -> GalaxyInsightDetails(insight)
                         selectedArtistReading != null -> ArtistReadingDetails(selectedArtistReading, selectedArtistTopTracks)
+                        selectedAlbumNode != null -> AlbumReadingDetails(selectedAlbumNode)
                         selectedTrackNode != null -> TrackReadingDetails(selectedTrackNode)
                         else -> {
                             Text(
-                                text = "Tap the Sun for cosmic insight, a star for artist stats, or a track for song stats.",
+                                text = "Tap the Sun for cosmic insight, a star for artist stats, an album for album stats, or a track for song stats.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White,
                                 lineHeight = 20.sp
@@ -802,6 +795,32 @@ private fun ArtistReadingDetails(artist: ConstellationArtistReading, topTracks: 
             }
         }
     }
+}
+
+/** Album stats block - shown when an album node is tapped. */
+@Composable
+private fun AlbumReadingDetails(album: PositionedNode) {
+    Text(
+        text = album.label,
+        style = MaterialTheme.typography.titleSmall,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
+    album.artistName?.takeIf { it.isNotBlank() }?.let { artistName ->
+        Text(
+            text = artistName,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.78f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    val estMinutes = (album.playCount * 3.5f).toInt()
+    InsightRow(label = "Total play count", value = "${album.playCount} plays")
+    InsightRow(label = "Estimated listening time", value = "~$estMinutes min")
 }
 
 /** Song stats block - shown when a track node is tapped, including in collapsed mode. */

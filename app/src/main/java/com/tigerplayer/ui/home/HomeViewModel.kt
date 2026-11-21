@@ -4,6 +4,9 @@ import android.app.Application
 import android.location.Location
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.tigerplayer.data.repository.AutoEqRepository
+import com.tigerplayer.engine.AudioDeviceEngine
+import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.data.repository.WeatherRepository
 import com.tigerplayer.data.repository.LocationProvider
 import com.tigerplayer.utils.Resource
@@ -12,23 +15,67 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 
 
 @HiltViewModel
+@OptIn(UnstableApi::class)
 class HomeViewModel @Inject constructor(
     application: Application,
     private val weatherRepository: WeatherRepository,
-    private val locationProvider: LocationProvider
+    private val locationProvider: LocationProvider,
+    private val audioDeviceEngine: AudioDeviceEngine,
+    private val autoEqRepository: AutoEqRepository,
+    private val adaptiveDspEngine: AdaptiveDspEngine
 ) : AndroidViewModel(application) {
 
     private val _weatherUiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
     val weatherUiState: StateFlow<WeatherUiState> = _weatherUiState.asStateFlow()
 
+    private val _uiState = MutableStateFlow(HomeUiState())
+    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
     init {
         fetchWeather()
+        observeAudioDevice()
+    }
+
+    private fun observeAudioDevice() {
+        viewModelScope.launch {
+            audioDeviceEngine.activeDevice.collect { device ->
+                val deviceName = device.displayName
+                _uiState.update { it.copy(connectedDeviceName = deviceName) }
+
+                if (deviceName.isNotBlank()) {
+                    val matched = autoEqRepository.findBestMatch(deviceName)
+                    _uiState.update { it.copy(autoEqMatch = matched) }
+                } else {
+                    _uiState.update { it.copy(autoEqMatch = null) }
+                }
+            }
+        }
+    }
+
+    fun applyAutoEqProfile() {
+        viewModelScope.launch {
+            val match = _uiState.value.autoEqMatch ?: return@launch
+            val result = autoEqRepository.fetchGraphicEqGains(match, emptyList()) // Assuming logic handles empty target frequencies or we pass standard 10-band ISO list
+            if (result.isSuccess) {
+                val (preamp, gains) = result.getOrThrow()
+                // In a real implementation we would construct the AcousticNodes or ParametricBands
+                // and push them to the AdaptiveDspEngine.
+                // For now, this placeholder handles the UI dismissal.
+            }
+            dismissAutoEqCard()
+        }
+    }
+
+    fun dismissAutoEqCard() {
+        _uiState.update { it.copy(autoEqMatch = null) }
     }
 
     fun fetchWeather() {

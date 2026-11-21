@@ -21,7 +21,7 @@ import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.ui.coverscreen.CoverAccessibleControls
 import com.tigerplayer.ui.coverscreen.CoverMicroWaveform
 import com.tigerplayer.ui.coverscreen.CoverScreenWindowState
-import com.tigerplayer.ui.coverscreen.TrackInfoText
+import com.tigerplayer.ui.coverscreen.CoverScreenTrackDashboard
 import com.tigerplayer.ui.coverscreen.shouldShowCoverControls
 import com.tigerplayer.ui.coverscreen.shouldShowCoverWaveform
 import com.tigerplayer.ui.player.PlayerUiState
@@ -94,7 +94,7 @@ fun CoverScreenMiniHubContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = if (isVortexImmersive) Arrangement.Top else Arrangement.Top
         ) {
-            TrackInfoText(
+            CoverScreenTrackDashboard(
                 track = track,
                 subtitle = if (uiState.isPlaying) "NOW PLAYING" else "PAUSED",
                 lyrics = uiState.currentLyrics,
@@ -112,7 +112,7 @@ fun CoverScreenMiniHubContent(
             )
 
             if (shouldShowCoverControls(isVortexImmersive)) {
-                Spacer(modifier = Modifier.height(if (isTightScreen) 39.dp else 53.dp))
+                Spacer(modifier = Modifier.height(if (isTightScreen) 8.dp else 14.dp))
                 CoverAccessibleControls(
                     isPlaying = uiState.isPlaying,
                     isShuffleEnabled = uiState.isShuffleEnabled,
@@ -132,6 +132,7 @@ fun CoverScreenMiniHubContent(
                 amplitudes = uiState.currentWaveform,
                 bass = uiState.audioReactiveFrame.bass,
                 energy = uiState.audioReactiveFrame.energy,
+                flux = uiState.audioReactiveFrame.flux,
                 isPlaying = uiState.isPlaying,
                 isRenderingActive = false,
                 duration = track?.durationMs ?: 240_000L,

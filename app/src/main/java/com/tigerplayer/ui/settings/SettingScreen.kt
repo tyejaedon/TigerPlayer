@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,9 +39,11 @@ import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
@@ -49,6 +52,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material.icons.rounded.ScreenRotation
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Upload
@@ -95,10 +99,12 @@ import android.widget.Toast
 import com.tigerplayer.BuildConfig
 import com.tigerplayer.data.backup.RestoreStrategy
 import com.tigerplayer.data.local.AudioReactiveHapticsProfile
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.DefaultPlayerView
 import com.tigerplayer.data.local.SkipShortAudio
 import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
+import com.tigerplayer.data.model.StorageBreakdown
 import com.tigerplayer.service.HapticsDebugEvent
 import com.tigerplayer.service.HapticsDebugState
 import com.tigerplayer.ui.theme.PremiumGlassCard
@@ -125,6 +131,7 @@ fun SettingsScreen(
     val hapticsDebug by viewModel.hapticsDebugState.collectAsStateWithLifecycle()
     val backupEvent by viewModel.backupEvent.collectAsStateWithLifecycle()
     val spotifyAuthError by viewModel.spotifyAuthError.collectAsStateWithLifecycle()
+    val storageEventMessage by viewModel.storageEventMessage.collectAsStateWithLifecycle()
     val accent = accentColor(settings.accentStyle)
 
     val context = LocalContext.current
@@ -142,15 +149,13 @@ fun SettingsScreen(
     }
     LaunchedEffect(backupEvent) {
         val event = backupEvent ?: return@LaunchedEffect
-        val message = when (event) {
-            is BackupUiEvent.ExportSucceeded ->
-                "Backup saved: ${event.playlists} playlists, ${event.history} history rows"
-            is BackupUiEvent.ImportSucceeded ->
-                "Restored: ${event.playlists} playlists, ${event.history} history rows"
-            is BackupUiEvent.Failed -> "Backup error: ${event.message}"
-        }
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        Toast.makeText(context, event.toDisplayMessage(), Toast.LENGTH_LONG).show()
         viewModel.consumeBackupEvent()
+    }
+    LaunchedEffect(storageEventMessage) {
+        val message = storageEventMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.consumeStorageEventMessage()
     }
 
     var crossfadeSlider by remember(settings.crossfadeDurationSec) {
@@ -298,6 +303,68 @@ fun SettingsScreen(
                 )
             }
 
+            // --- VISUALIZER & WAVEFORM SECTION ---
+            MatrixSection(title = "Visualizer & Waveform", icon = Icons.Rounded.GraphicEq, accent = accent) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("PALETTE COLOR MODE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = accent, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.tigerplayer.data.local.VisualizerPaletteMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = settings.visualizerPaletteMode == mode,
+                                onClick = { viewModel.setVisualizerPaletteMode(mode) },
+                                label = { Text(if (mode == com.tigerplayer.data.local.VisualizerPaletteMode.ALBUM_ART) "ALBUM ART" else "DEFAULT NEON") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("FLUID SENSITIVITY", fontWeight = FontWeight.Bold)
+                        Text(String.format(java.util.Locale.US, "%.1fx", settings.visualizerSensitivity), color = accent, fontWeight = FontWeight.Black)
+                    }
+                    Slider(
+                        value = settings.visualizerSensitivity,
+                        onValueChange = { viewModel.setVisualizerSensitivity(it) },
+                        valueRange = 0.5f..2.0f,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("WAVEFORM SENSITIVITY", fontWeight = FontWeight.Bold)
+                        Text(String.format(java.util.Locale.US, "%.1fx", settings.waveformSensitivity), color = accent, fontWeight = FontWeight.Black)
+                    }
+                    Slider(
+                        value = settings.waveformSensitivity,
+                        onValueChange = { viewModel.setWaveformSensitivity(it) },
+                        valueRange = 0.5f..2.0f,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+
             // --- AUDIO ENGINE SECTION ---
             MatrixSection(title = "Neural DSP", icon = Icons.Rounded.GraphicEq, accent = accent) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -348,9 +415,60 @@ fun SettingsScreen(
                     )
                 }
 
+                HorizontalDivider(
+                    Modifier.padding(horizontal = 16.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Headphones, null, tint = accent, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("BINAURAL CROSSFEED", fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Bauer/Linkwitz headphone stage (auto-bypassed on built-in speakers)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CrossfeedPreset.entries.forEach { preset ->
+                            FilterChip(
+                                selected = settings.crossfeedPreset == preset,
+                                onClick = { viewModel.setCrossfeedPreset(preset) },
+                                label = {
+                                    val label = when (preset) {
+                                        CrossfeedPreset.OFF -> "OFF"
+                                        CrossfeedPreset.SUBTLE -> "SUBTLE"
+                                        CrossfeedPreset.CLASSIC_STUDIO -> "CLASSIC STUDIO"
+                                    }
+                                    Text(label)
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accent.copy(alpha = 0.2f),
+                                    selectedLabelColor = accent
+                                )
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(
+                    Modifier.padding(horizontal = 16.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+
                 ListItem(
                     headlineContent = { Text("SYSTEM DECODER / DSP", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("Route audio through Android offload path") },
+                    supportingContent = { Text("Route audio through Android offload path (saves battery)") },
                     leadingContent = { Icon(Icons.Rounded.BluetoothAudio, null, tint = accent) },
                     trailingContent = {
                         Switch(
@@ -562,6 +680,9 @@ fun SettingsScreen(
             // --- BACKUP & RESTORE ---
             BackupRestoreSection(viewModel = viewModel, accent = accent)
 
+            // --- STORAGE & CACHE MATRIX (issue #391) ---
+            StorageSection(viewModel = viewModel, accent = accent)
+
             Spacer(modifier = Modifier.height(24.dp))
 
             TextButton(
@@ -644,6 +765,7 @@ private fun MusicFoldersSection(viewModel: SettingsViewModel, accent: Color) {
 @Composable
 private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color) {
     val accounts by viewModel.connectedAccountsState.collectAsStateWithLifecycle()
+    val settings by viewModel.settingsState.collectAsStateWithLifecycle()
     var pendingLogout by remember { mutableStateOf<String?>(null) }
 
     MatrixSection(title = "Connected Accounts", icon = Icons.Rounded.AccountCircle, accent = accent) {
@@ -691,6 +813,81 @@ private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
         )
+
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+        ListItem(
+            headlineContent = { Text("LAST.FM", fontWeight = FontWeight.Bold) },
+            supportingContent = {
+                val status = when {
+                    accounts.isLastfmConnected -> {
+                        val user = accounts.lastfmUsername?.takeIf { it.isNotBlank() } ?: "Connected"
+                        if (accounts.pendingScrobbleCount > 0) {
+                            "$user • ${accounts.pendingScrobbleCount} queued"
+                        } else {
+                            "Connected as $user"
+                        }
+                    }
+                    !accounts.isLastfmConfigured -> "API keys not configured in build"
+                    else -> "Not connected"
+                }
+                Text(status)
+            },
+            leadingContent = {
+                Icon(
+                    Icons.Rounded.CloudSync,
+                    null,
+                    tint = if (accounts.isLastfmConnected) accent else accent.copy(alpha = 0.4f)
+                )
+            },
+            trailingContent = {
+                val itemContext = LocalContext.current
+                if (accounts.isLastfmConnected) {
+                    TextButton(onClick = { pendingLogout = "Last.fm" }) {
+                        Text("LOG OUT")
+                    }
+                } else {
+                    Button(
+                        onClick = { viewModel.connectLastfm(itemContext) },
+                        enabled = accounts.isLastfmConfigured,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accent,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text("CONNECT", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                    }
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        )
+
+        if (accounts.isLastfmConnected) {
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+            ScrobbleSwitchItem(
+                title = "SCROBBLE PLAYS",
+                subtitle = "Scrobble tracks after 50% or 4 minutes",
+                checked = settings.lastfmScrobbleEnabled,
+                accent = accent,
+                onCheckedChange = viewModel::setLastfmScrobbleEnabled
+            )
+            ScrobbleSwitchItem(
+                title = "UPDATE NOW PLAYING",
+                subtitle = "Show currently playing track on Last.fm",
+                checked = settings.lastfmNowPlayingEnabled,
+                accent = accent,
+                onCheckedChange = viewModel::setLastfmNowPlayingEnabled
+            )
+            ScrobbleSwitchItem(
+                title = "SCROBBLE REMOTE TRACKS",
+                subtitle = "Include Navidrome & Spotify plays (off = local only)",
+                checked = settings.lastfmScrobbleRemote,
+                accent = accent,
+                onCheckedChange = viewModel::setLastfmScrobbleRemote
+            )
+        }
     }
 
     val serviceToLogOut = pendingLogout
@@ -704,6 +901,7 @@ private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color
                     when (serviceToLogOut) {
                         "Spotify" -> viewModel.logoutSpotify()
                         "Navidrome" -> viewModel.logoutNavidrome()
+                        "Last.fm" -> viewModel.logoutLastfm()
                     }
                     pendingLogout = null
                 }) {
@@ -717,6 +915,28 @@ private fun ConnectedAccountsSection(viewModel: SettingsViewModel, accent: Color
             }
         )
     }
+}
+
+@Composable
+private fun ScrobbleSwitchItem(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    accent: Color,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(title, fontWeight = FontWeight.Bold) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = { Icon(Icons.Rounded.CloudSync, null, tint = if (checked) accent else accent.copy(alpha = 0.4f)) },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
 }
 
 @Composable
@@ -844,6 +1064,330 @@ private fun HapticsDebugPanel(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
         )
+    }
+}
+
+@Composable
+private fun StorageSection(viewModel: SettingsViewModel, accent: Color) {
+    val breakdown by viewModel.storageBreakdown.collectAsStateWithLifecycle()
+    var showPurgeAllDialog by remember { mutableStateOf(false) }
+
+    MatrixSection(title = "Storage & Cache", icon = Icons.Rounded.Storage, accent = accent) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header: Total Space & Refresh
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "TOTAL APPLICATION STORAGE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = breakdown.formattedTotalAppSize,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "Temporary Cache: ${breakdown.formattedTotalCacheSize}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = { viewModel.refreshStorageBreakdown() }
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = "Refresh Storage",
+                        tint = accent
+                    )
+                }
+            }
+
+            // Visual Segmented Bar
+            StorageBreakdownBar(breakdown = breakdown)
+
+            // Category Breakdown Items
+            StorageCategoryRow(
+                title = "Artwork & Thumbnails",
+                subtitle = "${breakdown.artwork.formattedSize} • ${breakdown.artwork.itemCount ?: 0} cached images",
+                color = TigerCyberCyan,
+                onClear = if (breakdown.artwork.sizeBytes > 0) {
+                    { viewModel.clearArtworkCache() }
+                } else null
+            )
+
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            StorageCategoryRow(
+                title = "Synchronized Lyrics",
+                subtitle = "${breakdown.lyrics.formattedSize} • ${breakdown.lyrics.itemCount ?: 0} cached songs",
+                color = TigerNeonOrange,
+                onClear = if ((breakdown.lyrics.itemCount ?: 0) > 0) {
+                    { viewModel.clearLyricsCache() }
+                } else null
+            )
+
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            StorageCategoryRow(
+                title = "Artist Biographies & Info",
+                subtitle = "${breakdown.artists.formattedSize} • ${breakdown.artists.itemCount ?: 0} artists",
+                color = TigerSpectralViolet,
+                onClear = if ((breakdown.artists.itemCount ?: 0) > 0) {
+                    { viewModel.clearArtistCache() }
+                } else null
+            )
+
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            StorageCategoryRow(
+                title = "Waveform Peak Analysis",
+                subtitle = "${breakdown.waveforms.formattedSize} • ${breakdown.waveforms.itemCount ?: 0} tracks indexed",
+                color = TigerToxicLime,
+                onClear = if ((breakdown.waveforms.itemCount ?: 0) > 0) {
+                    { viewModel.clearWaveformCache() }
+                } else null
+            )
+
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            StorageCategoryRow(
+                title = "Core Database & Settings",
+                subtitle = "${breakdown.internalData.formattedSize} • Playlists & history",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                onClear = null // Protected
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Master Purge Button
+            OutlinedButton(
+                onClick = { showPurgeAllDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = TigerNeonRed
+                ),
+                shape = RoundedCornerShape(12.dp),
+                enabled = breakdown.totalPurgeableBytes > 0
+            ) {
+                Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "PURGE ALL TEMPORARY ARCHIVES (${breakdown.formattedPurgeableSize})",
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp
+                )
+            }
+        }
+    }
+
+    if (showPurgeAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showPurgeAllDialog = false },
+            title = {
+                Text(
+                    text = "PURGE TEMPORARY ARCHIVES?",
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "This will free up approximately ${breakdown.formattedPurgeableSize} by purging album artwork, downloaded lyrics, artist metadata, and waveform analysis peaks.\n\nYour playlists, play history, and sound presets will NOT be deleted.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPurgeAllDialog = false
+                        viewModel.clearAllTemporaryCaches()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TigerNeonRed)
+                ) {
+                    Text("PURGE ARCHIVES", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPurgeAllDialog = false }) {
+                    Text("CANCEL")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun StorageBreakdownBar(
+    breakdown: StorageBreakdown,
+    modifier: Modifier = Modifier
+) {
+    val total = breakdown.totalAppSizeBytes.coerceAtLeast(1L).toFloat()
+    val artworkWeight = (breakdown.artwork.sizeBytes / total).coerceIn(0f, 1f)
+    val lyricsWeight = (breakdown.lyrics.sizeBytes / total).coerceIn(0f, 1f)
+    val artistsWeight = (breakdown.artists.sizeBytes / total).coerceIn(0f, 1f)
+    val waveformsWeight = (breakdown.waveforms.sizeBytes / total).coerceIn(0f, 1f)
+    val internalWeight = (breakdown.internalData.sizeBytes / total).coerceIn(0f, 1f)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+        ) {
+            if (artworkWeight > 0.005f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(artworkWeight)
+                        .background(TigerCyberCyan)
+                )
+            }
+            if (lyricsWeight > 0.005f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(lyricsWeight)
+                        .background(TigerNeonOrange)
+                )
+            }
+            if (artistsWeight > 0.005f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(artistsWeight)
+                        .background(TigerSpectralViolet)
+                )
+            }
+            if (waveformsWeight > 0.005f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(waveformsWeight)
+                        .background(TigerToxicLime)
+                )
+            }
+            if (internalWeight > 0.005f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(internalWeight)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Legend
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StorageLegendItem(color = TigerCyberCyan, label = "Artwork")
+            StorageLegendItem(color = TigerNeonOrange, label = "Lyrics")
+            StorageLegendItem(color = TigerSpectralViolet, label = "Artists")
+            StorageLegendItem(color = TigerToxicLime, label = "Waveforms")
+            StorageLegendItem(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), label = "Database")
+        }
+    }
+}
+
+@Composable
+private fun StorageLegendItem(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun StorageCategoryRow(
+    title: String,
+    subtitle: String,
+    color: Color,
+    onClear: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (onClear != null) {
+            TextButton(
+                onClick = onClear
+            ) {
+                Text(
+                    text = "CLEAR",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        } else {
+            Text(
+                text = "PROTECTED",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
     }
 }
 

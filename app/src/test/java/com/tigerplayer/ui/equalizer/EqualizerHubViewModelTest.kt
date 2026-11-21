@@ -1,8 +1,11 @@
 package com.tigerplayer.ui.equalizer
 
 import androidx.media3.common.util.UnstableApi
+import com.tigerplayer.data.local.CoverScreenEqPreset
+import com.tigerplayer.data.local.CrossfeedPreset
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.AudioDeviceType
 import com.tigerplayer.data.model.AudioOutputDevice
 import com.tigerplayer.data.model.HeadphoneSearchResult
@@ -11,11 +14,13 @@ import com.tigerplayer.data.repository.AutoEqRepository
 import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AdaptiveDspEngine
 import com.tigerplayer.engine.AudioDeviceEngine
+import com.tigerplayer.engine.AudioReactiveFrame
 import com.tigerplayer.engine.FilterType
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -44,6 +49,7 @@ class EqualizerHubViewModelTest {
 
     private val activeDeviceFlow = MutableStateFlow(testActiveDevice)
     private val envModeFlow = MutableStateFlow(AcousticEnvironmentMode.STUDIO.name)
+    private val speakerOutputFlow = MutableStateFlow(false)
 
     private lateinit var viewModel: EqualizerHubViewModel
 
@@ -52,9 +58,31 @@ class EqualizerHubViewModelTest {
         Dispatchers.setMain(testDispatcher)
 
         every { adaptiveDspEngine.getSampleRate() } returns 48000
+        every { adaptiveDspEngine.audioReactiveFrame } returns MutableStateFlow(AudioReactiveFrame())
+        every { adaptiveDspEngine.isBuiltInSpeakerOutputFlow } returns speakerOutputFlow
         every { audioDeviceEngine.activeDevice } returns activeDeviceFlow
         every { playbackPrefs.acousticEnvironmentMode } returns envModeFlow
+        every { settingsDataStore.settingsFlow } returns flowOf(TigerSettingsState())
         coEvery { autoEqRepository.searchHeadphones(any()) } returns emptyList()
+
+        every { autoEqRepository.parseParametricEqText(any(), any(), any(), any(), any()) } answers {
+            val modelName = arg<String>(1)
+            val source = arg<String>(2)
+            val target = arg<String>(3)
+            val form = arg<String>(4)
+            HeadphoneSpecs(
+                modelName = modelName,
+                source = source,
+                targetCurve = target,
+                formFactor = form,
+                preampDb = -4.5f,
+                bands = listOf(
+                    com.tigerplayer.data.model.AutoEqBand(filterType = "PK", frequencyHz = 28f, gainDb = 6.2f, q = 1.41f),
+                    com.tigerplayer.data.model.AutoEqBand(filterType = "LSC", frequencyHz = 105f, gainDb = -2.0f, q = 0.71f),
+                    com.tigerplayer.data.model.AutoEqBand(filterType = "HSC", frequencyHz = 10000f, gainDb = 1.8f, q = 0.71f)
+                )
+            )
+        }
 
         viewModel = EqualizerHubViewModel(
             adaptiveDspEngine = adaptiveDspEngine,
@@ -159,14 +187,25 @@ class EqualizerHubViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(EqualizerBandMode.AUTOEQ_PARAMETRIC, state.bandMode)
+        assertEquals(EqualizerBandMode.TEN_BAND, state.bandMode)
         assertEquals(3, state.bands.size)
         assertEquals(-4.5f, state.preampDb, 0.01f)
         assertEquals("Sennheiser HD 650", state.autoEqModel)
+        assertFalse(state.isAutoEqModified)
 
         assertEquals(28f, state.bands[0].frequencyHz, 0.01f)
         assertEquals(6.2f, state.bands[0].gainDb, 0.01f)
         assertEquals(FilterType.PEAKING, state.bands[0].filterType)
+
+        // Test manual edit detection and restore
+        viewModel.updateBandGain(0, 10.0f)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isAutoEqModified)
+
+        viewModel.restoreAutoEqProfile()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isAutoEqModified)
+        assertEquals(6.2f, viewModel.uiState.value.bands[0].gainDb, 0.01f)
 
         assertEquals(105f, state.bands[1].frequencyHz, 0.01f)
         assertEquals(-2.0f, state.bands[1].gainDb, 0.01f)
@@ -185,5 +224,109 @@ class EqualizerHubViewModelTest {
         assertEquals(AcousticEnvironmentMode.VINYL_WARMTH, viewModel.uiState.value.environmentMode)
         verify { adaptiveDspEngine.setAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH) }
         coVerify { playbackPrefs.saveAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH.name) }
+    }
+
+    @Test
+    fun `selecting studio tab updates ui state without mutating active engine source`() = runTest(testDispatcher) {
+        val initialSource = viewModel.uiState.value.activeEngineSource
+        viewModel.selectStudioTab(EqualizerStudioTab.SPATIAL_NEXUS)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(EqualizerStudioTab.SPATIAL_NEXUS, state.studioTab)
+        assertEquals(initialSource, state.activeEngineSource) // Should not change
+    }
+
+    @Test
+    fun `setActiveEngineSource switches active engine source and dispatches nodes`() = runTest(testDispatcher) {
+        viewModel.setActiveEngineSource(EqualizerEngineSource.SPATIAL_NODES)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(EqualizerEngineSource.SPATIAL_NODES, state.activeEngineSource)
+        assertEquals(4, state.spatialNodes.size)
+        verify { adaptiveDspEngine.updateAcousticNodes(match { it.size == 4 }) }
+    }
+
+    @Test
+    fun `moveSpatialNode updates position and clamps coordinates within -1 and 1`() = runTest(testDispatcher) {
+        viewModel.moveSpatialNode("sub", androidx.compose.ui.geometry.Offset(-1.5f, 0.5f))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val subNode = viewModel.uiState.value.spatialNodes.first { it.id == "sub" }
+        assertEquals(-1.0f, subNode.spatialPos.x, 0.01f)
+        assertEquals(0.5f, subNode.spatialPos.y, 0.01f)
+        assertEquals("Custom Shape", viewModel.uiState.value.spatialMood)
+    }
+
+    @Test
+    fun `setSpatialMoodPreset applies predefined mood positions and persists`() = runTest(testDispatcher) {
+        viewModel.setSpatialMoodPreset("Night Drive")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("Night Drive", state.spatialMood)
+        assertEquals(EqualizerEngineSource.SPATIAL_NODES, state.activeEngineSource)
+        val sub = state.spatialNodes.first { it.id == "sub" }
+        assertEquals(-0.6f, sub.spatialPos.x, 0.01f)
+        assertEquals(-0.6f, sub.spatialPos.y, 0.01f)
+        coVerify { settingsDataStore.setCoverScreenEqPreset(CoverScreenEqPreset.NIGHT_DRIVE) }
+    }
+
+    @Test
+    fun `removeAutoEqProfile clears applied AutoEQ profile and resets bands and preamp to flat`() = runTest(testDispatcher) {
+        val sampleAutoEqText = """
+            Preamp: -4.5 dB
+            Filter 1: ON PK Fc 28 Hz Gain 6.2 dB Q 1.41
+            Filter 2: ON LSC Fc 105 Hz Gain -2.0 dB Q 0.71
+            Filter 3: ON HSC Fc 10000 Hz Gain 1.8 dB Q 0.71
+        """.trimIndent()
+
+        viewModel.importRawAutoEq(sampleAutoEqText, "Sennheiser HD 650")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("Sennheiser HD 650", viewModel.uiState.value.autoEqModel)
+        assertEquals(-4.5f, viewModel.uiState.value.preampDb, 0.01f)
+
+        viewModel.removeAutoEqProfile()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(state.autoEqModel)
+        assertNull(state.autoEqSource)
+        assertNull(state.targetCurve)
+        assertFalse(state.isAutoEqModified)
+        assertTrue(state.originalAutoEqBands.isEmpty())
+        assertEquals(0f, state.preampDb, 0.01f)
+        assertEquals(EqualizerPresets.FLAT, state.activePresetName)
+        assertEquals(10, state.bands.size)
+        assertTrue(state.bands.all { it.gainDb == 0f })
+
+        // Switching band mode after removing AutoEQ should stay flat and not re-apply removed AutoEQ
+        viewModel.setBandMode(EqualizerBandMode.FIVE_BAND)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.autoEqModel)
+        assertEquals(5, viewModel.uiState.value.bands.size)
+        assertTrue(viewModel.uiState.value.bands.all { it.gainDb == 0f })
+    }
+
+    @Test
+    fun `setCrossfeedPreset updates DSP, persists preference, and reflects speaker bypass state`() = runTest(testDispatcher) {
+        viewModel.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(CrossfeedPreset.CLASSIC_STUDIO, viewModel.uiState.value.crossfeedPreset)
+        verify { adaptiveDspEngine.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO) }
+        coVerify { settingsDataStore.setRouteToSystemDecoderDsp(false) }
+        coVerify { settingsDataStore.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO) }
+
+        speakerOutputFlow.value = true
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isBuiltInSpeakerOutput)
+
+        viewModel.setCrossfeedPreset(CrossfeedPreset.OFF)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(CrossfeedPreset.OFF, viewModel.uiState.value.crossfeedPreset)
+        coVerify(exactly = 1) { settingsDataStore.setRouteToSystemDecoderDsp(false) }
+        coVerify { settingsDataStore.setCrossfeedPreset(CrossfeedPreset.OFF) }
     }
 }

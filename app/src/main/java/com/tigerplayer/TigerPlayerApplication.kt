@@ -5,6 +5,7 @@ import android.os.StrictMode
 import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.memory.MemoryCache
 import com.tigerplayer.data.remote.NavidromeArtInterceptor
 import com.tigerplayer.data.remote.NavidromeUrlSigner
 import com.tigerplayer.data.repository.StatsEpoch
@@ -49,6 +50,11 @@ class TigerPlayerApplication : Application(), ImageLoaderFactory {
 	 * rotating token. Signing in an interceptor keeps every `AsyncImage` call site unchanged.
 	 */
 	override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+		.memoryCache {
+			MemoryCache.Builder(this)
+				.maxSizePercent(0.12)
+				.build()
+		}
 		.components {
 			add(NavidromeArtInterceptor(navidromeUrlSigner))
 		}

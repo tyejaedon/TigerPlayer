@@ -56,7 +56,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.coverscreen.library.formatTrackDuration
+import com.tigerplayer.ui.library.SongOptionsSheet
+import com.tigerplayer.ui.library.TagEditorSheet
 import com.tigerplayer.ui.theme.WitcherIcons
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.glassEffect
@@ -64,40 +67,130 @@ import com.tigerplayer.ui.theme.glassEffect
 @Composable
 internal fun SongPicker(
     tracks: List<AudioTrack>,
+    playlists: List<Playlist> = emptyList(),
     currentTrackId: String? = null,
     isPlaying: Boolean = false,
+    state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
     onPlayTrack: (AudioTrack) -> Unit,
-    onAddToQueue: (AudioTrack) -> Unit
+    onPlayNext: (AudioTrack) -> Unit = {},
+    onAddToQueue: (AudioTrack) -> Unit,
+    onAddToPlaylist: (Long, AudioTrack) -> Unit = { _, _ -> },
+    onGoToAlbum: (String) -> Unit = {}
 ) {
     if (tracks.isEmpty()) {
         EmptyLibraryMessage(stringResource(R.string.coverscreen_empty_songs))
     } else {
         var revealedTrackId by remember { mutableStateOf<String?>(null) }
         var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
+        var tracksToEditTags by remember { mutableStateOf<List<AudioTrack>?>(null) }
+        var isSelectionMode by remember { mutableStateOf(false) }
+        var selectedTrackIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+        val localTracks = remember(tracks) { tracks.filter { it.isLocal && !it.isRemote } }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag(CoverScreenTestTags.SONGS_LIST),
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items(tracks, key = AudioTrack::id) { track ->
-                val isCurrent = currentTrackId != null && track.id == currentTrackId
-                SongTrackRow(
-                    track = track,
-                    isCurrentTrack = isCurrent,
-                    isPlaying = isPlaying && isCurrent,
-                    isQueueRevealed = revealedTrackId == track.id,
-                    isOptionsExpanded = optionsTrack?.id == track.id,
-                    onPlay = { onPlayTrack(track) },
-                    onAddToQueue = { onAddToQueue(track) },
-                    onRevealQueue = { revealedTrackId = track.id },
-                    onDismissQueue = { revealedTrackId = null },
-                    onShowOptions = { optionsTrack = track },
-                    onDismissOptions = { optionsTrack = null }
-                )
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (localTracks.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isSelectionMode) {
+                        val selectedLocal = localTracks.filter { it.id in selectedTrackIds }
+                        Text(
+                            text = "${selectedLocal.size} selected",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = { tracksToEditTags = selectedLocal },
+                                enabled = selectedLocal.isNotEmpty()
+                            ) {
+                                Text("Edit Tags")
+                            }
+                            TextButton(onClick = {
+                                isSelectionMode = false
+                                selectedTrackIds = emptySet()
+                            }) {
+                                Text("Cancel")
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "${tracks.size} tracks",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                        TextButton(onClick = { isSelectionMode = true }) {
+                            Text("Batch Edit")
+                        }
+                    }
+                }
             }
+
+            LazyColumn(
+                state = state,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .testTag(CoverScreenTestTags.SONGS_LIST),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(tracks, key = AudioTrack::id) { track ->
+                    val isCurrent = currentTrackId != null && track.id == currentTrackId
+                    SongTrackRow(
+                        track = track,
+                        isCurrentTrack = isCurrent,
+                        isPlaying = isPlaying && isCurrent,
+                        isQueueRevealed = revealedTrackId == track.id,
+                        isOptionsExpanded = optionsTrack?.id == track.id,
+                        onPlay = {
+                            if (isSelectionMode && track.isLocal && !track.isRemote) {
+                                selectedTrackIds = if (track.id in selectedTrackIds) {
+                                    selectedTrackIds - track.id
+                                } else {
+                                    selectedTrackIds + track.id
+                                }
+                            } else {
+                                onPlayTrack(track)
+                            }
+                        },
+                        onAddToQueue = { onAddToQueue(track) },
+                        onRevealQueue = { revealedTrackId = track.id },
+                        onDismissQueue = { revealedTrackId = null },
+                        onShowOptions = { optionsTrack = track },
+                        onDismissOptions = { optionsTrack = null }
+                    )
+                }
+            }
+        }
+
+        optionsTrack?.let { selectedTrack ->
+            SongOptionsSheet(
+                track = selectedTrack,
+                playlists = playlists,
+                onDismiss = { optionsTrack = null },
+                onPlayNext = { onPlayNext(selectedTrack) },
+                onAddToQueue = { onAddToQueue(selectedTrack) },
+                onAddToPlaylist = { playlistId -> onAddToPlaylist(playlistId, selectedTrack) },
+                onGoToAlbum = { albumName -> onGoToAlbum(albumName) },
+                onEditTags = { tracksToEditTags = listOf(selectedTrack) }
+            )
+        }
+
+        tracksToEditTags?.let { targetTracks ->
+            TagEditorSheet(
+                tracks = targetTracks,
+                isCoverScreen = true,
+                onDismiss = { tracksToEditTags = null },
+                onSaved = {
+                    isSelectionMode = false
+                    selectedTrackIds = emptySet()
+                }
+            )
         }
     }
 }
@@ -149,7 +242,6 @@ internal fun SongTrackRow(
                     onLongClickLabel = stringResource(R.string.coverscreen_action_add_to_queue),
                     onClick = onPlay,
                     onLongClick = {
-                        onRevealQueue()
                         onShowOptions()
                     }
                 )

@@ -148,6 +148,8 @@ class MediaControllerManager @Inject constructor(
     private var flowStateFadeOutJob: Job? = null
     private var flowStateFadeInJob: Job? = null
     private var fadeOutAndPauseJob: Job? = null
+    private var saveStateJob: Job? = null
+    private var setPlaylistJob: Job? = null
     private var lastInfiniteAnchorId: String? = null
     private var activeFlowStateMediaId: String? = null
     private var pendingFlowStateFadeIn = false
@@ -295,6 +297,17 @@ class MediaControllerManager @Inject constructor(
 
         controllerFuture = MediaController.Builder(context, sessionToken)
             .setApplicationLooper(Looper.getMainLooper())
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    Log.w("MediaManager", "Controller disconnected. Reconnecting...")
+                    controllerFuture?.let { MediaController.releaseFuture(it) }
+                    mediaController = null
+                    _isPlaying.value = false
+                    positionJob?.cancel()
+                    bluetoothDeviceManager.stopTrackingListeningTime()
+                    initializeController()
+                }
+            })
             .buildAsync()
 
         controllerFuture?.addListener({
@@ -400,6 +413,14 @@ class MediaControllerManager @Inject constructor(
                 updateCurrentQueuePointer(controller)
                 _mediaControllerState.tryEmit(Unit)
             }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                _currentPosition.value = newPosition.positionMs
+            }
         })
     }
 
@@ -471,7 +492,7 @@ class MediaControllerManager @Inject constructor(
                     if (elapsedSinceSave >= POSITION_SAVE_INTERVAL_MS) {
                         elapsedSinceSave = 0L
                         // Throttled write; do not persist on every tick.
-                        playbackPrefs.savePosition(controller.currentPosition)
+                        managerScope.launch { playbackPrefs.savePosition(controller.currentPosition) }
                     }
                 }
                 delay(TICK_INTERVAL_MS.milliseconds)
@@ -661,16 +682,26 @@ class MediaControllerManager @Inject constructor(
         return List(controller.mediaItemCount) { controller.getMediaItemAt(it) }
     }
 
+    private val queueTracksFlow: Flow<List<AudioTrack>> = mediaControllerState
+        .onStart { emit(Unit) }
+        .map { getCurrentQueue() }
+        .map { items ->
+            withContext(Dispatchers.Default) {
+                items.map { mediaItemToAudioTrack(it) }
+            }
+        }
+        .distinctUntilChanged()
+        .shareIn(managerScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
     fun getQueueFlow(): Flow<List<AudioTrack>> {
         return getQueueSnapshotFlow().map { it.tracks }
     }
 
     fun getQueueSnapshotFlow(): Flow<QueueSnapshot> {
         return combine(
-            mediaControllerState.onStart { emit(Unit) },
+            queueTracksFlow,
             currentMediaItemIndex
-        ) { _, currentIndex ->
-            val queue = getQueueTracks()
+        ) { queue, currentIndex ->
             val safeIndex = if (currentIndex in queue.indices) currentIndex else -1
             QueueSnapshot(tracks = queue, currentIndex = safeIndex)
         }.distinctUntilChanged()
@@ -711,89 +742,34 @@ class MediaControllerManager @Inject constructor(
         return upcoming
     }
 
-    fun mediaItemToAudioTrack(mediaItem: MediaItem): AudioTrack {
-        val metadata = mediaItem.mediaMetadata
-        val extras = metadata.extras
-        val fallbackUri = mediaItem.localConfiguration?.uri ?: Uri.EMPTY
-        val mimeType = extras?.getString(META_MIME_TYPE).orEmpty()
+    fun mediaItemToAudioTrack(mediaItem: MediaItem): AudioTrack =
+        MediaItemConverter.toAudioTrack(mediaItem)
 
-        return AudioTrack(
-            id = mediaItem.mediaId,
-            title = metadata.title?.toString() ?: "Unknown",
-            artist = metadata.artist?.toString() ?: "Unknown Artist",
-            album = metadata.albumTitle?.toString() ?: "Unknown Album",
-            uri = fallbackUri,
-            artworkUri = metadata.artworkUri ?: Uri.EMPTY,
-            durationMs = extras?.getLong(META_DURATION_MS, 0L) ?: 0L,
-            mimeType = mimeType.ifBlank { "audio/unknown" },
-            isLocal = extras?.getBoolean(META_IS_LOCAL, false) ?: false,
-            isRemote = extras?.getBoolean(META_IS_REMOTE, fallbackUri != Uri.EMPTY)
-                ?: (fallbackUri != Uri.EMPTY),
-            bitrate = extras?.getInt(META_BITRATE, 0) ?: 0,
-            sampleRate = extras?.getInt(META_SAMPLE_RATE, 0) ?: 0,
-            trackNumber = extras?.getInt(META_TRACK_NUMBER, 0) ?: 0,
-            serverPath = extras?.getString(META_SERVER_PATH),
-            path = extras?.getString(META_PATH),
-            year = extras?.getString(META_YEAR),
-            dateAdded = extras?.getLong(META_DATE_ADDED, 0L) ?: 0L,
-            isLiked = extras?.getBoolean(META_IS_LIKED, false) ?: false,
-            replayGainTrackDb = if (extras?.containsKey(META_REPLAYGAIN_TRACK_DB) == true) extras.getDouble(META_REPLAYGAIN_TRACK_DB) else null,
-            replayGainAlbumDb = if (extras?.containsKey(META_REPLAYGAIN_ALBUM_DB) == true) extras.getDouble(META_REPLAYGAIN_ALBUM_DB) else null,
-            replayGainTrackPeak = if (extras?.containsKey(META_REPLAYGAIN_TRACK_PEAK) == true) extras.getDouble(META_REPLAYGAIN_TRACK_PEAK) else null,
-            replayGainAlbumPeak = if (extras?.containsKey(META_REPLAYGAIN_ALBUM_PEAK) == true) extras.getDouble(META_REPLAYGAIN_ALBUM_PEAK) else null
-        )
-    }
+    fun createMediaItem(track: AudioTrack): MediaItem =
+        MediaItemConverter.toMediaItem(track)
 
-    fun createMediaItem(track: AudioTrack): MediaItem {
-        return MediaItem.Builder()
-            .setMediaId(track.id)
-            .setUri(track.uri)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(track.title)
-                    .setArtist(track.artist)
-                    .setAlbumTitle(track.album)
-                    .setArtworkUri(track.artworkUri)
-                    .setExtras(buildQueueMetadataExtras(track))
-                    .build()
-            )
-            .build()
-    }
-
-    private fun buildQueueMetadataExtras(track: AudioTrack): Bundle {
-        return Bundle().apply {
-            putBoolean(META_IS_LOCAL, track.isLocal)
-            putBoolean(META_IS_REMOTE, track.isRemote)
-            putLong(META_DURATION_MS, track.durationMs)
-            putString(META_MIME_TYPE, track.mimeType)
-            putInt(META_BITRATE, track.bitrate)
-            putInt(META_SAMPLE_RATE, track.sampleRate)
-            putInt(META_TRACK_NUMBER, track.trackNumber)
-            putString(META_SERVER_PATH, track.serverPath)
-            putString(META_YEAR, track.year)
-            putLong(META_DATE_ADDED, track.dateAdded)
-            putBoolean(META_IS_LIKED, track.isLiked)
-            putString(META_PATH, track.path)
-            track.replayGainTrackDb?.let { putDouble(META_REPLAYGAIN_TRACK_DB, it) }
-            track.replayGainAlbumDb?.let { putDouble(META_REPLAYGAIN_ALBUM_DB, it) }
-            track.replayGainTrackPeak?.let { putDouble(META_REPLAYGAIN_TRACK_PEAK, it) }
-            track.replayGainAlbumPeak?.let { putDouble(META_REPLAYGAIN_ALBUM_PEAK, it) }
-        }
-    }
+    private fun buildQueueMetadataExtras(track: AudioTrack): Bundle =
+        MediaItemConverter.buildMetadataExtras(track)
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
-        val controller = mediaController ?: return
-        val mediaItems = tracks.map { createMediaItem(it) }
+        if (mediaController == null) return
+        setPlaylistJob?.cancel()
+        setPlaylistJob = managerScope.launch {
+            val mediaItems = withContext(Dispatchers.Default) {
+                tracks.map { createMediaItem(it) }
+            }
+            val activeController = mediaController ?: return@launch
 
-        resetFlowStatePipeline(restoreFullVolume = true)
+            resetFlowStatePipeline(restoreFullVolume = true)
 
-        controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
-        controller.prepare()
-        controller.play()
+            activeController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+            activeController.prepare()
+            activeController.play()
 
-        updateCurrentQueuePointer(controller)
-        _mediaControllerState.tryEmit(Unit)
-        saveCurrentState()
+            updateCurrentQueuePointer(activeController)
+            _mediaControllerState.tryEmit(Unit)
+            saveCurrentState()
+        }
     }
 
     fun removeFromQueueAt(index: Int) {
@@ -873,7 +849,10 @@ class MediaControllerManager @Inject constructor(
     }
 
     private fun saveCurrentState() {
-        managerScope.launch {
+        saveStateJob?.cancel()
+        saveStateJob = managerScope.launch {
+            // Coalesce back-to-back queue mutations (e.g. setPlaylistAndPlay + onMediaItemTransition).
+            delay(150L)
             val controller = mediaController ?: return@launch
             if (controller.mediaItemCount == 0) {
                 playbackPrefs.clearPlaybackState()
@@ -881,13 +860,19 @@ class MediaControllerManager @Inject constructor(
             }
 
             val queue = getCurrentQueue()
-            val queueIds = queue.map { it.mediaId }
+            val currentMediaId = controller.currentMediaItem?.mediaId
+            val currentPosition = controller.currentPosition
+
+            val (queueIds, queueSnapshot) = withContext(Dispatchers.Default) {
+                queue.map { it.mediaId } to serializeQueueSnapshot(queue)
+            }
+
             playbackPrefs.savePlaybackState(
-                controller.currentMediaItem?.mediaId,
-                controller.currentPosition,
+                currentMediaId,
+                currentPosition,
                 queueIds,
                 queueIds, // We no longer need to maintain separate 'original' lists for custom shuffle
-                queueSnapshot = serializeQueueSnapshot(queue)
+                queueSnapshot = queueSnapshot
             )
         }
     }
@@ -1086,15 +1071,26 @@ class MediaControllerManager @Inject constructor(
     }
 
     fun pause() = mediaController?.pause()
-    fun seekTo(pos: Long) = mediaController?.seekTo(pos)
+    fun seekTo(pos: Long) {
+        mediaController?.seekTo(pos)
+        _currentPosition.value = pos
+    }
     fun skipToNext() {
         resetFlowStatePipeline(restoreFullVolume = true)
-        mediaController?.seekToNext()
+        mediaController?.let {
+            it.seekToNextMediaItem()
+            updateCurrentQueuePointer(it)
+            _isPlaying.value = it.isPlaying
+        }
     }
 
     fun skipToPrevious() {
         resetFlowStatePipeline(restoreFullVolume = true)
-        mediaController?.seekToPrevious()
+        mediaController?.let {
+            it.seekToPreviousMediaItem()
+            updateCurrentQueuePointer(it)
+            _isPlaying.value = it.isPlaying
+        }
     }
 
     fun release() {

@@ -18,11 +18,15 @@ import com.tigerplayer.data.local.ThemeMode
 import com.tigerplayer.data.local.TigerAccentStyle
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.model.MusicFolder
+import com.tigerplayer.data.model.StorageBreakdown
+import com.tigerplayer.data.model.formatBytes
+import com.tigerplayer.data.repository.LastFmRepository
 import com.tigerplayer.data.repository.SpotifyAuthError
 import com.tigerplayer.data.repository.SpotifyAuthManager
 import com.tigerplayer.data.repository.SpotifyRepository
 import com.tigerplayer.data.source.LocalAudioDataSource
 import com.tigerplayer.engine.LibraryEngine
+import com.tigerplayer.engine.scrobble.ScrobbleEngine
 import com.tigerplayer.service.HapticsDebugMonitor
 import com.tigerplayer.service.HapticsDebugState
 import com.tigerplayer.utils.findActivity
@@ -48,14 +52,35 @@ data class LibraryRescanState(
 /** One-shot outcome of the last export/import, surfaced by the Settings screen then cleared. */
 sealed interface BackupUiEvent {
     data class ExportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
-    data class ImportSucceeded(val playlists: Int, val history: Int) : BackupUiEvent
+    data class ImportSucceeded(
+        val playlists: Int,
+        val history: Int,
+        val unresolvedTracks: Int = 0,
+        val unresolvedByPlaylist: Map<String, Int> = emptyMap()
+    ) : BackupUiEvent
     data class Failed(val message: String) : BackupUiEvent
+
+    fun toDisplayMessage(): String = when (this) {
+        is ExportSucceeded ->
+            "Backup saved: $playlists playlists, $history history rows"
+        is ImportSucceeded -> if (unresolvedTracks > 0) {
+            val noun = if (unresolvedTracks == 1) "track" else "tracks"
+            "Restored $playlists playlists, $history history rows - $unresolvedTracks $noun could not be found and were skipped"
+        } else {
+            "Restored: $playlists playlists, $history history rows"
+        }
+        is Failed -> "Backup error: $message"
+    }
 }
 
 /** Connection status for the third-party accounts surfaced in the Settings "Connected Accounts" section. */
 data class ConnectedAccountsState(
     val isSpotifyConnected: Boolean = false,
-    val navidromeServerUrl: String? = null
+    val navidromeServerUrl: String? = null,
+    val isLastfmConfigured: Boolean = false,
+    val isLastfmConnected: Boolean = false,
+    val lastfmUsername: String? = null,
+    val pendingScrobbleCount: Int = 0
 ) {
     val isNavidromeConnected: Boolean get() = !navidromeServerUrl.isNullOrBlank()
 }
@@ -68,7 +93,9 @@ class SettingsViewModel @Inject constructor(
     private val backupManager: BackupManager,
     private val spotifyAuthManager: SpotifyAuthManager,
     private val spotifyRepository: SpotifyRepository,
-    private val navidromePrefs: NavidromePrefs
+    private val navidromePrefs: NavidromePrefs,
+    private val lastFmRepository: LastFmRepository? = null,
+    private val scrobbleEngine: ScrobbleEngine? = null
 ) : ViewModel() {
 
 
@@ -87,6 +114,16 @@ class SettingsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000L),
             initialValue = ThemeMode.SYSTEM
         )
+
+    private val _storageBreakdown = MutableStateFlow(StorageBreakdown(isCalculating = true))
+    val storageBreakdown: StateFlow<StorageBreakdown> = _storageBreakdown.asStateFlow()
+
+    private val _storageEventMessage = MutableStateFlow<String?>(null)
+    val storageEventMessage: StateFlow<String?> = _storageEventMessage.asStateFlow()
+
+    init {
+        refreshStorageBreakdown()
+    }
 
     private val _libraryRescanState = MutableStateFlow(LibraryRescanState())
     val libraryRescanState: StateFlow<LibraryRescanState> = _libraryRescanState.asStateFlow()
@@ -107,17 +144,42 @@ class SettingsViewModel @Inject constructor(
 
     val connectedAccountsState: StateFlow<ConnectedAccountsState> = combine(
         spotifyAuthManager.token,
-        navidromePrefs.serverUrl
-    ) { token, serverUrl ->
+        navidromePrefs.serverUrl,
+        lastFmRepository?.isConnected ?: kotlinx.coroutines.flow.flowOf(false),
+        lastFmRepository?.username ?: kotlinx.coroutines.flow.flowOf(null),
+        scrobbleEngine?.pendingCount ?: kotlinx.coroutines.flow.flowOf(0)
+    ) { token, serverUrl, lastfmConnected, lastfmUser, pendingCount ->
         ConnectedAccountsState(
             isSpotifyConnected = token.isNotEmpty(),
-            navidromeServerUrl = serverUrl
+            navidromeServerUrl = serverUrl,
+            isLastfmConfigured = lastFmRepository?.isConfigured() == true,
+            isLastfmConnected = lastfmConnected,
+            lastfmUsername = lastfmUser,
+            pendingScrobbleCount = pendingCount
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000L),
         initialValue = ConnectedAccountsState()
     )
+
+    val lastfmAuthError: StateFlow<String?> =
+        scrobbleEngine?.authError ?: MutableStateFlow(null)
+
+    fun dismissLastfmAuthError() {
+        scrobbleEngine?.clearAuthError()
+    }
+
+    fun connectLastfm(context: Context) {
+        val activity = context.findActivity() as? MainActivity ?: return
+        activity.authenticateLastfm()
+    }
+
+    fun flushPendingScrobbles() {
+        viewModelScope.launch {
+            scrobbleEngine?.flushQueue()
+        }
+    }
 
     val spotifyAuthError: StateFlow<SpotifyAuthError?> = spotifyAuthManager.authError
 
@@ -169,7 +231,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             backupManager.importFrom(source, strategy).fold(
                 onSuccess = { summary ->
-                    _backupEvent.value = BackupUiEvent.ImportSucceeded(summary.playlistCount, summary.historyCount)
+                    _backupEvent.value = BackupUiEvent.ImportSucceeded(
+                        playlists = summary.playlistCount,
+                        history = summary.historyCount,
+                        unresolvedTracks = summary.unresolvedTrackCount,
+                        unresolvedByPlaylist = summary.unresolvedByPlaylist
+                    )
                 },
                 onFailure = { error ->
                     _backupEvent.value = BackupUiEvent.Failed(error.message ?: "Import failed")
@@ -232,6 +299,16 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setRouteToSystemDecoderDsp(enabled) }
     }
 
+    fun setCrossfeedPreset(preset: com.tigerplayer.data.local.CrossfeedPreset) {
+        viewModelScope.launch {
+            if (preset != com.tigerplayer.data.local.CrossfeedPreset.OFF) {
+                // Binaural crossfeed runs in the in-app DSP pipeline.
+                settingsDataStore.setRouteToSystemDecoderDsp(false)
+            }
+            settingsDataStore.setCrossfeedPreset(preset)
+        }
+    }
+
     fun setResumeOnBluetoothConnect(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setResumeOnBluetoothConnect(enabled) }
     }
@@ -250,6 +327,30 @@ class SettingsViewModel @Inject constructor(
 
     fun setAutoDownloadLyrics(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setAutoDownloadLyrics(enabled) }
+    }
+
+    fun setVisualizerSensitivity(sensitivity: Float) {
+        viewModelScope.launch { settingsDataStore.setVisualizerSensitivity(sensitivity) }
+    }
+
+    fun setVisualizerPaletteMode(mode: com.tigerplayer.data.local.VisualizerPaletteMode) {
+        viewModelScope.launch { settingsDataStore.setVisualizerPaletteMode(mode) }
+    }
+
+    fun setWaveformSensitivity(sensitivity: Float) {
+        viewModelScope.launch { settingsDataStore.setWaveformSensitivity(sensitivity) }
+    }
+
+    fun setLastfmScrobbleEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setLastfmScrobbleEnabled(enabled) }
+    }
+
+    fun setLastfmNowPlayingEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setLastfmNowPlayingEnabled(enabled) }
+    }
+
+    fun setLastfmScrobbleRemote(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setLastfmScrobbleRemote(enabled) }
     }
 
     fun resetToDefaults() {
@@ -329,5 +430,66 @@ class SettingsViewModel @Inject constructor(
             navidromePrefs.clearCredentials()
             triggerLibraryRescan()
         }
+    }
+
+    /** Signs out of Last.fm by clearing the encrypted session key and username. */
+    fun logoutLastfm() {
+        viewModelScope.launch {
+            lastFmRepository?.logout()
+            scrobbleEngine?.clearAuthError()
+        }
+    }
+
+    // --- Storage & Cache Operations (issue #391) ---
+
+    fun refreshStorageBreakdown() {
+        viewModelScope.launch {
+            _storageBreakdown.value = _storageBreakdown.value.copy(isCalculating = true)
+            _storageBreakdown.value = libraryEngine.getStorageBreakdown()
+        }
+    }
+
+    fun clearArtworkCache() {
+        viewModelScope.launch {
+            val freedBytes = libraryEngine.clearArtworkCache()
+            _storageEventMessage.value = "Cleared artwork cache (${freedBytes.formatBytes()} freed)"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearLyricsCache() {
+        viewModelScope.launch {
+            libraryEngine.clearLyricsCache()
+            _storageEventMessage.value = "Cleared synchronized lyrics cache"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearArtistCache() {
+        viewModelScope.launch {
+            libraryEngine.clearArtistCache()
+            _storageEventMessage.value = "Cleared artist metadata cache"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearWaveformCache() {
+        viewModelScope.launch {
+            libraryEngine.clearWaveformCache()
+            _storageEventMessage.value = "Cleared waveform analysis cache"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun clearAllTemporaryCaches() {
+        viewModelScope.launch {
+            val freedBytes = libraryEngine.clearAllTemporaryCaches()
+            _storageEventMessage.value = "All temporary archives purged (${freedBytes.formatBytes()} freed)"
+            refreshStorageBreakdown()
+        }
+    }
+
+    fun consumeStorageEventMessage() {
+        _storageEventMessage.value = null
     }
 }

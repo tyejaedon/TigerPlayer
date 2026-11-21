@@ -13,6 +13,10 @@
     <string name="coverscreen_gesture_long_press_settings">Appui long pour les paramètres de lecture</string>
     <string name="coverscreen_gesture_instructions">Mini lecteur d\'écran externe. Appuyez pour lire ou mettre en pause. Balayez vers la gauche pour suivant, à droite pour précédent, haut pour la file et bas pour fermer.</string>
     <string name="coverscreen_talkback_gesture_instructions">Mini lecteur d\'écran externe. Appuyez pour lire ou mettre en pause. Balayez vers la gauche pour suivant, à droite pour précédent, haut pour la file et bas pour fermer.</string>
+    <string name="coverscreen_immersive_hint">Appuyez longuement n\'importe où pour afficher les commandes</string>
+    <string name="coverscreen_action_hide_controls">Masquer les commandes</string>
+    <string name="coverscreen_action_show_controls">Afficher les commandes</string>
+    <string name="coverscreen_action_toggle_immersive">Basculer en mode immersif</string>
 
     <!-- Cover Screen Playback Controls -->
     <string name="coverscreen_action_previous">Piste précédente</string>
@@ -92,4 +96,14 @@
     <string name="coverscreen_search_prompt">Recherchez votre musique</string>
     <string name="coverscreen_voice_search_no_speech">Aucune parole reconnue. Réessayez ou tapez pour rechercher.</string>
     <string name="coverscreen_voice_search_unavailable">La recherche vocale n\'est pas disponible. Tapez pour rechercher.</string>
+
+    <!-- App Widgets -->
+    <string name="widget_player_label">TigerPlayer</string>
+    <string name="widget_player_description">Commandes de lecture et pochette (2x2, 4x1, 4x2, écran externe)</string>
+    <string name="widget_daylist_label">TigerPlayer Day List</string>
+    <string name="widget_daylist_description">Raccourci rapide vers votre Day List et Heavy Rotation</string>
+    <string name="widget_idle_title">Aucune lecture</string>
+    <string name="widget_idle_artist">Appuyez pour ouvrir TigerPlayer</string>
+    <string name="widget_daylist_title">Day List</string>
+    <string name="widget_heavy_rotation_subtitle">Heavy Rotation</string>
 </resources>

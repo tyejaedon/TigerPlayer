@@ -37,11 +37,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
-import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
+import com.tigerplayer.ui.coverscreen.CoverScreenTestTags
+import com.tigerplayer.ui.coverscreen.core.WetPaintingFadeImage
+import com.tigerplayer.ui.coverscreen.core.rememberArtworkAccent
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.theme.PremiumGlassCard
 import com.tigerplayer.ui.theme.TigerNeonOrange
@@ -78,49 +82,32 @@ fun AlbumDetailsScreen(
     val firstTrack = albumTracks.firstOrNull()
 
     // --- DYNAMIC COLOR EXTRACTION ---
-    var dominantColor by remember(albumName, firstTrack?.artworkUri) { mutableStateOf(TigerNeonOrange) }
-
-    val animatedDominantColor by animateColorAsState(
-        targetValue = dominantColor,
-        animationSpec = tween(1000),
-        label = "AlbumColorAnimation"
+    val heroArtwork = remember(firstTrack?.artworkUri) {
+        firstTrack?.artworkUri?.toString()?.takeIf { it.isNotBlank() } ?: R.drawable.ic_tiger_logo
+    }
+    val artworkAccent = rememberArtworkAccent(
+        imageModel = heroArtwork,
+        fallback = TigerNeonOrange
     )
-    val ambientBrush = rememberTigerAmbientGradient(animatedDominantColor, baseTopAlpha = 0.22f)
+    val ambientBackBrush = rememberTigerAmbientGradient(artworkAccent, baseTopAlpha = 0.22f)
 
-    val imageRequest = remember(firstTrack?.artworkUri) {
+    val imageRequest = remember(heroArtwork) {
         ImageRequest.Builder(context)
-            .data(firstTrack?.artworkUri)
+            .data(heroArtwork)
             .crossfade(true)
             .allowHardware(false)
-            .listener(
-                onSuccess = { _, result ->
-                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                    bitmap?.let { b ->
-                        Palette.from(b).generate { palette ->
-                            val colorInt = palette?.vibrantSwatch?.rgb
-                                ?: palette?.lightVibrantSwatch?.rgb
-                                ?: palette?.dominantSwatch?.rgb
-
-                            colorInt?.let { dominantColor = Color(it) }
-                        }
-                    }
-                },
-                onError = { _, _ ->
-                    dominantColor = TigerNeonOrange
-                }
-            )
             .build()
     }
 
-    val accentColor = remember(dominantColor) {
+    val accentColor = remember(artworkAccent) {
         val hsl = FloatArray(3)
-        androidx.core.graphics.ColorUtils.colorToHSL(dominantColor.toArgb(), hsl)
+        androidx.core.graphics.ColorUtils.colorToHSL(artworkAccent.toArgb(), hsl)
         if (hsl[2] < 0.5f) {
             hsl[2] = 0.75f
             hsl[1] = (hsl[1] + 0.15f).coerceAtMost(1f)
             Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
         } else {
-            dominantColor
+            artworkAccent
         }
     }
 
@@ -149,21 +136,22 @@ fun AlbumDetailsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(ambientBrush)
+                .background(ambientBackBrush)
         ) {
             // Parallax Blurred Artwork Background
-            AsyncImage(
-                model = imageRequest,
+            WetPaintingFadeImage(
+                imageModel = heroArtwork,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                fadeBottomPercent = 0.08f,
+                blurRadius = 4f,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
                         val parallaxOffset = if (firstVisibleIndex == 0) scrollOffset * 0.40f else 0f
                         translationY = -parallaxOffset
-                        alpha = 0.32f
+                        alpha = 0.52f
                     }
-                    .blur(80.dp)
             )
 
             // Animated 3D Light Refraction Orbs
@@ -236,7 +224,7 @@ fun AlbumDetailsScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Black.copy(alpha = (topBarAlpha * 0.75f).coerceIn(0f, 0.75f)),
+                        containerColor = Color.Transparent,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                     ),
@@ -261,7 +249,7 @@ fun AlbumDetailsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(bottom = 190.dp)
+                contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 // --- 1. HERO 3D FLOATING GLASS ARTWORK ---
                 item {
@@ -368,7 +356,7 @@ fun AlbumDetailsScreen(
                                     Brush.verticalGradient(
                                         listOf(
                                             accentColor.copy(alpha = 0.16f),
-                                            Color.Black.copy(alpha = 0.25f)
+                                            Color.Transparent
                                         )
                                     ),
                                     MaterialTheme.shapes.extraLarge
@@ -468,100 +456,138 @@ fun AlbumDetailsScreen(
                     },
                     onGoToAlbum = { albumName ->
                         Toast.makeText(context, "Album: $albumName", Toast.LENGTH_SHORT).show()
+                    },
+                    onQueueAdded = {
+                        Toast.makeText(
+                            context,
+                            "${it.title} added to queue",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onPlaylistAdded = { song, playlist ->
+                        Toast.makeText(
+                            context,
+                            "${song.title} added to ${playlist.name}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
             }
         }
 
         // --- 4. FLOATING 3D GLASS CONTROL DOCK ---
-        Box(
+        FloatingRitualControlDock(
+            accentColor = accentColor,
+            onPlayClick = { viewModel.setPlaylistAndPlay(albumTracks, 0) },
+            onShuffleClick = {
+                if (albumTracks.isNotEmpty()) {
+                    viewModel.setPlaylistAndPlay(albumTracks.shuffled(), 0)
+                }
+            },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 90.dp, start = 20.dp, end = 20.dp)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = Color.Black.copy(alpha = 0.55f),
-                modifier = Modifier
-                    .shadow(
-                        28.dp,
-                        CircleShape,
-                        spotColor = accentColor.copy(alpha = 0.55f),
-                        ambientColor = Color.Black
-                    )
-                    .glassEffect(CircleShape)
-                    .border(
-                        width = 1.2.dp,
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.40f),
-                                accentColor.copy(alpha = 0.30f),
-                                Color.White.copy(alpha = 0.15f)
-                            )
-                        ),
-                        shape = CircleShape
-                    )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // "START RITUAL" Primary Play Button
-                    Button(
-                        onClick = { viewModel.setPlaylistAndPlay(albumTracks, 0) },
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                        contentPadding = PaddingValues(horizontal = 28.dp, vertical = 14.dp),
-                        modifier = Modifier
-                            .height(54.dp)
-                            .bounceClick { viewModel.setPlaylistAndPlay(albumTracks, 0) }
-                    ) {
-                        Icon(
-                            WitcherIcons.Play,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "START RITUAL",
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 15.sp,
-                            letterSpacing = 1.5.sp
-                        )
-                    }
+        )
+    }
+}
 
-                    // "SHUFFLE" Glass Action Button
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .glassEffect(CircleShape)
-                            .background(accentColor.copy(alpha = 0.12f))
-                            .border(
-                                1.dp,
-                                Color.White.copy(alpha = 0.20f),
-                                CircleShape
-                            )
-                            .bounceClick {
-                                if (albumTracks.isNotEmpty()) {
-                                    viewModel.setPlaylistAndPlay(albumTracks.shuffled(), 0)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            WitcherIcons.Shuffle,
-                            contentDescription = "Shuffle Album",
-                            tint = accentColor,
-                            modifier = Modifier.size(22.dp)
+// ------------------------------
+// FLOATING 3D GLASS CONTROL DOCK
+// ------------------------------
+@Composable
+fun FloatingRitualControlDock(
+    accentColor: Color,
+    onPlayClick: () -> Unit,
+    onShuffleClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    playButtonText: String = "START RITUAL",
+    shuffleDescription: String = "Shuffle Album",
+    playTestTag: String = CoverScreenTestTags.PLAY_ALL,
+    shuffleTestTag: String = CoverScreenTestTags.PLAYLIST_SHUFFLE
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.55f),
+            modifier = Modifier
+                .shadow(
+                    28.dp,
+                    CircleShape,
+                    spotColor = accentColor.copy(alpha = 0.55f),
+                    ambientColor = Color.Black
+                )
+                .glassEffect(CircleShape)
+                .border(
+                    width = 1.2.dp,
+                    brush = Brush.horizontalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.40f),
+                            accentColor.copy(alpha = 0.30f),
+                            Color.White.copy(alpha = 0.15f)
                         )
-                    }
+                    ),
+                    shape = CircleShape
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // "START RITUAL" Primary Play Button
+                Button(
+                    onClick = onPlayClick,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                    contentPadding = PaddingValues(horizontal = 28.dp, vertical = 14.dp),
+                    modifier = Modifier
+                        .height(54.dp)
+                        .bounceClick { onPlayClick() }
+                        .testTag(playTestTag)
+                ) {
+                    Icon(
+                        WitcherIcons.Play,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = playButtonText,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+
+                // "SHUFFLE" Glass Action Button
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .glassEffect(CircleShape)
+                        .background(accentColor.copy(alpha = 0.12f))
+                        .border(
+                            1.dp,
+                            Color.White.copy(alpha = 0.20f),
+                            CircleShape
+                        )
+                        .bounceClick { onShuffleClick() }
+                        .testTag(shuffleTestTag),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        WitcherIcons.Shuffle,
+                        contentDescription = shuffleDescription,
+                        tint = accentColor,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
         }

@@ -247,36 +247,44 @@ fun DiscoverWeeklyDetailScreen(
                                 alpha = heroAlpha
                                 translationY = (1f - heroAlpha) * 42f
                             },
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = { playCurationAt(viewModel, tracks, index = 0) },
-                            enabled = tracks.isNotEmpty(),
+                        Row(
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF67F7B1),
-                                contentColor = Color.Black
-                            )
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Play Feed", fontWeight = FontWeight.Black)
+                            Button(
+                                onClick = { playCurationAt(viewModel, tracks, index = 0) },
+                                enabled = tracks.isNotEmpty(),
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF67F7B1),
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Play Feed", fontWeight = FontWeight.Black)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    if (tracks.isNotEmpty()) {
+                                        playCurationShuffled(viewModel, tracks)
+                                    }
+                                },
+                                enabled = tracks.isNotEmpty(),
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF67F7B1).copy(alpha = 0.75f))
+                            ) {
+                                Icon(Icons.Rounded.Shuffle, contentDescription = null, tint = Color(0xFF67F7B1))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Scan", color = Color.White)
+                            }
                         }
 
-                        OutlinedButton(
-                            onClick = {
-                                if (tracks.isNotEmpty()) {
-                                    playCurationShuffled(viewModel, tracks)
-                                }
-                            },
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier.weight(1f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF67F7B1).copy(alpha = 0.75f))
-                        ) {
-                            Icon(Icons.Rounded.Shuffle, contentDescription = null, tint = Color(0xFF67F7B1))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Random Scan", color = Color.White)
-                        }
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         OutlinedButton(
                             onClick = {
@@ -289,8 +297,6 @@ fun DiscoverWeeklyDetailScreen(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF67F7B1))
                         ) {
                             Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null, tint = Color(0xFF67F7B1))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add", color = Color.White)
                         }
                     }
                 }

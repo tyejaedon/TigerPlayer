@@ -100,4 +100,42 @@ class SettingsDataStoreTest {
             assertEquals(CoverScreenEqPreset.NEURAL_ADAPTIVE, snapshot.coverScreenEqPreset)
         }
     }
+
+    @Test
+    fun persists_and_reads_visualizer_and_waveform_preferences() {
+        runBlocking {
+            val settingsDataStore = SettingsDataStore(InMemoryPreferencesDataStore())
+
+            settingsDataStore.setVisualizerSensitivity(1.5f)
+            settingsDataStore.setVisualizerPaletteMode(VisualizerPaletteMode.DEFAULT_NEON)
+            settingsDataStore.setWaveformSensitivity(1.8f)
+
+            val snapshot = settingsDataStore.settingsFlow.first()
+
+            assertEquals(1.5f, snapshot.visualizerSensitivity, 0.001f)
+            assertEquals(VisualizerPaletteMode.DEFAULT_NEON, snapshot.visualizerPaletteMode)
+            assertEquals(1.8f, snapshot.waveformSensitivity, 0.001f)
+        }
+    }
+
+    @Test
+    fun persists_and_defaults_crossfeed_preset_with_safe_fallback() {
+        runBlocking {
+            val defaultStore = SettingsDataStore(InMemoryPreferencesDataStore())
+            assertEquals(CrossfeedPreset.OFF, defaultStore.settingsFlow.first().crossfeedPreset)
+
+            defaultStore.setCrossfeedPreset(CrossfeedPreset.SUBTLE)
+            assertEquals(CrossfeedPreset.SUBTLE, defaultStore.settingsFlow.first().crossfeedPreset)
+
+            defaultStore.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+            assertEquals(CrossfeedPreset.CLASSIC_STUDIO, defaultStore.settingsFlow.first().crossfeedPreset)
+
+            val fallbackStore = SettingsDataStore(
+                InMemoryPreferencesDataStore(
+                    mutablePreferencesOf(stringPreferencesKey("crossfeed_preset") to "UNKNOWN_CROSSFEED")
+                )
+            )
+            assertEquals(CrossfeedPreset.OFF, fallbackStore.settingsFlow.first().crossfeedPreset)
+        }
+    }
 }
