@@ -108,6 +108,7 @@ class AudioPlayerService : MediaLibraryService() {
     @Inject lateinit var hapticsDebugMonitor: HapticsDebugMonitor
     @Inject lateinit var navidromeUrlSigner: NavidromeUrlSigner
     @Inject lateinit var mediaBrowseTree: com.tigerplayer.engine.library.MediaBrowseTree
+    @Inject lateinit var playbackWidgetUpdater: com.tigerplayer.widget.PlaybackWidgetUpdater
 
     private var isBitPerfectMode = false // Initial state to ensure first call triggers
     private var lastReplayGainMode = ReplayGainMode.OFF
@@ -386,6 +387,7 @@ class AudioPlayerService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .build()
 
+        playbackWidgetUpdater.attach(player)
         invalidateCustomLayout()
     }
 
@@ -932,6 +934,7 @@ class AudioPlayerService : MediaLibraryService() {
         isPlayerReleased = true
         offloadTransitionJob?.cancel()
         offloadTransitionJob = null
+        playbackWidgetUpdater.detach()
 
         mediaSession?.run {
             player.release()

@@ -101,13 +101,19 @@ class BackupManager @Inject constructor(
             val restoredDevices = restoreAudioDevices(manifest.audioDevices, strategy)
             val restoredPresets = restorePresets(manifest.devicePresets, strategy)
 
+            val knownTrackIds = tigerDao.getCachedTrackIdsSync().toHashSet()
+            val unresolvedByPlaylist = computeUnresolvedByPlaylist(manifest.playlists, knownTrackIds)
+            val unresolvedTrackCount = computeUnresolvedTrackCount(manifest, knownTrackIds)
+
             Result.success(
                 BackupSummary(
                     playlistCount = manifest.playlists.size,
                     trackRefCount = trackRefCount,
                     historyCount = manifest.history.size,
                     audioDeviceCount = restoredDevices,
-                    devicePresetCount = restoredPresets
+                    devicePresetCount = restoredPresets,
+                    unresolvedTrackCount = unresolvedTrackCount,
+                    unresolvedByPlaylist = unresolvedByPlaylist
                 )
             )
         } catch (e: Exception) {
@@ -329,6 +335,36 @@ class BackupManager @Inject constructor(
             audioDeviceDao.upsertPreset(entity)
         }
         return presets.size
+    }
+
+    private fun computeUnresolvedByPlaylist(
+        playlists: List<PlaylistBackup>,
+        knownTrackIds: Set<String>
+    ): Map<String, Int> {
+        val result = linkedMapOf<String, Int>()
+        playlists.forEach { playlist ->
+            val missing = playlist.tracks.count { it.trackId !in knownTrackIds }
+            if (missing > 0) {
+                result[playlist.name] = (result[playlist.name] ?: 0) + missing
+            }
+        }
+        return result
+    }
+
+    private fun computeUnresolvedTrackCount(
+        manifest: BackupManifest,
+        knownTrackIds: Set<String>
+    ): Int {
+        val unresolvedIds = hashSetOf<String>()
+        manifest.playlists.forEach { playlist ->
+            playlist.tracks.forEach { track ->
+                if (track.trackId !in knownTrackIds) unresolvedIds.add(track.trackId)
+            }
+        }
+        manifest.history.forEach { entry ->
+            if (entry.trackId !in knownTrackIds) unresolvedIds.add(entry.trackId)
+        }
+        return unresolvedIds.size
     }
 
     private fun currentAppVersionName(): String = runCatching {

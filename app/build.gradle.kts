@@ -78,6 +78,7 @@ configure<ApplicationExtension> {
 
         val clientId = secrets.getProperty("SPOTIFY_CLIENT_ID") ?: "MISSING_ID"
         val lastfmApiKey = secrets.getProperty("LASTFM_API_KEY") ?: "MISSING_API_KEY"
+        val lastfmApiSecret = secrets.getProperty("LASTFM_API_SECRET") ?: "MISSING_API_SECRET"
         val youtubeApiKey = secrets.getProperty("YOUTUBE_API_KEY") ?: "MISSING_YOUTUBE_KEY"
 
         // BuildConfig Fields
@@ -85,6 +86,7 @@ configure<ApplicationExtension> {
         // which requires no client secret. Never add one back here (issue #46).
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$clientId\"")
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastfmApiKey\"")
+        buildConfigField("String", "LASTFM_API_SECRET", "\"$lastfmApiSecret\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
     }
 
@@ -206,6 +208,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.glance)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.window)

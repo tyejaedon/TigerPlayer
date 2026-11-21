@@ -73,6 +73,7 @@ import com.tigerplayer.data.model.Artist
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.ui.cloud.CloudViewModel
+import com.tigerplayer.ui.coverscreen.features.CoverScreenDiscoverView
 import com.tigerplayer.ui.coverscreen.library.CoverScreenAlbumsView
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
@@ -93,7 +94,8 @@ enum class CoverScreenLibraryTab(val label: String) {
     ALBUMS("Albums"),
     SONGS("Songs"),
     PLAYLISTS("Playlists"),
-    SPOTIFY_PLAYLISTS("Spotify Playlists")
+    SPOTIFY_PLAYLISTS("Spotify Playlists"),
+    DISCOVER("Discover")
 }
 
 @Composable
@@ -116,6 +118,7 @@ fun CoverScreenLibraryTabRow(
                 CoverScreenLibraryTab.SONGS -> stringResource(R.string.coverscreen_tab_songs)
                 CoverScreenLibraryTab.PLAYLISTS -> stringResource(R.string.coverscreen_tab_playlists)
                 CoverScreenLibraryTab.SPOTIFY_PLAYLISTS -> stringResource(R.string.coverscreen_tab_spotify_playlists)
+                CoverScreenLibraryTab.DISCOVER -> "Discover"
             }
             Tab(
                 selected = tab == selectedTab,
@@ -732,6 +735,8 @@ fun CoverScreenLibraryMenu(
                                     onDismiss()
                                 }
                             )
+
+                            CoverScreenLibraryTab.DISCOVER -> CoverScreenDiscoverView()
                         }
                     }
                 }

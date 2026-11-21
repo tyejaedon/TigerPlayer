@@ -2,6 +2,7 @@ package com.tigerplayer.di
 
 import com.google.gson.Gson
 import com.tigerplayer.BuildConfig
+import com.tigerplayer.data.remote.DeezerRateLimitInterceptor
 import com.tigerplayer.data.remote.api.*
 import com.tigerplayer.data.remote.api.deezer.DeezerApiService
 import com.tigerplayer.data.remote.api.deezer.DeezerRateLimitInterceptor
@@ -266,11 +267,20 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("LastFmRetrofit") // Use Named so Hilt doesn't confuse it with Spotify's Retrofit
-    fun provideLastFmRetrofit(): Retrofit {
+    fun provideLastFmRetrofit(baseClient: OkHttpClient): Retrofit {
+        val lastFmClient = baseClient.newBuilder()
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", "TigerPlayer/${com.tigerplayer.BuildConfig.VERSION_NAME} (Android)")
+                    .build()
+                chain.proceed(request)
+            }
+            .build()
+
         return Retrofit.Builder()
             .baseUrl("https://ws.audioscrobbler.com/")
+            .client(lastFmClient)
             .addConverterFactory(GsonConverterFactory.create())
-            // Consider adding an OkHttpClient with a custom User-Agent interceptor later!
             .build()
     }
 
@@ -297,5 +307,29 @@ object NetworkModule {
     fun provideAutoEqApi(@AutoEqRetrofit retrofit: Retrofit): AutoEqApi {
         return retrofit.create(AutoEqApi::class.java)
     }
+
+    // --- DEEZER FREE API INJECTIONS ---
+
+    @Provides
+    @Singleton
+    @DeezerRetrofit
+    fun provideDeezerClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+        .addInterceptor(DeezerRateLimitInterceptor())
+        .build()
+
+    @Provides
+    @Singleton
+    @DeezerRetrofit
+    fun provideDeezerRetrofit(@DeezerRetrofit client: OkHttpClient): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(DEEZER_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideDeezerApi(@DeezerRetrofit retrofit: Retrofit): DeezerApiService =
+        retrofit.create(DeezerApiService::class.java)
 }
 
