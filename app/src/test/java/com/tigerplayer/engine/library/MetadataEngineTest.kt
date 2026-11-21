@@ -56,7 +56,7 @@ class MetadataEngineTest {
             lyricsRepository = lyricsRepository,
             tigerDao = tigerDao,
             audioRepository = audioRepository,
-            deezerRepository = deezerRepository
+            deezerRepository = deezerRepository,
             localTagDataSource = localTagDataSource,
             settingsDataStore = settingsDataStore
         )
@@ -273,7 +273,7 @@ class MetadataEngineTest {
             tigerDao = tigerDao,
             audioRepository = audioRepository,
             settingsDataStore = settingsDataStore,
-            deezerRepository = deezerRepository
+            deezerRepository = deezerRepository,
             localTagDataSource = localTagDataSource,
         )
 
