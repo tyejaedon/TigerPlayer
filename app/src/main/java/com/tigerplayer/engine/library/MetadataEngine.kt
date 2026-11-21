@@ -12,6 +12,7 @@ import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.data.repository.LyricsRepository
 import com.tigerplayer.data.repository.MediaDataRepository
+import com.tigerplayer.data.repository.deezer.DeezerRepository
 import com.tigerplayer.data.source.LocalTagDataSource
 import com.tigerplayer.utils.ArtistUtils
 import kotlinx.coroutines.*
@@ -49,6 +50,7 @@ class MetadataEngine @Inject constructor(
     private val audioRepository: AudioRepository,
     private val localTagDataSource: LocalTagDataSource,
     private val settingsDataStore: SettingsDataStore,
+    private val deezerRepository: DeezerRepository,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -274,8 +276,9 @@ class MetadataEngine @Inject constructor(
             return null
         }
 
-        // Attempt Spotify high-resolution lookup
+        // Attempt Spotify high-resolution lookup, falling back to zero-auth Deezer album art
         val highResUri = fetchSpotifyHighResArt(track.title, track.artist, track.album)
+            ?: fetchDeezerHighResArt(track.album, track.artist)
         if (highResUri != null) {
             audioRepository.updateTrackArtworkUri(track.id, highResUri.toString())
             return highResUri
@@ -300,6 +303,18 @@ class MetadataEngine @Inject constructor(
             Log.e("MetadataEngine", "Artwork fetch failed: ${e.message}")
         }
         return highResUrl?.toUri()
+    }
+
+    /** Fetches high-resolution Deezer album artwork URI for a track without authentication. */
+    suspend fun fetchDeezerHighResArt(album: String, artist: String): Uri? {
+        return try {
+            deezerRepository.getAlbumArt(album, artist)?.takeIf { it.isNotBlank() }?.toUri()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("MetadataEngine", "Deezer artwork fetch failed: ${e.message}")
+            null
+        }
     }
 
     companion object {

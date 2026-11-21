@@ -2,8 +2,9 @@ package com.tigerplayer.di
 
 import com.google.gson.Gson
 import com.tigerplayer.BuildConfig
-import com.tigerplayer.data.remote.DeezerRateLimitInterceptor
 import com.tigerplayer.data.remote.api.*
+import com.tigerplayer.data.remote.api.deezer.DeezerApiService
+import com.tigerplayer.data.remote.api.deezer.DeezerRateLimitInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -105,6 +106,13 @@ object NetworkModule {
         }
         .build()
 
+    @Provides
+    @Singleton
+    @DeezerRetrofit
+    fun provideDeezerClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+        .addInterceptor(DeezerRateLimitInterceptor())
+        .build()
+
     // --- Retrofit Builders ---
 
 
@@ -193,6 +201,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @DeezerRetrofit
+    fun provideDeezerRetrofit(@DeezerRetrofit client: OkHttpClient, gson: Gson): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(DEEZER_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+
+    @Provides
+    @Singleton
     @KugouRetrofit
     fun provideKugouRetrofit(client: OkHttpClient): Retrofit =
         Retrofit.Builder()
@@ -237,6 +255,16 @@ object NetworkModule {
     @Singleton
     fun provideKugouApi(@KugouRetrofit retrofit: Retrofit): KugouApi =
         retrofit.create(KugouApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideDeezerApi(@DeezerRetrofit retrofit: Retrofit): DeezerApiService =
+        retrofit.create(DeezerApiService::class.java)
+
+    @Provides
+    @Singleton
+    fun provideDeezerPublicApi(@DeezerRetrofit retrofit: Retrofit): com.tigerplayer.data.remote.api.DeezerApiService =
+        retrofit.create(com.tigerplayer.data.remote.api.DeezerApiService::class.java)
 
     // --- LAST.FM INJECTIONS ---
 
@@ -283,29 +311,5 @@ object NetworkModule {
     fun provideAutoEqApi(@AutoEqRetrofit retrofit: Retrofit): AutoEqApi {
         return retrofit.create(AutoEqApi::class.java)
     }
-
-    // --- DEEZER FREE API INJECTIONS ---
-
-    @Provides
-    @Singleton
-    @DeezerRetrofit
-    fun provideDeezerClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
-        .addInterceptor(DeezerRateLimitInterceptor())
-        .build()
-
-    @Provides
-    @Singleton
-    @DeezerRetrofit
-    fun provideDeezerRetrofit(@DeezerRetrofit client: OkHttpClient): Retrofit =
-        Retrofit.Builder()
-            .baseUrl(DEEZER_BASE_URL)
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideDeezerApi(@DeezerRetrofit retrofit: Retrofit): DeezerApiService =
-        retrofit.create(DeezerApiService::class.java)
 }
 

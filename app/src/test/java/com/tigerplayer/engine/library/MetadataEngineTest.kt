@@ -11,6 +11,7 @@ import com.tigerplayer.data.repository.ArtistDetails
 import com.tigerplayer.data.repository.AudioRepository
 import com.tigerplayer.data.repository.LyricsRepository
 import com.tigerplayer.data.repository.MediaDataRepository
+import com.tigerplayer.data.repository.deezer.DeezerRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -45,6 +46,7 @@ class MetadataEngineTest {
     private val audioRepository = mockk<AudioRepository>(relaxed = true)
     private val localTagDataSource = mockk<com.tigerplayer.data.source.LocalTagDataSource>(relaxed = true)
     private val settingsDataStore = mockk<SettingsDataStore>(relaxed = true)
+    private val deezerRepository = mockk<DeezerRepository>(relaxed = true)
 
     private fun engine(fetchOnlineArtwork: Boolean = true): MetadataEngine {
         every { tigerDao.getAllArtistCache() } returns flowOf(emptyList())
@@ -54,6 +56,7 @@ class MetadataEngineTest {
             lyricsRepository = lyricsRepository,
             tigerDao = tigerDao,
             audioRepository = audioRepository,
+            deezerRepository = deezerRepository,
             localTagDataSource = localTagDataSource,
             settingsDataStore = settingsDataStore
         )
@@ -269,8 +272,9 @@ class MetadataEngineTest {
             lyricsRepository = lyricsRepository,
             tigerDao = tigerDao,
             audioRepository = audioRepository,
+            settingsDataStore = settingsDataStore,
+            deezerRepository = deezerRepository,
             localTagDataSource = localTagDataSource,
-            settingsDataStore = settingsDataStore
         )
 
         val processedCount = engine.crawlMissingLyricsBatch(20)
@@ -278,6 +282,22 @@ class MetadataEngineTest {
         assertEquals(1, processedCount)
         coVerify(exactly = 1) {
             lyricsRepository.getLyrics(match { it.id == "pending-1" && it.title == "Pending Song" })
+        }
+    }
+
+    @Test
+    fun `resolveTrackArtwork falls back to Deezer when Spotify returns null`() = runTest {
+        val sampleTrack = track(id = 42, artist = "Daft Punk")
+        coEvery { audioRepository.hasEmbeddedArtwork(sampleTrack) } returns false
+        coEvery { audioRepository.getCachedTrack(sampleTrack.id) } returns null
+        every { mediaDataRepository.getHighResAlbumArt(any(), any(), any()) } returns flowOf(null)
+        coEvery { deezerRepository.getAlbumArt("Album", "Daft Punk") } returns "https://cdn-images.dzcdn.net/cover.jpg"
+
+        val resolved = engine().resolveTrackArtwork(sampleTrack)
+
+        assertEquals("https://cdn-images.dzcdn.net/cover.jpg", resolved?.toString())
+        coVerify(exactly = 1) {
+            audioRepository.updateTrackArtworkUri("track-42", "https://cdn-images.dzcdn.net/cover.jpg")
         }
     }
 }
