@@ -83,6 +83,12 @@ class MediaControllerManager @Inject constructor(
         private const val QUEUE_ITEM_SEPARATOR = "\u001F"
         private const val QUEUE_FIELD_SEPARATOR = "\u001E"
 
+        // Add tracking flags for connection attempt state and retries
+        @Volatile private var isConnecting = false
+        private var connectionRetryCount = 0
+        private const val MAX_RETRY_ATTEMPTS = 3
+        private const val RETRY_BASE_DELAY_MS = 400L
+
         private const val TICK_INTERVAL_MS = 250L
 
         private const val POSITION_SAVE_INTERVAL_MS = 15_000L
@@ -167,6 +173,8 @@ class MediaControllerManager @Inject constructor(
     @Volatile private var resumeOnBluetoothConnect = true
     @Volatile private var resumeOnWiredHeadsetConnect = false
 
+
+
     private val audioRouteReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
@@ -210,6 +218,14 @@ class MediaControllerManager @Inject constructor(
      * process (issue #48). This is a @Singleton with no other natural teardown hook.
      */
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            // Automatically check connection when returning to foreground
+            if (mediaController == null || mediaController?.isConnected == false) {
+                Log.i("MediaManager", "App resumed with disconnected controller. Re-initializing...")
+                initializeController()
+            }
+        }
+
         override fun onDestroy(owner: LifecycleOwner) {
             release()
         }
@@ -290,11 +306,19 @@ class MediaControllerManager @Inject constructor(
 
     @OptIn(UnstableApi::class)
     private fun initializeController() {
+        if (isReleased) return
+        val currentController = mediaController
+        if (currentController != null && currentController.isConnected) return
+        if (isConnecting) return
+
+        isConnecting = true
+
         val sessionToken = SessionToken(
             context,
             ComponentName(context, AudioPlayerService::class.java)
         )
 
+        controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = MediaController.Builder(context, sessionToken)
             .setApplicationLooper(Looper.getMainLooper())
             .setListener(object : MediaController.Listener {
@@ -302,6 +326,7 @@ class MediaControllerManager @Inject constructor(
                     Log.w("MediaManager", "Controller disconnected. Reconnecting...")
                     controllerFuture?.let { MediaController.releaseFuture(it) }
                     mediaController = null
+                    isConnecting = false
                     _isPlaying.value = false
                     positionJob?.cancel()
                     bluetoothDeviceManager.stopTrackingListeningTime()
@@ -312,8 +337,13 @@ class MediaControllerManager @Inject constructor(
 
         controllerFuture?.addListener({
             try {
-                val controller = controllerFuture?.get() ?: return@addListener
+                val controller = controllerFuture?.get() ?: run {
+                    isConnecting = false
+                    return@addListener
+                }
                 mediaController = controller
+                isConnecting = false
+                connectionRetryCount = 0 // Reset counter on successful connection
 
                 // Initialize State
                 _isPlaying.value = controller.isPlaying
@@ -332,11 +362,22 @@ class MediaControllerManager @Inject constructor(
                 }
 
             } catch (e: Exception) {
-                Log.e("MediaManager", "Controller init failed", e)
+                Log.e("MediaManager", "Controller init failed (Attempt ${connectionRetryCount + 1})", e)
+                isConnecting = false
+                mediaController = null
+
+                // Retry initialization with exponential backoff if service was delayed/suspended
+                if (connectionRetryCount < MAX_RETRY_ATTEMPTS && !isReleased) {
+                    connectionRetryCount++
+                    val delayMs = RETRY_BASE_DELAY_MS * (1 shl (connectionRetryCount - 1))
+                    managerScope.launch {
+                        delay(delayMs)
+                        initializeController()
+                    }
+                }
             }
         }, ContextCompat.getMainExecutor(context))
     }
-
     private fun setupPlayerListener(controller: MediaController) {
         controller.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -714,6 +755,7 @@ class MediaControllerManager @Inject constructor(
         }
     }
 
+
     fun getUpcomingTracksPreview(isShuffleEnabled: Boolean): List<AudioTrack> {
         val controller = mediaController ?: return emptyList()
         val queue = getQueueTracks()
@@ -758,8 +800,7 @@ class MediaControllerManager @Inject constructor(
             val mediaItems = withContext(Dispatchers.Default) {
                 tracks.map { createMediaItem(it) }
             }
-            val activeController = mediaController ?: return@launch
-
+            val activeController = getActiveController() ?: return@launch
             resetFlowStatePipeline(restoreFullVolume = true)
 
             activeController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
@@ -852,7 +893,7 @@ class MediaControllerManager @Inject constructor(
         saveStateJob?.cancel()
         saveStateJob = managerScope.launch {
             // Coalesce back-to-back queue mutations (e.g. setPlaylistAndPlay + onMediaItemTransition).
-            delay(150L)
+            delay(150L.milliseconds)
             val controller = mediaController ?: return@launch
             if (controller.mediaItemCount == 0) {
                 playbackPrefs.clearPlaybackState()
@@ -1129,4 +1170,19 @@ class MediaControllerManager @Inject constructor(
             playbackPrefs.savePlaybackParameters(savedSpeed, savedPitch)
         }
     }
+
+    /**
+     * Returns active [MediaController] if connected, or triggers re-initialization
+     * if disconnected instead of silently dropping actions.
+     */
+    private fun getActiveController(): MediaController? {
+        val controller = mediaController
+        if (controller != null && controller.isConnected) {
+            return controller
+        }
+        Log.w("MediaManager", "Controller missing or disconnected. Triggering re-initialization...")
+        initializeController()
+        return null
+    }
 }
+
