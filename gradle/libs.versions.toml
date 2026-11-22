@@ -67,6 +67,7 @@ foundationLayout = "1.11.2"
 browser = "1.10.0"
 glancePreview = "1.2.0"
 foundationLayoutVersion = "1.12.1"
+androidxFoundationLayout = "1.13.0"
 
 [libraries]
 # Core & Lifecycle
@@ -164,6 +165,7 @@ androidx-foundation-layout = { group = "androidx.compose.foundation", name = "fo
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 androidx-glance-preview = { group = "androidx.glance", name = "glance-preview", version.ref = "glancePreview" }
 foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayoutVersion" }
+androidx-compose-foundation-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "androidxFoundationLayout" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
