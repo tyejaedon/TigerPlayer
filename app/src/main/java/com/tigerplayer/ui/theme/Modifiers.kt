@@ -125,7 +125,7 @@ fun Modifier.tigerGlow(
 
         val paint = androidx.compose.ui.graphics.Paint().apply {
             this.color = color.copy(alpha = 0.25f)
-            asFrameworkPaint().apply {
+            nativePaint.apply {
                 maskFilter =
                     android.graphics.BlurMaskFilter(
                         40f,

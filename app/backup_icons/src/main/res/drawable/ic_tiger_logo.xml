@@ -1,0 +1,94 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="800dp"
+    android:height="800dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Dark Shield Background -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M256,490 L40,256 L256,22 L472,256 Z" />
+
+    <!-- Left Tiger Ear (Orange) -->
+    <path
+        android:fillColor="#F97316"
+        android:pathData="M 160,140 L 110,50 L 210,120 Z" />
+
+    <!-- Right Tiger Ear (Orange) -->
+    <path
+        android:fillColor="#F97316"
+        android:pathData="M 352,140 L 402,50 L 302,120 Z" />
+
+    <!-- Left Inner Ear (Dark) -->
+    <path
+        android:fillColor="#1F2937"
+        android:pathData="M 165,125 L 135,75 L 195,115 Z" />
+
+    <!-- Right Inner Ear (Dark) -->
+    <path
+        android:fillColor="#1F2937"
+        android:pathData="M 347,125 L 377,75 L 317,115 Z" />
+
+    <!-- Main Tiger Face Base (Vibrant Orange) -->
+    <path
+        android:fillColor="#F97316"
+        android:pathData="M 256,420 L 140,320 L 100,200 L 160,140 L 352,140 L 412,200 L 372,320 Z" />
+
+    <!-- Lower Jaw & Cheeks Background (Light Gray) -->
+    <path
+        android:fillColor="#E5E7EB"
+        android:pathData="M 256,420 L 170,320 L 256,260 L 342,320 Z" />
+
+    <!-- Pronounced Muzzle (Pure White) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 256,380 L 190,310 L 256,270 L 322,310 Z" />
+
+    <!-- Tiger Nose (Black) -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 256,310 L 236,275 L 276,275 Z" />
+
+    <!-- Left Glowing Cyber Eye (Cyan) -->
+    <path
+        android:fillColor="#00FFFF"
+        android:pathData="M 220,195 L 170,210 L 190,225 L 230,210 Z" />
+
+    <!-- Right Glowing Cyber Eye (Cyan) -->
+    <path
+        android:fillColor="#00FFFF"
+        android:pathData="M 292,195 L 342,210 L 322,225 L 282,210 Z" />
+
+    <!-- Center Crown Stripes (Black) -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 256,140 L 236,190 L 276,190 Z" />
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 256,205 L 246,235 L 266,235 Z" />
+
+    <!-- Top Side Stripes (Black) -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 170,140 L 190,175 L 150,175 Z" />
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 342,140 L 322,175 L 362,175 Z" />
+
+    <!-- Upper Cheek Stripes (Black) -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 105,210 L 155,220 L 115,240 Z" />
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 407,210 L 357,220 L 397,240 Z" />
+
+    <!-- Lower Cheek Stripes (Black) -->
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 125,270 L 175,260 L 140,290 Z" />
+    <path
+        android:fillColor="#111827"
+        android:pathData="M 387,270 L 337,260 L 372,290 Z" />
+
+</vector>
