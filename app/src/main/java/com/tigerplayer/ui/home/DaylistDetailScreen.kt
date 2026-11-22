@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,15 +51,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.tigerplayer.R
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.ui.dashboard.DashboardViewModel
 import com.tigerplayer.ui.player.PlayerViewModel
@@ -492,6 +498,59 @@ private fun rememberDayPhaseDescriptor(): DayPhaseDescriptor {
         }
     }
 }
+
+@Composable
+fun ThreeAlbumCollage(
+    tracks: List<AudioTrack>,
+    modifier: Modifier = Modifier
+) {
+    val spotlight = tracks.take(3)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(160.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (spotlight.isNotEmpty()) {
+            // Draw order: index 1 (left), index 2 (right), index 0 (center top)
+            val orderedIndices = when (spotlight.size) {
+                3 -> listOf(1, 2, 0)
+                2 -> listOf(1, 0)
+                else -> listOf(0)
+            }
+
+            orderedIndices.forEach { index ->
+                val track = spotlight[index]
+                val rotate = when (index) {
+                    0 -> 0f
+                    1 -> -8f
+                    else -> 8f
+                }
+                val xOffset = when (index) {
+                    0 -> 0.dp
+                    1 -> (-50).dp
+                    else -> 50.dp
+                }
+                val yOffset = if (index == 0) 0.dp else 10.dp
+
+                AsyncImage(
+                    model = track.artworkUri,
+                    contentDescription = "Album art ${track.title}",
+                    contentScale = ContentScale.Crop,
+                    fallback = painterResource(R.drawable.ic_tiger_logo),
+                    modifier = Modifier
+                        .size(110.dp)
+                        .offset(x = xOffset, y = yOffset)
+                        .rotate(rotate)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                )
+            }
+        }
+    }
+}
+
 
 private fun formatDuration(durationMs: Long): String {
     val totalSeconds = max(0L, durationMs / 1000L)

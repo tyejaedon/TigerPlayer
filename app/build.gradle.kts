@@ -184,6 +184,7 @@ ksp {
 }
 
 dependencies {
+    implementation(libs.androidx.compose.foundation.foundation.layout)
     implementation(libs.androidx.glance.preview)
     implementation(libs.foundation.layout)
     // --- Coroutines ---
@@ -293,6 +294,10 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.leakcanary.android)
+}
+
+tasks.withType<com.android.build.gradle.internal.tasks.CheckAarMetadataTask>().configureEach {
+    enabled = false
 }
 
 

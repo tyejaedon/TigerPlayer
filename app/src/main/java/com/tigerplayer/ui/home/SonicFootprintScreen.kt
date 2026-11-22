@@ -229,11 +229,11 @@ private fun RadarChart(
 ) {
     val axes = SonicAxis.entries
     val density = LocalDensity.current
-    
+
     // Smooth growth animation on entry
     var animateEntry by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animateEntry = true }
-    
+
     val entryScale by animateFloatAsState(
         targetValue = if (animateEntry) 1f else 0f,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 120f),
@@ -287,7 +287,7 @@ private fun RadarChart(
                 val labelRadius = radius + 32f
                 val lx = center.x + cos(angle).toFloat() * labelRadius
                 val ly = center.y + sin(angle).toFloat() * labelRadius + (labelTextSize / 3f)
-                
+
                 canvas.nativeCanvas.drawText(axis.label, lx, ly, textPaint)
             }
         }
@@ -321,7 +321,7 @@ private fun RadarChart(
                     color = TigerNeonOrange.copy(alpha = 0.4f)
                     style = PaintingStyle.Stroke
                     strokeWidth = 10f
-                    asFrameworkPaint().maskFilter = BlurMaskFilter(15f, BlurMaskFilter.Blur.NORMAL)
+                    nativePaint.maskFilter = BlurMaskFilter(15f, BlurMaskFilter.Blur.NORMAL)
                 }
                 canvas.drawPath(cachedPath, glowPaint)
             }
