@@ -54,7 +54,7 @@ uiautomator = "2.4.1"
 # Testing
 junit = "4.13.2"
 junitVersion = "1.3.0"
-robolectric = "4.17"
+robolectric = "4.18.1"
 espressoCore = "3.7.0"
 animation = "1.11.4"
 roomVersion = "2.8.5"
