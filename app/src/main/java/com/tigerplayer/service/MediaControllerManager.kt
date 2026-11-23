@@ -373,10 +373,12 @@ class MediaControllerManager @Inject constructor(
 
         // Initialize State
         _isPlaying.value = controller.isPlaying
+        _currentPosition.value = controller.currentPosition.coerceAtLeast(0L)
         _shuffleModeEnabled.value = controller.shuffleModeEnabled
         _repeatMode.value = controller.repeatMode
         controller.volume = _volume.value
         updateCurrentQueuePointer(controller)
+        _mediaControllerState.tryEmit(Unit)
 
         setupPlayerListener(controller)
         restorePlaybackState(controller)
@@ -450,6 +452,7 @@ class MediaControllerManager @Inject constructor(
                     maybeScheduleInfinitePlay(controller.currentMediaItem?.mediaId)
                 } else {
                     positionJob?.cancel()
+                    _currentPosition.value = controller.currentPosition.coerceAtLeast(0L)
                     bluetoothDeviceManager.stopTrackingListeningTime()
                     // Ensure we never resume from an attenuated crossfade volume.
                     resetFlowStatePipeline(restoreFullVolume = true)

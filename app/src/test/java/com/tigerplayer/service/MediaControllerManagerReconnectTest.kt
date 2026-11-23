@@ -181,4 +181,17 @@ class MediaControllerManagerReconnectTest {
         // A subsequent failure after disconnect should still be able to schedule a retry
         manager.onControllerConnectFailed(RuntimeException("transient-after-disconnect"))
     }
+
+    @Test
+    fun `onControllerConnected syncs position and emits mediaControllerState`() = runTest(testDispatcher) {
+        val controller = mockConnectedController(itemCount = 2, playing = false)
+        every { controller.currentPosition } returns 42_500L
+        every { controller.currentMediaItemIndex } returns 1
+
+        manager.onControllerConnected(controller)
+        testScheduler.advanceUntilIdle()
+
+        org.junit.Assert.assertEquals(42_500L, manager.currentPosition.value)
+        org.junit.Assert.assertEquals(1, manager.currentMediaItemIndex.value)
+    }
 }
