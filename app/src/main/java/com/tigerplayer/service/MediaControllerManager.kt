@@ -83,9 +83,6 @@ class MediaControllerManager @Inject constructor(
         private const val QUEUE_ITEM_SEPARATOR = "\u001F"
         private const val QUEUE_FIELD_SEPARATOR = "\u001E"
 
-        // Add tracking flags for connection attempt state and retries
-        @Volatile private var isConnecting = false
-        private var connectionRetryCount = 0
         private const val MAX_RETRY_ATTEMPTS = 3
         private const val RETRY_BASE_DELAY_MS = 400L
 
@@ -114,6 +111,12 @@ class MediaControllerManager @Inject constructor(
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     var mediaController: MediaController? = null
+
+    private val connectionLock = Any()
+    @Volatile private var isConnecting = false
+    @Volatile private var connectionRetryCount = 0
+    private var retryJob: Job? = null
+    private val pendingControllerActions = ArrayDeque<(MediaController) -> Unit>()
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
@@ -219,10 +222,10 @@ class MediaControllerManager @Inject constructor(
      */
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
-            // Automatically check connection when returning to foreground
-            if (mediaController == null || mediaController?.isConnected == false) {
+            val current = mediaController
+            if ((current == null || !current.isConnected) && !isConnecting) {
                 Log.i("MediaManager", "App resumed with disconnected controller. Re-initializing...")
-                initializeController()
+                initializeController(resetRetryBudget = true)
             }
         }
 
@@ -305,13 +308,19 @@ class MediaControllerManager @Inject constructor(
     }
 
     @OptIn(UnstableApi::class)
-    private fun initializeController() {
+    private fun initializeController(resetRetryBudget: Boolean = false) {
         if (isReleased) return
-        val currentController = mediaController
-        if (currentController != null && currentController.isConnected) return
-        if (isConnecting) return
-
-        isConnecting = true
+        synchronized(connectionLock) {
+            val currentController = mediaController
+            if (currentController != null && currentController.isConnected) return
+            if (isConnecting) return
+            if (resetRetryBudget) {
+                connectionRetryCount = 0
+            }
+            isConnecting = true
+            retryJob?.cancel()
+            retryJob = null
+        }
 
         val sessionToken = SessionToken(
             context,
@@ -323,14 +332,7 @@ class MediaControllerManager @Inject constructor(
             .setApplicationLooper(Looper.getMainLooper())
             .setListener(object : MediaController.Listener {
                 override fun onDisconnected(controller: MediaController) {
-                    Log.w("MediaManager", "Controller disconnected. Reconnecting...")
-                    controllerFuture?.let { MediaController.releaseFuture(it) }
-                    mediaController = null
-                    isConnecting = false
-                    _isPlaying.value = false
-                    positionJob?.cancel()
-                    bluetoothDeviceManager.stopTrackingListeningTime()
-                    initializeController()
+                    onControllerDisconnected()
                 }
             })
             .buildAsync()
@@ -341,42 +343,90 @@ class MediaControllerManager @Inject constructor(
                     isConnecting = false
                     return@addListener
                 }
-                mediaController = controller
-                isConnecting = false
-                connectionRetryCount = 0 // Reset counter on successful connection
-
-                // Initialize State
-                _isPlaying.value = controller.isPlaying
-                _shuffleModeEnabled.value = controller.shuffleModeEnabled
-                _repeatMode.value = controller.repeatMode
-                controller.volume = _volume.value
-                updateCurrentQueuePointer(controller)
-
-                setupPlayerListener(controller)
-                restorePlaybackState(controller)
-                restoreSavedPlaybackParameters(controller)
-
-                if (controller.isPlaying) {
-                    startPositionTicker()
-                    bluetoothDeviceManager.startTrackingListeningTime()
-                }
-
+                onControllerConnected(controller)
             } catch (e: Exception) {
-                Log.e("MediaManager", "Controller init failed (Attempt ${connectionRetryCount + 1})", e)
-                isConnecting = false
-                mediaController = null
-
-                // Retry initialization with exponential backoff if service was delayed/suspended
-                if (connectionRetryCount < MAX_RETRY_ATTEMPTS && !isReleased) {
-                    connectionRetryCount++
-                    val delayMs = RETRY_BASE_DELAY_MS * (1 shl (connectionRetryCount - 1))
-                    managerScope.launch {
-                        delay(delayMs)
-                        initializeController()
-                    }
-                }
+                onControllerConnectFailed(e)
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    internal fun onControllerDisconnected() {
+        Log.w("MediaManager", "Controller disconnected. Reconnecting...")
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        synchronized(connectionLock) {
+            mediaController = null
+            isConnecting = false
+            connectionRetryCount = 0
+        }
+        _isPlaying.value = false
+        positionJob?.cancel()
+        bluetoothDeviceManager.stopTrackingListeningTime()
+        initializeController(resetRetryBudget = true)
+    }
+
+    internal fun onControllerConnected(controller: MediaController) {
+        synchronized(connectionLock) {
+            mediaController = controller
+            isConnecting = false
+            connectionRetryCount = 0
+        }
+
+        // Initialize State
+        _isPlaying.value = controller.isPlaying
+        _shuffleModeEnabled.value = controller.shuffleModeEnabled
+        _repeatMode.value = controller.repeatMode
+        controller.volume = _volume.value
+        updateCurrentQueuePointer(controller)
+
+        setupPlayerListener(controller)
+        restorePlaybackState(controller)
+        restoreSavedPlaybackParameters(controller)
+
+        if (controller.isPlaying) {
+            startPositionTicker()
+            bluetoothDeviceManager.startTrackingListeningTime()
+        }
+
+        drainPendingActions(controller)
+    }
+
+    internal fun onControllerConnectFailed(e: Exception) {
+        val attempt = synchronized(connectionLock) {
+            isConnecting = false
+            mediaController = null
+            connectionRetryCount + 1
+        }
+        Log.e("MediaManager", "Controller init failed (Attempt $attempt)", e)
+
+        // Retry initialization with exponential backoff if service was delayed/suspended
+        val nextRetryDelay = synchronized(connectionLock) {
+            if (connectionRetryCount < MAX_RETRY_ATTEMPTS && !isReleased) {
+                connectionRetryCount++
+                RETRY_BASE_DELAY_MS * (1 shl (connectionRetryCount - 1))
+            } else {
+                pendingControllerActions.clear()
+                null
+            }
+        }
+        if (nextRetryDelay != null) {
+            retryJob?.cancel()
+            retryJob = managerScope.launch {
+                delay(nextRetryDelay)
+                initializeController()
+            }
+        }
+    }
+
+    private fun drainPendingActions(controller: MediaController) {
+        val actionsToRun = synchronized(connectionLock) {
+            if (pendingControllerActions.isEmpty()) return
+            pendingControllerActions.toList().also { pendingControllerActions.clear() }
+        }
+        actionsToRun.forEach { action ->
+            if (controller.isConnected) {
+                action(controller)
+            }
+        }
     }
     private fun setupPlayerListener(controller: MediaController) {
         controller.addListener(object : Player.Listener {
@@ -794,85 +844,90 @@ class MediaControllerManager @Inject constructor(
         MediaItemConverter.buildMetadataExtras(track)
 
     fun setPlaylistAndPlay(tracks: List<AudioTrack>, startIndex: Int = 0) {
-        if (mediaController == null) return
         setPlaylistJob?.cancel()
         setPlaylistJob = managerScope.launch {
             val mediaItems = withContext(Dispatchers.Default) {
                 tracks.map { createMediaItem(it) }
             }
-            val activeController = getActiveController() ?: return@launch
-            resetFlowStatePipeline(restoreFullVolume = true)
+            withActiveController { activeController ->
+                resetFlowStatePipeline(restoreFullVolume = true)
 
-            activeController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
-            activeController.prepare()
-            activeController.play()
+                activeController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+                activeController.prepare()
+                activeController.play()
 
-            updateCurrentQueuePointer(activeController)
-            _mediaControllerState.tryEmit(Unit)
-            saveCurrentState()
+                updateCurrentQueuePointer(activeController)
+                _mediaControllerState.tryEmit(Unit)
+                saveCurrentState()
+            }
         }
     }
 
     fun removeFromQueueAt(index: Int) {
-        val controller = mediaController ?: return
-        if (index !in 0 until controller.mediaItemCount) return
+        withActiveController { controller ->
+            if (index !in 0 until controller.mediaItemCount) return@withActiveController
 
-        controller.removeMediaItem(index)
-        updateCurrentQueuePointer(controller)
-        _mediaControllerState.tryEmit(Unit)
-        saveCurrentState()
-    }
-
-    fun clearQueue() {
-        val controller = mediaController ?: return
-        if (controller.mediaItemCount == 0) return
-
-        controller.clearMediaItems()
-        updateCurrentQueuePointer(controller)
-        _mediaControllerState.tryEmit(Unit)
-        saveCurrentState()
-    }
-
-    fun playNext(track: AudioTrack) {
-        val controller = mediaController ?: return
-        val newItem = createMediaItem(track)
-
-        if (controller.mediaItemCount == 0) {
-            controller.setMediaItem(newItem)
-            controller.prepare()
-            controller.play()
-        } else {
-            val insertIndex = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
-            controller.addMediaItem(insertIndex, newItem)
-        }
-        updateCurrentQueuePointer(controller)
-        _mediaControllerState.tryEmit(Unit)
-        saveCurrentState()
-    }
-
-    fun addToQueue(track: AudioTrack) {
-        val controller = mediaController ?: return
-        val newItem = createMediaItem(track)
-
-        if (controller.mediaItemCount == 0) {
-            controller.setMediaItem(newItem)
-            controller.prepare()
-            controller.play()
-        } else {
-            controller.addMediaItem(controller.mediaItemCount, newItem)
-        }
-        updateCurrentQueuePointer(controller)
-        _mediaControllerState.tryEmit(Unit)
-        saveCurrentState()
-    }
-
-    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
-        val controller = mediaController ?: return
-        if (fromIndex in 0 until controller.mediaItemCount && toIndex in 0 until controller.mediaItemCount) {
-            controller.moveMediaItem(fromIndex, toIndex)
+            controller.removeMediaItem(index)
             updateCurrentQueuePointer(controller)
             _mediaControllerState.tryEmit(Unit)
             saveCurrentState()
+        }
+    }
+
+    fun clearQueue() {
+        withActiveController { controller ->
+            if (controller.mediaItemCount == 0) return@withActiveController
+
+            controller.clearMediaItems()
+            updateCurrentQueuePointer(controller)
+            _mediaControllerState.tryEmit(Unit)
+            saveCurrentState()
+        }
+    }
+
+    fun playNext(track: AudioTrack) {
+        withActiveController { controller ->
+            val newItem = createMediaItem(track)
+
+            if (controller.mediaItemCount == 0) {
+                controller.setMediaItem(newItem)
+                controller.prepare()
+                controller.play()
+            } else {
+                val insertIndex = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
+                controller.addMediaItem(insertIndex, newItem)
+            }
+            updateCurrentQueuePointer(controller)
+            _mediaControllerState.tryEmit(Unit)
+            saveCurrentState()
+        }
+    }
+
+    fun addToQueue(track: AudioTrack) {
+        withActiveController { controller ->
+            val newItem = createMediaItem(track)
+
+            if (controller.mediaItemCount == 0) {
+                controller.setMediaItem(newItem)
+                controller.prepare()
+                controller.play()
+            } else {
+                controller.addMediaItem(controller.mediaItemCount, newItem)
+            }
+            updateCurrentQueuePointer(controller)
+            _mediaControllerState.tryEmit(Unit)
+            saveCurrentState()
+        }
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        withActiveController { controller ->
+            if (fromIndex in 0 until controller.mediaItemCount && toIndex in 0 until controller.mediaItemCount) {
+                controller.moveMediaItem(fromIndex, toIndex)
+                updateCurrentQueuePointer(controller)
+                _mediaControllerState.tryEmit(Unit)
+                saveCurrentState()
+            }
         }
     }
 
@@ -882,10 +937,11 @@ class MediaControllerManager @Inject constructor(
     }
 
     fun playQueueItem(index: Int) {
-        val controller = mediaController ?: return
-        if (index in 0 until controller.mediaItemCount) {
-            controller.seekTo(index, C.TIME_UNSET)
-            controller.play()
+        withActiveController { controller ->
+            if (index in 0 until controller.mediaItemCount) {
+                controller.seekTo(index, C.TIME_UNSET)
+                controller.play()
+            }
         }
     }
 
@@ -1013,7 +1069,11 @@ class MediaControllerManager @Inject constructor(
 
 
     private fun restorePlaybackState(controller: MediaController) {
+        if (controller.mediaItemCount > 0 || controller.isPlaying) return
         managerScope.launch {
+            if (!controller.isConnected || controller.mediaItemCount > 0 || controller.isPlaying) {
+                return@launch
+            }
             val lastId = playbackPrefs.lastTrackId.firstOrNull()
             val lastPos = playbackPrefs.lastPosition.firstOrNull() ?: 0L
             val queueIds = playbackPrefs.lastQueueIds.firstOrNull() ?: emptyList()
@@ -1049,6 +1109,11 @@ class MediaControllerManager @Inject constructor(
                 return@launch
             }
 
+            // Re-check after async disk/DB reads so we never clobber a queue set in the meantime.
+            if (!controller.isConnected || controller.mediaItemCount > 0 || controller.isPlaying) {
+                return@launch
+            }
+
             val startIndex = lastId?.let { id ->
                 restored.indexOfFirst { it.id == id }.coerceAtLeast(0)
             } ?: 0
@@ -1067,13 +1132,13 @@ class MediaControllerManager @Inject constructor(
     fun toggleShuffleMode() {
         // Let ExoPlayer handle the shuffle natively.
         // DO NOT manipulate the queue array, ExoPlayer manages this via an internal Index mapping.
-        mediaController?.let {
+        withActiveController {
             it.shuffleModeEnabled = !it.shuffleModeEnabled
         }
     }
 
     fun toggleRepeatMode() {
-        mediaController?.let {
+        withActiveController {
             it.repeatMode = when (it.repeatMode) {
                 Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                 Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
@@ -1085,14 +1150,15 @@ class MediaControllerManager @Inject constructor(
     // --- PLAYBACK CONTROLS ---
 
     fun resume(fallbackTrack: AudioTrack? = null) {
-        val controller = mediaController ?: return
-        if (controller.mediaItemCount == 0 && fallbackTrack != null) {
-            controller.setMediaItem(createMediaItem(fallbackTrack))
-            controller.prepare()
-        } else if (controller.playbackState == Player.STATE_IDLE || controller.playbackState == Player.STATE_ENDED) {
-            controller.prepare()
+        withActiveController { controller ->
+            if (controller.mediaItemCount == 0 && fallbackTrack != null) {
+                controller.setMediaItem(createMediaItem(fallbackTrack))
+                controller.prepare()
+            } else if (controller.playbackState == Player.STATE_IDLE || controller.playbackState == Player.STATE_ENDED) {
+                controller.prepare()
+            }
+            controller.play()
         }
-        controller.play()
     }
 
     fun setVolume(volume: Float) {
@@ -1111,14 +1177,14 @@ class MediaControllerManager @Inject constructor(
         mediaController?.volume = safeVolume
     }
 
-    fun pause() = mediaController?.pause()
+    fun pause() = withActiveController { it.pause() }
     fun seekTo(pos: Long) {
-        mediaController?.seekTo(pos)
         _currentPosition.value = pos
+        withActiveController { it.seekTo(pos) }
     }
     fun skipToNext() {
         resetFlowStatePipeline(restoreFullVolume = true)
-        mediaController?.let {
+        withActiveController {
             it.seekToNextMediaItem()
             updateCurrentQueuePointer(it)
             _isPlaying.value = it.isPlaying
@@ -1127,7 +1193,7 @@ class MediaControllerManager @Inject constructor(
 
     fun skipToPrevious() {
         resetFlowStatePipeline(restoreFullVolume = true)
-        mediaController?.let {
+        withActiveController {
             it.seekToPreviousMediaItem()
             updateCurrentQueuePointer(it)
             _isPlaying.value = it.isPlaying
@@ -1139,6 +1205,12 @@ class MediaControllerManager @Inject constructor(
         isReleased = true
 
         saveCurrentState()
+        retryJob?.cancel()
+        retryJob = null
+        synchronized(connectionLock) {
+            isConnecting = false
+            pendingControllerActions.clear()
+        }
         positionJob?.cancel()
         infinitePlayJob?.cancel()
         bluetoothDeviceManager.stopTrackingListeningTime()
@@ -1151,12 +1223,13 @@ class MediaControllerManager @Inject constructor(
     }
 
     fun setPlaybackParameters(speed: Float, pitch: Float) {
-        val controller = mediaController ?: return
         val nextSpeed = speed.coerceIn(0.5f, 2.0f)
         val nextPitch = pitch.coerceIn(0.5f, 2.0f)
         _playbackSpeed.value = nextSpeed
         _pitch.value = nextPitch
-        controller.setPlaybackParameters(PlaybackParameters(nextSpeed, nextPitch))
+        withActiveController { controller ->
+            controller.setPlaybackParameters(PlaybackParameters(nextSpeed, nextPitch))
+        }
         managerScope.launch { playbackPrefs.savePlaybackParameters(nextSpeed, nextPitch) }
     }
 
@@ -1172,17 +1245,21 @@ class MediaControllerManager @Inject constructor(
     }
 
     /**
-     * Returns active [MediaController] if connected, or triggers re-initialization
-     * if disconnected instead of silently dropping actions.
+     * Runs [action] immediately if [mediaController] is connected; otherwise queues it
+     * to replay once reconnection completes and triggers [initializeController].
      */
-    private fun getActiveController(): MediaController? {
-        val controller = mediaController
-        if (controller != null && controller.isConnected) {
-            return controller
+    private fun withActiveController(action: (MediaController) -> Unit) {
+        if (isReleased) return
+        synchronized(connectionLock) {
+            val controller = mediaController
+            if (controller != null && controller.isConnected) {
+                action(controller)
+                return
+            }
+            pendingControllerActions.addLast(action)
         }
-        Log.w("MediaManager", "Controller missing or disconnected. Triggering re-initialization...")
-        initializeController()
-        return null
+        Log.w("MediaManager", "Controller missing or disconnected. Queueing action and re-initializing...")
+        initializeController(resetRetryBudget = true)
     }
 }
 
