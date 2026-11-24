@@ -95,7 +95,6 @@ class PlaybackEngine @Inject constructor(
             if (spotifyRepository.spotifyPlaybackState.value?.isPlaying == true) {
                 spotifyRepository.pause()
             }
-            mediaControllerManager.pause()
             val startIndex = libraryTracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
             mediaControllerManager.setPlaylistAndPlay(
                 libraryTracks,

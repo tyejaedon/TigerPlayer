@@ -69,9 +69,14 @@ class MediaControllerManagerTest {
         manager.release()
     }
 
+    private fun mockConnectedController(): MediaController =
+        mockk<MediaController>(relaxed = true).apply {
+            every { isConnected } returns true
+        }
+
     @Test
     fun skipToNext_restores_full_volume() {
-        val mockController = mockk<MediaController>(relaxed = true)
+        val mockController = mockConnectedController()
         manager.mediaController = mockController
 
         every { mockController.volume } returns 0.5f
@@ -79,11 +84,12 @@ class MediaControllerManagerTest {
         manager.skipToNext()
 
         verify { mockController.volume = 1.0f }
+        verify { mockController.seekToNextMediaItem() }
     }
 
     @Test
     fun skipToPrevious_restores_full_volume() {
-        val mockController = mockk<MediaController>(relaxed = true)
+        val mockController = mockConnectedController()
         manager.mediaController = mockController
 
         every { mockController.volume } returns 0.35f
@@ -91,11 +97,12 @@ class MediaControllerManagerTest {
         manager.skipToPrevious()
 
         verify { mockController.volume = 1.0f }
+        verify { mockController.seekToPreviousMediaItem() }
     }
 
     @Test
     fun clearQueue_clearsControllerAndPersistsEmptyState() = runBlocking {
-        val mockController = mockk<MediaController>(relaxed = true)
+        val mockController = mockConnectedController()
         manager.mediaController = mockController
         every { mockController.mediaItemCount } returnsMany listOf(2, 0)
 
@@ -109,7 +116,7 @@ class MediaControllerManagerTest {
 
     @Test
     fun crossfade_disable_restores_full_volume() = runBlocking {
-        val mockController = mockk<MediaController>(relaxed = true)
+        val mockController = mockConnectedController()
         manager.mediaController = mockController
 
         every { mockController.volume } returns 0.42f
@@ -125,7 +132,7 @@ class MediaControllerManagerTest {
     // callback) must not crash, and must actually tear the controller reference down.
     @Test
     fun release_is_idempotent_and_clears_media_controller() {
-        val mockController = mockk<MediaController>(relaxed = true)
+        val mockController = mockConnectedController()
         manager.mediaController = mockController
 
         manager.release()
@@ -140,7 +147,7 @@ class MediaControllerManagerTest {
     // throttle-persist the position on a ~15s interval while playing.
     @Test
     fun position_ticker_persists_position_periodically_while_playing() = runBlocking {
-        val mockController = mockk<MediaController>(relaxed = true)
+        val mockController = mockConnectedController()
         manager.mediaController = mockController
 
         every { mockController.isPlaying } returns true

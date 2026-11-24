@@ -80,7 +80,7 @@ class AcousticEnvironmentViewModel @Inject constructor(
             playbackPrefs.saveAcousticEnvironmentMode(mode.name)
         }
 
-        mediaControllerManager.mediaController?.sendCustomCommand(
+        mediaControllerManager.sendCustomCommand(
             SessionCommand(AudioPlayerService.ACTION_SET_ACOUSTIC_ENV, Bundle.EMPTY),
             Bundle().apply {
                 putString(AudioPlayerService.EXTRA_ACOUSTIC_ENV_MODE, mode.name)
