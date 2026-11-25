@@ -1419,6 +1419,10 @@ class MediaControllerManager @Inject constructor(
         setPlaylistJob?.join()
     }
 
+    internal suspend fun awaitRestoreStateJobForTest() {
+        restoreStateJob?.join()
+    }
+
     internal fun isConnectingForTest(): Boolean = synchronized(connectionLock) { isConnecting }
 
     internal fun connectionRetryCountForTest(): Int = synchronized(connectionLock) { connectionRetryCount }

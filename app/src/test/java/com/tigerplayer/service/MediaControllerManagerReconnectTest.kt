@@ -161,6 +161,8 @@ class MediaControllerManagerReconnectTest {
         manager.resume()
         manager.onControllerConnected(controller)
         testScheduler.advanceUntilIdle()
+        manager.awaitRestoreStateJobForTest()
+        testScheduler.advanceUntilIdle()
 
         verify(atLeast = 1) { controller.play() }
     }
@@ -297,6 +299,8 @@ class MediaControllerManagerReconnectTest {
 
         manager.resume()
         manager.onControllerConnected(controller)
+        testScheduler.advanceUntilIdle()
+        manager.awaitRestoreStateJobForTest()
         testScheduler.advanceUntilIdle()
 
         verifyOrder {
