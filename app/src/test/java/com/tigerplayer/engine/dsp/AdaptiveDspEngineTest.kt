@@ -580,4 +580,28 @@ class AdaptiveDspEngineTest {
         assertTrue("32-bit float Left output must be audible (rmsL=$rmsL)", rmsL > 0.2f)
         assertTrue("32-bit float crossfeed Right output must be audible (rmsR=$rmsR)", rmsR > 0.12f)
     }
+
+    @Test
+    fun losslessStream_zeroLatency_preservesFirstSampleAndExactCount() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val sampleRate = 48_000
+        val frames = 512
+        engine.configure(AudioFormat(sampleRate, 2, C.ENCODING_PCM_16BIT))
+        engine.setIsLosslessStream(true)
+
+        val input = ByteBuffer.allocateDirect(frames * 4).order(ByteOrder.nativeOrder())
+        for (i in 0 until frames) {
+            val sample = if (i % 2 == 0) 12_000.toShort() else (-12_000).toShort()
+            input.putShort(sample)
+            input.putShort(sample)
+        }
+        input.flip()
+
+        engine.queueInput(input)
+        val output = engine.getOutput()
+        assertEquals(frames * 4, output.remaining())
+
+        val firstLeft = output.getShort().toInt()
+        assertTrue("Lossless stream must not insert leading look-ahead zeros (firstLeft=$firstLeft)", abs(firstLeft) > 8_000)
+    }
 }

@@ -19,6 +19,7 @@ import com.tigerplayer.utils.BiquadDesigner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,20 +49,19 @@ class AdaptiveDspEngine @Inject constructor(
 ) : AudioProcessor {
 
     companion object {
-        // AUDIOPHILE COMPATIBILITY: Increased buffer size for Samsung HAL stability
-        // during high-CPU visualizer operations.
-        private const val LOOK_AHEAD_BUFFER_SIZE = 1024
         private const val TRUE_PEAK_THRESHOLD = 1.0f
         @Deprecated("Replaced with transparent true-peak ceiling at 1.0f (0.0 dBFS)", ReplaceWith("TRUE_PEAK_THRESHOLD"))
         private const val LIMITER_THRESHOLD = 1.0f
-        private const val LIMITER_ATTACK_SEC = 0.0008f // ~0.8ms look-ahead settling attack
+        private const val LIMITER_ATTACK_SEC = 0.0008f // ~0.8ms settling attack
         private const val LIMITER_RELEASE_SEC = 0.050f // 50ms fast recovery release (no pumping)
+        private const val REPLAY_GAIN_RAMP_SEC = 0.005f // 5ms slew-rate ramp for click-free ReplayGain transitions
     }
 
     private var isActive = true
     private var inputEnded = false
     @Volatile private var autoMakeupGain = 1.0f
-    @Volatile private var replayGainLinear = 1.0f
+    private val replayGainTargetBits = AtomicInteger(java.lang.Float.floatToRawIntBits(1.0f))
+    private var currentReplayGain = 1.0f
     @Volatile private var replayGainMode = ReplayGainMode.SMART
     @Volatile private var replayGainPreampDb = 0.0f
     @Volatile private var replayGainPreventClipping = true
@@ -80,6 +80,7 @@ class AdaptiveDspEngine @Inject constructor(
 
     private var inputAudioFormat = AudioFormat.NOT_SET
     private var outputAudioFormat = AudioFormat.NOT_SET
+    private var lastInputFormat = AudioFormat.NOT_SET
 
     @Volatile private var activeFilters: List<StateVariableFilter> = emptyList()
     @Volatile private var deviceCompensationFilters: List<StateVariableFilter> = emptyList()
@@ -100,12 +101,6 @@ class AdaptiveDspEngine @Inject constructor(
     @Volatile private var prismMode: PrismMode = PrismMode.BYPASS
     @Volatile private var prismTargetMix = PrismMixLevels()
     @Volatile private var spectralAnalysisMode: SpectralAnalysisMode = SpectralAnalysisMode.FFT
-
-    // LOOK-AHEAD BUFFER: delay is sample-rate aware, buffer remains fixed-size for perf.
-    private val lookAheadBufferL = FloatArray(LOOK_AHEAD_BUFFER_SIZE)
-    private val lookAheadBufferR = FloatArray(LOOK_AHEAD_BUFFER_SIZE)
-    private var lookAheadIndex = 0
-    private var lookAheadDelaySamples = 240
 
     private var prismCurrentVocals = 1f
     private var prismCurrentBeats = 1f
@@ -421,6 +416,9 @@ class AdaptiveDspEngine @Inject constructor(
         agcReleaseCoef = 1f - exp(-1f / (rate * LIMITER_RELEASE_SEC))
     }
 
+    private fun getTargetReplayGain(): Float =
+        java.lang.Float.intBitsToFloat(replayGainTargetBits.get())
+
     /**
      * Determines whether digital overs exceeding 0 dBFS (1.0f) are physically imminent due to positive
      * EQ boosts, reverb tail summing, stem boosting, or positive ReplayGain scaling.
@@ -430,7 +428,8 @@ class AdaptiveDspEngine @Inject constructor(
             acousticEnvironmentMode == AcousticEnvironmentMode.CONCERT_HALL ||
             isCrossfeedEffectivelyActive() ||
             (prismMode == PrismMode.ISOLATION && (prismTargetMix.vocals > 1.0f || prismTargetMix.beats > 1.0f || prismTargetMix.instruments > 1.0f)) ||
-            replayGainLinear > 1.001f
+            getTargetReplayGain() > 1.001f ||
+            currentReplayGain > 1.001f
     }
 
     /**
@@ -603,7 +602,7 @@ class AdaptiveDspEngine @Inject constructor(
      * Recalculates effective linear gain based on current ReplayGain config and track metadata.
      */
     private fun recalculateReplayGain() {
-        replayGainLinear = ReplayGainCalculator.calculateEffectiveLinearGain(
+        val linearGain = ReplayGainCalculator.calculateEffectiveLinearGain(
             mode = replayGainMode,
             preampDb = replayGainPreampDb,
             preventClipping = replayGainPreventClipping,
@@ -614,6 +613,7 @@ class AdaptiveDspEngine @Inject constructor(
             isSequentialAlbumPlay = isSequentialAlbumPlay,
             isBitPerfect = isBitPerfect
         )
+        replayGainTargetBits.set(java.lang.Float.floatToRawIntBits(linearGain))
     }
 
     /**
@@ -657,6 +657,7 @@ class AdaptiveDspEngine @Inject constructor(
 
         if (!isSupported) {
             isActive = false
+            lastInputFormat = AudioFormat.NOT_SET
             return inputAudioFormat
         }
 
@@ -666,8 +667,30 @@ class AdaptiveDspEngine @Inject constructor(
             isLosslessStream = true
         }
 
+        // Short-circuit identical format so Media3 reuses DefaultAudioSink without flushing.
+        if (isActive &&
+            outputAudioFormat != AudioFormat.NOT_SET &&
+            lastInputFormat == inputAudioFormat
+        ) {
+            return outputAudioFormat
+        }
+
+        // Preserve identical output AudioFormat and continuous DSP state when sample rate and
+        // channel count match (e.g., 16-bit to 24-bit FLAC track transitions).
+        if (isActive &&
+            outputAudioFormat != AudioFormat.NOT_SET &&
+            lastInputFormat.sampleRate == inputAudioFormat.sampleRate &&
+            lastInputFormat.channelCount == inputAudioFormat.channelCount
+        ) {
+            this.inputAudioFormat = inputAudioFormat
+            this.lastInputFormat = inputAudioFormat
+            return outputAudioFormat
+        }
+
+        val isInitialConfigure = lastInputFormat == AudioFormat.NOT_SET
         val isNewSampleRate = this.inputAudioFormat.sampleRate != inputAudioFormat.sampleRate
         this.inputAudioFormat = inputAudioFormat
+        this.lastInputFormat = inputAudioFormat
         // Keep internal math in float, but emit PCM_16BIT so downstream Media3 processors
         // (notably silence skipping) can always configure successfully.
         this.outputAudioFormat = AudioFormat(
@@ -678,9 +701,6 @@ class AdaptiveDspEngine @Inject constructor(
 
         detectAndApplyDeviceProfile()
         updateLimiterCoefficients(inputAudioFormat.sampleRate)
-        lookAheadDelaySamples = (inputAudioFormat.sampleRate * 0.0045f)
-            .roundToInt()
-            .coerceIn(24, LOOK_AHEAD_BUFFER_SIZE - 1)
         val safeRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
         hallProcessor.configure(safeRate)
         crossfeedProcessor.configure(safeRate)
@@ -691,6 +711,10 @@ class AdaptiveDspEngine @Inject constructor(
         // FIXED: Re-apply current EQ nodes if track changes sample rates
         if (isNewSampleRate && pendingNodes.isNotEmpty()) {
             updateAcousticNodes(pendingNodes)
+        }
+
+        if (isInitialConfigure) {
+            currentReplayGain = getTargetReplayGain()
         }
 
         isActive = true
@@ -760,6 +784,14 @@ class AdaptiveDspEngine @Inject constructor(
         val localSpectralMode = spectralAnalysisMode
         val sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8000)
         val prismMixSmoothing = (36f / sampleRate).coerceIn(0.0008f, 0.05f)
+        val targetReplayGain = getTargetReplayGain()
+        val maxReplayGainStep = 1f / (sampleRate * REPLAY_GAIN_RAMP_SEC).coerceAtLeast(1f)
+        val localAutoMakeupGain = autoMakeupGain
+        val localLosslessStream = isLosslessStream
+        val baseOverImminent = hasPositiveEqBoost ||
+            localEnvironmentMode == AcousticEnvironmentMode.CONCERT_HALL ||
+            localCrossfeedActive ||
+            (localPrismMode == PrismMode.ISOLATION && (localPrismTargetMix.vocals > 1.0f || localPrismTargetMix.beats > 1.0f || localPrismTargetMix.instruments > 1.0f))
 
         repeat(framesToProcess) {
             var sampleL = 0f
@@ -813,8 +845,14 @@ class AdaptiveDspEngine @Inject constructor(
                 if (channels == 2) sampleR = localDeviceFilters[i].process(sampleR, 1)
             }
 
-            // FIX: Apply auto-makeup gain and ReplayGain preamp before active EQ to prevent SVF internal clipping
-            val totalInputGain = autoMakeupGain * replayGainLinear
+            // FIX: Apply auto-makeup gain and ramped ReplayGain preamp before active EQ to prevent clicks & SVF clipping
+            val replayGainDiff = targetReplayGain - currentReplayGain
+            if (abs(replayGainDiff) <= maxReplayGainStep) {
+                currentReplayGain = targetReplayGain
+            } else {
+                currentReplayGain += if (replayGainDiff > 0f) maxReplayGainStep else -maxReplayGainStep
+            }
+            val totalInputGain = localAutoMakeupGain * currentReplayGain
             var eqSampleL = sampleL * totalInputGain
             var eqSampleR = sampleR * totalInputGain
 
@@ -871,16 +909,9 @@ class AdaptiveDspEngine @Inject constructor(
                 sampleR = prismFrame.right
             }
 
-            // 5. TRUE-PEAK LIMITER & AGC (sample-rate aware look-ahead + smooth release)
-            val delayedIndex = (lookAheadIndex - lookAheadDelaySamples + LOOK_AHEAD_BUFFER_SIZE) % LOOK_AHEAD_BUFFER_SIZE
-            val delayedL = lookAheadBufferL[delayedIndex]
-            val delayedR = lookAheadBufferR[delayedIndex]
-
-            lookAheadBufferL[lookAheadIndex] = sampleL
-            lookAheadBufferR[lookAheadIndex] = sampleR
-            lookAheadIndex = (lookAheadIndex + 1) % LOOK_AHEAD_BUFFER_SIZE
-
-            val shouldBypassLimiter = (isLosslessStream && !isDigitalOverImminent()) || isBitPerfect
+            // 5. ZERO-LATENCY TRUE-PEAK LIMITER & AGC (preserves sample-accurate gapless alignment)
+            val isOverImminent = baseOverImminent || currentReplayGain > 1.001f || targetReplayGain > 1.001f
+            val shouldBypassLimiter = (localLosslessStream && !isOverImminent) || localBitPerfect
 
             val reduction = if (shouldBypassLimiter) {
                 1.0f
@@ -891,12 +922,12 @@ class AdaptiveDspEngine @Inject constructor(
                 } else {
                     agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
                 }
-                if (agcEnvelope > TRUE_PEAK_THRESHOLD) TRUE_PEAK_THRESHOLD / agcEnvelope else 1.0f
+                val effectivePeak = max(agcEnvelope, currentPeak)
+                if (effectivePeak > TRUE_PEAK_THRESHOLD) TRUE_PEAK_THRESHOLD / effectivePeak else 1.0f
             }
 
-            // AUDIOPHILE LIMITER: Use the look-ahead signal and apply gain reduction
-            sampleL = (delayedL * reduction).coerceIn(-1.0f, 1.0f)
-            sampleR = (delayedR * reduction).coerceIn(-1.0f, 1.0f)
+            sampleL = (sampleL * reduction).coerceIn(-1.0f, 1.0f)
+            sampleR = (sampleR * reduction).coerceIn(-1.0f, 1.0f)
 
             // 6. REAL-TIME ANALYSIS (Gated by screen / visualizer visibility to save CPU and battery)
             if (isSpectralAnalysisActive) {
@@ -1043,9 +1074,7 @@ class AdaptiveDspEngine @Inject constructor(
         activeFilters.forEach { it.reset() }
         deviceCompensationFilters.forEach { it.reset() }
         agcEnvelope = 0f // FIXED: Clear AGC volume reduction upon seeking/re-buffering
-        lookAheadBufferL.fill(0f)
-        lookAheadBufferR.fill(0f)
-        lookAheadIndex = 0
+        currentReplayGain = getTargetReplayGain()
         vinylNoiseSeedL = 0x13579BDF
         vinylNoiseSeedR = 0x2468ACE0
         vinylNoiseLpL = 0f
@@ -1072,10 +1101,6 @@ class AdaptiveDspEngine @Inject constructor(
         vinylWowBufferL.fill(0f)
         vinylWowBufferR.fill(0f)
         vinylWowIndex = 0
-
-        lookAheadBufferL.fill(0f)
-        lookAheadBufferR.fill(0f)
-        lookAheadIndex = 0
         _audioReactiveFrame.value = AudioReactiveFrame()
     }
 
@@ -1085,5 +1110,8 @@ class AdaptiveDspEngine @Inject constructor(
     override fun reset() {
         flush()
         buffer = AudioProcessor.EMPTY_BUFFER
+        inputAudioFormat = AudioFormat.NOT_SET
+        outputAudioFormat = AudioFormat.NOT_SET
+        lastInputFormat = AudioFormat.NOT_SET
     }
 }
