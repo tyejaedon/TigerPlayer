@@ -84,9 +84,15 @@ class MediaDataRepository @Inject constructor(
                     ))
                 }
 
-                // If no cache or we want to refresh, do the Dual-Oracle Ritual
-                // For simplicity, only fetch if no cache or image is missing
-                if (cachedData == null || cachedData.imageUrl == null) {
+                // A cached image equal to the local album art is the last-resort fallback, not a
+                // genuine portrait. Older builds persisted it permanently for artists with no
+                // Spotify login, so treat it as stale and retry the remote sources (issue #285).
+                val localArtwork = if (cachedData?.imageUrl != null) {
+                    tigerDao.getLocalArtworkForArtist(cleanArtist)
+                } else null
+                val isAlbumArtFallback = cachedData?.imageUrl != null && cachedData.imageUrl == localArtwork
+
+                if (cachedData == null || cachedData.imageUrl == null || isAlbumArtFallback) {
                     val freshDetails = try {
                         coroutineScope {
                             val spotifyDeferred = async {
@@ -140,6 +146,11 @@ class MediaDataRepository @Inject constructor(
                                 var imageUrl = spotifyDetail?.images?.firstOrNull()?.url
                                 if (imageUrl.isNullOrBlank()) imageUrl = deezerArtist?.imageUrl
                                 if (imageUrl.isNullOrBlank()) imageUrl = lastFmArtist?.image?.getBestImage()
+                                if (isAlbumArtFallback && (imageUrl.isNullOrBlank() || imageUrl == localArtwork)) {
+                                    // Still no genuine portrait. Rewriting the identical fallback row
+                                    // would re-trigger the Room flow and loop back into this fetch.
+                                    return@coroutineScope null
+                                }
                                 if (imageUrl.isNullOrBlank()) imageUrl = tigerDao.getLocalArtworkForArtist(cleanArtist)
 
                                 val genreList = spotifyDetail?.genres?.takeIf { it.isNotEmpty() }
