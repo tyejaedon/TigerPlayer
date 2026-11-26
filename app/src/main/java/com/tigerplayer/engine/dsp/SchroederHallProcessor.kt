@@ -1,20 +1,69 @@
 package com.tigerplayer.engine
 
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.tanh
 
 /**
- * 🏛️ Schroeder Reverb Processor
+ * Pre-allocated acoustic tuning parameters for [SchroederHallProcessor].
+ */
+internal data class HallTuning(
+    val preDelayMs: Float,
+    val targetRt60Sec: Float,
+    val dampingFactor: Float,
+    val highPassCutoffHz: Float,
+    val dryMix: Float,
+    val earlyMix: Float,
+    val tailMix: Float
+) {
+    companion object {
+        val SPEAKER = HallTuning(
+            preDelayMs = 16.0f,
+            targetRt60Sec = 1.4f,
+            dampingFactor = 0.55f,
+            highPassCutoffHz = 200.0f,
+            dryMix = 0.72f,
+            earlyMix = 0.08f,
+            tailMix = 0.18f
+        )
+
+        val HEADPHONES = HallTuning(
+            preDelayMs = 22.0f,
+            targetRt60Sec = 2.0f,
+            dampingFactor = 0.38f,
+            highPassCutoffHz = 100.0f,
+            dryMix = 0.70f,
+            earlyMix = 0.10f,
+            tailMix = 0.20f
+        )
+    }
+}
+
+/**
+ * Schroeder Reverb Processor
  *
  * Implements a 3D concert hall reverberator tank using 4 parallel comb filters with
- * one-pole low-pass damping & soft-clipping feedback, followed by series all-pass diffusion
- * and Haas effect early reflections.
+ * one-pole low-pass damping & soft-clipping feedback, followed by series all-pass diffusion,
+ * Haas effect early reflections, a sample-rate-scaled pre-delay line, and a one-pole
+ * high-pass filter on the reverb send.
  */
 internal class SchroederHallProcessor {
+    companion object {
+        private const val DENORMAL_THRESHOLD = 1e-18f
+    }
+
     /** Left channel reverb output sample. */
     var outL: Float = 0f
         private set
     /** Right channel reverb output sample. */
     var outR: Float = 0f
+        private set
+
+    internal var lastTailL: Float = 0f
+        private set
+    internal var lastTailR: Float = 0f
         private set
 
     private var combL: Array<FloatArray> = emptyArray()
@@ -27,7 +76,6 @@ internal class SchroederHallProcessor {
     // REVERB DAMPING: One-pole LPF states per comb filter
     private var combDampL = FloatArray(0)
     private var combDampR = FloatArray(0)
-    private val dampingFactor = 0.45f
 
     private var allPassL: Array<FloatArray> = emptyArray()
     private var allPassR: Array<FloatArray> = emptyArray()
@@ -39,17 +87,33 @@ internal class SchroederHallProcessor {
     private var haasIndexL = 0
     private var haasIndexR = 0
 
+    private var preDelayBuffer = FloatArray(1)
+    private var preDelayWriteIndex = 0
+    private var speakerPreDelaySamples = 1
+    private var headphonePreDelaySamples = 1
+
+    private var speakerCombFeedbacksL = FloatArray(0)
+    private var speakerCombFeedbacksR = FloatArray(0)
+    private var headphoneCombFeedbacksL = FloatArray(0)
+    private var headphoneCombFeedbacksR = FloatArray(0)
+
+    private var speakerHpfAlpha = 0.97f
+    private var headphoneHpfAlpha = 0.985f
+    private var hpfPrevIn = 0f
+    private var hpfPrevOut = 0f
+
     private val combMs = floatArrayOf(31.1f, 37.1f, 41.1f, 43.7f)
     private val allPassMs = floatArrayOf(5.0f, 1.7f)
 
     /**
-     * Configures comb, all-pass, and Haas delay buffers based on sample rate.
+     * Configures comb, all-pass, Haas, pre-delay buffers, and preset coefficients based on sample rate.
      *
      * @param sampleRate Target audio sampling rate in Hz.
      */
     fun configure(sampleRate: Int) {
-        combL = Array(combMs.size) { i -> FloatArray(((sampleRate * combMs[i]) / 1000f).toInt().coerceAtLeast(1)) }
-        combR = Array(combMs.size) { i -> FloatArray(((sampleRate * (combMs[i] + 0.8f)) / 1000f).toInt().coerceAtLeast(1)) }
+        val safeRate = sampleRate.coerceAtLeast(8000)
+        combL = Array(combMs.size) { i -> FloatArray(((safeRate * combMs[i]) / 1000f).toInt().coerceAtLeast(1)) }
+        combR = Array(combMs.size) { i -> FloatArray(((safeRate * (combMs[i] + 0.8f)) / 1000f).toInt().coerceAtLeast(1)) }
         combIndexL = IntArray(combMs.size)
         combIndexR = IntArray(combMs.size)
         combStoreL = FloatArray(combMs.size)
@@ -57,15 +121,36 @@ internal class SchroederHallProcessor {
         combDampL = FloatArray(combMs.size)
         combDampR = FloatArray(combMs.size)
 
-        allPassL = Array(allPassMs.size) { i -> FloatArray(((sampleRate * allPassMs[i]) / 1000f).toInt().coerceAtLeast(1)) }
-        allPassR = Array(allPassMs.size) { i -> FloatArray(((sampleRate * (allPassMs[i] + 0.3f)) / 1000f).toInt().coerceAtLeast(1)) }
+        allPassL = Array(allPassMs.size) { i -> FloatArray(((safeRate * allPassMs[i]) / 1000f).toInt().coerceAtLeast(1)) }
+        allPassR = Array(allPassMs.size) { i -> FloatArray(((safeRate * (allPassMs[i] + 0.3f)) / 1000f).toInt().coerceAtLeast(1)) }
         allPassIndexL = IntArray(allPassMs.size)
         allPassIndexR = IntArray(allPassMs.size)
 
-        haasL = FloatArray((sampleRate * 0.013f).toInt().coerceAtLeast(1))
-        haasR = FloatArray((sampleRate * 0.019f).toInt().coerceAtLeast(1))
+        haasL = FloatArray((safeRate * 0.013f).toInt().coerceAtLeast(1))
+        haasR = FloatArray((safeRate * 0.019f).toInt().coerceAtLeast(1))
         haasIndexL = 0
         haasIndexR = 0
+
+        speakerPreDelaySamples = ((safeRate * HallTuning.SPEAKER.preDelayMs) / 1000f).roundToInt().coerceAtLeast(1)
+        headphonePreDelaySamples = ((safeRate * HallTuning.HEADPHONES.preDelayMs) / 1000f).roundToInt().coerceAtLeast(1)
+        preDelayBuffer = FloatArray(maxOf(speakerPreDelaySamples, headphonePreDelaySamples) + 1)
+        preDelayWriteIndex = 0
+
+        speakerCombFeedbacksL = computeCombFeedbacks(combL, safeRate, HallTuning.SPEAKER.targetRt60Sec)
+        speakerCombFeedbacksR = computeCombFeedbacks(combR, safeRate, HallTuning.SPEAKER.targetRt60Sec)
+        headphoneCombFeedbacksL = computeCombFeedbacks(combL, safeRate, HallTuning.HEADPHONES.targetRt60Sec)
+        headphoneCombFeedbacksR = computeCombFeedbacks(combR, safeRate, HallTuning.HEADPHONES.targetRt60Sec)
+
+        speakerHpfAlpha = computeHpfAlpha(HallTuning.SPEAKER.highPassCutoffHz, safeRate)
+        headphoneHpfAlpha = computeHpfAlpha(HallTuning.HEADPHONES.highPassCutoffHz, safeRate)
+        hpfPrevIn = 0f
+        hpfPrevOut = 0f
+        lastTailL = 0f
+        lastTailR = 0f
+    }
+
+    internal fun preDelaySamplesFor(isBuiltInSpeaker: Boolean): Int {
+        return if (isBuiltInSpeaker) speakerPreDelaySamples else headphonePreDelaySamples
     }
 
     /**
@@ -75,24 +160,44 @@ internal class SchroederHallProcessor {
      * @param inputL Left channel input sample.
      * @param inputR Right channel input sample.
      * @param channels Channel count (1 for Mono, 2 for Stereo).
+     * @param isBuiltInSpeaker True when routed solely to built-in device speakers.
      */
-    fun process(inputL: Float, inputR: Float, channels: Int) {
+    fun process(inputL: Float, inputR: Float, channels: Int, isBuiltInSpeaker: Boolean = false) {
         if (combL.isEmpty()) {
             outL = inputL
             outR = if (channels == 2) inputR else inputL
+            lastTailL = 0f
+            lastTailR = 0f
             return
         }
+
+        val tuning = if (isBuiltInSpeaker) HallTuning.SPEAKER else HallTuning.HEADPHONES
+        val preDelaySamples = if (isBuiltInSpeaker) speakerPreDelaySamples else headphonePreDelaySamples
+        val feedbacksL = if (isBuiltInSpeaker) speakerCombFeedbacksL else headphoneCombFeedbacksL
+        val feedbacksR = if (isBuiltInSpeaker) speakerCombFeedbacksR else headphoneCombFeedbacksR
+        val hpfAlpha = if (isBuiltInSpeaker) speakerHpfAlpha else headphoneHpfAlpha
 
         val stereoR = if (channels == 2) inputR else inputL
         val earlyL = writeDelay(haasL, inputL + stereoR * 0.18f, true)
         val earlyR = writeDelay(haasR, stereoR + inputL * 0.18f, false)
-        val diffuseIn = ((inputL + stereoR) * 0.5f + (earlyL + earlyR) * 0.25f) * 0.95f
+        val rawSend = ((inputL + stereoR) * 0.5f + (earlyL + earlyR) * 0.25f) * 0.95f
+
+        val hpfOut = flushDenormal(hpfAlpha * (hpfPrevOut + rawSend - hpfPrevIn))
+        hpfPrevIn = rawSend
+        hpfPrevOut = hpfOut
+
+        val readIndex = (preDelayWriteIndex - preDelaySamples + preDelayBuffer.size) % preDelayBuffer.size
+        val diffuseIn = preDelayBuffer[readIndex]
+        preDelayBuffer[preDelayWriteIndex] = hpfOut
+        preDelayWriteIndex = (preDelayWriteIndex + 1) % preDelayBuffer.size
 
         val tailL = processTank(
             diffuseIn,
             combL,
             combIndexL,
             combDampL,
+            feedbacksL,
+            tuning.dampingFactor,
             allPassL,
             allPassIndexL
         )
@@ -101,12 +206,21 @@ internal class SchroederHallProcessor {
             combR,
             combIndexR,
             combDampR,
+            feedbacksR,
+            tuning.dampingFactor,
             allPassR,
             allPassIndexR
         )
 
-        outL = (inputL * 0.70f + earlyL * 0.10f + tailL * 0.20f).coerceIn(-1.0f, 1.0f)
-        outR = (stereoR * 0.70f + earlyR * 0.10f + tailR * 0.20f).coerceIn(-1.0f, 1.0f)
+        lastTailL = tailL
+        lastTailR = tailR
+
+        outL = flushDenormal(
+            (inputL * tuning.dryMix + earlyL * tuning.earlyMix + tailL * tuning.tailMix).coerceIn(-1.0f, 1.0f)
+        )
+        outR = flushDenormal(
+            (stereoR * tuning.dryMix + earlyR * tuning.earlyMix + tailR * tuning.tailMix).coerceIn(-1.0f, 1.0f)
+        )
     }
 
     /**
@@ -129,8 +243,34 @@ internal class SchroederHallProcessor {
         haasR.fill(0f)
         haasIndexL = 0
         haasIndexR = 0
+        preDelayBuffer.fill(0f)
+        preDelayWriteIndex = 0
+        hpfPrevIn = 0f
+        hpfPrevOut = 0f
+        lastTailL = 0f
+        lastTailR = 0f
         outL = 0f
         outR = 0f
+    }
+
+    private fun computeCombFeedbacks(
+        combs: Array<FloatArray>,
+        sampleRate: Int,
+        targetRt60Sec: Float
+    ): FloatArray {
+        return FloatArray(combs.size) { i ->
+            val delaySec = combs[i].size.toDouble() / sampleRate.toDouble()
+            10.0.pow(-3.0 * delaySec / targetRt60Sec.toDouble()).toFloat().coerceIn(0f, 0.99f)
+        }
+    }
+
+    private fun computeHpfAlpha(cutoffHz: Float, sampleRate: Int): Float {
+        val omega = 2.0 * PI * cutoffHz.toDouble() / sampleRate.toDouble()
+        return (1.0 / (1.0 + omega)).toFloat().coerceIn(0f, 0.9999f)
+    }
+
+    private fun flushDenormal(value: Float): Float {
+        return if (abs(value) < DENORMAL_THRESHOLD) 0f else value
     }
 
     /**
@@ -144,7 +284,7 @@ internal class SchroederHallProcessor {
     private fun writeDelay(buffer: FloatArray, input: Float, isLeft: Boolean): Float {
         val index = if (isLeft) haasIndexL else haasIndexR
         val delayed = buffer[index]
-        buffer[index] = input
+        buffer[index] = flushDenormal(input)
 
         if (isLeft) {
             haasIndexL = (index + 1) % buffer.size
@@ -162,6 +302,8 @@ internal class SchroederHallProcessor {
      * @param comb Comb filter delay lines.
      * @param combIndices Comb delay line read/write indices.
      * @param combDamp Comb damping state array.
+     * @param combFeedbacks Pre-computed RT60 comb feedback gains.
+     * @param dampingFactor One-pole low-pass damping coefficient.
      * @param allPass All-pass filter delay lines.
      * @param allPassIndices All-pass delay line indices.
      * @return Reverb tail sample value.
@@ -171,6 +313,8 @@ internal class SchroederHallProcessor {
         comb: Array<FloatArray>,
         combIndices: IntArray,
         combDamp: FloatArray,
+        combFeedbacks: FloatArray,
+        dampingFactor: Float,
         allPass: Array<FloatArray>,
         allPassIndices: IntArray
     ): Float {
@@ -181,14 +325,12 @@ internal class SchroederHallProcessor {
             val idx = combIndices[i]
             val delayed = buffer[idx]
 
-            // DAMPING RITUAL: Filter the feedback signal
-            combDamp[i] += (delayed - combDamp[i]) * dampingFactor
+            combDamp[i] = flushDenormal(combDamp[i] + (delayed - combDamp[i]) * dampingFactor)
 
-            // FIX: Apply tanh soft-clipping inside the feedback loop
-            val feedback = combDamp[i] * 0.79f
+            val feedback = combDamp[i] * combFeedbacks[i]
             val safeFeedback = tanh(feedback)
 
-            buffer[idx] = input + safeFeedback
+            buffer[idx] = flushDenormal(input + safeFeedback)
             combIndices[i] = (idx + 1) % buffer.size
             sum += delayed
         }
@@ -199,8 +341,8 @@ internal class SchroederHallProcessor {
             val buffer = allPass[i]
             val idx = allPassIndices[i]
             val delayed = buffer[idx]
-            buffer[idx] = output + delayed * 0.5f
-            output = delayed - output
+            buffer[idx] = flushDenormal(output + delayed * 0.5f)
+            output = flushDenormal(delayed - output)
             allPassIndices[i] = (idx + 1) % buffer.size
         }
 
