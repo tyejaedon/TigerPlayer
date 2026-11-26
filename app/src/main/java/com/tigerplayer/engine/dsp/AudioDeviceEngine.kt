@@ -4,6 +4,7 @@ import com.tigerplayer.data.local.SettingsDataStore
 import com.tigerplayer.data.local.TigerSettingsState
 import com.tigerplayer.data.local.entity.AudioDeviceEntity
 import com.tigerplayer.data.local.entity.DevicePresetEntity
+import com.tigerplayer.data.model.AudioDeviceType
 import com.tigerplayer.data.model.AudioOutputDevice
 import com.tigerplayer.data.model.HeadphoneSearchResult
 import com.tigerplayer.data.model.HeadphoneSpecs
@@ -29,6 +30,29 @@ class AudioDeviceEngine @Inject constructor(
     val activePreset: StateFlow<DevicePresetEntity?> = audioDeviceRepository.currentActivePreset
     val knownDevicesFlow: Flow<List<AudioOutputDevice>> = audioDeviceRepository.knownDevicesFlow
     val settingsFlow: Flow<TigerSettingsState> = settingsDataStore.settingsFlow
+
+    fun currentDeviceType(): AudioDeviceType = activeDevice.value.type
+
+    fun isUsbDacActive(): Boolean = currentDeviceType() == AudioDeviceType.USB_DAC
+
+    fun isWiredOutputActive(): Boolean = currentDeviceType() == AudioDeviceType.WIRED_HEADPHONES
+
+    fun isBluetoothActive(): Boolean = currentDeviceType() == AudioDeviceType.BLUETOOTH
+
+    fun resolveDirectOutputDecision(
+        sampleRateHz: Int,
+        encoding: DirectPcmEncoding,
+        isDirectSupported: Boolean,
+        isSamsungDevice: Boolean = false
+    ): DirectOutputDecision {
+        return DirectOutputPolicy.evaluate(
+            deviceType = currentDeviceType(),
+            sampleRate = sampleRateHz,
+            encoding = encoding,
+            isDirectSupported = isDirectSupported,
+            isSamsungDevice = isSamsungDevice
+        )
+    }
 
     suspend fun searchHeadphones(query: String): List<HeadphoneSearchResult> {
         return autoEqRepository.searchHeadphones(query)

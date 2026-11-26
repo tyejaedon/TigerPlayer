@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.os.Bundle
 import android.os.Build
 import android.os.Handler
@@ -19,6 +21,7 @@ import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Metadata
 import androidx.media3.common.Player
@@ -52,6 +55,7 @@ import com.tigerplayer.data.local.AudioReactiveHapticsProfile
 import com.tigerplayer.data.local.PlaybackPrefs
 import com.tigerplayer.data.local.ReplayGainMode
 import com.tigerplayer.data.local.SettingsDataStore
+import com.tigerplayer.data.model.AudioDeviceType
 import com.tigerplayer.data.remote.NavidromeUri
 import com.tigerplayer.data.remote.NavidromeUrlSigner
 import com.tigerplayer.MainActivity
@@ -59,6 +63,9 @@ import com.tigerplayer.R
 import com.tigerplayer.engine.AcousticNode
 import com.tigerplayer.engine.AcousticEnvironmentMode
 import com.tigerplayer.engine.AdaptiveDspEngine
+import com.tigerplayer.engine.DirectOutputDecision
+import com.tigerplayer.engine.DirectOutputPolicy
+import com.tigerplayer.engine.DirectPcmEncoding
 import com.tigerplayer.engine.FilterType
 import com.tigerplayer.engine.OffloadVolumePolicy
 import com.tigerplayer.utils.ReplayGainTagParser
@@ -146,6 +153,10 @@ class AudioPlayerService : MediaLibraryService() {
     /** Set before `player.release()` so a cancelled fade does not touch a released player. */
     private var isPlayerReleased = false
 
+    private var platformAudioAttributes: android.media.AudioAttributes? = null
+    private var lastDirectOutputDecision: DirectOutputDecision? = null
+    private var lastPreferredAudioDeviceId: Int? = null
+
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             getSystemService(VibratorManager::class.java)?.defaultVibrator
@@ -202,10 +213,37 @@ class AudioPlayerService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
 
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            // AUDIOPHILE COMPATIBILITY: Explicitly flag as high-priority music
+            // to improve Samsung's "Separate App Sound" routing accuracy.
+            .setAllowedCapturePolicy(C.ALLOW_CAPTURE_BY_NONE)
+            .build()
+        val platformAttrs = audioAttributes.platformAudioAttributes
+        platformAudioAttributes = platformAttrs
+
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val initialRoute = resolveActiveOutputDevice(audioManager)
+        val initialDirectSupported = hasDirectHiResSupport(platformAttrs)
+        val initialDecision = DirectOutputPolicy.evaluate(
+            deviceType = initialRoute.first,
+            sampleRate = DirectOutputPolicy.STANDARD_MIXER_SAMPLE_RATE_HZ,
+            encoding = DirectPcmEncoding.PCM_24BIT,
+            isDirectSupported = initialDirectSupported,
+            isSamsungDevice = isSamsungDevice
+        )
+        lastDirectOutputDecision = initialDecision
+        lastPreferredAudioDeviceId = if (initialDecision.requestDirectPcm) initialRoute.second?.id else null
+
         // Samsung devices can still exhibit HAL instability in float output mode.
-        // Keep float enabled on other OEMs for high-resolution paths.
-        val enableFloatOutput = !isSamsungDevice
-        if (!enableFloatOutput) {
+        // Keep float enabled on non-Samsung devices for 24/32-bit paths when direct output is supported.
+        val enableFloatOutput = DirectOutputPolicy.shouldEnableFloatOutput(
+            isSamsungDevice = isSamsungDevice,
+            isDirectSupported = initialDirectSupported,
+            encoding = DirectPcmEncoding.PCM_24BIT
+        )
+        if (isSamsungDevice) {
             Log.w(TAG, "Samsung compatibility mode active: forcing PCM output (float disabled)")
         }
 
@@ -226,14 +264,6 @@ class AudioPlayerService : MediaLibraryService() {
         }.apply {
             setExtensionRendererMode(EXTENSION_RENDERER_MODE_PREFER)
         }
-
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            // AUDIOPHILE COMPATIBILITY: Explicitly flag as high-priority music
-            // to improve Samsung's "Separate App Sound" routing accuracy.
-            .setAllowedCapturePolicy(C.ALLOW_CAPTURE_BY_NONE)
-            .build()
 
         val loadControl = DefaultLoadControl.Builder()
             .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
@@ -257,6 +287,10 @@ class AudioPlayerService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+
+        if (initialDecision.requestDirectPcm && initialRoute.second != null) {
+            player.setPreferredAudioDevice(initialRoute.second)
+        }
 
         serviceScope.launch {
             val savedModeName = playbackPrefs.acousticEnvironmentMode.firstOrNull() ?: AcousticEnvironmentMode.STUDIO.name
@@ -356,15 +390,16 @@ class AudioPlayerService : MediaLibraryService() {
                 }
         }
 
-        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         if (audioManager != null) {
             val callback = object : AudioDeviceCallback() {
                 override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
                     adaptiveDspEngine.detectAndApplyDeviceProfile()
+                    reevaluateDirectOutputRoute(audioManager)
                 }
 
                 override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
                     adaptiveDspEngine.detectAndApplyDeviceProfile()
+                    reevaluateDirectOutputRoute(audioManager)
                 }
             }
             audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
@@ -471,14 +506,66 @@ class AudioPlayerService : MediaLibraryService() {
             isBitPerfect = isBitPerfectMode
         )
 
-        val offloadMode = if (enabled) {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val preferredDevice = if (lastDirectOutputDecision?.requestDirectPcm == true) {
+            resolveActiveOutputDevice(audioManager).second
+        } else {
+            null
+        }
+        launchSinkTransition(bitPerfect = enabled, preferredDevice = preferredDevice)
+    }
+
+    /**
+     * Re-evaluates [DirectOutputPolicy] when audio output devices are added or removed (issue #291).
+     * When the policy result changes, reconfigures the sink through [offloadTransitionMutex] and the
+     * existing fade-out/drain/fade-in lifecycle.
+     */
+    private fun reevaluateDirectOutputRoute(audioManager: AudioManager) {
+        val (deviceType, candidateDevice) = resolveActiveOutputDevice(audioManager)
+        val (sampleRateHz, encoding) = resolveCurrentStreamFormat()
+        val attrs = platformAudioAttributes
+        val isDirectSupported = if (attrs != null) {
+            isDirectPcmSupported(sampleRateHz, encoding, attrs)
+        } else {
+            false
+        }
+        val decision = DirectOutputPolicy.evaluate(
+            deviceType = deviceType,
+            sampleRate = sampleRateHz,
+            encoding = encoding,
+            isDirectSupported = isDirectSupported,
+            isSamsungDevice = isSamsungDevice
+        )
+        val preferredDevice = if (decision.requestDirectPcm) candidateDevice else null
+        val preferredDeviceId = preferredDevice?.id
+
+        if (decision == lastDirectOutputDecision && preferredDeviceId == lastPreferredAudioDeviceId) {
+            return
+        }
+        lastDirectOutputDecision = decision
+        lastPreferredAudioDeviceId = preferredDeviceId
+
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "Direct output policy updated: device=$deviceType rate=$sampleRateHz " +
+                    "enc=$encoding direct=${decision.requestDirectPcm} float=${decision.enableFloatOutput}"
+            )
+        }
+
+        launchSinkTransition(bitPerfect = isBitPerfectMode, preferredDevice = preferredDevice)
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun launchSinkTransition(bitPerfect: Boolean, preferredDevice: AudioDeviceInfo?) {
+        val offloadMode = if (bitPerfect) {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
         } else {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
         }
 
-        // A rapid double-toggle would otherwise leave two coroutines ramping the same volume
-        // against each other; whichever lost would strand it at a partial value.
+        // A rapid double-toggle or device swap would otherwise leave two coroutines ramping the
+        // same volume against each other; whichever lost would strand it at a partial value.
         offloadTransitionJob?.cancel()
         offloadTransitionJob = serviceScope.launch {
             // The mutex makes the cancelled transition's terminal restore complete before the next
@@ -489,7 +576,7 @@ class AudioPlayerService : MediaLibraryService() {
                 val preFadeVolume = player.volume
 
                 val targetVolume = OffloadVolumePolicy.targetVolume(
-                    bitPerfect = enabled,
+                    bitPerfect = bitPerfect,
                     profilePreampDb = currentProfile?.preamp,
                     preFadeVolume = preFadeVolume
                 )
@@ -500,6 +587,8 @@ class AudioPlayerService : MediaLibraryService() {
                         // Let the A2DP / HAL buffers drain before the sink is reconfigured.
                         delay(SINK_DRAIN_DELAY)
                     }
+
+                    player.setPreferredAudioDevice(preferredDevice)
 
                     player.trackSelectionParameters = player.trackSelectionParameters
                         .buildUpon()
@@ -512,7 +601,7 @@ class AudioPlayerService : MediaLibraryService() {
 
                     // In bit-perfect mode the DSP chain is bypassed, so the PEQ profile must not be
                     // reapplied - doing so would reintroduce the preamp attenuation it excludes.
-                    if (!enabled) {
+                    if (!bitPerfect) {
                         currentProfile?.let { applyProfileToDsp(it) }
                     }
 
@@ -528,6 +617,117 @@ class AudioPlayerService : MediaLibraryService() {
                 }
             }
         }
+    }
+
+    private fun hasDirectHiResSupport(attrs: android.media.AudioAttributes): Boolean {
+        val probes = listOf(
+            96_000 to DirectPcmEncoding.PCM_24BIT,
+            96_000 to DirectPcmEncoding.PCM_32BIT,
+            48_000 to DirectPcmEncoding.PCM_FLOAT,
+            192_000 to DirectPcmEncoding.PCM_32BIT
+        )
+        return probes.any { (rate, enc) -> isDirectPcmSupported(rate, enc, attrs) }
+    }
+
+    private fun isDirectPcmSupported(
+        sampleRateHz: Int,
+        encoding: DirectPcmEncoding,
+        attrs: android.media.AudioAttributes
+    ): Boolean {
+        val androidEncoding = toAndroidPcmEncoding(encoding) ?: return false
+        if (sampleRateHz < DirectOutputPolicy.MIN_DIRECT_SAMPLE_RATE_HZ) return false
+        return try {
+            val audioFormat = AudioFormat.Builder()
+                .setSampleRate(sampleRateHz)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                .setEncoding(androidEncoding)
+                .build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                AudioManager.getDirectPlaybackSupport(audioFormat, attrs) !=
+                    AudioManager.DIRECT_PLAYBACK_NOT_SUPPORTED
+            } else {
+                AudioTrack.isDirectPlaybackSupported(audioFormat, attrs)
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun toAndroidPcmEncoding(encoding: DirectPcmEncoding): Int? {
+        return when (encoding) {
+            DirectPcmEncoding.PCM_16BIT -> AudioFormat.ENCODING_PCM_16BIT
+            DirectPcmEncoding.PCM_24BIT ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    AudioFormat.ENCODING_PCM_24BIT_PACKED
+                } else {
+                    AudioFormat.ENCODING_PCM_FLOAT
+                }
+            DirectPcmEncoding.PCM_32BIT ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    AudioFormat.ENCODING_PCM_32BIT
+                } else {
+                    AudioFormat.ENCODING_PCM_FLOAT
+                }
+            DirectPcmEncoding.PCM_FLOAT -> AudioFormat.ENCODING_PCM_FLOAT
+            DirectPcmEncoding.OTHER -> null
+        }
+    }
+
+    private fun resolveActiveOutputDevice(
+        audioManager: AudioManager?
+    ): Pair<AudioDeviceType, AudioDeviceInfo?> {
+        val outputs = runCatching {
+            audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        }.getOrNull() ?: return AudioDeviceType.PHONE_SPEAKER to null
+
+        val usb = outputs.firstOrNull { device ->
+            device.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                device.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                device.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
+        }
+        if (usb != null) return AudioDeviceType.USB_DAC to usb
+
+        val wired = outputs.firstOrNull { device ->
+            device.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                device.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                device.type == AudioDeviceInfo.TYPE_LINE_ANALOG ||
+                device.type == AudioDeviceInfo.TYPE_LINE_DIGITAL ||
+                device.type == AudioDeviceInfo.TYPE_AUX_LINE
+        }
+        if (wired != null) return AudioDeviceType.WIRED_HEADPHONES to wired
+
+        val bluetooth = outputs.firstOrNull { device ->
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    (device.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                        device.type == AudioDeviceInfo.TYPE_BLE_SPEAKER))
+        }
+        if (bluetooth != null) return AudioDeviceType.BLUETOOTH to bluetooth
+
+        return AudioDeviceType.PHONE_SPEAKER to null
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun resolveCurrentStreamFormat(): Pair<Int, DirectPcmEncoding> {
+        val format: Format? = player.audioFormat
+        val sampleRate = format?.sampleRate?.takeIf { it > 0 }
+            ?: DirectOutputPolicy.STANDARD_MIXER_SAMPLE_RATE_HZ
+        val encoding = when (format?.pcmEncoding) {
+            C.ENCODING_PCM_16BIT -> DirectPcmEncoding.PCM_16BIT
+            C.ENCODING_PCM_24BIT -> DirectPcmEncoding.PCM_24BIT
+            C.ENCODING_PCM_32BIT -> DirectPcmEncoding.PCM_32BIT
+            C.ENCODING_PCM_FLOAT -> DirectPcmEncoding.PCM_FLOAT
+            else -> {
+                val mimeType = format?.sampleMimeType.orEmpty()
+                if (isLosslessMimeType(mimeType)) {
+                    DirectPcmEncoding.PCM_24BIT
+                } else {
+                    DirectPcmEncoding.PCM_16BIT
+                }
+            }
+        }
+        return sampleRate to encoding
     }
 
     /** Linear volume ramp on the main thread. Values are clamped; a NaN would silence the sink. */

@@ -74,3 +74,25 @@ data class AcousticNode(
 
 /** Internal stereo sample container holding left and right channel float samples. */
 internal data class StereoFrame(val left: Float, val right: Float)
+
+/**
+ * Pure PCM encoding classification for direct hi-res output negotiation (issue #291).
+ * Decoupled from Android framework constants so policy logic remains JVM-testable.
+ */
+enum class DirectPcmEncoding(val bitDepth: Int, val isHighResolution: Boolean) {
+    PCM_16BIT(bitDepth = 16, isHighResolution = false),
+    PCM_24BIT(bitDepth = 24, isHighResolution = true),
+    PCM_32BIT(bitDepth = 32, isHighResolution = true),
+    PCM_FLOAT(bitDepth = 32, isHighResolution = true),
+    OTHER(bitDepth = 0, isHighResolution = false)
+}
+
+/**
+ * Pure policy output describing whether to request direct PCM routing and float output.
+ */
+data class DirectOutputDecision(
+    val requestDirectPcm: Boolean,
+    val enableFloatOutput: Boolean,
+    val negotiatedSampleRateHz: Int,
+    val negotiatedEncoding: DirectPcmEncoding
+)
