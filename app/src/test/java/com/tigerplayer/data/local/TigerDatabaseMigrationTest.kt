@@ -398,4 +398,39 @@ class TigerDatabaseMigrationTest {
         }
         connection.close()
     }
+
+    @Test
+    fun migrate18To19_createsSmartPlaylistsTable_andPreservesExistingRows() {
+        var connection: SQLiteConnection = helper.createDatabase(18)
+        connection.execSQL(
+            """
+            INSERT INTO playlists (playlistId, name, artworkUri, createdAt, position)
+            VALUES (1, 'Manual Mix', NULL, 1720000000, 0)
+            """.trimIndent()
+        )
+        connection.close()
+
+        connection = helper.runMigrationsAndValidate(19)
+
+        connection.prepare("SELECT name FROM playlists WHERE playlistId = 1").use { stmt ->
+            assertTrue("existing playlists must survive migration to 19", stmt.step())
+            assertEquals("Manual Mix", stmt.getText(0))
+        }
+
+        connection.execSQL(
+            """
+            INSERT INTO smart_playlists
+                (name, rulesJson, sortBy, sortDescending, limitCount, createdAt, updatedAt)
+            VALUES
+                ('Liked & Forgotten', '{"type":"LIKED","isLiked":true}', 'PLAY_COUNT', 1, 50, 1720000000, 1720000001)
+            """.trimIndent()
+        )
+        connection.prepare("SELECT * FROM smart_playlists WHERE name = 'Liked & Forgotten'").use { stmt ->
+            assertTrue("smart_playlists row must be readable post-migration", stmt.step())
+            assertEquals("PLAY_COUNT", stmt.getText(stmt.columnIndex("sortBy")))
+            assertEquals(1, stmt.getInt(stmt.columnIndex("sortDescending")))
+            assertEquals(50, stmt.getInt(stmt.columnIndex("limitCount")))
+        }
+        connection.close()
+    }
 }

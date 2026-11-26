@@ -72,10 +72,17 @@ import com.tigerplayer.R
 import com.tigerplayer.data.model.Artist
 import com.tigerplayer.data.model.AudioTrack
 import com.tigerplayer.data.model.Playlist
+import com.tigerplayer.engine.library.SmartPlaylist
 import com.tigerplayer.ui.cloud.CloudViewModel
 import com.tigerplayer.ui.coverscreen.features.CoverScreenDiscoverView
 import com.tigerplayer.ui.coverscreen.library.CoverScreenAlbumsView
+import com.tigerplayer.ui.coverscreen.library.CoverScreenSmartPlaylistBuilderView
+import com.tigerplayer.ui.coverscreen.library.CoverScreenSmartPlaylistDetailView
 import com.tigerplayer.ui.dashboard.DashboardViewModel
+import com.tigerplayer.ui.library.SmartPlaylistViewModel
+import com.tigerplayer.ui.library.SmartRuleEditorState
+import com.tigerplayer.ui.library.toEditorState
+import com.tigerplayer.ui.library.toSmartPredicate
 import com.tigerplayer.ui.player.PlayerViewModel
 import com.tigerplayer.ui.settings.SettingsViewModel
 import com.tigerplayer.ui.theme.WitcherIcons
@@ -141,7 +148,8 @@ fun CoverScreenLibraryMenu(
     libraryViewModel: CoverScreenLibraryViewModel = hiltViewModel(),
     cloudViewModel: CloudViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    dashboardViewModel: DashboardViewModel = hiltViewModel()
+    dashboardViewModel: DashboardViewModel = hiltViewModel(),
+    smartPlaylistViewModel: SmartPlaylistViewModel = hiltViewModel()
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -152,6 +160,7 @@ fun CoverScreenLibraryMenu(
     val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val artists by libraryViewModel.artists.collectAsStateWithLifecycle()
     val playlists by playerViewModel.customPlaylists.collectAsStateWithLifecycle()
+    val smartPlaylists by smartPlaylistViewModel.smartPlaylists.collectAsStateWithLifecycle()
     val spotifyPlaylists by cloudViewModel.userPlaylists.collectAsStateWithLifecycle()
     val spotifyAuthenticated by cloudViewModel.isSpotifyAuthenticated.collectAsStateWithLifecycle()
     val selectedTab by libraryViewModel.selectedTab.collectAsStateWithLifecycle()
@@ -161,8 +170,12 @@ fun CoverScreenLibraryMenu(
     var showSettings by remember { mutableStateOf(false) }
     var selectedAlbum by remember { mutableStateOf<CoverScreenAlbum?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    var selectedSmartPlaylistId by remember { mutableStateOf<Long?>(null) }
+    var showSmartBuilder by remember { mutableStateOf(false) }
+    var editingSmartPlaylist by remember { mutableStateOf<SmartPlaylist?>(null) }
     var selectedArtist by remember { mutableStateOf<Artist?>(null) }
     var selectedPlaylistTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
+    var selectedSmartTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
     var playlistToEdit by remember { mutableStateOf<Playlist?>(null) }
     var importStatusMessage by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -257,6 +270,14 @@ fun CoverScreenLibraryMenu(
             it.name.contains(debouncedSearchQuery, ignoreCase = true)
         }
     }
+    val filteredSmartPlaylists = remember(smartPlaylists, debouncedSearchQuery) {
+        if (debouncedSearchQuery.isBlank()) smartPlaylists else smartPlaylists.filter {
+            it.name.contains(debouncedSearchQuery, ignoreCase = true)
+        }
+    }
+    val selectedSmartPlaylist = remember(smartPlaylists, selectedSmartPlaylistId) {
+        smartPlaylists.find { it.id == selectedSmartPlaylistId }
+    }
     val filteredSpotifyPlaylists = remember(spotifyPlaylists, debouncedSearchQuery) {
         if (debouncedSearchQuery.isBlank()) spotifyPlaylists else spotifyPlaylists.filter {
             it.name.contains(debouncedSearchQuery, ignoreCase = true)
@@ -269,6 +290,11 @@ fun CoverScreenLibraryMenu(
     BackHandler(enabled = true) {
         when {
             showSettings -> showSettings = false
+            showSmartBuilder -> {
+                showSmartBuilder = false
+                editingSmartPlaylist = null
+            }
+            selectedSmartPlaylist != null -> selectedSmartPlaylistId = null
             selectedAlbum != null -> selectedAlbum = null
             selectedPlaylist != null -> selectedPlaylist = null
             selectedArtist != null -> selectedArtist = null
@@ -285,6 +311,15 @@ fun CoverScreenLibraryMenu(
     LaunchedEffect(selectedPlaylist?.id) {
         val playlistId = selectedPlaylist?.id ?: return@LaunchedEffect
         playerViewModel.getPlaylistTracks(playlistId).collect { selectedPlaylistTracks = it }
+    }
+
+    LaunchedEffect(selectedSmartPlaylist) {
+        val sp = selectedSmartPlaylist
+        if (sp == null) {
+            selectedSmartTracks = emptyList()
+        } else {
+            smartPlaylistViewModel.observeTracks(sp).collect { selectedSmartTracks = it }
+        }
     }
 
     LaunchedEffect(spotifyAuthenticated) {
@@ -322,6 +357,60 @@ fun CoverScreenLibraryMenu(
                 CoverScreenSettingsView(
                     viewModel = settingsViewModel,
                     onClose = { showSettings = false }
+                )
+            } else if (showSmartBuilder) {
+                val editing = editingSmartPlaylist
+                CoverScreenSmartPlaylistBuilderView(
+                    initialState = editing?.toEditorState() ?: SmartRuleEditorState(),
+                    presets = smartPlaylistViewModel.starterPresets,
+                    isEditing = editing != null,
+                    onBack = {
+                        showSmartBuilder = false
+                        editingSmartPlaylist = null
+                    },
+                    onSave = { editorState ->
+                        val predicate = editorState.toSmartPredicate()
+                        val limit = editorState.limitText.toIntOrNull()?.takeIf { it > 0 }
+                        if (editing != null) {
+                            smartPlaylistViewModel.updateSmartPlaylist(
+                                existing = editing,
+                                name = editorState.name,
+                                predicate = predicate,
+                                sortBy = editorState.sortBy,
+                                sortDescending = editorState.sortDescending,
+                                limitCount = limit
+                            )
+                        } else {
+                            smartPlaylistViewModel.createSmartPlaylist(
+                                name = editorState.name,
+                                predicate = predicate,
+                                sortBy = editorState.sortBy,
+                                sortDescending = editorState.sortDescending,
+                                limitCount = limit
+                            )
+                        }
+                        showSmartBuilder = false
+                        editingSmartPlaylist = null
+                    }
+                )
+            } else if (selectedSmartPlaylist != null) {
+                CoverScreenSmartPlaylistDetailView(
+                    smartPlaylist = selectedSmartPlaylist,
+                    tracks = selectedSmartTracks,
+                    onBack = { selectedSmartPlaylistId = null },
+                    onPlayAll = smartPlaylistViewModel::playAll,
+                    onShufflePlay = smartPlaylistViewModel::shufflePlay,
+                    onQueueAll = smartPlaylistViewModel::queueAll,
+                    onPlayTrack = { track -> smartPlaylistViewModel.playTrack(track, selectedSmartTracks) },
+                    onQueueTrack = smartPlaylistViewModel::addToQueue,
+                    onEditRules = {
+                        editingSmartPlaylist = selectedSmartPlaylist
+                        showSmartBuilder = true
+                    },
+                    onDelete = {
+                        smartPlaylistViewModel.deleteSmartPlaylist(selectedSmartPlaylist.id)
+                        selectedSmartPlaylistId = null
+                    }
                 )
             } else if (selectedPlaylist != null) {
                 val playlist = selectedPlaylist!!
@@ -724,6 +813,12 @@ fun CoverScreenLibraryMenu(
                                 },
                                 onCreatePlaylist = { name ->
                                     playerViewModel.createPlaylist(name)
+                                },
+                                smartPlaylists = filteredSmartPlaylists,
+                                onSmartPlaylistSelected = { selectedSmartPlaylistId = it.id },
+                                onCreateSmartPlaylist = {
+                                    editingSmartPlaylist = null
+                                    showSmartBuilder = true
                                 }
                             )
 

@@ -20,6 +20,7 @@ import com.tigerplayer.data.local.entity.DevicePresetEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.tigerplayer.data.local.entity.SmartPlaylistEntity
 import com.google.gson.GsonBuilder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
@@ -63,7 +64,8 @@ class BackupManager @Inject constructor(
                     trackRefCount = manifest.playlists.sumOf { it.tracks.size },
                     historyCount = manifest.history.size,
                     audioDeviceCount = manifest.audioDevices.size,
-                    devicePresetCount = manifest.devicePresets.size
+                    devicePresetCount = manifest.devicePresets.size,
+                    smartPlaylistCount = manifest.smartPlaylists.size
                 )
             )
         } catch (e: Exception) {
@@ -100,6 +102,7 @@ class BackupManager @Inject constructor(
             restoreHistory(manifest.history, strategy)
             val restoredDevices = restoreAudioDevices(manifest.audioDevices, strategy)
             val restoredPresets = restorePresets(manifest.devicePresets, strategy)
+            val restoredSmartPlaylists = restoreSmartPlaylists(manifest.smartPlaylists, strategy)
 
             val knownTrackIds = tigerDao.getCachedTrackIdsSync().toHashSet()
             val unresolvedByPlaylist = computeUnresolvedByPlaylist(manifest.playlists, knownTrackIds)
@@ -112,6 +115,7 @@ class BackupManager @Inject constructor(
                     historyCount = manifest.history.size,
                     audioDeviceCount = restoredDevices,
                     devicePresetCount = restoredPresets,
+                    smartPlaylistCount = restoredSmartPlaylists,
                     unresolvedTrackCount = unresolvedTrackCount,
                     unresolvedByPlaylist = unresolvedByPlaylist
                 )
@@ -182,6 +186,17 @@ class BackupManager @Inject constructor(
                 formFactor = preset.formFactor
             )
         }
+        val smartPlaylists = playlistDao.getAllSmartPlaylistsSync().map { smart ->
+            SmartPlaylistBackup(
+                name = smart.name,
+                rulesJson = smart.rulesJson,
+                sortBy = smart.sortBy,
+                sortDescending = smart.sortDescending,
+                limitCount = smart.limitCount,
+                createdAt = smart.createdAt,
+                updatedAt = smart.updatedAt
+            )
+        }
         return BackupManifest(
             appVersionName = currentAppVersionName(),
             createdAtEpochMs = System.currentTimeMillis(),
@@ -189,7 +204,8 @@ class BackupManager @Inject constructor(
             playlists = playlists,
             history = history,
             audioDevices = audioDevices,
-            devicePresets = presets
+            devicePresets = presets,
+            smartPlaylists = smartPlaylists
         )
     }
 
@@ -335,6 +351,31 @@ class BackupManager @Inject constructor(
             audioDeviceDao.upsertPreset(entity)
         }
         return presets.size
+    }
+
+    private suspend fun restoreSmartPlaylists(
+        smartPlaylists: List<SmartPlaylistBackup>,
+        strategy: RestoreStrategy
+    ): Int {
+        if (strategy == RestoreStrategy.REPLACE) {
+            playlistDao.clearAllSmartPlaylists()
+        }
+        if (smartPlaylists.isEmpty()) return 0
+        smartPlaylists.forEach { backup ->
+            playlistDao.insertSmartPlaylist(
+                SmartPlaylistEntity(
+                    id = 0L,
+                    name = backup.name,
+                    rulesJson = backup.rulesJson,
+                    sortBy = backup.sortBy,
+                    sortDescending = backup.sortDescending,
+                    limitCount = backup.limitCount,
+                    createdAt = backup.createdAt,
+                    updatedAt = backup.updatedAt
+                )
+            )
+        }
+        return smartPlaylists.size
     }
 
     private fun computeUnresolvedByPlaylist(
