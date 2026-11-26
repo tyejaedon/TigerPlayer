@@ -156,6 +156,7 @@ class AudioPlayerService : MediaLibraryService() {
     private var platformAudioAttributes: android.media.AudioAttributes? = null
     private var lastDirectOutputDecision: DirectOutputDecision? = null
     private var lastPreferredAudioDeviceId: Int? = null
+    private var lastOffloadEnabled = false
 
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -291,12 +292,18 @@ class AudioPlayerService : MediaLibraryService() {
         if (initialDecision.requestDirectPcm && initialRoute.second != null) {
             player.setPreferredAudioDevice(initialRoute.second)
         }
+        adaptiveDspEngine.updateOutputRouteState(
+            routeLabel = routeLabelFor(initialRoute.first),
+            isDirectOutput = initialDecision.requestDirectPcm,
+            isOffloadActive = lastOffloadEnabled
+        )
 
         serviceScope.launch {
             val savedModeName = playbackPrefs.acousticEnvironmentMode.firstOrNull() ?: AcousticEnvironmentMode.STUDIO.name
             val savedMode = runCatching { AcousticEnvironmentMode.valueOf(savedModeName) }
                 .getOrDefault(AcousticEnvironmentMode.STUDIO)
             adaptiveDspEngine.setAcousticEnvironmentMode(savedMode)
+            syncOffloadWithDspIfChanged()
         }
 
         serviceScope.launch {
@@ -378,6 +385,7 @@ class AudioPlayerService : MediaLibraryService() {
                         preventClipping = preventClipping,
                         isBitPerfect = isBitPerfectMode
                     )
+                    syncOffloadWithDspIfChanged()
                 }
         }
 
@@ -387,6 +395,7 @@ class AudioPlayerService : MediaLibraryService() {
                 .distinctUntilChanged()
                 .collect { preset ->
                     adaptiveDspEngine.setCrossfeedPreset(preset)
+                    syncOffloadWithDspIfChanged()
                 }
         }
 
@@ -424,6 +433,15 @@ class AudioPlayerService : MediaLibraryService() {
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 updateReplayGainForMediaItem(mediaItem)
+            }
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                val audioMime = player.audioFormat?.sampleMimeType
+                if (!audioMime.isNullOrBlank()) {
+                    adaptiveDspEngine.setInputStreamInfo(
+                        codec = codecLabelFor(audioMime),
+                        isLossless = isLosslessMimeType(audioMime)
+                    )
+                }
             }
             override fun onMetadata(metadata: Metadata) {
                 val info = ReplayGainTagParser.parseFromMetadata(metadata)
@@ -507,12 +525,18 @@ class AudioPlayerService : MediaLibraryService() {
         )
 
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val (deviceType, candidateDevice) = resolveActiveOutputDevice(audioManager)
         val preferredDevice = if (lastDirectOutputDecision?.requestDirectPcm == true) {
-            resolveActiveOutputDevice(audioManager).second
+            candidateDevice
         } else {
             null
         }
-        launchSinkTransition(bitPerfect = enabled, preferredDevice = preferredDevice)
+        launchSinkTransition(
+            bitPerfect = enabled,
+            offloadEnabled = shouldAllowOffload(),
+            preferredDevice = preferredDevice,
+            routeLabel = routeLabelFor(deviceType)
+        )
     }
 
     /**
@@ -538,8 +562,14 @@ class AudioPlayerService : MediaLibraryService() {
         )
         val preferredDevice = if (decision.requestDirectPcm) candidateDevice else null
         val preferredDeviceId = preferredDevice?.id
+        val routeLabel = routeLabelFor(deviceType)
 
         if (decision == lastDirectOutputDecision && preferredDeviceId == lastPreferredAudioDeviceId) {
+            syncSignalPathOutputState(
+                routeLabel = routeLabel,
+                isDirect = decision.requestDirectPcm,
+                isOffload = lastOffloadEnabled
+            )
             return
         }
         lastDirectOutputDecision = decision
@@ -553,12 +583,23 @@ class AudioPlayerService : MediaLibraryService() {
             )
         }
 
-        launchSinkTransition(bitPerfect = isBitPerfectMode, preferredDevice = preferredDevice)
+        launchSinkTransition(
+            bitPerfect = isBitPerfectMode,
+            offloadEnabled = shouldAllowOffload(),
+            preferredDevice = preferredDevice,
+            routeLabel = routeLabel
+        )
     }
 
     @OptIn(UnstableApi::class)
-    private fun launchSinkTransition(bitPerfect: Boolean, preferredDevice: AudioDeviceInfo?) {
-        val offloadMode = if (bitPerfect) {
+    private fun launchSinkTransition(
+        bitPerfect: Boolean,
+        offloadEnabled: Boolean = bitPerfect,
+        preferredDevice: AudioDeviceInfo?,
+        routeLabel: String? = null
+    ) {
+        lastOffloadEnabled = offloadEnabled
+        val offloadMode = if (offloadEnabled) {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
         } else {
             AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
@@ -604,6 +645,12 @@ class AudioPlayerService : MediaLibraryService() {
                     if (!bitPerfect) {
                         currentProfile?.let { applyProfileToDsp(it) }
                     }
+
+                    syncSignalPathOutputState(
+                        routeLabel = routeLabel,
+                        isDirect = preferredDevice != null || lastDirectOutputDecision?.requestDirectPcm == true,
+                        isOffload = offloadEnabled
+                    )
 
                     if (wasPlaying) {
                         rampVolume(from = 0f, to = targetVolume, stepDelay = FADE_IN_STEP)
@@ -742,13 +789,8 @@ class AudioPlayerService : MediaLibraryService() {
         }
     }
 
-    private fun applyProfileToDsp(profile: PeqProfile) {
-        if (isBitPerfectMode) return
-
-        // Shared with the offload transition so both agree on the resulting volume.
-        player.volume = OffloadVolumePolicy.preampVolume(profile.preamp)
-
-        val acousticNodes = profile.bands.mapIndexed { index, band ->
+    private fun toAcousticNodes(profile: PeqProfile): List<AcousticNode> {
+        return profile.bands.mapIndexed { index, band ->
             val type = when (band.type.uppercase()) {
                 "LS" -> FilterType.LOW_SHELF
                 "HS" -> FilterType.HIGH_SHELF
@@ -762,8 +804,15 @@ class AudioPlayerService : MediaLibraryService() {
                 qFactor = band.q.coerceIn(0.2f, 8f)
             )
         }
+    }
 
-        adaptiveDspEngine.updateAcousticNodes(acousticNodes)
+    private fun applyProfileToDsp(profile: PeqProfile) {
+        if (isBitPerfectMode) return
+
+        // Shared with the offload transition so both agree on the resulting volume.
+        player.volume = OffloadVolumePolicy.preampVolume(profile.preamp)
+
+        adaptiveDspEngine.updateAcousticNodes(toAcousticNodes(profile))
     }
 
     private fun maybeEmitAudioReactiveHaptic(bass: Float, energy: Float, flux: Float) {
@@ -1072,12 +1121,87 @@ class AudioPlayerService : MediaLibraryService() {
     }
 
     fun loadAutoEqPreset(rawText: String, profileName: String) {
-        currentProfile = AutoEqParser.parse(rawText, profileName)
+        val parsed = AutoEqParser.parse(rawText, profileName)
+        currentProfile = parsed
         if (isBitPerfectMode) {
             Log.i(TAG, "Bit-perfect route enabled; storing PEQ profile without activating app DSP")
             return
         }
-        setAudioOffloadEnabled(false)
+        val wouldBypass = adaptiveDspEngine.wouldBypassWithNodes(toAcousticNodes(parsed))
+        val wantOffload = adaptiveDspEngine.isLosslessStream() && wouldBypass
+        if (wantOffload != lastOffloadEnabled) {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val (deviceType, candidateDevice) = resolveActiveOutputDevice(audioManager)
+            val preferredDevice = if (lastDirectOutputDecision?.requestDirectPcm == true) candidateDevice else null
+            launchSinkTransition(
+                bitPerfect = false,
+                offloadEnabled = wantOffload,
+                preferredDevice = preferredDevice,
+                routeLabel = routeLabelFor(deviceType)
+            )
+        } else {
+            applyProfileToDsp(parsed)
+        }
+    }
+
+    private fun routeLabelFor(deviceType: AudioDeviceType): String = when (deviceType) {
+        AudioDeviceType.USB_DAC -> "USB DAC"
+        AudioDeviceType.WIRED_HEADPHONES -> "Wired Headphones"
+        AudioDeviceType.BLUETOOTH -> "Bluetooth"
+        AudioDeviceType.PHONE_SPEAKER -> "Built-in Speaker"
+    }
+
+    private fun codecLabelFor(mimeType: String?): String {
+        val lower = mimeType.orEmpty().lowercase()
+        return when {
+            lower.contains("flac") -> "FLAC"
+            lower.contains("alac") -> "ALAC"
+            lower.contains("wav") || lower.contains("x-wav") -> "WAV"
+            lower.contains("aiff") -> "AIFF"
+            lower.contains("mpeg") || lower.contains("mp3") -> "MP3"
+            lower.contains("mp4a") || lower.contains("aac") -> "AAC"
+            lower.contains("opus") -> "OPUS"
+            lower.contains("vorbis") -> "VORBIS"
+            lower.contains("raw") || lower.contains("pcm") -> "PCM"
+            else -> ""
+        }
+    }
+
+    private fun shouldAllowOffload(): Boolean {
+        return isBitPerfectMode || (adaptiveDspEngine.isLosslessStream() && !adaptiveDspEngine.isActive())
+    }
+
+    private fun syncSignalPathOutputState(
+        routeLabel: String? = null,
+        isDirect: Boolean = lastDirectOutputDecision?.requestDirectPcm == true,
+        isOffload: Boolean = lastOffloadEnabled
+    ) {
+        val resolvedLabel = routeLabel ?: run {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            routeLabelFor(resolveActiveOutputDevice(audioManager).first)
+        }
+        adaptiveDspEngine.updateOutputRouteState(
+            routeLabel = resolvedLabel,
+            isDirectOutput = isDirect,
+            isOffloadActive = isOffload
+        )
+    }
+
+    private fun syncOffloadWithDspIfChanged() {
+        val wantOffload = shouldAllowOffload()
+        if (wantOffload == lastOffloadEnabled) {
+            syncSignalPathOutputState(isOffload = wantOffload)
+            return
+        }
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val (deviceType, candidateDevice) = resolveActiveOutputDevice(audioManager)
+        val preferredDevice = if (lastDirectOutputDecision?.requestDirectPcm == true) candidateDevice else null
+        launchSinkTransition(
+            bitPerfect = isBitPerfectMode,
+            offloadEnabled = wantOffload,
+            preferredDevice = preferredDevice,
+            routeLabel = routeLabelFor(deviceType)
+        )
     }
 
     private fun invalidateCustomLayout() {
@@ -1103,9 +1227,12 @@ class AudioPlayerService : MediaLibraryService() {
 
     private fun updateReplayGainForMediaItem(mediaItem: MediaItem?) {
         val extras = mediaItem?.mediaMetadata?.extras
-        val mimeType = extras?.getString(MediaControllerManager.META_MIME_TYPE).orEmpty()
+        val mimeType = extras?.getString(MediaControllerManager.META_MIME_TYPE)
+            ?: mediaItem?.localConfiguration?.mimeType
+            ?: player.audioFormat?.sampleMimeType
+            ?: ""
         val isLossless = isLosslessMimeType(mimeType)
-        adaptiveDspEngine.setIsLosslessStream(isLossless)
+        adaptiveDspEngine.setInputStreamInfo(codec = codecLabelFor(mimeType), isLossless = isLossless)
 
         val trackDb = if (extras?.containsKey(MediaControllerManager.META_REPLAYGAIN_TRACK_DB) == true) {
             extras.getDouble(MediaControllerManager.META_REPLAYGAIN_TRACK_DB)
@@ -1133,6 +1260,32 @@ class AudioPlayerService : MediaLibraryService() {
             albumPeak = albumPeak,
             isSequentialAlbumPlay = isSequential
         )
+        syncOffloadOnTrackTransition()
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun syncOffloadOnTrackTransition() {
+        val wantOffload = shouldAllowOffload()
+        if (wantOffload == lastOffloadEnabled) {
+            syncSignalPathOutputState(isOffload = wantOffload)
+            return
+        }
+        if (offloadTransitionJob?.isActive == true) return
+        lastOffloadEnabled = wantOffload
+        val offloadMode = if (wantOffload) {
+            AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
+        } else {
+            AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
+        }
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setAudioOffloadPreferences(
+                AudioOffloadPreferences.Builder()
+                    .setAudioOffloadMode(offloadMode)
+                    .build()
+            )
+            .build()
+        syncSignalPathOutputState(isOffload = wantOffload)
     }
 
     private fun isLosslessMimeType(mimeType: String): Boolean {
@@ -1247,6 +1400,7 @@ class AudioPlayerService : MediaLibraryService() {
                     val mode = runCatching { AcousticEnvironmentMode.valueOf(modeName) }
                         .getOrDefault(AcousticEnvironmentMode.STUDIO)
                     adaptiveDspEngine.setAcousticEnvironmentMode(mode)
+                    syncOffloadWithDspIfChanged()
                     serviceScope.launch {
                         playbackPrefs.saveAcousticEnvironmentMode(mode.name)
                     }

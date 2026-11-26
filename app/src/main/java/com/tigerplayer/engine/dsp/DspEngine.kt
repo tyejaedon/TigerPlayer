@@ -57,7 +57,8 @@ class AdaptiveDspEngine @Inject constructor(
         private const val REPLAY_GAIN_RAMP_SEC = 0.005f // 5ms slew-rate ramp for click-free ReplayGain transitions
     }
 
-    private var isActive = true
+    private var isActive = false
+    private var isConfigured = false
     private var inputEnded = false
     @Volatile private var autoMakeupGain = 1.0f
     private val replayGainTargetBits = AtomicInteger(java.lang.Float.floatToRawIntBits(1.0f))
@@ -74,6 +75,15 @@ class AdaptiveDspEngine @Inject constructor(
     @Volatile private var isLosslessStream = false
     @Volatile private var hasPositiveEqBoost = false
     @Volatile private var compositePeakDb = 0.0f
+    @Volatile private var activeEqBandCount = 0
+    @Volatile private var inputCodecLabel = ""
+    @Volatile private var outputRouteLabel = "Built-in Speaker"
+    @Volatile private var isDirectOutputActive = false
+    @Volatile private var isOffloadActive = false
+
+    private val _signalPathState = MutableStateFlow(SignalPathState())
+    /** StateFlow emitting live signal-path telemetry (format, DSP mode, output route). */
+    val signalPathState: StateFlow<SignalPathState> = _signalPathState.asStateFlow()
 
     private var buffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var outputBuffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
@@ -363,6 +373,43 @@ class AdaptiveDspEngine @Inject constructor(
         }
 
         deviceCompensationFilters = newDeviceFilters
+        outputRouteLabel = resolveOutputRouteLabel(devices, isBuiltInSpeakerOutput)
+        publishSignalPathState()
+    }
+
+    private fun resolveOutputRouteLabel(
+        devices: Array<AudioDeviceInfo>,
+        builtInSpeakerOnly: Boolean
+    ): String {
+        if (devices.any {
+                it.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                    it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                    it.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
+            }
+        ) {
+            return "USB DAC"
+        }
+        if (devices.any {
+                it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                    it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                    it.type == AudioDeviceInfo.TYPE_LINE_ANALOG ||
+                    it.type == AudioDeviceInfo.TYPE_LINE_DIGITAL ||
+                    it.type == AudioDeviceInfo.TYPE_AUX_LINE
+            }
+        ) {
+            return "Wired Headphones"
+        }
+        if (devices.any {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        (it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                            it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER))
+            }
+        ) {
+            return "Bluetooth"
+        }
+        return if (builtInSpeakerOnly) "Built-in Speaker" else "Audio Output"
     }
 
     private fun isSpeakerLikeDevice(type: Int): Boolean {
@@ -438,6 +485,24 @@ class AdaptiveDspEngine @Inject constructor(
      */
     fun setIsLosslessStream(isLossless: Boolean) {
         this.isLosslessStream = isLossless
+        publishSignalPathState()
+    }
+
+    /** Updates input stream codec label and lossless flag for signal-path telemetry. */
+    fun setInputStreamInfo(codec: String, isLossless: Boolean) {
+        this.inputCodecLabel = codec
+        this.isLosslessStream = isLossless
+        publishSignalPathState()
+    }
+
+    /** Updates output sink route label, direct PCM status, and hardware offload state for telemetry. */
+    fun updateOutputRouteState(routeLabel: String, isDirectOutput: Boolean, isOffloadActive: Boolean) {
+        if (routeLabel.isNotBlank()) {
+            this.outputRouteLabel = routeLabel
+        }
+        this.isDirectOutputActive = isDirectOutput
+        this.isOffloadActive = isOffloadActive
+        publishSignalPathState()
     }
 
     /** Returns whether the current stream is flagged as lossless audio. */
@@ -446,10 +511,85 @@ class AdaptiveDspEngine @Inject constructor(
     /** Updates bit-perfect DSP bypass state. */
     fun setBitPerfect(enabled: Boolean) {
         this.isBitPerfect = enabled
+        recalculateReplayGain()
     }
 
     /** Returns whether bit-perfect DSP bypass is active. */
     fun isBitPerfect(): Boolean = isBitPerfect
+
+    /** Returns true if applying [nodes] would leave the processor in bit-perfect bypass mode. */
+    fun wouldBypassWithNodes(nodes: List<AcousticNode>): Boolean = shouldBypassDsp(nodes)
+
+    private fun isEqEffectivelyFlat(nodes: List<AcousticNode> = pendingNodes): Boolean {
+        return nodes.all { abs(it.gainDb) <= 0.001f }
+    }
+
+    private fun shouldBypassDsp(nodes: List<AcousticNode> = pendingNodes): Boolean {
+        if (isBitPerfect) return true
+        if (!isLosslessStream) return false
+        val eqFlat = isEqEffectivelyFlat(nodes)
+        val envBypassed = acousticEnvironmentMode == AcousticEnvironmentMode.STUDIO
+        val crossfeedBypassed = crossfeedPreset == CrossfeedPreset.OFF || isBuiltInSpeakerOutput
+        val prismBypassed = prismMode == PrismMode.BYPASS
+        val replayGainBypassed = abs(getTargetReplayGain() - 1.0f) <= 0.0001f &&
+            abs(currentReplayGain - 1.0f) <= 0.0001f
+        return eqFlat && envBypassed && crossfeedBypassed && prismBypassed && replayGainBypassed
+    }
+
+    private fun bitDepthForEncoding(encoding: Int): Int = when (encoding) {
+        C.ENCODING_PCM_16BIT -> 16
+        C.ENCODING_PCM_24BIT -> 24
+        C.ENCODING_PCM_32BIT, C.ENCODING_PCM_FLOAT -> 32
+        else -> 0
+    }
+
+    private fun encodingLabelFor(encoding: Int): String = when (encoding) {
+        C.ENCODING_PCM_16BIT -> "16-bit PCM"
+        C.ENCODING_PCM_24BIT -> "24-bit PCM"
+        C.ENCODING_PCM_32BIT -> "32-bit PCM"
+        C.ENCODING_PCM_FLOAT -> "32-bit Float"
+        else -> ""
+    }
+
+    private fun publishSignalPathState() {
+        val inputFmt = inputAudioFormat
+        val hasFormat = isConfigured && inputFmt != AudioFormat.NOT_SET
+        val bypass = shouldBypassDsp()
+        val inBits = if (hasFormat) bitDepthForEncoding(inputFmt.encoding) else 0
+        val inRate = if (hasFormat) inputFmt.sampleRate else 0
+        val inChannels = if (hasFormat) inputFmt.channelCount else 0
+        val resolvedCodec = inputCodecLabel.ifBlank {
+            if (hasFormat) "PCM" else ""
+        }
+        val outEncoding = when {
+            !hasFormat -> C.ENCODING_INVALID
+            bypass -> inputFmt.encoding
+            else -> C.ENCODING_PCM_16BIT
+        }
+        val outBits = if (hasFormat) bitDepthForEncoding(outEncoding) else 0
+        val outLabel = if (hasFormat) encodingLabelFor(outEncoding) else ""
+        val dspMode = if (bypass) {
+            SignalPathDspMode.DIRECT_BIT_PERFECT_BYPASS
+        } else {
+            SignalPathDspMode.FLOAT_32_PEQ_ACTIVE
+        }
+        _signalPathState.value = SignalPathState(
+            inputCodec = resolvedCodec,
+            inputBitDepth = inBits,
+            inputSampleRateHz = inRate,
+            inputChannelCount = inChannels,
+            isLosslessInput = isLosslessStream,
+            dspMode = dspMode,
+            activeEqBandCount = if (bypass) 0 else activeEqBandCount,
+            isBitPerfectBypass = bypass,
+            outputBitDepth = outBits,
+            outputSampleRateHz = inRate,
+            outputEncodingLabel = outLabel,
+            outputRouteLabel = outputRouteLabel,
+            isDirectOutput = isDirectOutputActive,
+            isOffloadActive = isOffloadActive
+        )
+    }
 
     /** Returns the current auto-makeup headroom gain multiplier [0.0, 1.0]. */
     fun getAutoMakeupGain(): Float = autoMakeupGain
@@ -470,6 +610,7 @@ class AdaptiveDspEngine @Inject constructor(
      */
     fun updateAcousticNodes(nodes: List<AcousticNode>) {
         pendingNodes = nodes
+        activeEqBandCount = nodes.count { abs(it.gainDb) > 0.001f }
         val sampleRate = getSampleRate()
 
         // Calculate true peak composite gain across spectrum rather than linear algebraic sum
@@ -492,6 +633,7 @@ class AdaptiveDspEngine @Inject constructor(
                 StateVariableFilter(node.filterType, sampleRate, node.frequency, node.gainDb, node.qFactor)
             }
         }
+        publishSignalPathState()
     }
 
     /**
@@ -501,6 +643,7 @@ class AdaptiveDspEngine @Inject constructor(
      */
     fun setAcousticEnvironmentMode(mode: AcousticEnvironmentMode) {
         acousticEnvironmentMode = mode
+        publishSignalPathState()
     }
 
     /**
@@ -508,6 +651,7 @@ class AdaptiveDspEngine @Inject constructor(
      */
     fun setCrossfeedPreset(preset: CrossfeedPreset) {
         crossfeedPreset = preset
+        publishSignalPathState()
     }
 
     /** Returns the currently configured [CrossfeedPreset]. */
@@ -536,6 +680,7 @@ class AdaptiveDspEngine @Inject constructor(
      */
     fun setPrismMode(mode: PrismMode) {
         prismMode = mode
+        publishSignalPathState()
     }
 
     /**
@@ -551,6 +696,7 @@ class AdaptiveDspEngine @Inject constructor(
             beats = beats.coerceIn(0f, 1f),
             instruments = instruments.coerceIn(0f, 1f)
         )
+        publishSignalPathState()
     }
 
     /**
@@ -614,6 +760,7 @@ class AdaptiveDspEngine @Inject constructor(
             isBitPerfect = isBitPerfect
         )
         replayGainTargetBits.set(java.lang.Float.floatToRawIntBits(linearGain))
+        publishSignalPathState()
     }
 
     /**
@@ -656,8 +803,12 @@ class AdaptiveDspEngine @Inject constructor(
                 inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT
 
         if (!isSupported) {
+            isConfigured = false
             isActive = false
             lastInputFormat = AudioFormat.NOT_SET
+            this.inputAudioFormat = AudioFormat.NOT_SET
+            this.outputAudioFormat = AudioFormat.NOT_SET
+            publishSignalPathState()
             return inputAudioFormat
         }
 
@@ -667,23 +818,29 @@ class AdaptiveDspEngine @Inject constructor(
             isLosslessStream = true
         }
 
-        // Short-circuit identical format so Media3 reuses DefaultAudioSink without flushing.
-        if (isActive &&
+        val bypassNow = shouldBypassDsp()
+
+        // Short-circuit identical format and active state so Media3 reuses DefaultAudioSink without flushing.
+        if (isConfigured &&
+            isActive == !bypassNow &&
             outputAudioFormat != AudioFormat.NOT_SET &&
             lastInputFormat == inputAudioFormat
         ) {
-            return outputAudioFormat
+            return if (isActive) outputAudioFormat else AudioFormat.NOT_SET
         }
 
         // Preserve identical output AudioFormat and continuous DSP state when sample rate and
-        // channel count match (e.g., 16-bit to 24-bit FLAC track transitions).
-        if (isActive &&
+        // channel count match (e.g., 16-bit to 24-bit FLAC track transitions) while active.
+        if (isConfigured &&
+            !bypassNow &&
+            isActive &&
             outputAudioFormat != AudioFormat.NOT_SET &&
             lastInputFormat.sampleRate == inputAudioFormat.sampleRate &&
             lastInputFormat.channelCount == inputAudioFormat.channelCount
         ) {
             this.inputAudioFormat = inputAudioFormat
             this.lastInputFormat = inputAudioFormat
+            publishSignalPathState()
             return outputAudioFormat
         }
 
@@ -691,13 +848,19 @@ class AdaptiveDspEngine @Inject constructor(
         val isNewSampleRate = this.inputAudioFormat.sampleRate != inputAudioFormat.sampleRate
         this.inputAudioFormat = inputAudioFormat
         this.lastInputFormat = inputAudioFormat
-        // Keep internal math in float, but emit PCM_16BIT so downstream Media3 processors
-        // (notably silence skipping) can always configure successfully.
-        this.outputAudioFormat = AudioFormat(
-            inputAudioFormat.sampleRate,
-            inputAudioFormat.channelCount,
-            C.ENCODING_PCM_16BIT
-        )
+        this.isConfigured = true
+        this.isActive = !bypassNow
+        // Keep internal math in float when active, emitting PCM_16BIT for downstream compatibility;
+        // when bypassed, preserve inputAudioFormat untouched.
+        this.outputAudioFormat = if (bypassNow) {
+            inputAudioFormat
+        } else {
+            AudioFormat(
+                inputAudioFormat.sampleRate,
+                inputAudioFormat.channelCount,
+                C.ENCODING_PCM_16BIT
+            )
+        }
 
         detectAndApplyDeviceProfile()
         updateLimiterCoefficients(inputAudioFormat.sampleRate)
@@ -717,16 +880,16 @@ class AdaptiveDspEngine @Inject constructor(
             currentReplayGain = getTargetReplayGain()
         }
 
-        isActive = true
-        return outputAudioFormat
+        publishSignalPathState()
+        return if (isActive()) outputAudioFormat else AudioFormat.NOT_SET
     }
 
     /**
-     * Indicates whether the processor is configured and active.
-     *
-     * @return True if active; false otherwise.
+     * Indicates whether the processor is configured and actively modifying audio.
+     * Returns false when bit-perfect bypass or flat lossless bypass is active so Media3
+     * can drop the processor and route directly to hardware offload / direct PCM.
      */
-    override fun isActive(): Boolean = isActive
+    override fun isActive(): Boolean = isConfigured && !shouldBypassDsp()
 
     /**
      * Reallocates or clears internal direct ByteBuffer for output frame storage.
@@ -768,7 +931,28 @@ class AdaptiveDspEngine @Inject constructor(
         val framesToProcess = remaining / inputFrameSize
         if (framesToProcess == 0) return
 
-        // Output is always PCM_16BIT (2 bytes per sample)
+        // Zero-allocation, zero-float-conversion byte-copy fast path when bypass is active
+        // and output encoding matches input encoding.
+        val bypassNow = shouldBypassDsp()
+        if (bypassNow &&
+            (outputAudioFormat == AudioFormat.NOT_SET || inputEncoding == outputAudioFormat.encoding)
+        ) {
+            val alignedBytes = framesToProcess * inputFrameSize
+            val outBuffer = replaceOutputBuffer(alignedBytes)
+            if (alignedBytes == remaining) {
+                outBuffer.put(inputBuffer)
+            } else {
+                val oldLimit = inputBuffer.limit()
+                inputBuffer.limit(inputBuffer.position() + alignedBytes)
+                outBuffer.put(inputBuffer)
+                inputBuffer.limit(oldLimit)
+                inputBuffer.position(oldLimit)
+            }
+            outBuffer.flip()
+            return
+        }
+
+        // Output is PCM_16BIT (2 bytes per sample) when active or converting mid-stream before reconfigure
         val requiredOutputBytes = framesToProcess * channels * 2
         val outBuffer = replaceOutputBuffer(requiredOutputBytes)
 
@@ -830,8 +1014,8 @@ class AdaptiveDspEngine @Inject constructor(
                 }
             }
 
-            // 1. HEADPHONE WIDENING (Optimized for transparency)
-            if (isHeadphones && channels == 2 && !localCrossfeedActive) {
+            // 1. HEADPHONE WIDENING (Optimized for transparency; skipped during bypass)
+            if (!bypassNow && isHeadphones && channels == 2 && !localCrossfeedActive) {
                 val mid = (sampleL + sampleR) * 0.5f
                 val side = (sampleL - sampleR) * 0.5f
                 val widenedSide = side * 1.02f
@@ -839,186 +1023,188 @@ class AdaptiveDspEngine @Inject constructor(
                 sampleR = mid - widenedSide
             }
 
-            // 2. APPLY FILTERS (SVF)
-            for (i in localDeviceFilters.indices) {
-                sampleL = localDeviceFilters[i].process(sampleL, 0)
-                if (channels == 2) sampleR = localDeviceFilters[i].process(sampleR, 1)
-            }
-
-            // FIX: Apply auto-makeup gain and ramped ReplayGain preamp before active EQ to prevent clicks & SVF clipping
-            val replayGainDiff = targetReplayGain - currentReplayGain
-            if (abs(replayGainDiff) <= maxReplayGainStep) {
-                currentReplayGain = targetReplayGain
-            } else {
-                currentReplayGain += if (replayGainDiff > 0f) maxReplayGainStep else -maxReplayGainStep
-            }
-            val totalInputGain = localAutoMakeupGain * currentReplayGain
-            var eqSampleL = sampleL * totalInputGain
-            var eqSampleR = sampleR * totalInputGain
-
-            for (i in localActiveFilters.indices) {
-                eqSampleL = localActiveFilters[i].process(eqSampleL, 0)
-                if (channels == 2) eqSampleR = localActiveFilters[i].process(eqSampleR, 1)
-            }
-
-            sampleL = eqSampleL
-            sampleR = eqSampleR
-
-            // 3. ACOUSTIC ENVIRONMENTS
-            when (localEnvironmentMode) {
-                AcousticEnvironmentMode.STUDIO -> Unit
-                AcousticEnvironmentMode.VINYL_WARMTH -> {
-                    val vinylFrame = applyVinylWarmth(sampleL, sampleR, channels, sampleRate)
-                    sampleL = vinylFrame.left
-                    sampleR = vinylFrame.right
+            if (!bypassNow) {
+                // 2. APPLY FILTERS (SVF)
+                for (i in localDeviceFilters.indices) {
+                    sampleL = localDeviceFilters[i].process(sampleL, 0)
+                    if (channels == 2) sampleR = localDeviceFilters[i].process(sampleR, 1)
                 }
-                AcousticEnvironmentMode.CONCERT_HALL -> {
-                    hallProcessor.process(sampleL, sampleR, channels)
-                    sampleL = hallProcessor.outL
-                    sampleR = hallProcessor.outR
-                }
-            }
 
-            // 3.5. BINAURAL CROSSFEED (Linear-phase Bauer / Linkwitz, auto-bypassed on built-in speakers)
-            crossfeedProcessor.process(
-                inputL = sampleL,
-                inputR = sampleR,
-                channels = channels,
-                preset = localCrossfeedPreset,
-                bypassForSpeaker = localBuiltInSpeaker,
-                isBitPerfect = localBitPerfect
-            )
-            sampleL = crossfeedProcessor.outL
-            sampleR = crossfeedProcessor.outR
-
-            // 4. PRISM ISOLATION (Linkwitz-Riley)
-            if (localPrismMode == PrismMode.ISOLATION) {
-                prismCurrentVocals += (localPrismTargetMix.vocals - prismCurrentVocals) * prismMixSmoothing
-                prismCurrentBeats += (localPrismTargetMix.beats - prismCurrentBeats) * prismMixSmoothing
-                prismCurrentInstruments += (localPrismTargetMix.instruments - prismCurrentInstruments) * prismMixSmoothing
-
-                val prismFrame = prismIsolator.process(
-                    left = sampleL,
-                    right = sampleR,
-                    channels = channels,
-                    vocalsGain = prismCurrentVocals,
-                    beatsGain = prismCurrentBeats,
-                    instrumentsGain = prismCurrentInstruments
-                )
-                sampleL = prismFrame.left
-                sampleR = prismFrame.right
-            }
-
-            // 5. ZERO-LATENCY TRUE-PEAK LIMITER & AGC (preserves sample-accurate gapless alignment)
-            val isOverImminent = baseOverImminent || currentReplayGain > 1.001f || targetReplayGain > 1.001f
-            val shouldBypassLimiter = (localLosslessStream && !isOverImminent) || localBitPerfect
-
-            val reduction = if (shouldBypassLimiter) {
-                1.0f
-            } else {
-                val currentPeak = max(abs(sampleL), abs(sampleR))
-                if (currentPeak > agcEnvelope) {
-                    agcEnvelope += agcAttackCoef * (currentPeak - agcEnvelope)
+                // FIX: Apply auto-makeup gain and ramped ReplayGain preamp before active EQ to prevent clicks & SVF clipping
+                val replayGainDiff = targetReplayGain - currentReplayGain
+                if (abs(replayGainDiff) <= maxReplayGainStep) {
+                    currentReplayGain = targetReplayGain
                 } else {
-                    agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
+                    currentReplayGain += if (replayGainDiff > 0f) maxReplayGainStep else -maxReplayGainStep
                 }
-                val effectivePeak = max(agcEnvelope, currentPeak)
-                if (effectivePeak > TRUE_PEAK_THRESHOLD) TRUE_PEAK_THRESHOLD / effectivePeak else 1.0f
-            }
+                val totalInputGain = localAutoMakeupGain * currentReplayGain
+                var eqSampleL = sampleL * totalInputGain
+                var eqSampleR = sampleR * totalInputGain
 
-            sampleL = (sampleL * reduction).coerceIn(-1.0f, 1.0f)
-            sampleR = (sampleR * reduction).coerceIn(-1.0f, 1.0f)
+                for (i in localActiveFilters.indices) {
+                    eqSampleL = localActiveFilters[i].process(eqSampleL, 0)
+                    if (channels == 2) eqSampleR = localActiveFilters[i].process(eqSampleR, 1)
+                }
 
-            // 6. REAL-TIME ANALYSIS (Gated by screen / visualizer visibility to save CPU and battery)
-            if (isSpectralAnalysisActive) {
-                val mono = (sampleL + sampleR) * 0.5f
-                val energy = abs(mono)
+                sampleL = eqSampleL
+                sampleR = eqSampleR
 
-                if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
-                    for (index in spectralBandFilters.indices) {
-                        val filtered = spectralBandFilters[index].process(mono)
-                        spectralBandAccumulators[index] += abs(filtered)
+                // 3. ACOUSTIC ENVIRONMENTS
+                when (localEnvironmentMode) {
+                    AcousticEnvironmentMode.STUDIO -> Unit
+                    AcousticEnvironmentMode.VINYL_WARMTH -> {
+                        val vinylFrame = applyVinylWarmth(sampleL, sampleR, channels, sampleRate)
+                        sampleL = vinylFrame.left
+                        sampleR = vinylFrame.right
                     }
-                } else {
-                    fftSpectralAnalyzer.pushSample(mono)
+                    AcousticEnvironmentMode.CONCERT_HALL -> {
+                        hallProcessor.process(sampleL, sampleR, channels)
+                        sampleL = hallProcessor.outL
+                        sampleR = hallProcessor.outR
+                    }
                 }
 
-                energyAccumulator += energy
-                analysisFrameCounter += 1
+                // 3.5. BINAURAL CROSSFEED (Linear-phase Bauer / Linkwitz, auto-bypassed on built-in speakers)
+                crossfeedProcessor.process(
+                    inputL = sampleL,
+                    inputR = sampleR,
+                    channels = channels,
+                    preset = localCrossfeedPreset,
+                    bypassForSpeaker = localBuiltInSpeaker,
+                    isBitPerfect = localBitPerfect
+                )
+                sampleL = crossfeedProcessor.outL
+                sampleR = crossfeedProcessor.outR
 
-                if (analysisFrameCounter >= 1024) {
-                    val analysisStartNs = System.nanoTime()
-                    val inv = 1f / analysisFrameCounter.toFloat()
-                    val energyAvg = (energyAccumulator * inv * 3.2f)
+                // 4. PRISM ISOLATION (Linkwitz-Riley)
+                if (localPrismMode == PrismMode.ISOLATION) {
+                    prismCurrentVocals += (localPrismTargetMix.vocals - prismCurrentVocals) * prismMixSmoothing
+                    prismCurrentBeats += (localPrismTargetMix.beats - prismCurrentBeats) * prismMixSmoothing
+                    prismCurrentInstruments += (localPrismTargetMix.instruments - prismCurrentInstruments) * prismMixSmoothing
 
-                    var rawSum = 0f
+                    val prismFrame = prismIsolator.process(
+                        left = sampleL,
+                        right = sampleR,
+                        channels = channels,
+                        vocalsGain = prismCurrentVocals,
+                        beatsGain = prismCurrentBeats,
+                        instrumentsGain = prismCurrentInstruments
+                    )
+                    sampleL = prismFrame.left
+                    sampleR = prismFrame.right
+                }
+
+                // 5. ZERO-LATENCY TRUE-PEAK LIMITER & AGC (preserves sample-accurate gapless alignment)
+                val isOverImminent = baseOverImminent || currentReplayGain > 1.001f || targetReplayGain > 1.001f
+                val shouldBypassLimiter = (localLosslessStream && !isOverImminent) || localBitPerfect
+
+                val reduction = if (shouldBypassLimiter) {
+                    1.0f
+                } else {
+                    val currentPeak = max(abs(sampleL), abs(sampleR))
+                    if (currentPeak > agcEnvelope) {
+                        agcEnvelope += agcAttackCoef * (currentPeak - agcEnvelope)
+                    } else {
+                        agcEnvelope += agcReleaseCoef * (currentPeak - agcEnvelope)
+                    }
+                    val effectivePeak = max(agcEnvelope, currentPeak)
+                    if (effectivePeak > TRUE_PEAK_THRESHOLD) TRUE_PEAK_THRESHOLD / effectivePeak else 1.0f
+                }
+
+                sampleL = (sampleL * reduction).coerceIn(-1.0f, 1.0f)
+                sampleR = (sampleR * reduction).coerceIn(-1.0f, 1.0f)
+
+                // 6. REAL-TIME ANALYSIS (Gated by screen / visualizer visibility to save CPU and battery)
+                if (isSpectralAnalysisActive) {
+                    val mono = (sampleL + sampleR) * 0.5f
+                    val energy = abs(mono)
+
                     if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
-                        for (index in 0 until 6) {
-                            val raw = spectralBandAccumulators[index] * inv
-                            rawBandEnergies[index] = raw
-                            rawSum += raw
+                        for (index in spectralBandFilters.indices) {
+                            val filtered = spectralBandFilters[index].process(mono)
+                            spectralBandAccumulators[index] += abs(filtered)
                         }
                     } else {
-                        val fftBands = fftSpectralAnalyzer.getLatestBandEnergies()
-                        for (index in 0 until 6) {
-                            val raw = fftBands[index]
-                            rawBandEnergies[index] = raw
-                            rawSum += raw
+                        fftSpectralAnalyzer.pushSample(mono)
+                    }
+
+                    energyAccumulator += energy
+                    analysisFrameCounter += 1
+
+                    if (analysisFrameCounter >= 1024) {
+                        val analysisStartNs = System.nanoTime()
+                        val inv = 1f / analysisFrameCounter.toFloat()
+                        val energyAvg = (energyAccumulator * inv * 3.2f)
+
+                        var rawSum = 0f
+                        if (localSpectralMode == SpectralAnalysisMode.BANDPASS) {
+                            for (index in 0 until 6) {
+                                val raw = spectralBandAccumulators[index] * inv
+                                rawBandEnergies[index] = raw
+                                rawSum += raw
+                            }
+                        } else {
+                            val fftBands = fftSpectralAnalyzer.getLatestBandEnergies()
+                            for (index in 0 until 6) {
+                                val raw = fftBands[index]
+                                rawBandEnergies[index] = raw
+                                rawSum += raw
+                            }
                         }
+
+                        val energyGate = clamp01(energyAvg)
+                        var bandSum = 0f
+                        for (index in 0 until 6) {
+                            val raw = rawBandEnergies[index]
+                            val targetNorm = (raw * 14f).coerceAtLeast(0f)
+                            val currentNorm = spectralBandNormalization[index]
+                            val coeff = if (targetNorm > currentNorm) 0.16f else 0.04f
+                            spectralBandNormalization[index] = currentNorm + (targetNorm - currentNorm) * coeff
+
+                            val ratio = if (rawSum > 1e-6f) raw / rawSum else 0f
+                            val normalized = (ratio * 6f * energyGate).coerceIn(0f, 1f)
+                            val adaptive = (raw / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
+                            val value = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
+                            normalizedBandEnergies[index] = value
+                            bandSum += value
+                        }
+
+                        val bassAvg = (normalizedBandEnergies[0] * 0.72f + normalizedBandEnergies[1] * 0.28f).coerceIn(0f, 1f)
+                        val midAvg = (normalizedBandEnergies[2] * 0.56f + normalizedBandEnergies[3] * 0.44f).coerceIn(0f, 1f)
+                        val trebleAvg = (normalizedBandEnergies[4] * 0.58f + normalizedBandEnergies[5] * 0.42f).coerceIn(0f, 1f)
+
+                        val weightedCentroid =
+                            normalizedBandEnergies[0] * 0.05f +
+                            normalizedBandEnergies[1] * 0.18f +
+                            normalizedBandEnergies[2] * 0.38f +
+                            normalizedBandEnergies[3] * 0.58f +
+                            normalizedBandEnergies[4] * 0.78f +
+                            normalizedBandEnergies[5] * 0.95f
+                        val centroid = if (bandSum > 1e-5f) weightedCentroid / bandSum else 0.5f
+                        val flux = max(0f, energyAvg - prevEnergy) * 2.2f
+                        prevEnergy += (energyAvg - prevEnergy) * 0.2f
+
+                        val elapsedMicros = (System.nanoTime() - analysisStartNs) / 1_000f
+                        val profileSmoothing = if (elapsedMicros > analysisCostMicrosSmoothed) 0.24f else 0.08f
+                        analysisCostMicrosSmoothed +=
+                            (elapsedMicros - analysisCostMicrosSmoothed) * profileSmoothing
+
+                        _audioReactiveFrame.value = AudioReactiveFrame(
+                            bass = clamp01(bassAvg),
+                            mid = clamp01(midAvg),
+                            treble = clamp01(trebleAvg),
+                            energy = clamp01(energyAvg),
+                            centroid = clamp01(centroid),
+                            flux = clamp01(flux),
+                            spectralBands = normalizedBandEnergies.toList(),
+                            analysisMode = localSpectralMode,
+                            analysisCostMicros = analysisCostMicrosSmoothed.coerceAtLeast(0f)
+                        )
+
+                        analysisFrameCounter = 0
+                        spectralBandAccumulators.fill(0f)
+                        energyAccumulator = 0f
                     }
-
-                    val energyGate = clamp01(energyAvg)
-                    var bandSum = 0f
-                    for (index in 0 until 6) {
-                        val raw = rawBandEnergies[index]
-                        val targetNorm = (raw * 14f).coerceAtLeast(0f)
-                        val currentNorm = spectralBandNormalization[index]
-                        val coeff = if (targetNorm > currentNorm) 0.16f else 0.04f
-                        spectralBandNormalization[index] = currentNorm + (targetNorm - currentNorm) * coeff
-
-                        val ratio = if (rawSum > 1e-6f) raw / rawSum else 0f
-                        val normalized = (ratio * 6f * energyGate).coerceIn(0f, 1f)
-                        val adaptive = (raw / (spectralBandNormalization[index] + 1e-5f)).coerceIn(0f, 1f)
-                        val value = (normalized * 0.55f + adaptive * 0.45f).coerceIn(0f, 1f)
-                        normalizedBandEnergies[index] = value
-                        bandSum += value
-                    }
-
-                    val bassAvg = (normalizedBandEnergies[0] * 0.72f + normalizedBandEnergies[1] * 0.28f).coerceIn(0f, 1f)
-                    val midAvg = (normalizedBandEnergies[2] * 0.56f + normalizedBandEnergies[3] * 0.44f).coerceIn(0f, 1f)
-                    val trebleAvg = (normalizedBandEnergies[4] * 0.58f + normalizedBandEnergies[5] * 0.42f).coerceIn(0f, 1f)
-
-                    val weightedCentroid =
-                        normalizedBandEnergies[0] * 0.05f +
-                        normalizedBandEnergies[1] * 0.18f +
-                        normalizedBandEnergies[2] * 0.38f +
-                        normalizedBandEnergies[3] * 0.58f +
-                        normalizedBandEnergies[4] * 0.78f +
-                        normalizedBandEnergies[5] * 0.95f
-                    val centroid = if (bandSum > 1e-5f) weightedCentroid / bandSum else 0.5f
-                    val flux = max(0f, energyAvg - prevEnergy) * 2.2f
-                    prevEnergy += (energyAvg - prevEnergy) * 0.2f
-
-                    val elapsedMicros = (System.nanoTime() - analysisStartNs) / 1_000f
-                    val profileSmoothing = if (elapsedMicros > analysisCostMicrosSmoothed) 0.24f else 0.08f
-                    analysisCostMicrosSmoothed +=
-                        (elapsedMicros - analysisCostMicrosSmoothed) * profileSmoothing
-
-                    _audioReactiveFrame.value = AudioReactiveFrame(
-                        bass = clamp01(bassAvg),
-                        mid = clamp01(midAvg),
-                        treble = clamp01(trebleAvg),
-                        energy = clamp01(energyAvg),
-                        centroid = clamp01(centroid),
-                        flux = clamp01(flux),
-                        spectralBands = normalizedBandEnergies.toList(),
-                        analysisMode = localSpectralMode,
-                        analysisCostMicros = analysisCostMicrosSmoothed.coerceAtLeast(0f)
-                    )
-
-                    analysisFrameCounter = 0
-                    spectralBandAccumulators.fill(0f)
-                    energyAccumulator = 0f
                 }
             }
 
@@ -1110,8 +1296,11 @@ class AdaptiveDspEngine @Inject constructor(
     override fun reset() {
         flush()
         buffer = AudioProcessor.EMPTY_BUFFER
+        isConfigured = false
+        isActive = false
         inputAudioFormat = AudioFormat.NOT_SET
         outputAudioFormat = AudioFormat.NOT_SET
         lastInputFormat = AudioFormat.NOT_SET
+        publishSignalPathState()
     }
 }

@@ -6,6 +6,7 @@ import android.media.AudioManager
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import com.tigerplayer.data.local.CrossfeedPreset
+import com.tigerplayer.data.local.ReplayGainMode
 import io.mockk.every
 import io.mockk.mockk
 import java.nio.ByteBuffer
@@ -15,6 +16,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.random.Random
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -603,5 +606,172 @@ class AdaptiveDspEngineTest {
 
         val firstLeft = output.getShort().toInt()
         assertTrue("Lossless stream must not insert leading look-ahead zeros (firstLeft=$firstLeft)", abs(firstLeft) > 8_000)
+    }
+
+    @Test
+    fun bitPerfectBypass_random16BitPcm_producesBitIdenticalOutput() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val frames = 512
+        val byteCount = frames * 2 * 2
+        val rng = Random(42)
+        val inputBytes = rng.nextBytes(byteCount)
+        val input = ByteBuffer.allocateDirect(byteCount).order(ByteOrder.nativeOrder())
+        input.put(inputBytes)
+        input.flip()
+
+        engine.setBitPerfect(true)
+        engine.configure(AudioFormat(44_100, 2, C.ENCODING_PCM_16BIT))
+        assertFalse("Processor should report inactive when bit-perfect bypass is enabled", engine.isActive())
+
+        engine.queueInput(input)
+        val output = engine.getOutput()
+        val outputBytes = ByteArray(output.remaining())
+        output.get(outputBytes)
+
+        assertArrayEquals("16-bit PCM output in bypass mode must be bit-identical to input", inputBytes, outputBytes)
+    }
+
+    @Test
+    fun bitPerfectBypass_random24BitPcm_producesBitIdenticalOutput() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+        val frames = 512
+        val byteCount = frames * 2 * 3
+        val rng = Random(282)
+        val inputBytes = rng.nextBytes(byteCount)
+        val input = ByteBuffer.allocateDirect(byteCount).order(ByteOrder.nativeOrder())
+        input.put(inputBytes)
+        input.flip()
+
+        engine.configure(AudioFormat(96_000, 2, C.ENCODING_PCM_24BIT))
+        engine.updateAcousticNodes(emptyList())
+        assertFalse("Flat lossless 24-bit PCM should bypass DSP processor", engine.isActive())
+
+        engine.queueInput(input)
+        val output = engine.getOutput()
+        val outputBytes = ByteArray(output.remaining())
+        output.get(outputBytes)
+
+        assertArrayEquals("24-bit PCM output in bypass mode must be bit-identical to input", inputBytes, outputBytes)
+    }
+
+    @Test
+    fun isActive_reflectsFlatBypassVsActiveDspAndBitPerfectOverride() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+
+        // Lossy 16-bit stream with DSP enabled remains active
+        engine.configure(AudioFormat(48_000, 2, C.ENCODING_PCM_16BIT))
+        assertTrue("Lossy non-bypassed stream should keep processor active", engine.isActive())
+
+        // Bit-perfect flag disables processor immediately
+        engine.setBitPerfect(true)
+        assertFalse("Bit-perfect mode must deactivate processor", engine.isActive())
+
+        // Lossless 24-bit with empty or 0 dB flat EQ bypasses processor
+        engine.setBitPerfect(false)
+        engine.configure(AudioFormat(96_000, 2, C.ENCODING_PCM_24BIT))
+        assertFalse("Lossless 24-bit stream with flat EQ must bypass processor", engine.isActive())
+
+        val flatNode = AcousticNode("flat", "Flat", FilterType.PEAKING, 1_000f, 0.0f, 1.0f)
+        engine.updateAcousticNodes(listOf(flatNode))
+        assertFalse("All-zero dB EQ nodes must keep bypass active", engine.isActive())
+
+        // Non-zero EQ band activates processor
+        val boostNode = AcousticNode("bass", "Bass", FilterType.LOW_SHELF, 100f, 3.5f, 0.707f)
+        engine.updateAcousticNodes(listOf(boostNode))
+        assertTrue("Non-flat EQ band must activate processor", engine.isActive())
+
+        // Returning to empty EQ restores bypass
+        engine.updateAcousticNodes(emptyList())
+        assertFalse("Clearing EQ nodes must restore bypass", engine.isActive())
+
+        // Acoustic environment, crossfeed, and non-unity ReplayGain activate processor
+        engine.setAcousticEnvironmentMode(AcousticEnvironmentMode.VINYL_WARMTH)
+        assertTrue("Vinyl warmth environment must activate processor", engine.isActive())
+        engine.setAcousticEnvironmentMode(AcousticEnvironmentMode.STUDIO)
+        assertFalse(engine.isActive())
+
+        engine.setCrossfeedPreset(CrossfeedPreset.CLASSIC_STUDIO)
+        assertTrue("Active headphone crossfeed must activate processor", engine.isActive())
+        engine.setCrossfeedPreset(CrossfeedPreset.OFF)
+        assertFalse(engine.isActive())
+
+        engine.setReplayGainConfig(
+            mode = ReplayGainMode.TRACK,
+            preampDb = 0f,
+            preventClipping = true,
+            isBitPerfect = false
+        )
+        engine.setReplayGainTrackData(
+            trackGainDb = -4.5,
+            albumGainDb = null,
+            trackPeak = 0.95,
+            albumPeak = null,
+            isSequentialAlbumPlay = false
+        )
+        assertTrue("Active ReplayGain scaling must activate processor", engine.isActive())
+
+        // Bit-perfect overrides all active DSP settings
+        engine.updateAcousticNodes(listOf(boostNode))
+        engine.setAcousticEnvironmentMode(AcousticEnvironmentMode.CONCERT_HALL)
+        engine.setBitPerfect(true)
+        assertFalse("Bit-perfect must override EQ, environment, and ReplayGain", engine.isActive())
+    }
+
+    @Test
+    fun signalPathState_emitsAccurateTransitionsForFormatDspAndRoute() {
+        val engine = AdaptiveDspEngine(mockHeadphonesContext())
+
+        engine.setInputStreamInfo(codec = "FLAC", isLossless = true)
+        engine.configure(AudioFormat(96_000, 2, C.ENCODING_PCM_24BIT))
+        engine.updateOutputRouteState(
+            routeLabel = "USB DAC",
+            isDirectOutput = true,
+            isOffloadActive = true
+        )
+
+        val bypassState = engine.signalPathState.value
+        assertEquals("FLAC", bypassState.inputCodec)
+        assertEquals(24, bypassState.inputBitDepth)
+        assertEquals(96_000, bypassState.inputSampleRateHz)
+        assertEquals(SignalPathDspMode.DIRECT_BIT_PERFECT_BYPASS, bypassState.dspMode)
+        assertTrue(bypassState.isBitPerfectBypass)
+        assertEquals(0, bypassState.activeEqBandCount)
+        assertEquals(24, bypassState.outputBitDepth)
+        assertEquals(96_000, bypassState.outputSampleRateHz)
+        assertEquals("USB DAC", bypassState.outputRouteLabel)
+        assertTrue(bypassState.isDirectOutput)
+        assertTrue(bypassState.isOffloadActive)
+
+        // Activate 2 non-flat EQ bands (plus 1 flat 0 dB band) and reconfigure for DSP output
+        val bands = listOf(
+            AcousticNode("b1", "Low", FilterType.LOW_SHELF, 80f, 3.0f, 0.707f),
+            AcousticNode("b2", "Mid", FilterType.PEAKING, 1_000f, 0.0f, 1.0f),
+            AcousticNode("b3", "High", FilterType.HIGH_SHELF, 8_000f, -2.0f, 0.707f)
+        )
+        engine.updateAcousticNodes(bands)
+        engine.configure(AudioFormat(96_000, 2, C.ENCODING_PCM_24BIT))
+        engine.updateOutputRouteState(
+            routeLabel = "USB DAC",
+            isDirectOutput = false,
+            isOffloadActive = false
+        )
+
+        val activeState = engine.signalPathState.value
+        assertEquals(SignalPathDspMode.FLOAT_32_PEQ_ACTIVE, activeState.dspMode)
+        assertFalse(activeState.isBitPerfectBypass)
+        assertEquals(2, activeState.activeEqBandCount)
+        assertEquals(16, activeState.outputBitDepth)
+        assertEquals(96_000, activeState.outputSampleRateHz)
+        assertFalse(activeState.isDirectOutput)
+        assertFalse(activeState.isOffloadActive)
+
+        // Re-enable bit-perfect bypass
+        engine.setBitPerfect(true)
+        engine.configure(AudioFormat(96_000, 2, C.ENCODING_PCM_24BIT))
+        val reBypassedState = engine.signalPathState.value
+        assertEquals(SignalPathDspMode.DIRECT_BIT_PERFECT_BYPASS, reBypassedState.dspMode)
+        assertTrue(reBypassedState.isBitPerfectBypass)
+        assertEquals(0, reBypassedState.activeEqBandCount)
+        assertEquals(24, reBypassedState.outputBitDepth)
     }
 }
