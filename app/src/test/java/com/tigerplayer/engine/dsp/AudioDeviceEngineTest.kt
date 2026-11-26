@@ -104,4 +104,60 @@ class AudioDeviceEngineTest {
         engine.setPreferredTargetCurve("Harman In-Ear 2019v2")
         coVerify { settingsDataStore.setPreferredTargetCurve("Harman In-Ear 2019v2") }
     }
+
+    @Test
+    fun `device type detection classifies bluetooth, usb dac, wired, and speaker`() {
+        assertEquals(AudioDeviceType.BLUETOOTH, engine.currentDeviceType())
+        assertTrue(engine.isBluetoothActive())
+        assertFalse(engine.isUsbDacActive())
+        assertFalse(engine.isWiredOutputActive())
+
+        activeDeviceFlow.value = AudioOutputDevice(
+            deviceId = "usb_dac",
+            displayName = "FiiO KA3",
+            type = AudioDeviceType.USB_DAC,
+            isConnected = true,
+            isActiveRoute = true,
+            lastConnectedEpochMs = 2000L
+        )
+        assertEquals(AudioDeviceType.USB_DAC, engine.currentDeviceType())
+        assertTrue(engine.isUsbDacActive())
+        assertFalse(engine.isWiredOutputActive())
+        assertFalse(engine.isBluetoothActive())
+
+        val usbDecision = engine.resolveDirectOutputDecision(
+            sampleRateHz = 96_000,
+            encoding = DirectPcmEncoding.PCM_24BIT,
+            isDirectSupported = true,
+            isSamsungDevice = false
+        )
+        assertTrue(usbDecision.requestDirectPcm)
+        assertEquals(96_000, usbDecision.negotiatedSampleRateHz)
+
+        activeDeviceFlow.value = AudioOutputDevice(
+            deviceId = "wired_jack",
+            displayName = "Wired Headphones",
+            type = AudioDeviceType.WIRED_HEADPHONES,
+            isConnected = true,
+            isActiveRoute = true,
+            lastConnectedEpochMs = 3000L
+        )
+        assertTrue(engine.isWiredOutputActive())
+
+        activeDeviceFlow.value = AudioOutputDevice(
+            deviceId = "speaker",
+            displayName = "Phone Speaker",
+            type = AudioDeviceType.PHONE_SPEAKER,
+            isConnected = true,
+            isActiveRoute = true,
+            lastConnectedEpochMs = 4000L
+        )
+        val speakerDecision = engine.resolveDirectOutputDecision(
+            sampleRateHz = 192_000,
+            encoding = DirectPcmEncoding.PCM_24BIT,
+            isDirectSupported = true,
+            isSamsungDevice = false
+        )
+        assertFalse(speakerDecision.requestDirectPcm)
+    }
 }
