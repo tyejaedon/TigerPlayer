@@ -7,11 +7,15 @@ import com.tigerplayer.data.remote.api.LastFmApi
 import com.tigerplayer.data.remote.api.SpotifyApiService
 import com.tigerplayer.data.remote.model.DeezerArtistDto
 import com.tigerplayer.data.remote.model.DeezerTrackDto
+import com.tigerplayer.data.local.entity.ArtistCacheEntity
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -69,6 +73,53 @@ class MediaDataRepositoryDeezerFallbackTest {
 
         val details = repository().getArtistDetails("Daft Punk").first()
         assertEquals("https://cdn.deezer.com/daft_xl.jpg", details.imageUrl)
+    }
+
+    @Test
+    fun `getArtistDetails replaces cached album-art fallback with Deezer portrait`() = runTest {
+        val albumArt = "content://media/external/audio/albumart/42"
+        every { tigerDao.getArtistCache("daft punk") } returns flowOf(
+            ArtistCacheEntity(artistName = "daft punk", imageUrl = albumArt, bio = "bio", genres = "")
+        )
+        coEvery { tigerDao.getArtistPlayCount("Daft Punk") } returns 5
+        coEvery { tigerDao.getArtistMinutesListened("Daft Punk") } returns 12
+        every { tigerDao.getTotalListeningTimeMs() } returns flowOf(600_000L)
+        coEvery { tigerDao.getLocalArtworkForArtist("Daft Punk") } returns albumArt
+        val saved = slot<ArtistCacheEntity>()
+        coEvery { tigerDao.insertArtistCache(capture(saved)) } returns 1L
+        coEvery { authManager.getValidToken() } returns ""
+        coEvery { lastFmApi.getArtistInfo(artistName = "Daft Punk") } returns Response.success(mockk(relaxed = true))
+        coEvery { deezerRepository.findArtistInfo("Daft Punk") } returns DeezerArtist(
+            id = 27L,
+            name = "Daft Punk",
+            imageUrl = "https://cdn.deezer.com/daft_xl.jpg"
+        )
+
+        val emissions = repository().getArtistDetails("Daft Punk").toList()
+
+        assertEquals(albumArt, emissions.first().imageUrl)
+        assertEquals("https://cdn.deezer.com/daft_xl.jpg", emissions.last().imageUrl)
+        assertEquals("https://cdn.deezer.com/daft_xl.jpg", saved.captured.imageUrl)
+    }
+
+    @Test
+    fun `getArtistDetails does not rewrite album-art fallback when no portrait is found`() = runTest {
+        val albumArt = "content://media/external/audio/albumart/42"
+        every { tigerDao.getArtistCache("daft punk") } returns flowOf(
+            ArtistCacheEntity(artistName = "daft punk", imageUrl = albumArt, bio = "bio", genres = "")
+        )
+        coEvery { tigerDao.getArtistPlayCount("Daft Punk") } returns 5
+        coEvery { tigerDao.getArtistMinutesListened("Daft Punk") } returns 12
+        every { tigerDao.getTotalListeningTimeMs() } returns flowOf(600_000L)
+        coEvery { tigerDao.getLocalArtworkForArtist("Daft Punk") } returns albumArt
+        coEvery { authManager.getValidToken() } returns ""
+        coEvery { lastFmApi.getArtistInfo(artistName = "Daft Punk") } returns Response.success(mockk(relaxed = true))
+        coEvery { deezerRepository.findArtistInfo("Daft Punk") } returns null
+
+        val emissions = repository().getArtistDetails("Daft Punk").toList()
+
+        assertEquals(listOf(albumArt), emissions.map { it.imageUrl })
+        coVerify(exactly = 0) { tigerDao.insertArtistCache(any()) }
     }
 
     @Test
