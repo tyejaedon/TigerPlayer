@@ -1,8 +1,13 @@
 package com.tigerplayer.data.local.dao
 
 import androidx.room.*
+import androidx.sqlite.db.SupportSQLiteQuery
+import com.tigerplayer.data.local.entity.ArtistCacheEntity
+import com.tigerplayer.data.local.entity.CachedTrackEntity
+import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.tigerplayer.data.local.entity.SmartPlaylistEntity
 import com.tigerplayer.data.model.Playlist
 import kotlinx.coroutines.flow.Flow
 
@@ -296,4 +301,39 @@ abstract class PlaylistDao {
         clearAllCrossRefs()
         clearAllPlaylists()
     }
+
+    // --- SMART PLAYLISTS (issue #68) ---
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun insertSmartPlaylist(entity: SmartPlaylistEntity): Long
+
+    @Update
+    abstract suspend fun updateSmartPlaylist(entity: SmartPlaylistEntity): Int
+
+    @Query("DELETE FROM smart_playlists WHERE id = :smartPlaylistId")
+    abstract suspend fun deleteSmartPlaylist(smartPlaylistId: Long): Int
+
+    @Query("SELECT * FROM smart_playlists WHERE id = :smartPlaylistId LIMIT 1")
+    abstract suspend fun getSmartPlaylistById(smartPlaylistId: Long): SmartPlaylistEntity?
+
+    @Query("SELECT * FROM smart_playlists WHERE id = :smartPlaylistId LIMIT 1")
+    abstract fun observeSmartPlaylistById(smartPlaylistId: Long): Flow<SmartPlaylistEntity?>
+
+    @Query("SELECT * FROM smart_playlists ORDER BY updatedAt DESC, createdAt DESC")
+    abstract fun getAllSmartPlaylistsFlow(): Flow<List<SmartPlaylistEntity>>
+
+    @Query("SELECT * FROM smart_playlists ORDER BY createdAt DESC")
+    abstract suspend fun getAllSmartPlaylistsSync(): List<SmartPlaylistEntity>
+
+    @Query("DELETE FROM smart_playlists")
+    abstract suspend fun clearAllSmartPlaylists(): Int
+
+    @RawQuery(
+        observedEntities = [
+            CachedTrackEntity::class,
+            PlaybackHistoryEntity::class,
+            ArtistCacheEntity::class
+        ]
+    )
+    abstract fun observeSmartPlaylistTracks(query: SupportSQLiteQuery): Flow<List<CachedTrackEntity>>
 }
