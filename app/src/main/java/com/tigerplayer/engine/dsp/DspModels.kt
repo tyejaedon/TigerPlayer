@@ -96,3 +96,39 @@ data class DirectOutputDecision(
     val negotiatedSampleRateHz: Int,
     val negotiatedEncoding: DirectPcmEncoding
 )
+
+/** Processing mode reported in [SignalPathState] for Signal Path telemetry (issue #282). */
+enum class SignalPathDspMode {
+    /** Processor is bypassed; untouched PCM / hardware offload path. */
+    DIRECT_BIT_PERFECT_BYPASS,
+    /** 32-bit floating-point DSP chain is actively processing audio. */
+    FLOAT_32_PEQ_ACTIVE
+}
+
+/**
+ * Live audio signal-path telemetry snapshot exposed by [AdaptiveDspEngine] (issue #282).
+ * Consumed by Signal Path Badge UI (#70); updated only on format configuration,
+ * DSP setting changes, or output route changes (never per-frame in `queueInput`).
+ */
+data class SignalPathState(
+    val inputCodec: String = "",
+    val inputBitDepth: Int = 0,
+    val inputSampleRateHz: Int = 0,
+    val inputChannelCount: Int = 0,
+    val isLosslessInput: Boolean = false,
+    val dspMode: SignalPathDspMode = SignalPathDspMode.DIRECT_BIT_PERFECT_BYPASS,
+    val activeEqBandCount: Int = 0,
+    val isBitPerfectBypass: Boolean = true,
+    val outputBitDepth: Int = 0,
+    val outputSampleRateHz: Int = 0,
+    val outputEncodingLabel: String = "",
+    val outputRouteLabel: String = "",
+    val isDirectOutput: Boolean = false,
+    val isOffloadActive: Boolean = false
+) {
+    /** Human-readable description of the active DSP processing mode. */
+    fun dspDescription(): String = when (dspMode) {
+        SignalPathDspMode.DIRECT_BIT_PERFECT_BYPASS -> "Direct Bit-Perfect Bypass"
+        SignalPathDspMode.FLOAT_32_PEQ_ACTIVE -> "32-bit Float PEQ Active ($activeEqBandCount bands)"
+    }
+}
