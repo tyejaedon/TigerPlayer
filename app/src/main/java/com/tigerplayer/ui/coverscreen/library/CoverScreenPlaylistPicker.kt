@@ -26,14 +26,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,6 +64,8 @@ import com.tigerplayer.R
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.model.Playlist
 import com.tigerplayer.data.remote.model.SpotifyPlaylist
+import com.tigerplayer.engine.library.SmartPlaylist
+import com.tigerplayer.ui.library.summarize
 import com.tigerplayer.ui.theme.aardBlue
 import com.tigerplayer.ui.theme.bounceClick
 import com.tigerplayer.ui.theme.glassEffect
@@ -73,13 +73,21 @@ import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
+private sealed interface CoverPlaylistCarouselItem {
+    data class Regular(val playlist: Playlist, val isLiked: Boolean) : CoverPlaylistCarouselItem
+    data class Smart(val smartPlaylist: SmartPlaylist) : CoverPlaylistCarouselItem
+}
+
 @Composable
 internal fun LocalPlaylistPicker(
     playlists: List<Playlist>,
     onPlaylistSelected: (Playlist) -> Unit,
     onEditPhoto: (Playlist) -> Unit,
     onImportPlaylist: () -> Unit = {},
-    onCreatePlaylist: (String) -> Unit = {}
+    onCreatePlaylist: (String) -> Unit = {},
+    smartPlaylists: List<SmartPlaylist> = emptyList(),
+    onSmartPlaylistSelected: (SmartPlaylist) -> Unit = {},
+    onCreateSmartPlaylist: () -> Unit = {}
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
 
@@ -93,7 +101,7 @@ internal fun LocalPlaylistPicker(
         )
     }
 
-    if (playlists.isEmpty()) {
+    if (playlists.isEmpty() && smartPlaylists.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -112,64 +120,46 @@ internal fun LocalPlaylistPicker(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                            .clickable(role = Role.Button, onClick = { showCreateDialog = true })
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                            .testTag(CoverScreenTestTags.CREATE_PLAYLIST),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                            contentDescription = stringResource(R.string.coverscreen_action_create_playlist),
-                            tint = MaterialTheme.aardBlue,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.coverscreen_action_new_playlist),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                            .clickable(role = Role.Button, onClick = onImportPlaylist)
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                            .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.FileDownload,
-                            contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
-                            tint = MaterialTheme.aardBlue,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.coverscreen_action_import_playlist),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
+                    CoverScreenPlaylistActionButton(
+                        icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                        label = stringResource(R.string.coverscreen_action_new_playlist),
+                        contentDescription = stringResource(R.string.coverscreen_action_create_playlist),
+                        onClick = { showCreateDialog = true },
+                        modifier = Modifier.testTag(CoverScreenTestTags.CREATE_PLAYLIST)
+                    )
+                    CoverScreenPlaylistActionButton(
+                        icon = Icons.Rounded.AutoAwesome,
+                        label = "Smart",
+                        contentDescription = "New smart playlist",
+                        onClick = onCreateSmartPlaylist,
+                        modifier = Modifier.testTag(CoverScreenTestTags.SMART_PLAYLIST_CREATE)
+                    )
+                    CoverScreenPlaylistActionButton(
+                        icon = Icons.Rounded.FileDownload,
+                        label = stringResource(R.string.coverscreen_action_import_playlist),
+                        contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
+                        onClick = onImportPlaylist,
+                        modifier = Modifier.testTag(CoverScreenTestTags.IMPORT_PLAYLIST)
+                    )
                 }
             }
         }
         return
     }
 
-    // Sort alphabetically, with Liked Songs ALWAYS first
-    val sortedPlaylists = remember(playlists) {
-        sortCoverScreenPlaylists(playlists)
+    // Sort alphabetically, with Liked Songs ALWAYS first, followed by Smart Playlists, then regular playlists
+    val carouselItems = remember(playlists, smartPlaylists) {
+        val sorted = sortCoverScreenPlaylists(playlists)
+        val liked = sorted.filter {
+            it.id == PlaylistEntity.LIKED_SONGS_PLAYLIST_ID ||
+                it.name.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)
+        }
+        val others = sorted.filterNot { it in liked }
+        buildList {
+            liked.forEach { add(CoverPlaylistCarouselItem.Regular(it, isLiked = true)) }
+            smartPlaylists.forEach { add(CoverPlaylistCarouselItem.Smart(it)) }
+            others.forEach { add(CoverPlaylistCarouselItem.Regular(it, isLiked = false)) }
+        }
     }
 
     BoxWithConstraints(
@@ -183,7 +173,7 @@ internal fun LocalPlaylistPicker(
 
         val pagerState = rememberPagerState(
             initialPage = 0,
-            pageCount = { sortedPlaylists.size }
+            pageCount = { carouselItems.size }
         )
         val coroutineScope = rememberCoroutineScope()
 
@@ -194,10 +184,7 @@ internal fun LocalPlaylistPicker(
             pageSpacing = 12.dp,
             modifier = Modifier.fillMaxSize()
         ) { page ->
-            val playlist = sortedPlaylists[page]
-            val isLiked = playlist.id == PlaylistEntity.LIKED_SONGS_PLAYLIST_ID ||
-                    playlist.name.equals(PlaylistEntity.LIKED_SONGS_PLAYLIST_NAME, ignoreCase = true)
-
+            val item = carouselItems[page]
             val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
             val absOffset = pageOffset.absoluteValue.coerceIn(0f, 2f)
 
@@ -206,33 +193,36 @@ internal fun LocalPlaylistPicker(
                     .width(cardWidth)
                     .graphicsLayer {
                         cameraDistance = 12f * density
-                        // Cylindrical wheel rotation around Y axis
                         rotationY = (pageOffset * -36f).coerceIn(-65f, 65f)
-                        // Scale contraction along cylindrical wheel
                         val scale = (1f - (absOffset * 0.16f)).coerceIn(0.68f, 1f)
                         scaleX = scale
                         scaleY = scale
-                        // Depth alpha fade
                         alpha = (1f - (absOffset * 0.40f)).coerceIn(0.25f, 1f)
-                        // Perspective translation
                         translationX = pageOffset * 6f
                     },
                 contentAlignment = Alignment.Center
             ) {
-                CoverScreenPlaylistCard(
-                    playlist = playlist,
-                    isLiked = isLiked,
-                    onSelect = { onPlaylistSelected(playlist) },
-                    onEditPhoto = { onEditPhoto(playlist) },
-                    modifier = Modifier.testTag(CoverScreenTestTags.localPlaylist(playlist.id))
-                )
+                when (item) {
+                    is CoverPlaylistCarouselItem.Regular -> CoverScreenPlaylistCard(
+                        playlist = item.playlist,
+                        isLiked = item.isLiked,
+                        onSelect = { onPlaylistSelected(item.playlist) },
+                        onEditPhoto = { onEditPhoto(item.playlist) },
+                        modifier = Modifier.testTag(CoverScreenTestTags.localPlaylist(item.playlist.id))
+                    )
+                    is CoverPlaylistCarouselItem.Smart -> CoverScreenSmartPlaylistCard(
+                        smartPlaylist = item.smartPlaylist,
+                        onSelect = { onSmartPlaylistSelected(item.smartPlaylist) },
+                        modifier = Modifier.testTag(CoverScreenTestTags.smartPlaylistCard(item.smartPlaylist.id))
+                    )
+                }
             }
         }
 
         // Fast-scroll Slider on the Side (Right Edge)
-        if (sortedPlaylists.size > 1) {
+        if (carouselItems.size > 1) {
             PlaylistSideScrubber(
-                totalCount = sortedPlaylists.size,
+                totalCount = carouselItems.size,
                 currentPage = pagerState.currentPage,
                 pageOffsetFraction = pagerState.currentPageOffsetFraction,
                 onScrubTo = { targetIndex ->
@@ -246,7 +236,7 @@ internal fun LocalPlaylistPicker(
             )
         }
 
-        // Action buttons positioned at bottom center: New Playlist & Import Playlist
+        // Action buttons positioned at bottom center: New, Smart & Import
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -256,59 +246,154 @@ internal fun LocalPlaylistPicker(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF1B1F2A).copy(alpha = 0.90f))
-                        .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-                        .clickable(role = Role.Button, onClick = { showCreateDialog = true })
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                        .testTag(CoverScreenTestTags.CREATE_PLAYLIST),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                        contentDescription = stringResource(R.string.coverscreen_action_create_playlist),
-                        tint = MaterialTheme.aardBlue,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = stringResource(R.string.coverscreen_action_new_playlist),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF1B1F2A).copy(alpha = 0.90f))
-                        .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-                        .clickable(role = Role.Button, onClick = onImportPlaylist)
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                        .testTag(CoverScreenTestTags.IMPORT_PLAYLIST),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.FileDownload,
-                        contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
-                        tint = MaterialTheme.aardBlue,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = stringResource(R.string.coverscreen_action_import_playlist),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
+                CoverScreenPlaylistActionButton(
+                    icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                    label = stringResource(R.string.coverscreen_action_new_playlist),
+                    contentDescription = stringResource(R.string.coverscreen_action_create_playlist),
+                    onClick = { showCreateDialog = true },
+                    compact = true,
+                    modifier = Modifier.testTag(CoverScreenTestTags.CREATE_PLAYLIST)
+                )
+                CoverScreenPlaylistActionButton(
+                    icon = Icons.Rounded.AutoAwesome,
+                    label = "Smart",
+                    contentDescription = "New smart playlist",
+                    onClick = onCreateSmartPlaylist,
+                    compact = true,
+                    modifier = Modifier.testTag(CoverScreenTestTags.SMART_PLAYLIST_CREATE)
+                )
+                CoverScreenPlaylistActionButton(
+                    icon = Icons.Rounded.FileDownload,
+                    label = stringResource(R.string.coverscreen_action_import_playlist),
+                    contentDescription = stringResource(R.string.coverscreen_action_import_playlist),
+                    onClick = onImportPlaylist,
+                    compact = true,
+                    modifier = Modifier.testTag(CoverScreenTestTags.IMPORT_PLAYLIST)
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun CoverScreenPlaylistActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(if (compact) 14.dp else 16.dp))
+            .background(
+                if (compact) Color(0xFF1B1F2A).copy(alpha = 0.90f)
+                else Color.White.copy(alpha = 0.08f)
+            )
+            .border(
+                1.dp,
+                MaterialTheme.aardBlue.copy(alpha = if (compact) 0.45f else 0.4f),
+                RoundedCornerShape(if (compact) 14.dp else 16.dp)
+            )
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(
+                horizontal = if (compact) 10.dp else 14.dp,
+                vertical = if (compact) 5.dp else 8.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = MaterialTheme.aardBlue,
+            modifier = Modifier.size(if (compact) 14.dp else 18.dp)
+        )
+        Spacer(modifier = Modifier.width(if (compact) 5.dp else 6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = if (compact) 10.sp else 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+    }
+}
+
+@Composable
+internal fun CoverScreenSmartPlaylistCard(
+    smartPlaylist: SmartPlaylist,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .width(154.dp)
+            .bounceClick { onSelect() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(154.dp)
+                .shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(22.dp),
+                    spotColor = MaterialTheme.aardBlue.copy(alpha = 0.35f),
+                    ambientColor = Color.Black
+                )
+                .clip(RoundedCornerShape(22.dp))
+                .glassEffect(RoundedCornerShape(22.dp))
+                .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            MaterialTheme.aardBlue.copy(alpha = 0.30f),
+                            Color(0xFF0E131D)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.AutoAwesome,
+                contentDescription = null,
+                tint = MaterialTheme.aardBlue,
+                modifier = Modifier.size(52.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.aardBlue.copy(alpha = 0.85f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "SMART",
+                    color = Color.Black,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 8.5.sp,
+                    letterSpacing = 0.8.sp
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = smartPlaylist.name,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = smartPlaylist.predicate.summarize(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.aardBlue,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

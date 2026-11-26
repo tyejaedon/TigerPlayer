@@ -37,7 +37,9 @@ data class BackupManifest(
     @SerializedName("audioDevices")
     val audioDevices: List<AudioDeviceBackup> = emptyList(),
     @SerializedName("devicePresets")
-    val devicePresets: List<DevicePresetBackup> = emptyList()
+    val devicePresets: List<DevicePresetBackup> = emptyList(),
+    @SerializedName("smartPlaylists")
+    val smartPlaylists: List<SmartPlaylistBackup> = emptyList()
 ) {
     companion object {
         /** Bump whenever the shape below changes in a way older parsers can't ignore. */
@@ -146,8 +148,19 @@ data class BackupSummary(
     val historyCount: Int,
     val audioDeviceCount: Int = 0,
     val devicePresetCount: Int = 0,
+    val smartPlaylistCount: Int = 0,
     val unresolvedTrackCount: Int = 0,
     val unresolvedByPlaylist: Map<String, Int> = emptyMap()
+)
+
+data class SmartPlaylistBackup(
+    @SerializedName("name") val name: String,
+    @SerializedName("rulesJson") val rulesJson: String,
+    @SerializedName("sortBy") val sortBy: String,
+    @SerializedName("sortDescending") val sortDescending: Boolean,
+    @SerializedName("limitCount") val limitCount: Int? = null,
+    @SerializedName("createdAt") val createdAt: Long,
+    @SerializedName("updatedAt") val updatedAt: Long
 )
 
 data class AudioDeviceBackup(

@@ -18,6 +18,7 @@ import com.tigerplayer.data.local.entity.PendingScrobbleEntity
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
+import com.tigerplayer.data.local.entity.SmartPlaylistEntity
 import com.tigerplayer.data.local.entity.LyricsCacheEntity
 import com.tigerplayer.data.local.entity.WaveformCacheEntity
 
@@ -33,9 +34,10 @@ import com.tigerplayer.data.local.entity.WaveformCacheEntity
         MusicFolderEntity::class, // <-- Added for custom music folders (issue #50)
         AudioDeviceEntity::class, // <-- Added for audio devices & history (issue #300)
         DevicePresetEntity::class, // <-- Added for per-device EQ presets (issue #300)
-        PendingScrobbleEntity::class // <-- Added for offline Last.fm scrobble queue (issue #62)
+        PendingScrobbleEntity::class, // <-- Added for offline Last.fm scrobble queue (issue #62)
+        SmartPlaylistEntity::class // <-- Added for rule-based smart playlists (issue #68)
     ],
-    version = 18, // <-- Bumped to 18 for pending_scrobbles table (issue #62)
+    version = 19, // <-- Bumped to 19 for smart_playlists table (issue #68)
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 11, to = 12),
@@ -44,7 +46,8 @@ import com.tigerplayer.data.local.entity.WaveformCacheEntity
         AutoMigration(from = 14, to = 15),
         AutoMigration(from = 15, to = 16),
         AutoMigration(from = 16, to = 17),
-        AutoMigration(from = 17, to = 18)
+        AutoMigration(from = 17, to = 18),
+        AutoMigration(from = 18, to = 19)
     ]
 )
 @TypeConverters(Converters::class)

@@ -32,10 +32,14 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Upload
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -848,8 +852,13 @@ fun ArtistsTab(viewModel: PlayerViewModel, onNavigateToArtist: (String) -> Unit)
 }
 
 @Composable
-fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String) -> Unit) {
+fun PlaylistsTab(
+    viewModel: PlayerViewModel,
+    onNavigateToPlaylist: (Long, String) -> Unit,
+    smartPlaylistViewModel: SmartPlaylistViewModel = hiltViewModel()
+) {
     val playlists by viewModel.customPlaylists.collectAsState(initial = emptyList())
+    val smartPlaylists by smartPlaylistViewModel.smartPlaylists.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val likedPlaylist = remember(playlists) { playlists.find { it.id == LIKED_SONGS_ID } }
     val userPlaylists = remember(playlists) { playlists.filterNot { it.id == LIKED_SONGS_ID } }
@@ -859,6 +868,17 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    var showSmartBuilder by remember { mutableStateOf(false) }
+    var editingSmartPlaylist by remember { mutableStateOf<com.tigerplayer.engine.library.SmartPlaylist?>(null) }
+    var selectedSmartPlaylistId by remember { mutableStateOf<Long?>(null) }
+    val selectedSmartPlaylist = remember(smartPlaylists, selectedSmartPlaylistId) {
+        smartPlaylists.find { it.id == selectedSmartPlaylistId }
+    }
+    val selectedSmartTracks by remember(selectedSmartPlaylist) {
+        val sp = selectedSmartPlaylist
+        if (sp == null) kotlinx.coroutines.flow.flowOf(emptyList())
+        else smartPlaylistViewModel.observeTracks(sp)
+    }.collectAsState(initial = emptyList())
 
     val importM3uLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -954,6 +974,70 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
         )
     }
 
+    if (showSmartBuilder) {
+        val editing = editingSmartPlaylist
+        SmartPlaylistBuilderDialog(
+            initialState = editing?.toEditorState() ?: SmartRuleEditorState(),
+            presets = smartPlaylistViewModel.starterPresets,
+            isEditing = editing != null,
+            onDismiss = {
+                showSmartBuilder = false
+                editingSmartPlaylist = null
+            },
+            onSave = { editorState ->
+                val predicate = editorState.toSmartPredicate()
+                val limit = editorState.limitText.toIntOrNull()?.takeIf { it > 0 }
+                if (editing != null) {
+                    smartPlaylistViewModel.updateSmartPlaylist(
+                        existing = editing,
+                        name = editorState.name,
+                        predicate = predicate,
+                        sortBy = editorState.sortBy,
+                        sortDescending = editorState.sortDescending,
+                        limitCount = limit
+                    )
+                } else {
+                    smartPlaylistViewModel.createSmartPlaylist(
+                        name = editorState.name,
+                        predicate = predicate,
+                        sortBy = editorState.sortBy,
+                        sortDescending = editorState.sortDescending,
+                        limitCount = limit
+                    )
+                }
+                showSmartBuilder = false
+                editingSmartPlaylist = null
+            }
+        )
+    }
+
+    if (selectedSmartPlaylist != null) {
+        SmartPlaylistDetailSheet(
+            smartPlaylist = selectedSmartPlaylist,
+            tracks = selectedSmartTracks,
+            onDismiss = { selectedSmartPlaylistId = null },
+            onPlayAll = { smartPlaylistViewModel.playAll(selectedSmartTracks) },
+            onShuffle = { smartPlaylistViewModel.shufflePlay(selectedSmartTracks) },
+            onQueueAll = {
+                smartPlaylistViewModel.queueAll(selectedSmartTracks)
+                Toast.makeText(context, "Queued ${selectedSmartTracks.size} tracks", Toast.LENGTH_SHORT).show()
+            },
+            onEdit = {
+                editingSmartPlaylist = selectedSmartPlaylist
+                showSmartBuilder = true
+            },
+            onDelete = {
+                smartPlaylistViewModel.deleteSmartPlaylist(selectedSmartPlaylist.id)
+                selectedSmartPlaylistId = null
+            },
+            onPlayTrack = { track -> smartPlaylistViewModel.playTrack(track, selectedSmartTracks) },
+            onQueueTrack = { track ->
+                smartPlaylistViewModel.addToQueue(track)
+                Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         SortRow(
             currentOrder = uiState.playlistSortOrder,
@@ -982,6 +1066,17 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     onClick = { showCreateDialog = true }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
+                Box(modifier = Modifier.testTag(SmartPlaylistTestTags.CREATE_BUTTON)) {
+                    PremiumActionRow(
+                        icon = Icons.Rounded.AutoAwesome,
+                        title = "Forge Smart Playlist",
+                        onClick = {
+                            editingSmartPlaylist = null
+                            showSmartBuilder = true
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
                 PremiumActionRow(
                     icon = Icons.Rounded.Upload,
                     title = "Import M3U / M3U8 Playlist",
@@ -999,6 +1094,68 @@ fun PlaylistsTab(viewModel: PlayerViewModel, onNavigateToPlaylist: (Long, String
                     }
                 )
                 Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            if (smartPlaylists.isNotEmpty()) {
+                item(key = "header_smart_playlists") {
+                    Text(
+                        text = "SMART PLAYLISTS",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.aardBlue,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+                items(smartPlaylists, key = { "smart_${it.id}" }) { smartPlaylist ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                            .border(1.dp, MaterialTheme.aardBlue.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+                            .bounceClick { selectedSmartPlaylistId = smartPlaylist.id }
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .testTag(SmartPlaylistTestTags.card(smartPlaylist.id)),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.aardBlue.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.AutoAwesome,
+                                contentDescription = null,
+                                tint = MaterialTheme.aardBlue,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = smartPlaylist.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = smartPlaylist.predicate.summarize(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+                item(key = "spacer_smart_playlists") {
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
             }
 
             if (userPlaylists.isNotEmpty()) {

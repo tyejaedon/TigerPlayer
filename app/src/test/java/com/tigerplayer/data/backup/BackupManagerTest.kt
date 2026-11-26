@@ -16,6 +16,7 @@ import com.tigerplayer.data.local.entity.DevicePresetEntity
 import com.tigerplayer.data.local.entity.PlaylistEntity
 import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
+import com.tigerplayer.data.local.entity.SmartPlaylistEntity
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -60,6 +61,9 @@ class BackupManagerTest {
         coEvery { tigerDao.getCachedTrackIdsSync() } returns emptyList()
         coEvery { audioDeviceDao.getAllDevicesSync() } returns emptyList()
         coEvery { audioDeviceDao.getAllPresetsSync() } returns emptyList()
+        coEvery { playlistDao.getAllSmartPlaylistsSync() } returns emptyList()
+        coEvery { playlistDao.clearAllSmartPlaylists() } returns 0
+        coEvery { playlistDao.insertSmartPlaylist(any()) } returns 1L
 
         backupManager = BackupManager(context, playlistDao, tigerDao, settingsDataStore, audioDeviceDao)
     }
@@ -225,6 +229,71 @@ class BackupManagerTest {
             "timestamp",
             "source"
         )
+        assertSerializedNames(
+            SmartPlaylistBackup::class.java,
+            "name",
+            "rulesJson",
+            "sortBy",
+            "sortDescending",
+            "limitCount",
+            "createdAt",
+            "updatedAt"
+        )
+    }
+
+    @Test
+    fun `export and restore smart playlists round-trips cleanly under merge and replace`() = runTest {
+        val smartEntity = SmartPlaylistEntity(
+            id = 7L,
+            name = "Liked & Forgotten",
+            rulesJson = """{"type":"AND","children":[{"type":"LIKED","isLiked":true}]}""",
+            sortBy = "PLAY_COUNT",
+            sortDescending = true,
+            limitCount = 50,
+            createdAt = 1720000000L,
+            updatedAt = 1720000500L
+        )
+        coEvery { playlistDao.getAllSmartPlaylistsSync() } returns listOf(smartEntity)
+        coEvery { playlistDao.getAllPlaylistsSync() } returns emptyList()
+        coEvery { tigerDao.getAllHistorySync() } returns emptyList()
+
+        val output = ByteArrayOutputStream()
+        every { contentResolver.openOutputStream(destination, "wt") } returns output
+
+        val exportResult = backupManager.exportTo(destination)
+        assertTrue(exportResult.isSuccess)
+        assertEquals(1, exportResult.getOrThrow().smartPlaylistCount)
+
+        val writtenJson = output.toString(Charsets.UTF_8.name())
+        val reparsed = com.google.gson.Gson().fromJson(writtenJson, BackupManifest::class.java)
+        assertEquals(1, reparsed.smartPlaylists.size)
+        assertEquals("Liked & Forgotten", reparsed.smartPlaylists.single().name)
+        assertEquals(50, reparsed.smartPlaylists.single().limitCount)
+
+        val source = mockk<Uri>()
+        every { contentResolver.openInputStream(source) } returns ByteArrayInputStream(writtenJson.toByteArray(Charsets.UTF_8))
+        coEvery { playlistDao.replaceAllPlaylists() } returns Unit
+        coEvery { tigerDao.clearHistory() } returns 0
+
+        val mergeResult = backupManager.importFrom(source, RestoreStrategy.MERGE)
+        assertTrue(mergeResult.isSuccess)
+        assertEquals(1, mergeResult.getOrThrow().smartPlaylistCount)
+        coVerify(exactly = 0) { playlistDao.clearAllSmartPlaylists() }
+        coVerify(exactly = 1) {
+            playlistDao.insertSmartPlaylist(
+                match {
+                    it.id == 0L &&
+                        it.name == "Liked & Forgotten" &&
+                        it.rulesJson == smartEntity.rulesJson &&
+                        it.limitCount == 50
+                }
+            )
+        }
+
+        every { contentResolver.openInputStream(source) } returns ByteArrayInputStream(writtenJson.toByteArray(Charsets.UTF_8))
+        val replaceResult = backupManager.importFrom(source, RestoreStrategy.REPLACE)
+        assertTrue(replaceResult.isSuccess)
+        coVerify(exactly = 1) { playlistDao.clearAllSmartPlaylists() }
     }
 
     @Test
