@@ -1058,7 +1058,7 @@ class AdaptiveDspEngine @Inject constructor(
                         sampleR = vinylFrame.right
                     }
                     AcousticEnvironmentMode.CONCERT_HALL -> {
-                        hallProcessor.process(sampleL, sampleR, channels)
+                        hallProcessor.process(sampleL, sampleR, channels, isBuiltInSpeaker = localBuiltInSpeaker)
                         sampleL = hallProcessor.outL
                         sampleR = hallProcessor.outR
                     }

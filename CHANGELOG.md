@@ -29,6 +29,9 @@ the terse, per-change log — add an entry here in the same PR as the change, un
 - **MediaControllerManager Disconnect/Reconnect Action Replay & State Preservation**: moved connection retry state to instance-scoped synchronized fields, reset the retry budget on disconnect and foreground resume, routed playback/queue mutations through `withActiveController` to queue and replay actions after reconnection, guarded `restorePlaybackState` against overwriting an active or populated `MediaController`, and added unit tests in `MediaControllerManagerReconnectTest`. (closes #458)
 - **Monotonic Beta VersionCode Floor & Release Tag Targeting**: shifted `2.2.0-beta.20+` version codes by `+11` (`2020011 + betaNum`) in `.github/workflows/beta-release.yml` and `app/build.gradle.kts` so `v2.2.0-beta.20` (`2020031`) cleanly supersedes `v2.1.9` (`2020030`) while remaining strictly below `v2.2.0` (`2020099`); passed `--target "${GITHUB_SHA}"` when creating beta pre-releases, added the `LASTFM_API_SECRET` placeholder, and appended `[Unreleased]` changelog highlights to published beta release notes. (closes #451)
 
+### Changed
+- **Concert Hall Reverb Tuning for Mobile Speakers**: parameterized `SchroederHallProcessor` with pre-allocated `HallTuning.SPEAKER` and `HallTuning.HEADPHONES` presets selected from `AdaptiveDspEngine`'s `isBuiltInSpeakerOutput` route, added a sample-rate-scaled pre-delay line (16 ms speaker / 22 ms headphones), RT60-derived comb feedback (1.4 s target RT60 on built-in speakers), a 200 Hz one-pole high-pass filter on the speaker reverb send, and denormal flushing while preserving `tanh`-bounded tank stability and zero per-frame allocations; added unit tests in `SchroederHallProcessorTest`. (closes #18)
+
 ## [2.1.9] - 2026-11-16
 
 ### Added
