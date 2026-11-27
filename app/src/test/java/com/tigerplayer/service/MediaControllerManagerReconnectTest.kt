@@ -346,4 +346,90 @@ class MediaControllerManagerReconnectTest {
         manager.onAppForegrounded()
         assertSame(firstFuture, manager.currentControllerFutureForTest())
     }
+
+    @Test
+    fun `resolvePlayableItemsSynchronously resolves playable tracks with requestMetadata uri and returns null for browse containers or voice queries`() {
+        val trackItem = MediaItemConverter.toMediaItem(sampleTrack("1"))
+        val ipcStrippedItem = MediaItem.Builder()
+            .setMediaId("track_no_local_config")
+            .setRequestMetadata(
+                MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(Uri.parse("content://media/external/audio/media/99"))
+                    .build()
+            )
+            .build()
+
+        val fastResolved = resolvePlayableItemsSynchronously(listOf(trackItem, ipcStrippedItem))
+        assertNotNull(fastResolved)
+        assertEquals(2, fastResolved!!.size)
+        assertEquals(Uri.parse("content://media/external/audio/media/1"), fastResolved[0].localConfiguration?.uri)
+        assertEquals(Uri.parse("content://media/external/audio/media/99"), fastResolved[1].localConfiguration?.uri)
+
+        val browseContainer = MediaItem.Builder()
+            .setMediaId("playlist:-1")
+            .setRequestMetadata(
+                MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(Uri.parse("content://media/external/audio/media/1"))
+                    .build()
+            )
+            .build()
+        assertNull(resolvePlayableItemsSynchronously(listOf(browseContainer)))
+
+        val voiceSearchItem = MediaItem.Builder()
+            .setMediaId("voice")
+            .setRequestMetadata(
+                MediaItem.RequestMetadata.Builder()
+                    .setSearchQuery("jazz")
+                    .build()
+            )
+            .build()
+        assertNull(resolvePlayableItemsSynchronously(listOf(voiceSearchItem)))
+    }
+
+    @Test
+    fun `onControllerDisconnected defers reconnect while backgrounded and reconnects on foreground`() = runTest(testDispatcher) {
+        val controller = mockConnectedController(itemCount = 1, playing = true)
+        manager.onControllerConnected(controller)
+
+        manager.setAppForegroundForTest(false)
+        manager.onControllerDisconnected()
+
+        assertNull(manager.mediaController)
+        assertFalse(manager.isConnectingForTest())
+        assertNull(manager.currentControllerFutureForTest())
+
+        manager.setAppForegroundForTest(true)
+        manager.onAppForegrounded()
+        assertTrue(manager.isConnectingForTest())
+        assertNotNull(manager.currentControllerFutureForTest())
+    }
+
+    @Test
+    fun `stalled initializeController past CONNECT_TIMEOUT_MS is superseded on foreground`() = runTest(testDispatcher) {
+        var nowMs = 10_000L
+        manager.elapsedRealtimeProvider = { nowMs }
+        // Clear any in-flight connect started by init() so nowMs governs connectingStartedAtMs.
+        manager.setAppForegroundForTest(false)
+        manager.onControllerDisconnected()
+        manager.setAppForegroundForTest(true)
+
+        manager.onAppForegrounded()
+        val firstFuture = manager.currentControllerFutureForTest()
+        assertNotNull(firstFuture)
+        assertTrue(manager.isConnectingForTest())
+
+        // Before timeout, foregrounding again must not supersede the active connect attempt.
+        nowMs += MediaControllerManager.CONNECT_TIMEOUT_MS - 1L
+        manager.onAppForegrounded()
+        assertSame(firstFuture, manager.currentControllerFutureForTest())
+
+        // Past timeout, foregrounding must break the stale isConnecting lock with a fresh future.
+        nowMs += 2L
+        manager.onAppForegrounded()
+
+        val secondFuture = manager.currentControllerFutureForTest()
+        assertNotNull(secondFuture)
+        assertTrue(firstFuture !== secondFuture)
+        assertTrue(manager.isConnectingForTest())
+    }
 }
