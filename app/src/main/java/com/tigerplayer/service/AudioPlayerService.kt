@@ -86,6 +86,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -1338,7 +1339,9 @@ class AudioPlayerService : MediaLibraryService() {
         val future = SettableFuture.create<T>()
         serviceScope.launch {
             val result = try {
-                block()
+                withContext(Dispatchers.IO) {
+                    block()
+                }
             } catch (e: Throwable) {
                 future.setException(e)
                 return@launch
@@ -1479,6 +1482,10 @@ class AudioPlayerService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
+            resolvePlayableItemsSynchronously(mediaItems)?.let { fastResolved ->
+                return Futures.immediateFuture(fastResolved)
+            }
+
             return runAsyncFuture {
                 val voiceQuery = mediaItems.firstOrNull()?.requestMetadata?.searchQuery
                 if (!voiceQuery.isNullOrBlank()) {
@@ -1487,13 +1494,14 @@ class AudioPlayerService : MediaLibraryService() {
 
                 val resolvedList = mutableListOf<MediaItem>()
                 for (item in mediaItems) {
+                    val direct = resolveSinglePlayableItem(item)
+                    if (direct != null) {
+                        resolvedList.add(direct)
+                        continue
+                    }
                     val expanded = mediaBrowseTree.expandItemToTracks(item)
                     if (expanded.isNotEmpty()) {
                         resolvedList.addAll(expanded)
-                    } else if (item.localConfiguration?.uri != null) {
-                        resolvedList.add(item)
-                    } else if (item.requestMetadata.mediaUri != null) {
-                        resolvedList.add(item.buildUpon().setUri(item.requestMetadata.mediaUri).build())
                     } else {
                         resolvedList.add(item)
                     }
@@ -1535,6 +1543,51 @@ class AudioPlayerService : MediaLibraryService() {
             return Futures.immediateFuture(LibraryResult.ofVoid(params))
         }
     }
+}
+
+/**
+ * Synchronous fast-path resolver for [AudioPlayerService]'s `onAddMediaItems`.
+ *
+ * When a controller (such as [MediaControllerManager]) submits already-playable tracks with
+ * populated URIs, returning them synchronously avoids invoking [MediaBrowseTree.expandItemToTracks]
+ * on every item (which previously triggered O(N^2) Room queries on the service main looper).
+ * Returns `null` if any item requires voice search or browse-container expansion.
+ */
+internal fun resolvePlayableItemsSynchronously(mediaItems: List<MediaItem>): List<MediaItem>? {
+    if (mediaItems.isEmpty()) return emptyList()
+    if (!mediaItems.first().requestMetadata.searchQuery.isNullOrBlank()) return null
+
+    val resolved = ArrayList<MediaItem>(mediaItems.size)
+    for (item in mediaItems) {
+        val direct = resolveSinglePlayableItem(item) ?: return null
+        resolved.add(direct)
+    }
+    return resolved
+}
+
+private fun resolveSinglePlayableItem(item: MediaItem): MediaItem? {
+    val mediaId = item.mediaId
+    if (isBrowseContainerOrLookupId(mediaId)) return null
+
+    val localUri = item.localConfiguration?.uri
+    if (localUri != null && localUri != android.net.Uri.EMPTY) {
+        return item
+    }
+    val requestUri = item.requestMetadata.mediaUri
+    if (requestUri != null && requestUri != android.net.Uri.EMPTY) {
+        return item.buildUpon().setUri(requestUri).build()
+    }
+    return null
+}
+
+private fun isBrowseContainerOrLookupId(mediaId: String): Boolean {
+    return mediaId == com.tigerplayer.engine.library.MediaBrowseConstants.CATEGORY_HEAVY_ROTATION ||
+        mediaId == com.tigerplayer.engine.library.MediaBrowseConstants.CATEGORY_DAY_LIST ||
+        mediaId.startsWith(com.tigerplayer.engine.library.MediaBrowseConstants.PREFIX_ALBUM) ||
+        mediaId.startsWith(com.tigerplayer.engine.library.MediaBrowseConstants.PREFIX_ARTIST) ||
+        mediaId.startsWith(com.tigerplayer.engine.library.MediaBrowseConstants.PREFIX_PLAYLIST) ||
+        mediaId.startsWith(com.tigerplayer.engine.library.MediaBrowseConstants.PREFIX_FOLDER) ||
+        mediaId.startsWith(com.tigerplayer.engine.library.MediaBrowseConstants.PREFIX_TRACK)
 }
 
 object AutoEqParser {

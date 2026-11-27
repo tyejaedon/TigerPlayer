@@ -86,6 +86,7 @@ class MediaControllerManager @Inject constructor(
 
         private const val MAX_RETRY_ATTEMPTS = 3
         private const val RETRY_BASE_DELAY_MS = 400L
+        internal const val CONNECT_TIMEOUT_MS = 5_000L
 
         private const val ACTION_KEY_SET_PLAYLIST = "set_playlist"
         private const val ACTION_KEY_SEEK_TO = "seek_to"
@@ -126,7 +127,10 @@ class MediaControllerManager @Inject constructor(
 
     private val connectionLock = Any()
     @Volatile private var isConnecting = false
+    @Volatile private var connectingStartedAtMs = 0L
+    @Volatile private var isAppForeground = true
     @Volatile private var connectionRetryCount = 0
+    internal var elapsedRealtimeProvider: () -> Long = { SystemClock.elapsedRealtime() }
     private var retryJob: Job? = null
     private val pendingControllerActions = ArrayDeque<PendingControllerAction>()
     private var restoreStateJob: Job? = null
@@ -236,7 +240,12 @@ class MediaControllerManager @Inject constructor(
      */
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
+            isAppForeground = true
             onAppForegrounded()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            isAppForeground = false
         }
 
         override fun onDestroy(owner: LifecycleOwner) {
@@ -244,11 +253,21 @@ class MediaControllerManager @Inject constructor(
         }
     }
 
+    internal fun setAppForegroundForTest(foreground: Boolean) {
+        isAppForeground = foreground
+    }
+
+    private fun isConnectStaleLocked(): Boolean {
+        if (!isConnecting) return false
+        val started = connectingStartedAtMs
+        return started > 0L && (elapsedRealtimeProvider() - started) >= CONNECT_TIMEOUT_MS
+    }
+
     internal fun onAppForegrounded() {
         if (isReleased) return
         val shouldInit = synchronized(connectionLock) {
             val current = mediaController
-            (current == null || !current.isConnected) && !isConnecting
+            (current == null || !current.isConnected) && (!isConnecting || isConnectStaleLocked())
         }
         if (shouldInit) {
             Log.i("MediaManager", "App resumed with disconnected controller. Re-initializing...")
@@ -335,11 +354,15 @@ class MediaControllerManager @Inject constructor(
         val previousFuture = synchronized(connectionLock) {
             val currentController = mediaController
             if (currentController != null && currentController.isConnected) return
-            if (isConnecting) return
+            if (isConnecting && !isConnectStaleLocked()) return
+            if (isConnecting) {
+                Log.w("MediaManager", "Previous MediaController connect timed out; resetting future")
+            }
             if (resetRetryBudget) {
                 connectionRetryCount = 0
             }
             isConnecting = true
+            connectingStartedAtMs = elapsedRealtimeProvider()
             retryJob?.cancel()
             retryJob = null
             controllerFuture.also { controllerFuture = null }
@@ -363,6 +386,7 @@ class MediaControllerManager @Inject constructor(
         val releasedWhileBuilding = synchronized(connectionLock) {
             if (isReleased) {
                 isConnecting = false
+                connectingStartedAtMs = 0L
                 true
             } else {
                 controllerFuture = future
@@ -382,6 +406,7 @@ class MediaControllerManager @Inject constructor(
                 synchronized(connectionLock) {
                     if (future === controllerFuture) {
                         isConnecting = false
+                        connectingStartedAtMs = 0L
                     }
                 }
                 return@addListener
@@ -393,6 +418,7 @@ class MediaControllerManager @Inject constructor(
                     synchronized(connectionLock) {
                         if (future === controllerFuture) {
                             isConnecting = false
+                            connectingStartedAtMs = 0L
                         }
                     }
                     return@addListener
@@ -403,6 +429,7 @@ class MediaControllerManager @Inject constructor(
                 synchronized(connectionLock) {
                     if (future === controllerFuture) {
                         isConnecting = false
+                        connectingStartedAtMs = 0L
                     }
                 }
             } catch (e: Exception) {
@@ -412,12 +439,13 @@ class MediaControllerManager @Inject constructor(
     }
 
     internal fun onControllerDisconnected() {
-        Log.w("MediaManager", "Controller disconnected. Reconnecting...")
+        Log.w("MediaManager", "Controller disconnected (foreground=$isAppForeground)")
         restoreStateJob?.cancel()
         restoreStateJob = null
         val oldFuture = synchronized(connectionLock) {
             mediaController = null
             isConnecting = false
+            connectingStartedAtMs = 0L
             connectionRetryCount = 0
             controllerFuture.also { controllerFuture = null }
         }
@@ -425,13 +453,16 @@ class MediaControllerManager @Inject constructor(
         _isPlaying.value = false
         positionJob?.cancel()
         bluetoothDeviceManager.stopTrackingListeningTime()
-        initializeController(resetRetryBudget = true)
+        if (isAppForeground) {
+            initializeController(resetRetryBudget = true)
+        }
     }
 
     internal fun onControllerConnected(controller: MediaController) {
         val (paramsGen, hasPendingParams, hasPendingPlaylist) = synchronized(connectionLock) {
             mediaController = controller
             isConnecting = false
+            connectingStartedAtMs = 0L
             connectionRetryCount = 0
             retryJob?.cancel()
             retryJob = null
@@ -479,6 +510,7 @@ class MediaControllerManager @Inject constructor(
     internal fun onControllerConnectFailed(e: Exception) {
         val attempt = synchronized(connectionLock) {
             isConnecting = false
+            connectingStartedAtMs = 0L
             mediaController = null
             connectionRetryCount + 1
         }
@@ -1334,6 +1366,7 @@ class MediaControllerManager @Inject constructor(
         retryJob = null
         val oldFuture = synchronized(connectionLock) {
             isConnecting = false
+            connectingStartedAtMs = 0L
             pendingControllerActions.clear()
             mediaController = null
             controllerFuture.also { controllerFuture = null }
