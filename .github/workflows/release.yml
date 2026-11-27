@@ -1,7 +1,9 @@
 name: Release candidate
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "v*"
+      - "!v*-beta*"
   workflow_dispatch:
     inputs:
       ref:
@@ -56,17 +58,17 @@ jobs:
               HOTFIX="${BASH_REMATCH[5]:-0}"
               BETA_NUM="${BASH_REMATCH[7]:-99}"
               CALCULATED_CODE=$(( MAJOR * 1000000 + MINOR * 10000 + PATCH * 100 + BETA_NUM ))
-              if (( CALCULATED_CODE < 2020030 )); then
-                VERSION_CODE=$(( 2020030 + HOTFIX ))
+              if (( CALCULATED_CODE < 2090299 )); then
+                VERSION_CODE=$(( 2090299 + HOTFIX ))
               else
                 VERSION_CODE=$(( CALCULATED_CODE + HOTFIX ))
               fi
             else
-              VERSION_CODE=2020030
+              VERSION_CODE=2090299
             fi
           else
             VERSION_NAME="2.1.9"
-            VERSION_CODE=2020030
+            VERSION_CODE=2090299
           fi
 
           echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
