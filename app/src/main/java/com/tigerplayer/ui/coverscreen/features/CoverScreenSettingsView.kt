@@ -1666,7 +1666,7 @@ fun CoverScreenSettingsView(
                             OutlinedButton(
                                 onClick = {
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    importLauncher.launch(arrayOf("application/json"))
+                                    importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()

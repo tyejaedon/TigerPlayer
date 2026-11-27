@@ -998,7 +998,7 @@ private fun BackupRestoreSection(viewModel: SettingsViewModel, accent: Color) {
             }
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedButton(
-                onClick = { importLauncher.launch(arrayOf("application/json")) },
+                onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*")) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))

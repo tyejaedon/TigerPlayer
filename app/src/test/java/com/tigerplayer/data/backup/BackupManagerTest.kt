@@ -432,6 +432,108 @@ class BackupManagerTest {
         assertEquals(mapOf("Road Trip" to 2), summary.unresolvedByPlaylist)
     }
 
+    @Test
+    fun `import handles legacy backup JSON missing smartPlaylists, audioDevices, devicePresets, and newer settings`() = runTest {
+        val legacyJson = """
+            {
+              "schemaVersion": 1,
+              "appVersionName": "2.1.6",
+              "createdAtEpochMs": 1700000000,
+              "settings": {
+                "themeMode": "DARK",
+                "pureAmoledBlack": true
+              },
+              "playlists": [
+                {
+                  "name": "Legacy Mix",
+                  "artworkUri": null,
+                  "createdAt": 100,
+                  "position": 0,
+                  "tracks": [
+                    { "trackId": "t1", "dateAdded": 100, "position": 0 }
+                  ]
+                }
+              ],
+              "history": [
+                {
+                  "trackId": "t1",
+                  "title": "Song",
+                  "artist": "Artist",
+                  "album": "Album",
+                  "durationListenedMs": 180000,
+                  "timestamp": 200
+                }
+              ]
+            }
+        """.trimIndent()
+        every { contentResolver.openInputStream(destination) } returns ByteArrayInputStream(legacyJson.toByteArray(Charsets.UTF_8))
+        coEvery { playlistDao.insertPlaylist(any()) } returns 10L
+        coEvery { playlistDao.insertTracksBatch(any()) } returns listOf(1L)
+        coEvery { tigerDao.insertHistoryBatch(any()) } returns listOf(1L)
+
+        val result = backupManager.importFrom(destination, RestoreStrategy.MERGE)
+
+        assertTrue(result.isSuccess)
+        val summary = result.getOrThrow()
+        assertEquals(1, summary.playlistCount)
+        assertEquals(1, summary.trackRefCount)
+        assertEquals(1, summary.historyCount)
+        assertEquals(0, summary.smartPlaylistCount)
+        assertEquals(0, summary.audioDeviceCount)
+        assertEquals(0, summary.devicePresetCount)
+        coVerify(exactly = 1) { settingsDataStore.setGaplessPlayback(true) }
+        coVerify(exactly = 1) { settingsDataStore.setPureAmoledBlack(true) }
+    }
+
+    @Test
+    fun `import handles UTF-8 BOM and null nested lists safely`() = runTest {
+        val bomJson = "\uFEFF" + """
+            {
+              "schemaVersion": 1,
+              "appVersionName": null,
+              "settings": null,
+              "playlists": [ { "name": null, "tracks": null } ],
+              "history": null,
+              "audioDevices": null,
+              "devicePresets": null,
+              "smartPlaylists": null
+            }
+        """.trimIndent()
+        every { contentResolver.openInputStream(destination) } returns ByteArrayInputStream(bomJson.toByteArray(Charsets.UTF_8))
+        coEvery { playlistDao.insertPlaylist(any()) } returns 11L
+
+        val result = backupManager.importFrom(destination, RestoreStrategy.MERGE)
+
+        assertTrue(result.isSuccess)
+        val summary = result.getOrThrow()
+        assertEquals(1, summary.playlistCount)
+        assertEquals(0, summary.trackRefCount)
+        assertEquals(0, summary.historyCount)
+    }
+
+    @Test
+    fun `import rejects non-object JSON such as an array`() = runTest {
+        every { contentResolver.openInputStream(destination) } returns ByteArrayInputStream("[1, 2, 3]".toByteArray(Charsets.UTF_8))
+
+        val result = backupManager.importFrom(destination, RestoreStrategy.MERGE)
+
+        assertFalse(result.isSuccess)
+    }
+
+    @Test
+    fun `export falls back to write mode when wt mode is unsupported`() = runTest {
+        coEvery { playlistDao.getAllPlaylistsSync() } returns emptyList()
+        coEvery { tigerDao.getAllHistorySync() } returns emptyList()
+        val output = ByteArrayOutputStream()
+        every { contentResolver.openOutputStream(destination, "wt") } throws IllegalArgumentException("wt unsupported")
+        every { contentResolver.openOutputStream(destination, "w") } returns output
+
+        val result = backupManager.exportTo(destination)
+
+        assertTrue(result.isSuccess)
+        assertTrue(output.toString(Charsets.UTF_8.name()).contains("\"schemaVersion\""))
+    }
+
     private fun sampleBackupJson(schemaVersion: Int): String {
         val manifest = BackupManifest(
             schemaVersion = schemaVersion,

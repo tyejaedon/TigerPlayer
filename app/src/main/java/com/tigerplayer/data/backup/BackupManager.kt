@@ -22,6 +22,9 @@ import com.tigerplayer.data.local.entity.PlaylistTrackCrossRef
 import com.tigerplayer.data.local.entity.PlaybackHistoryEntity
 import com.tigerplayer.data.local.entity.SmartPlaylistEntity
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import javax.inject.Inject
@@ -55,7 +58,7 @@ class BackupManager @Inject constructor(
         try {
             val manifest = buildManifest()
             val json = gson.toJson(manifest)
-            val stream = context.contentResolver.openOutputStream(destination, "wt")
+            val stream = openExportStream(destination)
                 ?: return@withContext Result.failure(IOException("Unable to open destination for writing"))
             stream.use { out -> out.bufferedWriter().use { it.write(json) } }
             Result.success(
@@ -85,8 +88,7 @@ class BackupManager @Inject constructor(
                 ?.use { it.readText() }
                 ?: return@withContext Result.failure(IOException("Unable to open backup file"))
 
-            val manifest = runCatching { gson.fromJson(json, BackupManifest::class.java) }
-                .getOrNull()
+            val manifest = parseManifest(json)
                 ?: return@withContext Result.failure(IOException("Backup file is not valid TigerPlayer JSON"))
 
             if (manifest.schemaVersion > BackupManifest.CURRENT_SCHEMA_VERSION) {
@@ -97,22 +99,28 @@ class BackupManager @Inject constructor(
                 )
             }
 
+            val playlists = (manifest.playlists as List<PlaylistBackup>?).orEmpty()
+            val history = (manifest.history as List<HistoryBackup>?).orEmpty()
+            val audioDevices = (manifest.audioDevices as List<AudioDeviceBackup>?).orEmpty()
+            val devicePresets = (manifest.devicePresets as List<DevicePresetBackup>?).orEmpty()
+            val smartPlaylists = (manifest.smartPlaylists as List<SmartPlaylistBackup>?).orEmpty()
+
             restoreSettings(manifest.settings)
-            val trackRefCount = restorePlaylists(manifest.playlists, strategy)
-            restoreHistory(manifest.history, strategy)
-            val restoredDevices = restoreAudioDevices(manifest.audioDevices, strategy)
-            val restoredPresets = restorePresets(manifest.devicePresets, strategy)
-            val restoredSmartPlaylists = restoreSmartPlaylists(manifest.smartPlaylists, strategy)
+            val trackRefCount = restorePlaylists(playlists, strategy)
+            restoreHistory(history, strategy)
+            val restoredDevices = restoreAudioDevices(audioDevices, strategy)
+            val restoredPresets = restorePresets(devicePresets, strategy)
+            val restoredSmartPlaylists = restoreSmartPlaylists(smartPlaylists, strategy)
 
             val knownTrackIds = tigerDao.getCachedTrackIdsSync().toHashSet()
-            val unresolvedByPlaylist = computeUnresolvedByPlaylist(manifest.playlists, knownTrackIds)
-            val unresolvedTrackCount = computeUnresolvedTrackCount(manifest, knownTrackIds)
+            val unresolvedByPlaylist = computeUnresolvedByPlaylist(playlists, knownTrackIds)
+            val unresolvedTrackCount = computeUnresolvedTrackCount(playlists, history, knownTrackIds)
 
             Result.success(
                 BackupSummary(
-                    playlistCount = manifest.playlists.size,
+                    playlistCount = playlists.size,
                     trackRefCount = trackRefCount,
-                    historyCount = manifest.history.size,
+                    historyCount = history.size,
                     audioDeviceCount = restoredDevices,
                     devicePresetCount = restoredPresets,
                     smartPlaylistCount = restoredSmartPlaylists,
@@ -275,8 +283,9 @@ class BackupManager @Inject constructor(
                     position = backup.position
                 )
             )
-            if (backup.tracks.isNotEmpty()) {
-                val crossRefs = backup.tracks.map {
+            val tracks = (backup.tracks as List<PlaylistTrackBackup>?).orEmpty()
+            if (tracks.isNotEmpty()) {
+                val crossRefs = tracks.map {
                     PlaylistTrackCrossRef(
                         playlistId = newPlaylistId,
                         trackId = it.trackId,
@@ -378,13 +387,84 @@ class BackupManager @Inject constructor(
         return smartPlaylists.size
     }
 
+    private fun openExportStream(destination: Uri) =
+        runCatching { context.contentResolver.openOutputStream(destination, "wt") }.getOrNull()
+            ?: runCatching { context.contentResolver.openOutputStream(destination, "w") }.getOrNull()
+            ?: runCatching { context.contentResolver.openOutputStream(destination) }.getOrNull()
+
+    /**
+     * Parses and normalizes legacy/partial backup JSON before Gson hydration so missing keys or
+     * JSON nulls from older app versions never leak null into Kotlin non-null fields via Unsafe.
+     */
+    private fun parseManifest(rawJson: String): BackupManifest? = runCatching {
+        val cleaned = rawJson.removePrefix("\uFEFF").trim()
+        if (cleaned.isEmpty()) return null
+        val parsed = JsonParser.parseString(cleaned)
+        if (!parsed.isJsonObject) return null
+        val root = parsed.asJsonObject
+
+        if (!root.has("schemaVersion") || root.get("schemaVersion").isJsonNull) {
+            root.addProperty("schemaVersion", BackupManifest.CURRENT_SCHEMA_VERSION)
+        }
+        if (!root.has("appVersionName") || root.get("appVersionName").isJsonNull) {
+            root.addProperty("appVersionName", APP_VERSION_NAME_UNKNOWN)
+        }
+
+        val defaultSettings = gson.toJsonTree(TigerSettingsState().toBackup()).asJsonObject
+        val settingsObj = if (root.has("settings") && root.get("settings").isJsonObject) {
+            root.getAsJsonObject("settings")
+        } else {
+            JsonObject().also { root.add("settings", it) }
+        }
+        defaultSettings.entrySet().forEach { (key, defaultValue) ->
+            if (!settingsObj.has(key) || settingsObj.get(key).isJsonNull) {
+                settingsObj.add(key, defaultValue)
+            }
+        }
+
+        listOf("playlists", "history", "audioDevices", "devicePresets", "smartPlaylists").forEach { key ->
+            if (!root.has(key) || !root.get(key).isJsonArray) {
+                root.add(key, JsonArray())
+            }
+        }
+
+        root.getAsJsonArray("playlists").forEach { element ->
+            if (element.isJsonObject) {
+                val obj = element.asJsonObject
+                if (!obj.has("name") || obj.get("name").isJsonNull) {
+                    obj.addProperty("name", "Restored Playlist")
+                }
+                if (!obj.has("tracks") || !obj.get("tracks").isJsonArray) {
+                    obj.add("tracks", JsonArray())
+                }
+            }
+        }
+
+        root.getAsJsonArray("history").forEach { element ->
+            if (element.isJsonObject) {
+                val obj = element.asJsonObject
+                listOf("trackId", "title", "artist", "album").forEach { field ->
+                    if (!obj.has(field) || obj.get(field).isJsonNull) {
+                        obj.addProperty(field, "")
+                    }
+                }
+                if (!obj.has("source") || obj.get("source").isJsonNull) {
+                    obj.addProperty("source", MediaSource.LOCAL.name)
+                }
+            }
+        }
+
+        gson.fromJson(root, BackupManifest::class.java)
+    }.getOrNull()
+
     private fun computeUnresolvedByPlaylist(
         playlists: List<PlaylistBackup>,
         knownTrackIds: Set<String>
     ): Map<String, Int> {
         val result = linkedMapOf<String, Int>()
         playlists.forEach { playlist ->
-            val missing = playlist.tracks.count { it.trackId !in knownTrackIds }
+            val tracks = (playlist.tracks as List<PlaylistTrackBackup>?).orEmpty()
+            val missing = tracks.count { it.trackId !in knownTrackIds }
             if (missing > 0) {
                 result[playlist.name] = (result[playlist.name] ?: 0) + missing
             }
@@ -393,16 +473,18 @@ class BackupManager @Inject constructor(
     }
 
     private fun computeUnresolvedTrackCount(
-        manifest: BackupManifest,
+        playlists: List<PlaylistBackup>,
+        history: List<HistoryBackup>,
         knownTrackIds: Set<String>
     ): Int {
         val unresolvedIds = hashSetOf<String>()
-        manifest.playlists.forEach { playlist ->
-            playlist.tracks.forEach { track ->
+        playlists.forEach { playlist ->
+            val tracks = (playlist.tracks as List<PlaylistTrackBackup>?).orEmpty()
+            tracks.forEach { track ->
                 if (track.trackId !in knownTrackIds) unresolvedIds.add(track.trackId)
             }
         }
-        manifest.history.forEach { entry ->
+        history.forEach { entry ->
             if (entry.trackId !in knownTrackIds) unresolvedIds.add(entry.trackId)
         }
         return unresolvedIds.size
